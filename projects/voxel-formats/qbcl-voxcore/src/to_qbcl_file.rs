@@ -1,4 +1,4 @@
-use crate::{Error, QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclVoxMain, Result};
+use crate::{Error, QbclExtNode, QbclExtNodeBody, QbclVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qbcl::{
     QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode, QbclNodeBody,
@@ -11,10 +11,10 @@ use voxcore::{
     color::resolve_cell_color_or_transparent,
 };
 
-/// Writes a [`QubicleQbclVoxMain`] to a decoded Qubicle Construction Library
+/// Writes a [`QbclVoxMain`] to a decoded Qubicle Construction Library
 /// [`QbclFile`].
 ///
-/// When the state carries the `qubicle-qbcl` ext the forward path writes, the
+/// When the state carries the `qbcl` ext the forward path writes, the
 /// file is rebuilt from it exactly, the inverse of
 /// [`from_qbcl_file`](crate::from_qbcl_file): the scene tree is walked from the
 /// single root, each matrix or compound emitting its grid with the visibility
@@ -22,11 +22,11 @@ use voxcore::{
 /// names another format, the file is synthesized from the bare scene by
 /// `synthesize_qbcl`, so any source can be written to Qubicle.
 ///
-/// Errors when a `qubicle-qbcl` ext is present but its node entries do not line
+/// Errors when a `qbcl` ext is present but its node entries do not line
 /// up with the hierarchy, the state does not have exactly one root, or a mask
 /// list does not match its object, and when an object's `baseColor` draws
 /// from a non-color value pool.
-pub fn to_qbcl_file(state: &QubicleQbclVoxMain) -> Result<QbclFile> {
+pub fn to_qbcl_file(state: &QbclVoxMain) -> Result<QbclFile> {
     let Some(ext) = state.ext().clone() else {
         return synthesize_qbcl(state);
     };
@@ -34,7 +34,7 @@ pub fn to_qbcl_file(state: &QubicleQbclVoxMain) -> Result<QbclFile> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.nodes.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qbcl ext has {} nodes but the state has {node_count} hierarchy nodes",
+            "qbcl ext has {} nodes but the state has {node_count} hierarchy nodes",
             ext.nodes.len()
         )));
     }
@@ -80,8 +80,8 @@ pub fn to_qbcl_file(state: &QubicleQbclVoxMain) -> Result<QbclFile> {
 /// and its aligned ext provenance.
 fn rebuild_node(
     node_id: U32Id<BVoxHierarchyNode>,
-    state: &QubicleQbclVoxMain,
-    nodes: &[QubicleQbclNode],
+    state: &QbclVoxMain,
+    nodes: &[QbclExtNode],
 ) -> Result<QbclNode> {
     let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
         Error::invalid(format!(
@@ -91,17 +91,17 @@ fn rebuild_node(
     })?;
     let provenance = nodes.get(node_id.to_u32() as usize).ok_or_else(|| {
         Error::invalid(format!(
-            "qubicle-qbcl ext has no entry for hierarchy node {}",
+            "qbcl ext has no entry for hierarchy node {}",
             node_id.to_u32()
         ))
     })?;
 
     let body = match &provenance.body {
-        QubicleQbclNodeBody::Model { transform } => QbclNodeBody::Model(QbclModel {
+        QbclExtNodeBody::Model { transform } => QbclNodeBody::Model(QbclModel {
             transform: model_transform(transform)?,
             children: rebuild_children(hierarchy, state, nodes)?,
         }),
-        QubicleQbclNodeBody::Matrix {
+        QbclExtNodeBody::Matrix {
             position,
             pivot,
             masks,
@@ -112,7 +112,7 @@ fn rebuild_node(
             *pivot,
             masks,
         )?),
-        QubicleQbclNodeBody::Compound {
+        QbclExtNodeBody::Compound {
             position,
             pivot,
             masks,
@@ -142,8 +142,8 @@ fn rebuild_node(
 /// Rebuilds the child nodes of a hierarchy node, in stored order.
 fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
-    state: &QubicleQbclVoxMain,
-    nodes: &[QubicleQbclNode],
+    state: &QbclVoxMain,
+    nodes: &[QbclExtNode],
 ) -> Result<Vec<QbclNode>> {
     hierarchy
         .child_node_ids
@@ -157,7 +157,7 @@ fn rebuild_children(
 /// keeps the original dimensions and voxel positions directly.
 fn matrix_object<'a>(
     hierarchy: &VoxHierarchyNode,
-    state: &'a QubicleQbclVoxMain,
+    state: &'a QbclVoxMain,
 ) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_object_ids
@@ -173,7 +173,7 @@ fn matrix_object<'a>(
 /// list, placed in `.qbcl` storage order. Errors if the mask count does not
 /// match the object's solid voxels.
 fn matrix_from_object(
-    state: &QubicleQbclVoxMain,
+    state: &QbclVoxMain,
     object: &VoxObject,
     position: [i32; 3],
     pivot: [f32; 3],
@@ -188,7 +188,7 @@ fn matrix_from_object(
     let live_count = object.live_count();
     if live_count != masks.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qbcl ext has {} masks but the object has {live_count} solid voxels",
+            "qbcl ext has {} masks but the object has {live_count} solid voxels",
             masks.len()
         )));
     }
@@ -218,7 +218,7 @@ fn matrix_from_object(
 fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
     <[u8; 36]>::try_from(bytes).map_err(|_| {
         Error::invalid(format!(
-            "qubicle-qbcl model transform is {} bytes, expected 36",
+            "qbcl model transform is {} bytes, expected 36",
             bytes.len()
         ))
     })
@@ -230,7 +230,7 @@ fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
 /// mirrors the codec's solid fixture.
 const SOLID_MASK: u8 = 0x7e;
 
-/// Synthesizes a Qubicle file from a state that carries no `qubicle-qbcl` ext,
+/// Synthesizes a Qubicle file from a state that carries no `qbcl` ext,
 /// such as one cross-loaded from another format.
 ///
 /// The voxcore hierarchy is mirrored into Qubicle's scene tree: a node with
@@ -249,7 +249,7 @@ const SOLID_MASK: u8 = 0x7e;
 /// stay per voxel with no palette merge, but a Qubicle voxel stores no alpha,
 /// so a color's alpha is dropped. Each matrix is pivoted at its grid origin, so
 /// its position is the world coordinate of the object's min corner.
-fn synthesize_qbcl(state: &QubicleQbclVoxMain) -> Result<QbclFile> {
+fn synthesize_qbcl(state: &QbclVoxMain) -> Result<QbclFile> {
     let mut builder = QbclBuilder::default();
     let mut children: Vec<QbclNode> = state
         .root_hierarchy_node_ids()
@@ -290,7 +290,7 @@ impl QbclBuilder {
     /// further objects and the mapped child nodes become its children.
     fn emit_node(
         &mut self,
-        state: &QubicleQbclVoxMain,
+        state: &QbclVoxMain,
         node_id: U32Id<BVoxHierarchyNode>,
         parent: TyVector3I32,
     ) -> Result<QbclNode> {
@@ -352,7 +352,7 @@ impl QbclBuilder {
     /// sweep.
     fn emit_object_node(
         &mut self,
-        state: &QubicleQbclVoxMain,
+        state: &QbclVoxMain,
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         world: [i32; 3],
@@ -375,7 +375,7 @@ impl QbclBuilder {
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         position: [i32; 3],
-        state: &QubicleQbclVoxMain,
+        state: &QbclVoxMain,
     ) -> Result<QbclMatrix> {
         self.placed.insert(object_id.to_u32());
 

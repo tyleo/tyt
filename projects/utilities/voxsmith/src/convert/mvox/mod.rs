@@ -14,4 +14,4 @@ pub use ::mvox::MVoxFile;
 
 // Re-exported so callers can name the state the MagicaVoxel conversions
 // exchange and its ext.
-pub use ::mvox_voxcore::{MagicaVoxelExt, MagicaVoxelVoxMain};
+pub use ::mvox_voxcore::{MVoxExt, MVoxVoxMain};

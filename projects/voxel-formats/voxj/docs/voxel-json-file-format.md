@@ -433,7 +433,7 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
 ```jsonc
 {
   "ext": {
-    "voxel-max": {
+    "vmax": {
       "version": 4,
       "camera": {
         "angles": [

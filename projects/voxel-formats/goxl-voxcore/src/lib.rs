@@ -3,8 +3,8 @@
 //! Converts between Goxel files and the voxcore state.
 //!
 //! [`from_goxl_file`] loads a [`GoxlFile`](goxl::GoxlFile) into a
-//! [`GoxelVoxMain`], and [`to_goxl_file`] writes one back. The Goxel state
-//! with no native voxcore home rides in the [`GoxelExt`] on the state's ext
+//! [`GoxlVoxMain`], and [`to_goxl_file`] writes one back. The Goxel state
+//! with no native voxcore home rides in the [`GoxlExt`] on the state's ext
 //! slot, so a loaded file writes back exactly. A state without one, such as
 //! one loaded from another format, has its file synthesized from the bare
 //! scene. The [`codec`] module, behind the default `codec` feature, goes
@@ -17,29 +17,29 @@
 
 mod error;
 mod from_goxl_file;
-mod goxel_camera;
-mod goxel_ext;
-mod goxel_image;
-mod goxel_layer;
-mod goxel_light;
-mod goxel_material;
-mod goxel_preview;
-mod goxel_unknown_chunk;
-mod goxel_vox_main;
+mod goxl_ext;
+mod goxl_ext_camera;
+mod goxl_ext_image;
+mod goxl_ext_layer;
+mod goxl_ext_light;
+mod goxl_ext_material;
+mod goxl_ext_preview;
+mod goxl_ext_unknown_chunk;
+mod goxl_vox_main;
 mod result;
 mod to_goxl_file;
 
 pub use error::*;
 pub use from_goxl_file::*;
-pub use goxel_camera::*;
-pub use goxel_ext::*;
-pub use goxel_image::*;
-pub use goxel_layer::*;
-pub use goxel_light::*;
-pub use goxel_material::*;
-pub use goxel_preview::*;
-pub use goxel_unknown_chunk::*;
-pub use goxel_vox_main::*;
+pub use goxl_ext::*;
+pub use goxl_ext_camera::*;
+pub use goxl_ext_image::*;
+pub use goxl_ext_layer::*;
+pub use goxl_ext_light::*;
+pub use goxl_ext_material::*;
+pub use goxl_ext_preview::*;
+pub use goxl_ext_unknown_chunk::*;
+pub use goxl_vox_main::*;
 pub use result::*;
 pub use to_goxl_file::*;
 

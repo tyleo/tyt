@@ -4,13 +4,13 @@ use std::{
     io::{self, ErrorKind},
     path::{Path, PathBuf},
 };
-use voxsmith::{VoxelMaxVoxMain, from_vmax_package};
+use voxsmith::{VMaxVoxMain, from_vmax_package};
 
 /// Loads the whole `.vmax` package directory at `input` into a
-/// [`VoxelMaxVoxMain`]. The listing covers every package-relative path,
+/// [`VMaxVoxMain`]. The listing covers every package-relative path,
 /// descending one level into subdirectories (only `QuickLook/`) so its
 /// thumbnails keep their prefix. The resolver reads each path's bytes.
-pub fn load_vmax_package(input: &Path) -> Result<VoxelMaxVoxMain> {
+pub fn load_vmax_package(input: &Path) -> Result<VMaxVoxMain> {
     Ok(from_vmax_package(
         || {
             let mut paths = Vec::new();

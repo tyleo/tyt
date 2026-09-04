@@ -1,6 +1,6 @@
 use crate::{ColorFormat, Result};
 use std::{fs, path::Path};
-use voxsmith::{VoxelMaxColorFormat, from_voxj_bytes, to_vmax_package};
+use voxsmith::{VMaxColorFormat, from_voxj_bytes, to_vmax_package};
 
 /// Converts Voxel Json bytes into a `.vmax` package directory at `output`,
 /// round-tripping through voxcore. `color_format` selects where each palette's
@@ -11,24 +11,20 @@ pub(crate) fn write_vmax_package(
     color_format: ColorFormat,
 ) -> Result<()> {
     let state = from_voxj_bytes(voxj_bytes)?;
-    to_vmax_package(
-        &state,
-        voxel_max_color_format(color_format),
-        |name, bytes| {
-            let path = output.join(name);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            tyt_injection::write_file(&path, bytes)
-        },
-    )?;
+    to_vmax_package(&state, vmax_color_format(color_format), |name, bytes| {
+        let path = output.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        tyt_injection::write_file(&path, bytes)
+    })?;
     Ok(())
 }
 
-fn voxel_max_color_format(format: ColorFormat) -> VoxelMaxColorFormat {
+fn vmax_color_format(format: ColorFormat) -> VMaxColorFormat {
     match format {
-        ColorFormat::Png => VoxelMaxColorFormat::Png,
-        ColorFormat::Plist => VoxelMaxColorFormat::Plist,
-        ColorFormat::All => VoxelMaxColorFormat::All,
+        ColorFormat::Png => VMaxColorFormat::Png,
+        ColorFormat::Plist => VMaxColorFormat::Plist,
+        ColorFormat::All => VMaxColorFormat::All,
     }
 }

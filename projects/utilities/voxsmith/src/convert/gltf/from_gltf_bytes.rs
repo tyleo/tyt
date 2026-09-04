@@ -1051,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn extent_converts_gltf_y_up_to_voxel_json_z_up() {
+    fn extent_converts_gltf_y_up_to_voxj_z_up() {
         // A box tall on glTF +Y should be tall on Voxel Json +Z.
         let extent = from_gltf_bytes(&box_glb(1.0, 4.0, 1.0, None, None))
             .unwrap()

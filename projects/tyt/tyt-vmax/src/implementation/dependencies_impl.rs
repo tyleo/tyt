@@ -1,5 +1,5 @@
 use crate::{
-    ColorFormat, Dependencies, ResolvedNodeTransform, Result, VoxelMaxSceneNode, VoxjEncoding,
+    ColorFormat, Dependencies, ResolvedNodeTransform, Result, VMaxSceneNode, VoxjEncoding,
     VoxjFormat,
 };
 use std::{
@@ -60,7 +60,7 @@ fn authored_bounds(
 
 /// A node's raw local transform: its stored translation and scale with the
 /// `[x, y, z, angle]` axis-angle rotation decoded to a quaternion.
-fn local_transform(node: &VoxelMaxSceneNode) -> TyTransformF64 {
+fn local_transform(node: &VMaxSceneNode) -> TyTransformF64 {
     let [x, y, z, angle] = node.rotation;
     let axis = TyVector3F64::new(x, y, z);
     let rotation = if axis.length() < ZERO_LENGTH_TOLERANCE {
@@ -80,7 +80,7 @@ fn local_transform(node: &VoxelMaxSceneNode) -> TyTransformF64 {
 /// parent chain in `parent_of` and memoizing each result in `cache`.
 fn world_transform(
     index: usize,
-    nodes: &[VoxelMaxSceneNode],
+    nodes: &[VMaxSceneNode],
     parent_of: &[Option<usize>],
     cache: &mut [Option<TyTransformF64>],
 ) -> TyTransformF64 {
@@ -137,11 +137,11 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::serialize_json_pretty(&value)?)
     }
 
-    fn scene_nodes(&self, scene_bytes: &[u8]) -> Result<Vec<VoxelMaxSceneNode>> {
+    fn scene_nodes(&self, scene_bytes: &[u8]) -> Result<Vec<VMaxSceneNode>> {
         let scene = from_scene_json_file_bytes(&VMaxDependenciesImpl, scene_bytes)?;
         let mut nodes = Vec::with_capacity(scene.groups.len() + scene.objects.len());
         for group in &scene.groups {
-            nodes.push(VoxelMaxSceneNode {
+            nodes.push(VMaxSceneNode {
                 id: group.id.clone(),
                 name: group.name.clone(),
                 parent_id: group.parent_id.clone(),
@@ -153,7 +153,7 @@ impl Dependencies for DependenciesImpl {
             });
         }
         for object in &scene.objects {
-            nodes.push(VoxelMaxSceneNode {
+            nodes.push(VMaxSceneNode {
                 id: object.id.clone(),
                 name: object.name.clone(),
                 parent_id: object.parent_id.clone(),
@@ -169,7 +169,7 @@ impl Dependencies for DependenciesImpl {
 
     fn resolve_node_transforms(
         &self,
-        nodes: &[VoxelMaxSceneNode],
+        nodes: &[VMaxSceneNode],
         parent_of: &[Option<usize>],
         world: bool,
     ) -> Vec<ResolvedNodeTransform> {
@@ -282,7 +282,7 @@ impl Dependencies for DependenciesImpl {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Dependencies, DependenciesImpl, VoxelMaxSceneNode};
+    use crate::{Dependencies, DependenciesImpl, VMaxSceneNode};
     use std::f64::consts::PI;
 
     /// A group node with the given parent, position, and axis-angle
@@ -292,8 +292,8 @@ mod tests {
         parent: Option<&str>,
         position: [f64; 3],
         rotation: [f64; 4],
-    ) -> VoxelMaxSceneNode {
-        VoxelMaxSceneNode {
+    ) -> VMaxSceneNode {
+        VMaxSceneNode {
             id: id.to_string(),
             name: id.to_string(),
             parent_id: parent.map(str::to_string),

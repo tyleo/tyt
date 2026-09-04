@@ -1,4 +1,4 @@
-use crate::GoxelExt;
+use crate::GoxlExt;
 use voxcore::{
     VoxMap,
     ext::{
@@ -7,13 +7,13 @@ use voxcore::{
     },
 };
 
-/// Keeps the Goxel ext under the `goxel` key of a document's `ext` block.
-impl VoxExtCodec for GoxelExt {
+/// Keeps the Goxel ext under the `goxl` key of a document's `ext` block.
+impl VoxExtCodec for GoxlExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
-        keyed_vox_ext("goxel", self)
+        keyed_vox_ext("goxl", self)
     }
 
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>> {
-        keyed_ext_from_vox("goxel", ext)
+        keyed_ext_from_vox("goxl", ext)
     }
 }

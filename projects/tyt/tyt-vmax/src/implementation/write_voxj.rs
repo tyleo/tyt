@@ -5,7 +5,7 @@ use voxsmith::{PositionEncoding, SampleEncoding, VoxjFileBuilder, from_vmax_pack
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
-    // The `voxel-max` ext carries the provenance with no native voxj home.
+    // The `vmax` ext carries the provenance with no native voxj home.
     let state = from_vmax_package(
         // List every package-relative file path, descending one level into
         // subdirectories (only `QuickLook/`) so its thumbnails keep their prefix.

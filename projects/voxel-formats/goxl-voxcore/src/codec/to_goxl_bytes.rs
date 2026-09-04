@@ -1,10 +1,10 @@
-use crate::{GoxelVoxMain, Result, to_goxl_file};
+use crate::{GoxlVoxMain, Result, to_goxl_file};
 use goxl_codec::{EncodePng, to_gox_file_bytes};
 
-/// Writes a [`GoxelVoxMain`] to the bytes of a Goxel `.gox` file through
+/// Writes a [`GoxlVoxMain`] to the bytes of a Goxel `.gox` file through
 /// `dependencies`, the bytes form of [`to_goxl_file`] and the inverse of
 /// [`from_goxl_bytes`](crate::codec::from_goxl_bytes).
-pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &GoxelVoxMain) -> Result<Vec<u8>> {
+pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &GoxlVoxMain) -> Result<Vec<u8>> {
     let file = to_goxl_file(state)?;
     Ok(to_gox_file_bytes(dependencies, &file))
 }
@@ -21,7 +21,7 @@ mod tests {
     };
 
     /// A state with no ext placing one red voxel at the origin.
-    fn red_voxel_state() -> VoxMain<Option<crate::GoxelExt>> {
+    fn red_voxel_state() -> VoxMain<Option<crate::GoxlExt>> {
         let mut state = VoxMain::default();
         let color = lin_srgba_f64_from_srgba_u8(TySrgbaU8::from([0xFF, 0, 0, 0xFF]));
         let value_pool_id =

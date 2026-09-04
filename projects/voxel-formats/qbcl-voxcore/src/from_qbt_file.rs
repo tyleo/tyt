@@ -1,4 +1,4 @@
-use crate::{Error, QubicleQbtExt, QubicleQbtNode, QubicleQbtVoxMain, Result};
+use crate::{Error, QbtExt, QbtExtNode, QbtVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
 use std::collections::{HashMap, HashSet};
@@ -14,12 +14,12 @@ use voxcore::{
 /// palette, and the scene tree becomes the hierarchy nodes. The state with no
 /// native voxcore home, such as the per-voxel visibility masks, matrix names,
 /// placements, scales, and pivots, the color map, the global scale, the
-/// version, and any unknown nodes, rides in a `qubicle-qbt` ext so the file can
+/// version, and any unknown nodes, rides in a `qbt` ext so the file can
 /// be written back exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qbt_file(file: &QbtFile) -> Result<QubicleQbtVoxMain> {
+pub fn from_qbt_file(file: &QbtFile) -> Result<QbtVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
@@ -35,7 +35,7 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<QubicleQbtVoxMain> {
     )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    state.set_ext(Some(QubicleQbtExt {
+    state.set_ext(Some(QbtExt {
         version: file.version,
         global_scale: file.global_scale,
         color_map: file
@@ -55,10 +55,10 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<QubicleQbtVoxMain> {
 /// node's id.
 fn build_node(
     node: &QbtNode,
-    state: &mut QubicleQbtVoxMain,
+    state: &mut QbtVoxMain,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<QubicleQbtNode>,
+    nodes: &mut Vec<QbtExtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let node_id = match node {
         QbtNode::Matrix(matrix) => {
@@ -74,7 +74,7 @@ fn build_node(
                 transform: translation(matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QubicleQbtNode::Matrix {
+            nodes.push(QbtExtNode::Matrix {
                 name: matrix.name.clone(),
                 position: matrix.position,
                 local_scale: matrix.local_scale,
@@ -95,7 +95,7 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QubicleQbtNode::Model);
+            nodes.push(QbtExtNode::Model);
             node_id
         }
         QbtNode::Compound(compound) => {
@@ -115,7 +115,7 @@ fn build_node(
                 transform: translation(compound.matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QubicleQbtNode::Compound {
+            nodes.push(QbtExtNode::Compound {
                 name: compound.matrix.name.clone(),
                 position: compound.matrix.position,
                 local_scale: compound.matrix.local_scale,
@@ -132,7 +132,7 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QubicleQbtNode::Unknown {
+            nodes.push(QbtExtNode::Unknown {
                 type_id: unknown.type_id,
                 data: unknown.data.clone(),
             });
@@ -149,7 +149,7 @@ fn build_node(
 /// gets a single placeholder color so objects have a default material to
 /// sample.
 fn build_palette(
-    state: &mut QubicleQbtVoxMain,
+    state: &mut QbtVoxMain,
     root: &QbtNode,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -371,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn errors_without_qubicle_qbt_ext() {
+    fn errors_without_qbt_ext() {
         let state = VoxMain::default();
         assert!(to_qbt_file(&state).is_err());
     }

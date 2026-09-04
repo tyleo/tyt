@@ -1,4 +1,4 @@
-use crate::MagicaVoxelExt;
+use crate::MVoxExt;
 use voxcore::{
     VoxMap,
     ext::{
@@ -7,14 +7,14 @@ use voxcore::{
     },
 };
 
-/// Keeps the MagicaVoxel ext under the `magica-voxel` key of a document's
+/// Keeps the MagicaVoxel ext under the `mvox` key of a document's
 /// `ext` block.
-impl VoxExtCodec for MagicaVoxelExt {
+impl VoxExtCodec for MVoxExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
-        keyed_vox_ext("magica-voxel", self)
+        keyed_vox_ext("mvox", self)
     }
 
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>> {
-        keyed_ext_from_vox("magica-voxel", ext)
+        keyed_ext_from_vox("mvox", ext)
     }
 }

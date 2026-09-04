@@ -1,4 +1,4 @@
-use crate::{Dependencies, Error, ResolvedNodeTransform, Result, VoxelMaxSceneNode};
+use crate::{Dependencies, Error, ResolvedNodeTransform, Result, VMaxSceneNode};
 use branded_id::U32Id;
 use clap::Parser;
 use std::{
@@ -168,7 +168,7 @@ impl Hierarchy {
 /// then recurses into its children in stored order.
 #[allow(clippy::too_many_arguments)]
 fn assign_paths(
-    nodes: &[VoxelMaxSceneNode],
+    nodes: &[VMaxSceneNode],
     children: &HashMap<Option<&str>, Vec<usize>>,
     index: usize,
     parent: Option<usize>,
@@ -209,7 +209,7 @@ fn assign_paths(
 fn select_nodes(
     dependencies: &impl Dependencies,
     select: &[String],
-    nodes: &[VoxelMaxSceneNode],
+    nodes: &[VMaxSceneNode],
     path_of: &[String],
     parent_of: &[Option<usize>],
     reachable: &[usize],
@@ -333,7 +333,7 @@ fn invalid_input(message: String) -> Error {
 /// Populates the filtered hierarchy tree into a [`TreeGrid`]. The selection
 /// holds node indices, so same-name siblings never conflate.
 struct Builder<'a> {
-    nodes: &'a [VoxelMaxSceneNode],
+    nodes: &'a [VMaxSceneNode],
     children: HashMap<Option<&'a str>, Vec<usize>>,
     parent_of: Vec<Option<usize>>,
     selection: Option<TreeSelection>,

@@ -16,4 +16,4 @@ pub use ::goxl::GoxlFile;
 
 // Re-exported so callers can name the state the Goxel conversions exchange
 // and its ext.
-pub use ::goxl_voxcore::{GoxelExt, GoxelVoxMain};
+pub use ::goxl_voxcore::{GoxlExt, GoxlVoxMain};

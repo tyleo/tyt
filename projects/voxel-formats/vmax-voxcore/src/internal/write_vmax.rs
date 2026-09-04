@@ -1,6 +1,6 @@
 use crate::{
-    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt,
-    VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, VoxelMaxVoxMain, pbr_factor_to_vm_coefficient,
+    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VMaxColorFormat, VMaxExt,
+    VMaxExtMaterial, VMaxExtNode, VMaxExtPalette, VMaxVoxMain, pbr_factor_to_vm_coefficient,
     tighten,
 };
 use branded_id::U32Id;
@@ -82,28 +82,28 @@ const SYNTH_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
 /// [`to_vmax_file`](crate::to_vmax_file) and
 /// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 ///
-/// A state carrying the [`VoxelMaxExt`] the forward path writes is rebuilt
+/// A state carrying the [`VMaxExt`] the forward path writes is rebuilt
 /// from it, and editor session artifacts voxcore does not model are dropped. A
 /// state without an ext, such as one loaded from another format, has its ext
-/// synthesized from the bare voxcore scene by [`synthesize_voxel_max_ext`] and
+/// synthesized from the bare voxcore scene by [`synthesize_vmax_ext`] and
 /// the rest of this path runs unchanged. `scene_camera` overrides the scene
 /// camera the document opens with, or keeps the path's own when `None`.
 pub fn write_vmax(
-    state: &VoxelMaxVoxMain,
-    voxel_max_color_format: VoxelMaxColorFormat,
+    state: &VMaxVoxMain,
+    vmax_color_format: VMaxColorFormat,
     scene_camera: Option<SceneCameraSource>,
 ) -> Result<VMaxFile> {
     let had_ext = state.ext().is_some();
-    let (voxel_max, placements) = match state.ext() {
+    let (vmax_ext, placements) = match state.ext() {
         Some(ext) => {
-            let voxel_max = ext.clone();
-            let placements = ext_placements(state, &voxel_max)?;
-            (voxel_max, placements)
+            let vmax_ext = ext.clone();
+            let placements = ext_placements(state, &vmax_ext)?;
+            (vmax_ext, placements)
         }
         None => {
-            let voxel_max = synthesize_voxel_max_ext(state);
+            let vmax_ext = synthesize_vmax_ext(state);
             let placements = synthesize_placements(state);
-            (voxel_max, placements)
+            (vmax_ext, placements)
         }
     };
 
@@ -148,7 +148,7 @@ pub fn write_vmax(
             let object = state.object(object_id).expect("a valid node child object");
             let folded = folded_ref(state, object);
             let plan = match folded.as_ref() {
-                Some(folded) => material_plan(state, folded, &voxel_max.palettes)?,
+                Some(folded) => material_plan(state, folded, &vmax_ext.palettes)?,
                 None => MaterialPlan::default(),
             };
             let suffix = suffix(object_id);
@@ -169,7 +169,7 @@ pub fn write_vmax(
             let (tight, (edit_bounds, edit_origin)) = tighten(object);
             let placement =
                 object_placement(tight.bounds(), tight.origin(), edit_bounds, edit_origin);
-            let object_state = voxel_max
+            let object_state = vmax_ext
                 .object_states
                 .get(object_id.to_u32() as usize)
                 .and_then(|s| s.clone());
@@ -234,7 +234,7 @@ pub fn write_vmax(
                 &mut palette_files,
                 &mut palette_settings_files,
                 &mut palette_png_files,
-                voxel_max_color_format,
+                vmax_color_format,
             )?;
 
             let ind = node_ind(&object_ext, false, &mut ind_counter);
@@ -250,7 +250,7 @@ pub fn write_vmax(
         }
     }
 
-    let mut scene = voxel_max.scene;
+    let mut scene = vmax_ext.scene;
     scene.groups = groups;
     scene.objects = objects;
     apply_scene_camera(&mut scene, scene_camera, had_ext)?;
@@ -398,7 +398,7 @@ fn apply_scene_camera(
         None => {}
         Some(SceneCameraSource::Ext) if !had_ext => {
             return Err(Error::invalid(
-                "scene camera `ext` needs a voxel-max ext, which the input has none of",
+                "scene camera `ext` needs a vmax ext, which the input has none of",
             ));
         }
         Some(SceneCameraSource::Ext) => {}
@@ -418,7 +418,7 @@ fn apply_scene_camera(
 struct Placement<'a> {
     node_id: U32Id<BVoxHierarchyNode>,
     node: &'a VoxHierarchyNode,
-    ext: VoxelMaxNode,
+    ext: VMaxExtNode,
 }
 
 /// Pairs each voxcore node with its ext entry by index, the placement the
@@ -429,15 +429,12 @@ struct Placement<'a> {
 /// defaults every entry. One carrying a short list errors instead: it names
 /// some nodes and not others, and a defaulted entry would write an all-zero id
 /// and bounds Voxel Max cannot resolve.
-fn ext_placements<'a>(
-    state: &'a VoxelMaxVoxMain,
-    voxel_max: &VoxelMaxExt,
-) -> Result<Vec<Placement<'a>>> {
+fn ext_placements<'a>(state: &'a VMaxVoxMain, vmax_ext: &VMaxExt) -> Result<Vec<Placement<'a>>> {
     let node_count = state.hierarchy_node_count();
-    let stored = voxel_max.hierarchy_nodes.len();
+    let stored = vmax_ext.hierarchy_nodes.len();
     if stored != 0 && stored < node_count {
         return Err(Error::invalid(format!(
-            "voxel-max ext has {stored} hierarchy nodes but the state has {node_count}"
+            "vmax ext has {stored} hierarchy nodes but the state has {node_count}"
         )));
     }
 
@@ -447,7 +444,7 @@ fn ext_placements<'a>(
         .map(|(index, (node_id, node))| Placement {
             node_id,
             node,
-            ext: voxel_max
+            ext: vmax_ext
                 .hierarchy_nodes
                 .get(index)
                 .cloned()
@@ -458,7 +455,7 @@ fn ext_placements<'a>(
 
 /// Walks the hierarchy from the roots, emitting one [`Placement`] per node-path
 /// with a synthesized ext, so the reverse path can rebuild a Voxel Max document
-/// from a state that carries no `voxel-max` ext. A subtree shared by several
+/// from a state that carries no `vmax` ext. A subtree shared by several
 /// parents is duplicated per path, matching the way voxcore composes a node's
 /// placement along every path to it, so the rebuilt world is identical even
 /// though Voxel Max models only a tree. Instances collapse back to one shared
@@ -469,7 +466,7 @@ fn ext_placements<'a>(
 /// the voxcore quaternion is not inverted to, and the material palette name is
 /// left empty. Node translation and scale, the hierarchy, colors, and any
 /// material palette survive.
-fn synthesize_placements(state: &VoxelMaxVoxMain) -> Vec<Placement<'_>> {
+fn synthesize_placements(state: &VMaxVoxMain) -> Vec<Placement<'_>> {
     let mut placements = Vec::new();
     let mut counter = 0usize;
     for &root_id in state.root_hierarchy_node_ids() {
@@ -484,7 +481,7 @@ fn synthesize_placements(state: &VoxelMaxVoxMain) -> Vec<Placement<'_>> {
 /// nodes attach to this occurrence's id, which is also the id of the node's
 /// first object.
 fn push_placement<'a>(
-    state: &'a VoxelMaxVoxMain,
+    state: &'a VMaxVoxMain,
     node_id: U32Id<BVoxHierarchyNode>,
     parent_id: Option<String>,
     counter: &mut usize,
@@ -499,7 +496,7 @@ fn push_placement<'a>(
     // transform on write, so a synthesized node carries the default anchor
     // tokens; its rotation is encoded from the node's live quaternion, and its
     // parent links this occurrence's id.
-    let ext = VoxelMaxNode {
+    let ext = VMaxExtNode {
         id: ext_id.clone(),
         parent_id,
         index: None,
@@ -515,13 +512,13 @@ fn push_placement<'a>(
     }
 }
 
-/// Synthesizes the scene-level `voxel-max` ext for a state that carries none,
+/// Synthesizes the scene-level `vmax` ext for a state that carries none,
 /// such as one loaded from another format. It holds only the document-wide data
 /// with no per-node home: a fallback scene version, a neutral camera, an empty
 /// name for each palette, and no preserved object state. Per-node provenance
 /// comes from [`synthesize_placements`].
-fn synthesize_voxel_max_ext(state: &VoxelMaxVoxMain) -> VoxelMaxExt {
-    VoxelMaxExt {
+fn synthesize_vmax_ext(state: &VMaxVoxMain) -> VMaxExt {
+    VMaxExt {
         scene: VMaxSceneJsonFile {
             v: FALLBACK_CONTENT_VERSION,
             cam: Some(SYNTH_CAMERA),
@@ -537,8 +534,8 @@ fn synthesize_voxel_max_ext(state: &VoxelMaxVoxMain) -> VoxelMaxExt {
 /// Goxel layer's blocks. It takes a distinct id and inherits the node's parent,
 /// rotation, and alignment to stay a sibling of the node's first object; its
 /// content box is derived from its own bounds on write.
-fn secondary_object_ext(node_ext: &VoxelMaxNode, slot: usize) -> VoxelMaxNode {
-    VoxelMaxNode {
+fn secondary_object_ext(node_ext: &VMaxExtNode, slot: usize) -> VMaxExtNode {
+    VMaxExtNode {
         id: secondary_uuid(&node_ext.id, slot),
         ..node_ext.clone()
     }
@@ -654,7 +651,7 @@ struct FoldedRef {
 
 /// The one folded palette an object references on its single layer, or `None`
 /// when it references no layer.
-fn folded_ref(state: &VoxelMaxVoxMain, object: &VoxObject) -> Option<FoldedRef> {
+fn folded_ref(state: &VMaxVoxMain, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
     let color_property_id = palette.property_id_by_name(BASE_COLOR);
@@ -687,9 +684,9 @@ struct MaterialPlan {
 /// list, so the materials are derived from the value pools, one per distinct
 /// material signature.
 fn material_plan(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     folded: &FoldedRef,
-    ext_palettes: &[Option<VoxelMaxPalette>],
+    ext_palettes: &[Option<VMaxExtPalette>],
 ) -> Result<MaterialPlan> {
     let provenance = ext_palettes
         .get(folded.palette_id.to_u32() as usize)
@@ -756,7 +753,7 @@ fn material_plan(
 /// cross-format source with too many materials cannot be represented rather
 /// than silently wrapping.
 fn derive_materials(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     folded: &FoldedRef,
     palette: &VoxPalette,
     name: String,
@@ -834,7 +831,7 @@ fn derive_materials(
 /// 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     palette_id: U32Id<BVoxPalette>,
     properties: &[(String, U32Id<BVoxProperty>)],
     slot: usize,
@@ -930,7 +927,7 @@ fn derived_material(
 /// Rebuilds a Voxel Max material from its exact ext copy. The `mi` token is
 /// derived from the 1-based slot and the transparency color `tc` is dropped,
 /// matching the writer's behavior.
-fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
+fn vmax_material(slot: usize, material: &VMaxExtMaterial) -> VMaxMaterial {
     VMaxMaterial {
         mi: (slot + 1).to_string(),
         mc: material.metallic,
@@ -959,7 +956,7 @@ fn unbound_scalar(value: Option<f64>, key: &str) -> f64 {
 
 /// The `f64` value at `value_id` in a property's `float` value pool, or `None`.
 fn value_pool_scalar(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -972,7 +969,7 @@ fn value_pool_scalar(
 
 /// The `bool` value at `value_id` in a property's `bool` value pool, or `None`.
 fn value_pool_flag(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -985,7 +982,7 @@ fn value_pool_flag(
 
 /// The value pool a property draws from.
 fn property_value_pool(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
@@ -1000,7 +997,7 @@ fn property_value_pool(
 /// one's `color_idx` from its material's `baseColor` value id and its
 /// `material_idx` from the material plan. A colorless voxel takes index 1.
 fn reconstruct_voxels(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     object: &VoxObject,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
@@ -1045,7 +1042,7 @@ fn reconstruct_voxels(
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
 fn voxel_color_index(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     folded: &FoldedRef,
     material_id: U32Id<BVoxMaterial>,
 ) -> Result<u8> {
@@ -1070,13 +1067,13 @@ fn voxel_color_index(
 /// color property borrows the default palette name and writes no file.
 #[allow(clippy::too_many_arguments)]
 fn build_palette(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
     palette_files: &mut HashMap<U32Id<BVoxPalette>, String>,
     palette_settings_files: &mut BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
-    voxel_max_color_format: VoxelMaxColorFormat,
+    vmax_color_format: VMaxColorFormat,
 ) -> Result<String> {
     // An object with no color property borrows the default palette name; an empty
     // reference is one Voxel Max cannot resolve. No file is written for it.
@@ -1096,8 +1093,8 @@ fn build_palette(
 
     let colors = color_palette_colors(state, palette_id, color_property_id)?;
     if matches!(
-        voxel_max_color_format,
-        VoxelMaxColorFormat::Png | VoxelMaxColorFormat::All
+        vmax_color_format,
+        VMaxColorFormat::Png | VMaxColorFormat::All
     ) {
         // 256 entries: the 255 colors 0-based then a transparent terminator.
         let mut cells = colors.clone();
@@ -1108,13 +1105,13 @@ fn build_palette(
     // does. Plist mode writes no image, so even a color-only object writes its
     // colors here rather than dropping them.
     let write_sidecar =
-        !plan.materials.is_empty() || matches!(voxel_max_color_format, VoxelMaxColorFormat::Plist);
+        !plan.materials.is_empty() || matches!(vmax_color_format, VMaxColorFormat::Plist);
     if write_sidecar {
         let sidecar = format!("palette{stem}.settings.vmaxpsb");
         // The plist `colors` table is the 255 colors with no terminator.
-        let sidecar_colors = match voxel_max_color_format {
-            VoxelMaxColorFormat::Png => Vec::new(),
-            VoxelMaxColorFormat::Plist | VoxelMaxColorFormat::All => colors,
+        let sidecar_colors = match vmax_color_format {
+            VMaxColorFormat::Png => Vec::new(),
+            VMaxColorFormat::Plist | VMaxColorFormat::All => colors,
         };
         // The per-color material map Voxel Max renders from: each used color
         // cell carries a bit for the material it draws.
@@ -1143,7 +1140,7 @@ fn build_palette(
 /// Errors when the bound value pool holds no color, since a transparent stand-in
 /// would write a model Voxel Max renders as empty.
 fn color_palette_colors(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
 ) -> Result<Vec<[u8; 4]>> {
@@ -1265,7 +1262,7 @@ fn default_material(slot: usize) -> VMaxMaterial {
 /// with its own defaults. Voxel Max reads a voxel's material from this map, not
 /// the per-voxel byte.
 fn color_material_map(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
     plan: &MaterialPlan,
@@ -1300,7 +1297,7 @@ fn color_material_map(
 /// Builds a scene object from its node and preserved provenance.
 fn object_from_node(
     node: &VoxHierarchyNode,
-    ext_node: &VoxelMaxNode,
+    ext_node: &VMaxExtNode,
     placement: &ObjectPlacement,
     data: String,
     pal: String,
@@ -1338,7 +1335,7 @@ fn object_from_node(
 /// subtree shared across parents is walked once. A node with no geometry
 /// collapses to a zero box.
 fn subtree_box_local(
-    state: &VoxelMaxVoxMain,
+    state: &VMaxVoxMain,
     node_id: U32Id<BVoxHierarchyNode>,
     memo: &mut HashMap<u32, ([f64; 3], [f64; 3])>,
 ) -> ([f64; 3], [f64; 3]) {
@@ -1386,7 +1383,7 @@ fn subtree_box_local(
 /// frame: the tight runtime grid `[origin, origin + bounds]`. An empty object
 /// has no runtime extent of its own, so it frames its build volume instead,
 /// matching the content box the write path gives it.
-fn object_box_local(state: &VoxelMaxVoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
+fn object_box_local(state: &VMaxVoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
     let object = state.object(object_id).expect("a valid child object");
     let (tight, (edit_bounds, edit_origin)) = tighten(object);
     let bounds = tight.bounds();
@@ -1434,7 +1431,7 @@ fn transform_half(transform: &TyTransformF64, half: [f64; 3]) -> [f64; 3] {
 /// symmetric `e_c`/`e_mi`/`e_ma` Voxel Max stores.
 fn group_from_node(
     node: &VoxHierarchyNode,
-    ext_node: &VoxelMaxNode,
+    ext_node: &VMaxExtNode,
     ind: [i64; 3],
     center: [f64; 3],
     half: [f64; 3],
@@ -1463,7 +1460,7 @@ fn group_from_node(
 /// or a synthesized triple keeping every node distinct, since Voxel Max
 /// collapses nodes that share `[0, 0, 0]`. Groups take the `1` lane and objects
 /// the `0` lane.
-fn node_ind(ext_node: &VoxelMaxNode, is_group: bool, counter: &mut i64) -> [i64; 3] {
+fn node_ind(ext_node: &VMaxExtNode, is_group: bool, counter: &mut i64) -> [i64; 3] {
     if let Some(index) = ext_node.index {
         return index;
     }
@@ -1475,7 +1472,7 @@ fn node_ind(ext_node: &VoxelMaxNode, is_group: bool, counter: &mut i64) -> [i64;
 /// The node's rotation as a quaternion, decoded from the stored axis-angle like
 /// the read path so the two stay inverses. A degenerate axis decodes to
 /// identity.
-fn ext_rotation(ext_node: &VoxelMaxNode) -> TyQuaternionF64 {
+fn ext_rotation(ext_node: &VMaxExtNode) -> TyQuaternionF64 {
     let [x, y, z, angle] = ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE);
     let axis = TyVector3F64::new(x, y, z);
     if axis.length() < ZERO_LENGTH_TOLERANCE {

@@ -1,7 +1,6 @@
 use crate::{
-    ABSORPTION, Error, Result, SHADOWS, VoxelMaxExt, VoxelMaxMaterial, VoxelMaxMaterialDispersion,
-    VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, VoxelMaxVoxMain,
-    vm_coefficient_to_pbr_factor,
+    ABSORPTION, Error, Result, SHADOWS, VMaxExt, VMaxExtMaterial, VMaxExtMaterialDispersion,
+    VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, VMaxVoxMain, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
 use std::collections::HashMap;
@@ -37,7 +36,7 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// Loads a Voxel Max document into a [`VoxMain`].
 ///
 /// Geometry, palettes, and hierarchy become native voxcore entities. The Voxel
-/// Max state with no native voxcore home rides in the [`VoxelMaxExt`] so the
+/// Max state with no native voxcore home rides in the [`VMaxExt`] so the
 /// document can be written back faithfully. Voxel snapshots are decoded to
 /// voxels on the fly and palette color tables unpacked as needed. Color indices
 /// are 1-based in Voxel Max, so a voxel's color cell is `color_idx - 1`; the
@@ -45,14 +44,14 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 ///
 /// Errors on malformed geometry or on a cross-reference the checked
 /// insertions reject.
-pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxelMaxVoxMain> {
+pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut state = VoxMain::default();
 
     // One folded palette per distinct object, aligned by palette id with the
     // ext provenance carrying its name and exact material list. Instances reuse
     // an object, so they share its palette rather than deduping by source.
-    let mut palette_provenance: Vec<Option<VoxelMaxPalette>> = Vec::new();
+    let mut palette_provenance: Vec<Option<VMaxExtPalette>> = Vec::new();
 
     // One voxcore object per distinct geometry; instances of one geometry
     // collapse to a single object placed by several nodes.
@@ -90,7 +89,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxelMaxVoxMain> {
 
     // Each object's preserved editor state, aligned by object id with the
     // objects, read off the contents files.
-    let object_states: Vec<Option<VoxelMaxObjectState>> = object_data
+    let object_states: Vec<Option<VMaxExtObjectState>> = object_data
         .iter()
         .map(|data| {
             data.as_deref()
@@ -99,11 +98,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxelMaxVoxMain> {
         })
         .collect();
 
-    state.set_ext(Some(voxel_max_ext(
-        scene,
-        palette_provenance,
-        &object_states,
-    )));
+    state.set_ext(Some(vmax_ext(scene, palette_provenance, &object_states)));
 
     Ok(state)
 }
@@ -111,8 +106,8 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxelMaxVoxMain> {
 /// Captures the editor state of a contents file for the ext. The tool partition
 /// (`tools.vp`) is dropped: it is the object's build volume, held natively as
 /// the object's grid, so it is rebuilt on write rather than stored here.
-fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectState {
-    VoxelMaxObjectState {
+fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VMaxExtObjectState {
+    VMaxExtObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
         tools: data.tools.clone().map(|mut tools| {
@@ -132,8 +127,8 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectSta
 fn build_object(
     serde: &VMaxFile,
     object: &VMaxObject,
-    state: &mut VoxelMaxVoxMain,
-    palette_provenance: &mut Vec<Option<VoxelMaxPalette>>,
+    state: &mut VMaxVoxMain,
+    palette_provenance: &mut Vec<Option<VMaxExtPalette>>,
 ) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
@@ -242,7 +237,7 @@ struct FoldedPalette {
     palette_id: U32Id<BVoxPalette>,
 
     /// The ext provenance carrying the name and exact material list.
-    provenance: VoxelMaxPalette,
+    provenance: VMaxExtPalette,
 
     /// Each used color-and-material combination's material id.
     combo_material_ids: HashMap<(u8, u8), U32Id<BVoxMaterial>>,
@@ -264,7 +259,7 @@ fn folded_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
     voxels: &[VMaxVoxel],
-    state: &mut VoxelMaxVoxMain,
+    state: &mut VMaxVoxMain,
 ) -> Result<FoldedPalette> {
     let colors = color_cells(serde, object);
     let (name, materials) = material_list(serde, object);
@@ -446,9 +441,9 @@ fn folded_palette(
     }
 
     let palette_id = state.retain_palette(palette)?;
-    let provenance = VoxelMaxPalette {
+    let provenance = VMaxExtPalette {
         name,
-        materials: materials.iter().map(voxel_max_material).collect(),
+        materials: materials.iter().map(vmax_ext_material).collect(),
     };
     Ok(FoldedPalette {
         palette_id,
@@ -507,7 +502,7 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
 /// A float value pool over `values`, defaulting a NaN coefficient to zero so
 /// the value pool builds. The infinities the wire spells carry across, and the
 /// exact value rides in the ext. Errors when `values` is empty.
-fn float_value_pool(state: &mut VoxelMaxVoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
+fn float_value_pool(state: &mut VMaxVoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
         .map(|v| if v.is_nan() { 0.0 } else { v })
@@ -527,14 +522,14 @@ fn dispersion(
 }
 
 /// The exact ext copy of a Voxel Max material.
-fn voxel_max_material(material: &VMaxMaterial) -> VoxelMaxMaterial {
-    VoxelMaxMaterial {
+fn vmax_ext_material(material: &VMaxMaterial) -> VMaxExtMaterial {
+    VMaxExtMaterial {
         metallic: material.mc,
         roughness: material.rc,
         emissive: material.sic,
         shadows: material.sh,
         transmission_color: material.tc,
-        dispersion: material.md.as_ref().map(|d| VoxelMaxMaterialDispersion {
+        dispersion: material.md.as_ref().map(|d| VMaxExtMaterialDispersion {
             absorption: d.absorption,
             ior: d.ior,
             transmission: d.transmission,
@@ -542,23 +537,23 @@ fn voxel_max_material(material: &VMaxMaterial) -> VoxelMaxMaterial {
     }
 }
 
-/// Builds the `voxel-max` ext payload: the scene-level state, the per-node
+/// Builds the `vmax` ext payload: the scene-level state, the per-node
 /// provenance aligned with the hierarchy nodes, the per-palette provenance, and
 /// the per-object editor states.
-fn voxel_max_ext(
+fn vmax_ext(
     scene: &VMaxSceneJsonFile,
-    palettes: Vec<Option<VoxelMaxPalette>>,
-    object_states: &[Option<VoxelMaxObjectState>],
-) -> VoxelMaxExt {
+    palettes: Vec<Option<VMaxExtPalette>>,
+    object_states: &[Option<VMaxExtObjectState>],
+) -> VMaxExt {
     let mut scene_block = scene.clone();
     scene_block.groups = Vec::new();
     scene_block.objects = Vec::new();
 
     // Aligned with the hierarchy nodes: groups first, then objects.
-    let mut hierarchy_nodes: Vec<VoxelMaxNode> = scene.groups.iter().map(node_from_group).collect();
+    let mut hierarchy_nodes: Vec<VMaxExtNode> = scene.groups.iter().map(node_from_group).collect();
     hierarchy_nodes.extend(scene.objects.iter().map(node_from_object));
 
-    VoxelMaxExt {
+    VMaxExt {
         scene: scene_block,
         hierarchy_nodes,
         palettes,
@@ -568,8 +563,8 @@ fn voxel_max_ext(
 
 /// The per-node provenance for a scene object. The content box is not kept; it
 /// is derived on write from the object's native tight bounds.
-fn node_from_object(object: &VMaxObject) -> VoxelMaxNode {
-    VoxelMaxNode {
+fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
+    VMaxExtNode {
         id: object.id.clone(),
         parent_id: object.parent_id.clone(),
         index: Some(object.ind),
@@ -583,8 +578,8 @@ fn node_from_object(object: &VMaxObject) -> VoxelMaxNode {
 
 /// The per-node provenance for a scene group. The content box is not kept; it
 /// is derived on write from the bounding box of the group's subtree.
-fn node_from_group(group: &VMaxGroup) -> VoxelMaxNode {
-    VoxelMaxNode {
+fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
+    VMaxExtNode {
         id: group.id.clone(),
         parent_id: group.parent_id.clone(),
         index: Some(group.ind),

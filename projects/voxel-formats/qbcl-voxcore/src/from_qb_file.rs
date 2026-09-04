@@ -1,4 +1,4 @@
-use crate::{Error, QubicleQbExt, QubicleQbMatrix, QubicleQbVoxMain, Result};
+use crate::{Error, QbExt, QbExtMatrix, QbVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
 use std::collections::{HashMap, HashSet};
@@ -13,12 +13,12 @@ use voxcore::{
 /// Each matrix becomes an object sharing one `baseColor` palette, placed
 /// by a hierarchy node at the matrix's scene position. The state with no native
 /// voxcore home, such as the header flags, matrix names, positions, and the
-/// per-voxel visibility bytes, rides in a `qubicle-qb` ext so the file can be
+/// per-voxel visibility bytes, rides in a `qb` ext so the file can be
 /// written back exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qb_file(file: &QbFile) -> Result<QubicleQbVoxMain> {
+pub fn from_qb_file(file: &QbFile) -> Result<QbVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
@@ -40,7 +40,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<QubicleQbVoxMain> {
             transform: translation(matrix.position),
         };
         root_ids.push(state.retain_hierarchy_node(node)?);
-        matrices.push(QubicleQbMatrix {
+        matrices.push(QbExtMatrix {
             name: matrix.name.clone(),
             position: matrix.position,
             visibility,
@@ -48,7 +48,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<QubicleQbVoxMain> {
     }
     state.set_root_hierarchy_node_ids(root_ids)?;
 
-    state.set_ext(Some(QubicleQbExt {
+    state.set_ext(Some(QbExt {
         version: file.version,
         bgra: matches!(file.color_format, QbColorFormat::Bgra),
         right_handed: matches!(file.z_axis_orientation, QbZAxisOrientation::RightHanded),
@@ -66,7 +66,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<QubicleQbVoxMain> {
 /// value pool is added to `state`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
 fn build_palette(
-    state: &mut QubicleQbVoxMain,
+    state: &mut QbVoxMain,
     file: &QbFile,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -237,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn errors_without_qubicle_qb_ext() {
+    fn errors_without_qb_ext() {
         let state = VoxMain::default();
         assert!(to_qb_file(&state).is_err());
     }

@@ -27,7 +27,7 @@ pub struct ToVmax {
     color_format: ColorFormat,
 
     /// Which scene camera the rebuilt document opens with. Omitted, the input's
-    /// `voxel-max` ext camera is kept when present, else the empty default.
+    /// `vmax` ext camera is kept when present, else the empty default.
     #[arg(value_name = "camera", long)]
     camera: Option<CameraView>,
 }

@@ -4,7 +4,7 @@ use crate::{
     implementation,
 };
 use std::{fs, path::Path};
-use voxsmith::{SceneCameraSource, VMaxSceneCamera, VmaxFileBuilder, VoxelMaxColorFormat};
+use voxsmith::{SceneCameraSource, VMaxColorFormat, VMaxSceneCamera, VmaxFileBuilder};
 
 /// The top-corner scene camera `--camera corner` writes: the empty camera's
 /// framing at the origin, rotated to a three-quarter view looking down at the
@@ -35,8 +35,7 @@ pub fn to_vmax(
     camera: Option<CameraView>,
 ) -> Result<()> {
     let state = implementation::load_state_vmax(input, from)?;
-    let mut builder =
-        VmaxFileBuilder::new(&state).color_format(voxel_max_color_format(color_format));
+    let mut builder = VmaxFileBuilder::new(&state).color_format(vmax_color_format(color_format));
     // Omitted, the path keeps its own camera: the ext's when present, else the
     // empty default.
     if let Some(camera) = camera {
@@ -56,11 +55,11 @@ pub fn to_vmax(
     Ok(())
 }
 
-/// Maps the CLI [`ColorFormat`] to voxsmith's [`VoxelMaxColorFormat`].
-fn voxel_max_color_format(format: ColorFormat) -> VoxelMaxColorFormat {
+/// Maps the CLI [`ColorFormat`] to voxsmith's [`VMaxColorFormat`].
+fn vmax_color_format(format: ColorFormat) -> VMaxColorFormat {
     match format {
-        ColorFormat::Png => VoxelMaxColorFormat::Png,
-        ColorFormat::Plist => VoxelMaxColorFormat::Plist,
-        ColorFormat::All => VoxelMaxColorFormat::All,
+        ColorFormat::Png => VMaxColorFormat::Png,
+        ColorFormat::Plist => VMaxColorFormat::Plist,
+        ColorFormat::All => VMaxColorFormat::All,
     }
 }

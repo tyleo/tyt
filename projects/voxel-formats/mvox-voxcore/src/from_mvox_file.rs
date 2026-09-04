@@ -1,7 +1,6 @@
 use crate::{
-    Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelLayer,
-    MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody, MagicaVoxelShapeModel,
-    MagicaVoxelUnknownChunk, MagicaVoxelVoxMain, Result,
+    Error, MVoxExt, MVoxExtCamera, MVoxExtFrame, MVoxExtLayer, MVoxExtMaterial, MVoxExtNode,
+    MVoxExtNodeBody, MVoxExtShapeModel, MVoxExtUnknownChunk, MVoxVoxMain, Result,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -36,7 +35,7 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// become one shared palette of value pools, and the `nTRN` / `nGRP` / `nSHP`
 /// scene graph becomes the hierarchy nodes. The state with no native voxcore
 /// home, such as layers, cameras, render settings, the exact per-node frames,
-/// and each material's exact optional fields, rides in the [`MagicaVoxelExt`]
+/// and each material's exact optional fields, rides in the [`MVoxExt`]
 /// so the file can be written back exactly.
 ///
 /// Errors if:
@@ -45,7 +44,7 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// 2. a material id is outside the palette range
 /// 3. a scene-node reference dangles
 /// 4. a checked insertion rejects a cross-reference
-pub fn from_mvox_file(file: &MVoxFile) -> Result<MagicaVoxelVoxMain> {
+pub fn from_mvox_file(file: &MVoxFile) -> Result<MVoxVoxMain> {
     let mut state = VoxMain::default();
 
     let palette = build_palette(&mut state, file)?;
@@ -63,7 +62,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<MagicaVoxelVoxMain> {
     state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
-    state.set_ext(Some(magica_voxel_ext(file)));
+    state.set_ext(Some(mvox_ext(file)));
 
     Ok(state)
 }
@@ -75,7 +74,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<MagicaVoxelVoxMain> {
 /// holds no null and a float value pool rejects NaN; the infinities carry
 /// across, and the exact optionals ride in the ext. Errors on a material id
 /// outside `0..=255` or a duplicate id.
-fn build_palette(state: &mut MagicaVoxelVoxMain, file: &MVoxFile) -> Result<VoxPalette> {
+fn build_palette(state: &mut MVoxVoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
     let has_materials = !file.materials.is_empty();
 
@@ -397,15 +396,15 @@ fn determinant(matrix: &[[f64; 3]; 3]) -> f64 {
     column(0).dot(column(1).cross(column(2)))
 }
 
-/// Builds the `magica-voxel` ext payload from the state with no native home.
-fn magica_voxel_ext(file: &MVoxFile) -> MagicaVoxelExt {
-    MagicaVoxelExt {
+/// Builds the `mvox` ext payload from the state with no native home.
+fn mvox_ext(file: &MVoxFile) -> MVoxExt {
+    MVoxExt {
         version: file.version,
         palette_present: file.palette.is_some(),
         materials: file
             .materials
             .iter()
-            .map(|material| MagicaVoxelMaterial {
+            .map(|material| MVoxExtMaterial {
                 id: material.id,
                 material_type: material.material_type.as_ref().map(material_type_token),
                 weight: material.weight,
@@ -430,7 +429,7 @@ fn magica_voxel_ext(file: &MVoxFile) -> MagicaVoxelExt {
         unknown_chunks: file
             .unknown_chunks
             .iter()
-            .map(|chunk| MagicaVoxelUnknownChunk {
+            .map(|chunk| MVoxExtUnknownChunk {
                 id: chunk.id,
                 content: chunk.content.clone(),
                 children: chunk.children.clone(),
@@ -441,26 +440,26 @@ fn magica_voxel_ext(file: &MVoxFile) -> MagicaVoxelExt {
 
 /// The ext provenance for one scene node: its id, attributes, and per-kind
 /// body.
-fn node_provenance(node: &MVoxSceneNode) -> MagicaVoxelNode {
-    MagicaVoxelNode {
+fn node_provenance(node: &MVoxSceneNode) -> MVoxExtNode {
+    MVoxExtNode {
         id: node.id,
         name: node.attributes.name.clone(),
         hidden: node.attributes.hidden,
         attr_extra: node.attributes.extra.0.clone(),
         body: match &node.body {
-            MVoxSceneNodeBody::Transform(transform) => MagicaVoxelNodeBody::Transform {
+            MVoxSceneNodeBody::Transform(transform) => MVoxExtNodeBody::Transform {
                 child: transform.child,
                 layer: transform.layer,
                 frames: transform.frames.iter().map(frame_provenance).collect(),
             },
-            MVoxSceneNodeBody::Group(group) => MagicaVoxelNodeBody::Group {
+            MVoxSceneNodeBody::Group(group) => MVoxExtNodeBody::Group {
                 children: group.children.clone(),
             },
-            MVoxSceneNodeBody::Shape(shape) => MagicaVoxelNodeBody::Shape {
+            MVoxSceneNodeBody::Shape(shape) => MVoxExtNodeBody::Shape {
                 models: shape
                     .models
                     .iter()
-                    .map(|model| MagicaVoxelShapeModel {
+                    .map(|model| MVoxExtShapeModel {
                         model: model.model,
                         frame_index: model.frame_index,
                         extra: model.extra.0.clone(),
@@ -472,8 +471,8 @@ fn node_provenance(node: &MVoxSceneNode) -> MagicaVoxelNode {
 }
 
 /// The ext provenance for one transform-node frame.
-fn frame_provenance(frame: &MVoxFrame) -> MagicaVoxelFrame {
-    MagicaVoxelFrame {
+fn frame_provenance(frame: &MVoxFrame) -> MVoxExtFrame {
+    MVoxExtFrame {
         rotation: frame.rotation.0,
         translation: frame.translation,
         frame_index: frame.frame_index,
@@ -482,8 +481,8 @@ fn frame_provenance(frame: &MVoxFrame) -> MagicaVoxelFrame {
 }
 
 /// The ext provenance for one layer.
-fn layer_provenance(layer: &MVoxLayer) -> MagicaVoxelLayer {
-    MagicaVoxelLayer {
+fn layer_provenance(layer: &MVoxLayer) -> MVoxExtLayer {
+    MVoxExtLayer {
         id: layer.id,
         name: layer.name.clone(),
         hidden: layer.hidden,
@@ -492,8 +491,8 @@ fn layer_provenance(layer: &MVoxLayer) -> MagicaVoxelLayer {
 }
 
 /// The ext provenance for one camera.
-fn camera_provenance(camera: &MVoxCamera) -> MagicaVoxelCamera {
-    MagicaVoxelCamera {
+fn camera_provenance(camera: &MVoxCamera) -> MVoxExtCamera {
+    MVoxExtCamera {
         id: camera.id,
         mode: camera.mode.clone(),
         focus: camera.focus,
@@ -509,7 +508,7 @@ fn camera_provenance(camera: &MVoxCamera) -> MagicaVoxelCamera {
 mod tests {
     #[cfg(feature = "codec")]
     use crate::codec::{from_mvox_bytes, to_mvox_bytes};
-    use crate::{MagicaVoxelVoxMain, from_mvox_file, to_mvox_file};
+    use crate::{MVoxVoxMain, from_mvox_file, to_mvox_file};
     use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
@@ -695,7 +694,7 @@ mod tests {
     /// object and a blue object sharing one `rgba` palette, placed by a small
     /// hierarchy of a nested group and two roots. The writer must synthesize a
     /// MagicaVoxel file from this rather than read an ext.
-    fn source_state() -> MagicaVoxelVoxMain {
+    fn source_state() -> MVoxVoxMain {
         let mut state = VoxMain::default();
 
         // One baseColor palette: a transparent placeholder, then red,
@@ -861,7 +860,7 @@ mod tests {
         assert!(file.models.is_empty());
     }
 
-    /// A state with no `magica-voxel` ext, such as one cross-loaded from
+    /// A state with no `mvox` ext, such as one cross-loaded from
     /// another format, synthesizes a file: one model per object, a global
     /// palette gathering every used color, and a scene graph the decoder reads
     /// back.

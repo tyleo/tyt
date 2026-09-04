@@ -1,11 +1,11 @@
-use crate::{Error, QubicleQbMatrix, QubicleQbVoxMain, Result};
+use crate::{Error, QbExtMatrix, QbVoxMain, Result};
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
 use voxcore::{VoxObject, color::resolve_cell_color_or_transparent};
 
-/// Writes a [`QubicleQbVoxMain`] back to a decoded Qubicle Binary [`QbFile`],
+/// Writes a [`QbVoxMain`] back to a decoded Qubicle Binary [`QbFile`],
 /// the inverse of [`from_qb_file`](crate::from_qb_file).
 ///
-/// Requires the `qubicle-qb` ext the forward path writes; without it the file
+/// Requires the `qb` ext the forward path writes; without it the file
 /// cannot be rebuilt. Each object emits one matrix, taking its name, position,
 /// and per-voxel visibility from the ext and its colors from the palette.
 ///
@@ -14,12 +14,12 @@ use voxcore::{VoxObject, color::resolve_cell_color_or_transparent};
 /// 1. the ext is missing
 /// 2. its matrix entries do not line up with the objects
 /// 3. a visibility list does not match its object
-pub fn to_qb_file(state: &QubicleQbVoxMain) -> Result<QbFile> {
+pub fn to_qb_file(state: &QbVoxMain) -> Result<QbFile> {
     let ext = match state.ext() {
         Some(ext) => ext.clone(),
         None => {
             return Err(Error::invalid(
-                "state has no qubicle-qb ext; cannot rebuild a Qubicle .qb file",
+                "state has no qb ext; cannot rebuild a Qubicle .qb file",
             ));
         }
     };
@@ -27,7 +27,7 @@ pub fn to_qb_file(state: &QubicleQbVoxMain) -> Result<QbFile> {
     let object_count = state.object_count();
     if object_count != ext.matrices.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qb ext has {} matrices but the state has {object_count} objects",
+            "qb ext has {} matrices but the state has {object_count} objects",
             ext.matrices.len()
         )));
     }
@@ -63,9 +63,9 @@ pub fn to_qb_file(state: &QubicleQbVoxMain) -> Result<QbFile> {
 /// list, placed in `.qb` storage order. Errors if the visibility count does not
 /// match the object's solid voxels.
 fn matrix_from_object(
-    state: &QubicleQbVoxMain,
+    state: &QbVoxMain,
     object: &VoxObject,
-    provenance: &QubicleQbMatrix,
+    provenance: &QbExtMatrix,
 ) -> Result<QbMatrix> {
     let bounds = object.bounds();
     let [size_x, size_y, size_z] = bounds.to_array();
@@ -76,7 +76,7 @@ fn matrix_from_object(
     let live_count = object.live_count();
     if live_count != provenance.visibility.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qb ext has {} visibility bytes but the object has {live_count} solid voxels",
+            "qb ext has {} visibility bytes but the object has {live_count} solid voxels",
             provenance.visibility.len()
         )));
     }

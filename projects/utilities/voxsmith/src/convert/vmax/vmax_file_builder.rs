@@ -1,11 +1,9 @@
-use crate::{
-    Result, SceneCameraSource, VMAX_DEPENDENCIES, VMaxFile, VoxelMaxColorFormat, VoxelMaxVoxMain,
-};
+use crate::{Result, SceneCameraSource, VMAX_DEPENDENCIES, VMaxColorFormat, VMaxFile, VMaxVoxMain};
 use std::io::Result as IOResult;
 use vmax_codec::to_vmax_package as write_vmax_package;
 use vmax_voxcore::VmaxFileBuilder as RawVmaxFileBuilder;
 
-/// Builds a Voxel Max document from a [`VoxelMaxVoxMain`], the configurable
+/// Builds a Voxel Max document from a [`VMaxVoxMain`], the configurable
 /// form of [`to_vmax_file`](crate::to_vmax_file) and
 /// [`to_vmax_package`](crate::to_vmax_package). It defaults to PNG palette
 /// colors and no camera override, reproducing the document those functions
@@ -14,12 +12,12 @@ pub struct VmaxFileBuilder<'a>(RawVmaxFileBuilder<'a>);
 
 impl<'a> VmaxFileBuilder<'a> {
     /// Starts a builder writing `state` into a Voxel Max document.
-    pub fn new(state: &'a VoxelMaxVoxMain) -> Self {
+    pub fn new(state: &'a VMaxVoxMain) -> Self {
         Self(RawVmaxFileBuilder::new(state))
     }
 
     /// Sets where each palette's colors are stored.
-    pub fn color_format(self, color_format: VoxelMaxColorFormat) -> Self {
+    pub fn color_format(self, color_format: VMaxColorFormat) -> Self {
         Self(self.0.color_format(color_format))
     }
 

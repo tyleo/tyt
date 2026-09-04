@@ -1,10 +1,10 @@
-use crate::{Result, VoxelMaxColorFormat, VoxelMaxVoxMain, to_vmax_file};
+use crate::{Result, VMaxColorFormat, VMaxVoxMain, to_vmax_file};
 use vmax_codec::{
     CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result as CodecResult,
     to_vmax_package as write_vmax_package,
 };
 
-/// Writes a [`VoxelMaxVoxMain`] to a `.vmax` package through `dependencies`,
+/// Writes a [`VMaxVoxMain`] to a `.vmax` package through `dependencies`,
 /// the package form of [`to_vmax_file`] and the inverse of
 /// [`from_vmax_package`](crate::codec::from_vmax_package). For control over
 /// the scene camera, build the file with
@@ -12,28 +12,28 @@ use vmax_codec::{
 /// [`vmax_codec::to_vmax_package`].
 ///
 /// # Arguments
-/// * `voxel_max_color_format` - where each palette's colors are stored.
+/// * `vmax_color_format` - where each palette's colors are stored.
 /// * `write` - receives each file's package-relative name and bytes and
 ///   performs the actual write, creating any subdirectory a `QuickLook/` name
 ///   implies.
 pub fn to_vmax_package<D, W>(
     dependencies: &D,
-    state: &VoxelMaxVoxMain,
-    voxel_max_color_format: VoxelMaxColorFormat,
+    state: &VMaxVoxMain,
+    vmax_color_format: VMaxColorFormat,
     write: W,
 ) -> Result<()>
 where
     D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
     W: FnMut(&str, &[u8]) -> CodecResult<()>,
 {
-    let file = to_vmax_file(state, voxel_max_color_format)?;
+    let file = to_vmax_file(state, vmax_color_format)?;
     Ok(write_vmax_package(dependencies, &file, write)?)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        VoxelMaxColorFormat, VoxelMaxVoxMain,
+        VMaxColorFormat, VMaxVoxMain,
         codec::{from_vmax_package, to_vmax_package},
     };
     use branded_id::U32Id;
@@ -46,7 +46,7 @@ mod tests {
     };
 
     /// A state placing one red voxel at the origin.
-    fn red_voxel_state() -> VoxelMaxVoxMain {
+    fn red_voxel_state() -> VMaxVoxMain {
         let mut state = VoxMain::default();
         let color = lin_srgba_f64_from_srgba_u8(TySrgbaU8::from([0xFF, 0, 0, 0xFF]));
         let value_pool_id =
@@ -88,7 +88,7 @@ mod tests {
         to_vmax_package(
             &DependenciesImpl,
             &red_voxel_state(),
-            VoxelMaxColorFormat::Png,
+            VMaxColorFormat::Png,
             |name, bytes| {
                 package.insert(name.to_owned(), bytes.to_vec());
                 Ok(())

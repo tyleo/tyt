@@ -350,7 +350,7 @@ mod tests {
     fn voxj_document(name: &str, voxj_version: u32) -> InfoDocument<'_> {
         InfoDocument {
             name,
-            format: VoxelFormat::VoxelJson,
+            format: VoxelFormat::Voxj,
             voxj_version: Some(voxj_version),
             has_ext: false,
         }
@@ -427,7 +427,7 @@ mod tests {
     fn omits_voxj_version_for_other_formats() {
         let document = InfoDocument {
             name: "model.mvox",
-            format: VoxelFormat::MagicaVoxel,
+            format: VoxelFormat::MVox,
             voxj_version: None,
             has_ext: false,
         };

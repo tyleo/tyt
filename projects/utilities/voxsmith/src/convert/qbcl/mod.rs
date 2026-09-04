@@ -33,7 +33,6 @@ pub use ::qbcl::{qb::QbFile, qbcl::QbclFile, qbt::QbtFile};
 // Re-exported so callers can name the states the Qubicle conversions exchange
 // and their exts.
 pub use ::qbcl_voxcore::{
-    QubicleQbExt, QubicleQbMatrix, QubicleQbVoxMain, QubicleQbclExt, QubicleQbclMetadata,
-    QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclThumbnail, QubicleQbclVoxMain, QubicleQbtExt,
-    QubicleQbtNode, QubicleQbtVoxMain,
+    QbExt, QbExtMatrix, QbVoxMain, QbclExt, QbclExtMetadata, QbclExtNode, QbclExtNodeBody,
+    QbclExtThumbnail, QbclVoxMain, QbtExt, QbtExtNode, QbtVoxMain,
 };

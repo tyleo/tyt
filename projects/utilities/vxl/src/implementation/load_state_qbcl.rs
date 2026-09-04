@@ -1,14 +1,14 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
-use voxsmith::{QubicleQbclVoxMain, from_qbcl_bytes, from_voxj_bytes};
+use voxsmith::{QbclVoxMain, from_qbcl_bytes, from_voxj_bytes};
 
-/// Loads the voxel file at `input` into a [`QubicleQbclVoxMain`] for the
+/// Loads the voxel file at `input` into a [`QbclVoxMain`] for the
 /// Qubicle `.qbcl` writer. A Qubicle `.qbcl` input keeps its ext. A Voxel
 /// Json input reads the ext back from its document `ext` block when that
 /// block is the Qubicle `.qbcl` one. Every other source, including a Voxel
 /// Json document with a foreign block, loads with no ext, so the writer
 /// synthesizes from the bare scene.
-pub fn load_state_qbcl(input: &Path, from: Option<Format>) -> Result<QubicleQbclVoxMain> {
+pub fn load_state_qbcl(input: &Path, from: Option<Format>) -> Result<QbclVoxMain> {
     match implementation::resolve_format(input, from)? {
         Format::Qbcl => Ok(from_qbcl_bytes(&fs::read(input)?)?),
         Format::Voxj => Ok(from_voxj_bytes(&fs::read(input)?)?),

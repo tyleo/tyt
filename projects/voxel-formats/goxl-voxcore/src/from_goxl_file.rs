@@ -1,6 +1,6 @@
 use crate::{
-    Error, GoxelCamera, GoxelExt, GoxelImage, GoxelLayer, GoxelLight, GoxelMaterial, GoxelPreview,
-    GoxelUnknownChunk, GoxelVoxMain, Result,
+    Error, GoxlExt, GoxlExtCamera, GoxlExtImage, GoxlExtLayer, GoxlExtLight, GoxlExtMaterial,
+    GoxlExtPreview, GoxlExtUnknownChunk, GoxlVoxMain, Result,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -18,11 +18,11 @@ use voxcore::{
 /// blocks it stamps. The state with no native voxcore home, such as the image
 /// metadata, preview, materials, cameras, light, per-layer metadata, the clone
 /// and shape definitions, the exact block placements, and unknown chunks, rides
-/// in the [`GoxelExt`] so the file can be written back exactly.
+/// in the [`GoxlExt`] so the file can be written back exactly.
 ///
 /// Errors on a layer placement that references a block outside the block
 /// list, or on a cross-reference the checked insertions reject.
-pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxelVoxMain> {
+pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxlVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
@@ -39,7 +39,7 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxelVoxMain> {
     let root_ids = state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(root_ids)?;
 
-    state.set_ext(Some(goxel_ext(file)));
+    state.set_ext(Some(goxl_ext(file)));
 
     Ok(state)
 }
@@ -50,7 +50,7 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxelVoxMain> {
 /// value pool is added to `state`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
 fn build_palette(
-    state: &mut GoxelVoxMain,
+    state: &mut GoxlVoxMain,
     file: &GoxlFile,
 ) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 4]> = Vec::new();
@@ -168,15 +168,15 @@ fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHier
     Ok(nodes)
 }
 
-/// Builds the `goxel` ext payload from the state with no native home.
-fn goxel_ext(file: &GoxlFile) -> GoxelExt {
-    GoxelExt {
+/// Builds the `goxl` ext payload from the state with no native home.
+fn goxl_ext(file: &GoxlFile) -> GoxlExt {
+    GoxlExt {
         version: file.version,
-        image: GoxelImage {
+        image: GoxlExtImage {
             bounding_box: file.image.bounding_box,
             extra: file.image.extra.0.clone(),
         },
-        preview: file.preview.as_ref().map(|preview| GoxelPreview {
+        preview: file.preview.as_ref().map(|preview| GoxlExtPreview {
             width: preview.width,
             height: preview.height,
             pixels: preview.pixels.clone(),
@@ -188,7 +188,7 @@ fn goxel_ext(file: &GoxlFile) -> GoxelExt {
         unknown_chunks: file
             .unknown_chunks
             .iter()
-            .map(|chunk| GoxelUnknownChunk {
+            .map(|chunk| GoxlExtUnknownChunk {
                 id: chunk.id,
                 data: chunk.data.clone(),
             })
@@ -198,8 +198,8 @@ fn goxel_ext(file: &GoxlFile) -> GoxelExt {
 
 /// The ext provenance for one layer: its metadata, clone and shape definition,
 /// and the full placement list.
-fn layer_provenance(layer: &GoxlLayer) -> GoxelLayer {
-    GoxelLayer {
+fn layer_provenance(layer: &GoxlLayer) -> GoxlExtLayer {
+    GoxlExtLayer {
         name: layer.name.clone(),
         id: layer.id,
         base_id: layer.base_id,
@@ -221,8 +221,8 @@ fn layer_provenance(layer: &GoxlLayer) -> GoxelLayer {
 }
 
 /// The ext provenance for one material.
-fn material_provenance(material: &GoxlMaterial) -> GoxelMaterial {
-    GoxelMaterial {
+fn material_provenance(material: &GoxlMaterial) -> GoxlExtMaterial {
+    GoxlExtMaterial {
         name: material.name.clone(),
         base_color: material.base_color,
         metallic: material.metallic,
@@ -233,8 +233,8 @@ fn material_provenance(material: &GoxlMaterial) -> GoxelMaterial {
 }
 
 /// The ext provenance for one camera.
-fn camera_provenance(camera: &GoxlCamera) -> GoxelCamera {
-    GoxelCamera {
+fn camera_provenance(camera: &GoxlCamera) -> GoxlExtCamera {
+    GoxlExtCamera {
         name: camera.name.clone(),
         distance: camera.distance,
         orthographic: camera.orthographic,
@@ -245,8 +245,8 @@ fn camera_provenance(camera: &GoxlCamera) -> GoxelCamera {
 }
 
 /// The ext provenance for the light settings.
-fn light_provenance(light: &GoxlLight) -> GoxelLight {
-    GoxelLight {
+fn light_provenance(light: &GoxlLight) -> GoxlExtLight {
+    GoxlExtLight {
         pitch: light.pitch,
         yaw: light.yaw,
         intensity: light.intensity,
@@ -270,7 +270,7 @@ fn shape_token(shape: GoxlShape) -> String {
 mod tests {
     #[cfg(feature = "codec")]
     use crate::codec::{from_goxl_bytes, to_goxl_bytes};
-    use crate::{GoxelVoxMain, from_goxl_file, to_goxl_file};
+    use crate::{GoxlVoxMain, from_goxl_file, to_goxl_file};
     use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -449,7 +449,7 @@ mod tests {
     /// object and a blue object sharing one `rgba` palette, placed by a
     /// hierarchy of a nested group and two roots. This is the cross-format
     /// synthesis input.
-    fn source_state() -> GoxelVoxMain {
+    fn source_state() -> GoxlVoxMain {
         let mut state = VoxMain::default();
 
         // One baseColor palette: a transparent placeholder, then red,
@@ -605,7 +605,7 @@ mod tests {
         assert!(file.layers.is_empty());
     }
 
-    /// A state with no `goxel` ext, such as one cross-loaded from another
+    /// A state with no `goxl` ext, such as one cross-loaded from another
     /// format, synthesizes a file: the hierarchy flattens to layers of placed
     /// blocks whose world voxels and colors match the source, one layer per
     /// placement named for its node, and the file reads back into a valid

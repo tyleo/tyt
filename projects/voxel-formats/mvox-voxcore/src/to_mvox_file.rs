@@ -1,6 +1,4 @@
-use crate::{
-    Error, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelNodeBody, MagicaVoxelVoxMain, Result,
-};
+use crate::{Error, MVoxExt, MVoxExtFrame, MVoxExtNodeBody, MVoxVoxMain, Result};
 use branded_id::U32Id;
 use mvox::{
     MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer, MVoxMaterial,
@@ -16,10 +14,10 @@ use voxcore::{
     material::BASE_COLOR,
 };
 
-/// Writes a [`MagicaVoxelVoxMain`] back to a decoded MagicaVoxel [`MVoxFile`],
+/// Writes a [`MVoxVoxMain`] back to a decoded MagicaVoxel [`MVoxFile`],
 /// the inverse of [`from_mvox_file`](crate::from_mvox_file).
 ///
-/// A state carrying the [`MagicaVoxelExt`] the forward path writes is rebuilt
+/// A state carrying the [`MVoxExt`] the forward path writes is rebuilt
 /// from it exactly. A state without an ext, such as one loaded from another
 /// format, is synthesized from the bare voxcore scene by `synthesize_mvox`.
 /// Each object emits one model whose voxels are listed in ascending raster
@@ -28,7 +26,7 @@ use voxcore::{
 /// Errors if the ext is present but its per-node entries do not line up with
 /// the hierarchy, or if synthesis exceeds a MagicaVoxel limit such as the
 /// per-axis voxel cap.
-pub fn to_mvox_file(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
+pub fn to_mvox_file(state: &MVoxVoxMain) -> Result<MVoxFile> {
     let Some(ext) = state.ext().clone() else {
         return synthesize_mvox(state);
     };
@@ -110,7 +108,7 @@ pub fn to_mvox_file(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
             .map(|map| {
                 <[u8; 256]>::try_from(map).map_err(|_| {
                     Error::Invalid(format!(
-                        "magica-voxel ext index map has {} entries, need exactly 256",
+                        "mvox ext index map has {} entries, need exactly 256",
                         map.len()
                     ))
                 })
@@ -124,7 +122,7 @@ pub fn to_mvox_file(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
 /// gives color index `index`. Transparent where the palette or its color
 /// property is absent.
 fn colors_from_palette(
-    state: &MagicaVoxelVoxMain,
+    state: &MVoxVoxMain,
     palette_id: Option<U32Id<BVoxPalette>>,
 ) -> [MVoxColor; 256] {
     let mut colors = [MVoxColor::default(); 256];
@@ -152,7 +150,7 @@ fn colors_from_palette(
 /// Rebuilds the materials from the ext, which holds each one's exact optional
 /// fields, so an absent field round-trips as absent. The palette's value pools
 /// carry only a default-substituted neutral copy.
-fn build_materials(ext: &MagicaVoxelExt) -> Vec<MVoxMaterial> {
+fn build_materials(ext: &MVoxExt) -> Vec<MVoxMaterial> {
     ext.materials
         .iter()
         .map(|material| MVoxMaterial {
@@ -235,14 +233,11 @@ fn model_byte(value: u32, label: &str) -> Result<u8> {
 /// references come from the ext, which holds the exact lists, so a shape that
 /// draws one model on several frames or any other repeated reference
 /// round-trips. Errors if the ext node count does not match the hierarchy.
-fn build_scene_nodes(
-    state: &MagicaVoxelVoxMain,
-    ext: &MagicaVoxelExt,
-) -> Result<Vec<MVoxSceneNode>> {
+fn build_scene_nodes(state: &MVoxVoxMain, ext: &MVoxExt) -> Result<Vec<MVoxSceneNode>> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.scene_nodes.len() {
         return Err(Error::Invalid(format!(
-            "magica-voxel ext has {} scene nodes but the state has {node_count} hierarchy nodes",
+            "mvox ext has {} scene nodes but the state has {node_count} hierarchy nodes",
             ext.scene_nodes.len()
         )));
     }
@@ -258,7 +253,7 @@ fn build_scene_nodes(
                 extra: MVoxDict(provenance.attr_extra.clone()),
             },
             body: match &provenance.body {
-                MagicaVoxelNodeBody::Transform {
+                MVoxExtNodeBody::Transform {
                     child,
                     layer,
                     frames,
@@ -267,12 +262,10 @@ fn build_scene_nodes(
                     layer: *layer,
                     frames: frames.iter().map(frame_from_provenance).collect(),
                 }),
-                MagicaVoxelNodeBody::Group { children } => {
-                    MVoxSceneNodeBody::Group(MVoxGroupNode {
-                        children: children.clone(),
-                    })
-                }
-                MagicaVoxelNodeBody::Shape { models } => MVoxSceneNodeBody::Shape(MVoxShapeNode {
+                MVoxExtNodeBody::Group { children } => MVoxSceneNodeBody::Group(MVoxGroupNode {
+                    children: children.clone(),
+                }),
+                MVoxExtNodeBody::Shape { models } => MVoxSceneNodeBody::Shape(MVoxShapeNode {
                     models: models
                         .iter()
                         .map(|model| MVoxShapeModel {
@@ -288,7 +281,7 @@ fn build_scene_nodes(
 }
 
 /// Rebuilds one transform-node frame from its ext provenance.
-fn frame_from_provenance(frame: &MagicaVoxelFrame) -> MVoxFrame {
+fn frame_from_provenance(frame: &MVoxExtFrame) -> MVoxFrame {
     MVoxFrame {
         rotation: MVoxRotation(frame.rotation),
         translation: frame.translation,
@@ -297,7 +290,7 @@ fn frame_from_provenance(frame: &MagicaVoxelFrame) -> MVoxFrame {
     }
 }
 
-/// Synthesizes a MagicaVoxel file from a state that carries no `magica-voxel`
+/// Synthesizes a MagicaVoxel file from a state that carries no `mvox`
 /// ext, such as one loaded from another format. Builds one model per object, a
 /// single global 256-color palette gathering every distinct color used, and a
 /// scene graph mirroring the voxcore hierarchy.
@@ -307,7 +300,7 @@ fn frame_from_provenance(frame: &MagicaVoxelFrame) -> MVoxFrame {
 /// carries only translation, so node rotation and scale are dropped. The
 /// palette is lossless up to 255 distinct colors; beyond that the table is full
 /// and the excess collapses onto the last slot.
-fn synthesize_mvox(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
+fn synthesize_mvox(state: &MVoxVoxMain) -> Result<MVoxFile> {
     let (palette, color_index) = synthesize_palette(state)?;
     let models = state
         .iter_objects()
@@ -327,7 +320,7 @@ fn synthesize_mvox(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
 /// table and the matching color-to-index map. Slot 0 is MagicaVoxel's reserved
 /// empty color, so real colors fill `1..=255`; a 256th distinct color and
 /// beyond reuse the last slot.
-fn synthesize_palette(state: &MagicaVoxelVoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], u8>)> {
+fn synthesize_palette(state: &MVoxVoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], u8>)> {
     let mut colors = [MVoxColor::default(); 256];
     let mut color_index: HashMap<[u8; 4], u8> = HashMap::new();
     let mut next = 1usize;
@@ -362,7 +355,7 @@ fn synthesize_palette(state: &MagicaVoxelVoxMain) -> Result<(MVoxPalette, HashMa
 /// 256-voxel-per-axis limit, past which the byte voxel coordinates cannot
 /// address it.
 fn synthesize_model(
-    state: &MagicaVoxelVoxMain,
+    state: &MVoxVoxMain,
     object: &VoxObject,
     color_index: &HashMap<[u8; 4], u8>,
 ) -> Result<MVoxModel> {
@@ -407,7 +400,7 @@ fn synthesize_model(
 /// requires. An object no node places is emitted once at the origin so geometry
 /// is never dropped, and an object placed by several nodes is emitted once per
 /// placement.
-fn synthesize_scene(state: &MagicaVoxelVoxMain) -> Vec<MVoxSceneNode> {
+fn synthesize_scene(state: &MVoxVoxMain) -> Vec<MVoxSceneNode> {
     let mut builder = SceneBuilder::default();
     let root_transform = builder.allocate();
     let root_group = builder.allocate();
@@ -452,7 +445,7 @@ impl SceneBuilder {
 
     /// Emits the `nTRN` -> `nGRP` for a hierarchy node and its whole subtree,
     /// returning the transform node's id for a parent group to list.
-    fn emit_node(&mut self, state: &MagicaVoxelVoxMain, node_id: U32Id<BVoxHierarchyNode>) -> i32 {
+    fn emit_node(&mut self, state: &MVoxVoxMain, node_id: U32Id<BVoxHierarchyNode>) -> i32 {
         let transform = self.allocate();
         let group = self.allocate();
 

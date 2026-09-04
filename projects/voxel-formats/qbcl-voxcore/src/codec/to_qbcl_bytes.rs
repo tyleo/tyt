@@ -1,14 +1,11 @@
-use crate::{QubicleQbclVoxMain, Result, to_qbcl_file};
+use crate::{QbclVoxMain, Result, to_qbcl_file};
 use qbcl_codec::{CompressZlib, qbcl::to_qbcl_file_bytes};
 
-/// Writes a [`QubicleQbclVoxMain`] to the bytes of a Qubicle Construction
+/// Writes a [`QbclVoxMain`] to the bytes of a Qubicle Construction
 /// Library `.qbcl` file through `dependencies`, the bytes form of
 /// [`to_qbcl_file`] and the inverse of
 /// [`from_qbcl_bytes`](crate::codec::from_qbcl_bytes).
-pub fn to_qbcl_bytes<D: CompressZlib>(
-    dependencies: &D,
-    state: &QubicleQbclVoxMain,
-) -> Result<Vec<u8>> {
+pub fn to_qbcl_bytes<D: CompressZlib>(dependencies: &D, state: &QbclVoxMain) -> Result<Vec<u8>> {
     let file = to_qbcl_file(state)?;
     Ok(to_qbcl_file_bytes(dependencies, &file))
 }

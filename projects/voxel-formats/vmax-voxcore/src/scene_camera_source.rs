@@ -8,7 +8,7 @@ use vmax::VMaxSceneCamera;
 /// default in synthesis.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SceneCameraSource {
-    /// The ext's scene camera; errors when the state carries no `voxel-max`
+    /// The ext's scene camera; errors when the state carries no `vmax`
     /// ext.
     Ext,
     /// The empty default scene camera, replacing any the ext carries.

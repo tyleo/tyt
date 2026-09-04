@@ -18,4 +18,4 @@ pub use ::vmax::{VMaxFile, VMaxSceneCamera};
 
 // Re-exported so callers can name the state the Voxel Max conversions
 // exchange, its ext, and the options `VmaxFileBuilder` takes.
-pub use ::vmax_voxcore::{SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxVoxMain};
+pub use ::vmax_voxcore::{SceneCameraSource, VMaxColorFormat, VMaxExt, VMaxVoxMain};

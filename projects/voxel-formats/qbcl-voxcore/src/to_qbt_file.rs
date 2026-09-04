@@ -1,4 +1,4 @@
-use crate::{Error, QubicleQbtNode, QubicleQbtVoxMain, Result};
+use crate::{Error, QbtExtNode, QbtVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
@@ -7,10 +7,10 @@ use voxcore::{
     BVoxHierarchyNode, VoxHierarchyNode, VoxObject, color::resolve_cell_color_or_transparent,
 };
 
-/// Writes a [`QubicleQbtVoxMain`] back to a decoded Qubicle Binary Tree
+/// Writes a [`QbtVoxMain`] back to a decoded Qubicle Binary Tree
 /// [`QbtFile`], the inverse of [`from_qbt_file`](crate::from_qbt_file).
 ///
-/// Requires the `qubicle-qbt` ext the forward path writes; without it the file
+/// Requires the `qbt` ext the forward path writes; without it the file
 /// cannot be rebuilt. The scene tree is walked from the single root, each
 /// matrix or compound object emitting its grid with the visibility masks and
 /// color from the ext and the palette.
@@ -21,12 +21,12 @@ use voxcore::{
 /// 2. its node entries do not line up with the hierarchy
 /// 3. the state does not have exactly one root
 /// 4. a mask list does not match its object
-pub fn to_qbt_file(state: &QubicleQbtVoxMain) -> Result<QbtFile> {
+pub fn to_qbt_file(state: &QbtVoxMain) -> Result<QbtFile> {
     let ext = match state.ext() {
         Some(ext) => ext.clone(),
         None => {
             return Err(Error::invalid(
-                "state has no qubicle-qbt ext; cannot rebuild a Qubicle .qbt file",
+                "state has no qbt ext; cannot rebuild a Qubicle .qbt file",
             ));
         }
     };
@@ -34,7 +34,7 @@ pub fn to_qbt_file(state: &QubicleQbtVoxMain) -> Result<QbtFile> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.nodes.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qbt ext has {} nodes but the state has {node_count} hierarchy nodes",
+            "qbt ext has {} nodes but the state has {node_count} hierarchy nodes",
             ext.nodes.len()
         )));
     }
@@ -65,8 +65,8 @@ pub fn to_qbt_file(state: &QubicleQbtVoxMain) -> Result<QbtFile> {
 /// and its aligned ext provenance.
 fn rebuild_node(
     node_id: U32Id<BVoxHierarchyNode>,
-    state: &QubicleQbtVoxMain,
-    nodes: &[QubicleQbtNode],
+    state: &QbtVoxMain,
+    nodes: &[QbtExtNode],
 ) -> Result<QbtNode> {
     let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
         Error::invalid(format!(
@@ -76,16 +76,16 @@ fn rebuild_node(
     })?;
     let provenance = nodes.get(node_id.to_u32() as usize).ok_or_else(|| {
         Error::invalid(format!(
-            "qubicle-qbt ext has no entry for hierarchy node {}",
+            "qbt ext has no entry for hierarchy node {}",
             node_id.to_u32()
         ))
     })?;
 
     let node = match provenance {
-        QubicleQbtNode::Model => QbtNode::Model(QbtModel {
+        QbtExtNode::Model => QbtNode::Model(QbtModel {
             children: rebuild_children(hierarchy, state, nodes)?,
         }),
-        QubicleQbtNode::Matrix {
+        QbtExtNode::Matrix {
             name,
             position,
             local_scale,
@@ -100,7 +100,7 @@ fn rebuild_node(
             *pivot,
             masks,
         )?),
-        QubicleQbtNode::Compound {
+        QbtExtNode::Compound {
             name,
             position,
             local_scale,
@@ -121,7 +121,7 @@ fn rebuild_node(
                 children: rebuild_children(hierarchy, state, nodes)?,
             })
         }
-        QubicleQbtNode::Unknown { type_id, data } => QbtNode::Unknown(QbtUnknownNode {
+        QbtExtNode::Unknown { type_id, data } => QbtNode::Unknown(QbtUnknownNode {
             type_id: *type_id,
             data: data.clone(),
         }),
@@ -133,8 +133,8 @@ fn rebuild_node(
 /// Rebuilds the child nodes of a hierarchy node, in stored order.
 fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
-    state: &QubicleQbtVoxMain,
-    nodes: &[QubicleQbtNode],
+    state: &QbtVoxMain,
+    nodes: &[QbtExtNode],
 ) -> Result<Vec<QbtNode>> {
     hierarchy
         .child_node_ids
@@ -146,10 +146,7 @@ fn rebuild_children(
 /// The build-volume object a matrix or compound node places, or an error if it
 /// has none. The object is the author's build volume, so the written matrix
 /// keeps the original dimensions and voxel positions directly.
-fn matrix_object<'a>(
-    hierarchy: &VoxHierarchyNode,
-    state: &'a QubicleQbtVoxMain,
-) -> Result<&'a VoxObject> {
+fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a QbtVoxMain) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_object_ids
         .first()
@@ -165,7 +162,7 @@ fn matrix_object<'a>(
 /// match the object's solid voxels.
 #[allow(clippy::too_many_arguments)]
 fn matrix_from_object(
-    state: &QubicleQbtVoxMain,
+    state: &QbtVoxMain,
     object: &VoxObject,
     name: String,
     position: [i32; 3],
@@ -182,7 +179,7 @@ fn matrix_from_object(
     let live_count = object.live_count();
     if live_count != masks.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qbt ext has {} masks but the object has {live_count} solid voxels",
+            "qbt ext has {} masks but the object has {live_count} solid voxels",
             masks.len()
         )));
     }

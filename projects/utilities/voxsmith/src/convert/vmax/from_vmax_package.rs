@@ -1,8 +1,8 @@
-use crate::{Result, VMAX_DEPENDENCIES, VoxelMaxVoxMain};
+use crate::{Result, VMAX_DEPENDENCIES, VMaxVoxMain};
 use std::io::Result as IOResult;
 use vmax_voxcore::codec::from_vmax_package as raw_from_vmax_package;
 
-/// Loads a `.vmax` package into a [`VoxelMaxVoxMain`], reading its files
+/// Loads a `.vmax` package into a [`VMaxVoxMain`], reading its files
 /// through the caller's closures. The document is the one
 /// [`from_vmax_file`](crate::from_vmax_file) loads.
 ///
@@ -11,7 +11,7 @@ use vmax_voxcore::codec::from_vmax_package as raw_from_vmax_package;
 ///   entries keep their subdirectory prefix.
 /// * `resolve` - returns a file's bytes by that path, or `Ok(None)` if it has
 ///   since vanished.
-pub fn from_vmax_package<L, R>(list: L, mut resolve: R) -> Result<VoxelMaxVoxMain>
+pub fn from_vmax_package<L, R>(list: L, mut resolve: R) -> Result<VMaxVoxMain>
 where
     L: FnOnce() -> IOResult<Vec<String>>,
     R: FnMut(&str) -> IOResult<Option<Vec<u8>>>,

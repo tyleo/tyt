@@ -19,20 +19,20 @@
 //! / [`to_vmax_file`]) and straight to and from a package's files
 //! ([`from_vmax_package`] / [`to_vmax_package`], with [`VmaxFileBuilder`]
 //! over the color format and the scene camera), carrying the
-//! [`VoxelMaxExt`]. For MagicaVoxel it fronts mvox-voxcore's typed loads
+//! [`VMaxExt`]. For MagicaVoxel it fronts mvox-voxcore's typed loads
 //! and writes, to and from a decoded `MVoxFile` ([`from_mvox_file`] /
 //! [`to_mvox_file`]) and straight to and from `.vox` bytes
 //! ([`from_mvox_bytes`] / [`to_mvox_bytes`]), carrying the
-//! [`MagicaVoxelExt`]. For Goxel it fronts goxl-voxcore's typed loads and
+//! [`MVoxExt`]. For Goxel it fronts goxl-voxcore's typed loads and
 //! writes, to and from a decoded `GoxlFile` ([`from_goxl_file`] /
 //! [`to_goxl_file`]) and straight to and from `.gox` bytes
-//! ([`from_goxl_bytes`] / [`to_goxl_bytes`]), carrying the [`GoxelExt`].
+//! ([`from_goxl_bytes`] / [`to_goxl_bytes`]), carrying the [`GoxlExt`].
 //! For the three Qubicle formats it fronts qbcl-voxcore's typed loads and
 //! writes, to and from their decoded files ([`from_qb_file`] /
 //! [`to_qb_file`], [`from_qbt_file`] / [`to_qbt_file`], [`from_qbcl_file`] /
 //! [`to_qbcl_file`]) and straight to and from `.qb` / `.qbt` / `.qbcl` bytes
 //! (the matching `from_*_bytes` / `to_*_bytes`), carrying the
-//! [`QubicleQbExt`], [`QubicleQbtExt`], or [`QubicleQbclExt`].
+//! [`QbExt`], [`QbtExt`], or [`QbclExt`].
 
 #[cfg(not(feature = "_codec"))]
 compile_error!(

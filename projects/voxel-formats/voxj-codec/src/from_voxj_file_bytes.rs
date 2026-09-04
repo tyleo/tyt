@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn voxj_round_trips_document_and_ext() {
-        let file = document_with_ext(json!({ "voxel-max": { "scene": { "v": 4 } } }));
+        let file = document_with_ext(json!({ "vmax": { "scene": { "v": 4 } } }));
         let bytes = to_voxj_file_bytes(&DependenciesImpl, &file);
         assert_eq!(
             from_voxj_file_bytes(&DependenciesImpl, &bytes).unwrap(),

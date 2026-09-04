@@ -9,13 +9,13 @@ defines the file models for the three Qubicle formats: Qubicle Binary
 ## File conversion
 
 - `from_qb_file` / `to_qb_file`: between a decoded `QbFile` and a
-  `QubicleQbVoxMain`. Each matrix becomes an object placed by a hierarchy
+  `QbVoxMain`. Each matrix becomes an object placed by a hierarchy
   node, all sharing one `baseColor` palette.
 - `from_qbt_file` / `to_qbt_file`: between a decoded `QbtFile` and a
-  `QubicleQbtVoxMain`. Matrix and compound grids become objects sharing one
+  `QbtVoxMain`. Matrix and compound grids become objects sharing one
   palette, and the scene tree becomes the hierarchy.
 - `from_qbcl_file` / `to_qbcl_file`: between a decoded `QbclFile` and a
-  `QubicleQbclVoxMain`, the same way.
+  `QbclVoxMain`, the same way.
 
 ## Bytes conversion
 
@@ -30,10 +30,10 @@ crate's `impl` feature turns on the codec's.
 ## The ext
 
 The Qubicle state with no native voxcore home rides in the format's ext:
-`QubicleQbExt`, `QubicleQbtExt`, or `QubicleQbclExt`. The loader stashes it on
+`QbExt`, `QbtExt`, or `QbclExt`. The loader stashes it on
 the state's ext slot, so a loaded file writes back exactly. The `.qb` and
 `.qbt` writers require it. The `.qbcl` writer synthesizes a file from the bare
 scene when the ext is absent, such as for a state loaded from another format.
 The `ext` feature, on by default, keys each ext into a document's `ext` block
-under its `qubicle-qb`, `qubicle-qbt`, or `qubicle-qbcl` key through voxcore's
+under its `qb`, `qbt`, or `qbcl` key through voxcore's
 `VoxExtCodec`. A Voxel Json document carries the ext in that block.

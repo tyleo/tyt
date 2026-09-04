@@ -1,4 +1,4 @@
-use crate::VoxelMaxExt;
+use crate::VMaxExt;
 use voxcore::{
     VoxMap,
     ext::{
@@ -7,14 +7,14 @@ use voxcore::{
     },
 };
 
-/// Keeps the Voxel Max ext under the `voxel-max` key of a document's `ext`
+/// Keeps the Voxel Max ext under the `vmax` key of a document's `ext`
 /// block.
-impl VoxExtCodec for VoxelMaxExt {
+impl VoxExtCodec for VMaxExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
-        keyed_vox_ext("voxel-max", self)
+        keyed_vox_ext("vmax", self)
     }
 
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>> {
-        keyed_ext_from_vox("voxel-max", ext)
+        keyed_ext_from_vox("vmax", ext)
     }
 }

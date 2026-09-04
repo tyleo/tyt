@@ -1,4 +1,4 @@
-use crate::{QubicleQbExt, QubicleQbclExt, QubicleQbtExt};
+use crate::{QbExt, QbclExt, QbtExt};
 use voxcore::{
     VoxMap,
     ext::{
@@ -7,38 +7,38 @@ use voxcore::{
     },
 };
 
-/// Keeps the Qubicle Binary ext under the `qubicle-qb` key of a document's
+/// Keeps the Qubicle Binary ext under the `qb` key of a document's
 /// `ext` block.
-impl VoxExtCodec for QubicleQbExt {
+impl VoxExtCodec for QbExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
-        keyed_vox_ext("qubicle-qb", self)
+        keyed_vox_ext("qb", self)
     }
 
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>> {
-        keyed_ext_from_vox("qubicle-qb", ext)
+        keyed_ext_from_vox("qb", ext)
     }
 }
 
-/// Keeps the Qubicle Binary Tree ext under the `qubicle-qbt` key of a
+/// Keeps the Qubicle Binary Tree ext under the `qbt` key of a
 /// document's `ext` block.
-impl VoxExtCodec for QubicleQbtExt {
+impl VoxExtCodec for QbtExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
-        keyed_vox_ext("qubicle-qbt", self)
+        keyed_vox_ext("qbt", self)
     }
 
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>> {
-        keyed_ext_from_vox("qubicle-qbt", ext)
+        keyed_ext_from_vox("qbt", ext)
     }
 }
 
-/// Keeps the Qubicle Project ext under the `qubicle-qbcl` key of a document's
+/// Keeps the Qubicle Project ext under the `qbcl` key of a document's
 /// `ext` block.
-impl VoxExtCodec for QubicleQbclExt {
+impl VoxExtCodec for QbclExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
-        keyed_vox_ext("qubicle-qbcl", self)
+        keyed_vox_ext("qbcl", self)
     }
 
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>> {
-        keyed_ext_from_vox("qubicle-qbcl", ext)
+        keyed_ext_from_vox("qbcl", ext)
     }
 }

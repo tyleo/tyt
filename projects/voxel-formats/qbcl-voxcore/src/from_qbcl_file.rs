@@ -1,6 +1,6 @@
 use crate::{
-    Error, QubicleQbclExt, QubicleQbclMetadata, QubicleQbclNode, QubicleQbclNodeBody,
-    QubicleQbclThumbnail, QubicleQbclVoxMain, Result,
+    Error, QbclExt, QbclExtMetadata, QbclExtNode, QbclExtNodeBody, QbclExtThumbnail, QbclVoxMain,
+    Result,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
@@ -19,11 +19,11 @@ use voxcore::{
 /// native voxcore home, such as the per-voxel visibility masks, node names and
 /// editor flags, the model transform chunks, matrix placements and pivots, the
 /// thumbnail, the metadata strings, the guid, and the versions, rides in a
-/// `qubicle-qbcl` ext so the file can be written back exactly.
+/// `qbcl` ext so the file can be written back exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qbcl_file(file: &QbclFile) -> Result<QubicleQbclVoxMain> {
+pub fn from_qbcl_file(file: &QbclFile) -> Result<QbclVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
@@ -39,10 +39,10 @@ pub fn from_qbcl_file(file: &QbclFile) -> Result<QubicleQbclVoxMain> {
     )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    state.set_ext(Some(QubicleQbclExt {
+    state.set_ext(Some(QbclExt {
         program_version: file.program_version,
         file_version: file.file_version,
-        thumbnail: QubicleQbclThumbnail {
+        thumbnail: QbclExtThumbnail {
             width: file.thumbnail.width,
             height: file.thumbnail.height,
             pixels: file
@@ -66,10 +66,10 @@ pub fn from_qbcl_file(file: &QbclFile) -> Result<QubicleQbclVoxMain> {
 /// node's id.
 fn build_node(
     node: &QbclNode,
-    state: &mut QubicleQbclVoxMain,
+    state: &mut QbclVoxMain,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<QubicleQbclNode>,
+    nodes: &mut Vec<QbclExtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let node_id = match &node.body {
         QbclNodeBody::Matrix(matrix) => {
@@ -87,7 +87,7 @@ fn build_node(
             let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(node_provenance(
                 node,
-                QubicleQbclNodeBody::Matrix {
+                QbclExtNodeBody::Matrix {
                     position: matrix.position,
                     pivot: matrix.pivot,
                     masks,
@@ -109,7 +109,7 @@ fn build_node(
             let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(node_provenance(
                 node,
-                QubicleQbclNodeBody::Model {
+                QbclExtNodeBody::Model {
                     transform: model.transform.to_vec(),
                 },
             ));
@@ -134,7 +134,7 @@ fn build_node(
             let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(node_provenance(
                 node,
-                QubicleQbclNodeBody::Compound {
+                QbclExtNodeBody::Compound {
                     position: compound.matrix.position,
                     pivot: compound.matrix.pivot,
                     masks,
@@ -153,7 +153,7 @@ fn build_node(
 /// gets a single placeholder color so objects have a default material to
 /// sample.
 fn build_palette(
-    state: &mut QubicleQbclVoxMain,
+    state: &mut QbclVoxMain,
     root: &QbclNode,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -279,8 +279,8 @@ fn masks_of(object: &VoxObject, matrix: &QbclMatrix) -> Vec<u8> {
 }
 
 /// The ext provenance for one node: its name, editor flags, and per-kind body.
-fn node_provenance(node: &QbclNode, body: QubicleQbclNodeBody) -> QubicleQbclNode {
-    QubicleQbclNode {
+fn node_provenance(node: &QbclNode, body: QbclExtNodeBody) -> QbclExtNode {
+    QbclExtNode {
         name: node.name.clone(),
         visible: node.visible,
         locked: node.locked,
@@ -289,8 +289,8 @@ fn node_provenance(node: &QbclNode, body: QubicleQbclNodeBody) -> QubicleQbclNod
 }
 
 /// The ext provenance for the metadata strings.
-fn metadata_provenance(metadata: &QbclMetadata) -> QubicleQbclMetadata {
-    QubicleQbclMetadata {
+fn metadata_provenance(metadata: &QbclMetadata) -> QbclExtMetadata {
+    QbclExtMetadata {
         title: metadata.title.clone(),
         description: metadata.description.clone(),
         tags: metadata.tags.clone(),
@@ -315,7 +315,7 @@ fn color_floats(color: [u8; 3]) -> [f64; 3] {
 
 #[cfg(test)]
 mod tests {
-    use crate::{QubicleQbclVoxMain, from_qbcl_file, to_qbcl_file};
+    use crate::{QbclVoxMain, from_qbcl_file, to_qbcl_file};
     use branded_id::U32Id;
     use qbcl::qbcl::{
         QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode,
@@ -413,7 +413,7 @@ mod tests {
     /// object and a blue object sharing one `baseColor` palette, placed by
     /// a hierarchy of a nested group and two roots. This is the cross-format
     /// synthesis input.
-    fn source_state() -> QubicleQbclVoxMain {
+    fn source_state() -> QbclVoxMain {
         let mut state = VoxMain::default();
 
         // One baseColor palette: red, green, blue.
@@ -591,7 +591,7 @@ mod tests {
         assert!(model.children.is_empty());
     }
 
-    /// A state with no `qubicle-qbcl` ext, such as one cross-loaded from
+    /// A state with no `qbcl` ext, such as one cross-loaded from
     /// another format, synthesizes a file: the hierarchy maps to a Qubicle
     /// scene tree whose world voxels and colors match the source, and the file
     /// reads back into a valid state with both objects.
