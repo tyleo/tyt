@@ -1,15 +1,10 @@
-use crate::{Result, invalid};
-use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
+use crate::{
+    qbt::{QbtFile, QbtMatrix, QbtNode},
+    validation::{Error, Result},
+};
 
-/// Checks a decoded [`QbtFile`] for the size / voxel-count mismatch the byte
-/// layout cannot catch: every matrix and compound grid must hold exactly
-/// `size[0] * size[1] * size[2]` cells.
-///
-/// Decoding always produces grids of the right length, but a hand-built or
-/// edited [`QbtFile`] can hold a grid whose length disagrees with its size,
-/// which [`to_qbt_file_bytes`](crate::qbt::to_qbt_file_bytes) would write as a
-/// structurally valid but broken file. Decoding does not call this; run it when
-/// you need the guarantee.
+/// Checks a decoded [`QbtFile`]: every matrix and compound grid must hold
+/// exactly `size[0] * size[1] * size[2]` cells.
 pub fn validate_qbt_file(file: &QbtFile) -> Result<()> {
     validate_node(&file.root)
 }
@@ -33,13 +28,13 @@ fn validate_matrix(matrix: &QbtMatrix) -> Result<()> {
         .checked_mul(matrix.size[1] as usize)
         .and_then(|xy| xy.checked_mul(matrix.size[2] as usize))
         .ok_or_else(|| {
-            invalid(format!(
+            Error::Invalid(format!(
                 "matrix {:?} size {:?} overflows the addressable range",
                 matrix.name, matrix.size
             ))
         })?;
     if matrix.voxels.len() != expected {
-        return Err(invalid(format!(
+        return Err(Error::Invalid(format!(
             "matrix {:?} holds {} voxels but its size {:?} needs {expected}",
             matrix.name,
             matrix.voxels.len(),
@@ -51,8 +46,10 @@ fn validate_matrix(matrix: &QbtMatrix) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::qbt::validate_qbt_file;
-    use qbcl::qbt::{QbtFile, QbtMatrix, QbtModel, QbtNode, QbtVoxel};
+    use crate::{
+        qbt::{QbtFile, QbtMatrix, QbtModel, QbtNode, QbtVoxel},
+        validation::validate_qbt_file,
+    };
 
     fn file_with_matrix(matrix: QbtMatrix) -> QbtFile {
         QbtFile {

@@ -1,16 +1,11 @@
-use crate::{Result, invalid};
-use qbcl::qbcl::{QbclFile, QbclMatrix, QbclNode, QbclNodeBody, QbclThumbnail};
+use crate::{
+    qbcl::{QbclFile, QbclMatrix, QbclNode, QbclNodeBody, QbclThumbnail},
+    validation::{Error, Result},
+};
 
-/// Checks a decoded [`QbclFile`] for the count / size mismatches the byte layout
-/// cannot catch: the thumbnail must hold exactly `width * height` pixels, and
-/// every matrix and compound grid must hold exactly `size[0] * size[1] * size[2]`
-/// cells.
-///
-/// Decoding always produces buffers of the right length, but a hand-built or
-/// edited [`QbclFile`] can hold one whose length disagrees with its declared
-/// size, which [`to_qbcl_file_bytes`](crate::qbcl::to_qbcl_file_bytes) would
-/// write as a structurally valid but broken file. Decoding does not call this;
-/// run it when you need the guarantee.
+/// Checks a decoded [`QbclFile`]: the thumbnail must hold exactly
+/// `width * height` pixels, and every matrix and compound grid must hold
+/// exactly `size[0] * size[1] * size[2]` cells.
 pub fn validate_qbcl_file(file: &QbclFile) -> Result<()> {
     validate_thumbnail(&file.thumbnail)?;
     validate_node(&file.root)
@@ -21,13 +16,13 @@ fn validate_thumbnail(thumbnail: &QbclThumbnail) -> Result<()> {
     let expected = (thumbnail.width as usize)
         .checked_mul(thumbnail.height as usize)
         .ok_or_else(|| {
-            invalid(format!(
+            Error::Invalid(format!(
                 "thumbnail {}x{} overflows the pixel range",
                 thumbnail.width, thumbnail.height
             ))
         })?;
     if thumbnail.pixels.len() != expected {
-        return Err(invalid(format!(
+        return Err(Error::Invalid(format!(
             "thumbnail holds {} pixels but its {}x{} size needs {expected}",
             thumbnail.pixels.len(),
             thumbnail.width,
@@ -55,13 +50,13 @@ fn validate_matrix(matrix: &QbclMatrix) -> Result<()> {
         .checked_mul(matrix.size[1] as usize)
         .and_then(|xy| xy.checked_mul(matrix.size[2] as usize))
         .ok_or_else(|| {
-            invalid(format!(
+            Error::Invalid(format!(
                 "matrix size {:?} overflows the addressable range",
                 matrix.size
             ))
         })?;
     if matrix.voxels.len() != expected {
-        return Err(invalid(format!(
+        return Err(Error::Invalid(format!(
             "matrix holds {} voxels but its size {:?} needs {expected}",
             matrix.voxels.len(),
             matrix.size
@@ -72,10 +67,12 @@ fn validate_matrix(matrix: &QbclMatrix) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::qbcl::validate_qbcl_file;
-    use qbcl::qbcl::{
-        QbclColor, QbclFile, QbclMatrix, QbclModel, QbclNode, QbclNodeBody, QbclThumbnail,
-        QbclVoxel,
+    use crate::{
+        qbcl::{
+            QbclColor, QbclFile, QbclMatrix, QbclModel, QbclNode, QbclNodeBody, QbclThumbnail,
+            QbclVoxel,
+        },
+        validation::validate_qbcl_file,
     };
 
     fn file_with_matrix(matrix: QbclMatrix) -> QbclFile {

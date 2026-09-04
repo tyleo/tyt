@@ -1,4 +1,4 @@
-use crate::{ByteWriter, zlib_compress};
+use crate::{ByteWriter, CompressZlib};
 use qbcl::qbcl::{
     QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode, QbclNodeBody,
     QbclThumbnail, QbclVoxel,
@@ -25,15 +25,16 @@ const RLE_MASK: u32 = 2;
 /// The longest run a single RLE marker can encode (its length is one byte).
 const MAX_RUN: usize = 255;
 
-/// Serializes a [`QbclFile`] to a Qubicle Construction Library `.qbcl` file, the
-/// inverse of [`from_qbcl_file_bytes`](crate::qbcl::from_qbcl_file_bytes).
+/// Serializes a [`QbclFile`] to a Qubicle Construction Library `.qbcl` file
+/// through `dependencies`, the inverse of
+/// [`from_qbcl_file_bytes`](crate::qbcl::from_qbcl_file_bytes).
 ///
 /// Writes the header, thumbnail, metadata, and scene tree in turn,
 /// run-length-encoding and zlib-compressing each matrix's voxel grid. The
 /// compressed bytes may differ from another encoder's (compression and run
 /// boundaries are encoder choices) but decode to the same grid, so a decoded
 /// file re-encodes to an equivalent one.
-pub fn to_qbcl_file_bytes(file: &QbclFile) -> Vec<u8> {
+pub fn to_qbcl_file_bytes<D: CompressZlib>(dependencies: &D, file: &QbclFile) -> Vec<u8> {
     let mut out = ByteWriter::new();
 
     out.write_bytes(b"QBCL");
@@ -42,7 +43,7 @@ pub fn to_qbcl_file_bytes(file: &QbclFile) -> Vec<u8> {
     write_thumbnail(&mut out, &file.thumbnail);
     write_metadata(&mut out, &file.metadata);
     out.write_bytes(&file.guid);
-    write_node(&mut out, &file.root);
+    write_node(dependencies, &mut out, &file.root);
 
     out.into_bytes()
 }
@@ -80,7 +81,7 @@ fn write_len_string(out: &mut ByteWriter, value: &str) {
 
 /// Writes one node: the common header (type, name, and editor flags) then a
 /// type-specific body.
-fn write_node(out: &mut ByteWriter, node: &QbclNode) {
+fn write_node<D: CompressZlib>(dependencies: &D, out: &mut ByteWriter, node: &QbclNode) {
     let type_id = match node.body {
         QbclNodeBody::Matrix(_) => NODE_MATRIX,
         QbclNodeBody::Model(_) => NODE_MODEL,
@@ -94,14 +95,14 @@ fn write_node(out: &mut ByteWriter, node: &QbclNode) {
     out.write_u8(node.locked as u8);
 
     match &node.body {
-        QbclNodeBody::Matrix(matrix) => write_matrix(out, matrix),
-        QbclNodeBody::Model(model) => write_model(out, model),
-        QbclNodeBody::Compound(compound) => write_compound(out, compound),
+        QbclNodeBody::Matrix(matrix) => write_matrix(dependencies, out, matrix),
+        QbclNodeBody::Model(model) => write_model(dependencies, out, model),
+        QbclNodeBody::Compound(compound) => write_compound(dependencies, out, compound),
     }
 }
 
 /// Writes a matrix body: size, position, pivot, then the compressed voxel grid.
-fn write_matrix(out: &mut ByteWriter, matrix: &QbclMatrix) {
+fn write_matrix<D: CompressZlib>(dependencies: &D, out: &mut ByteWriter, matrix: &QbclMatrix) {
     for value in matrix.size {
         out.write_u32(value);
     }
@@ -111,28 +112,32 @@ fn write_matrix(out: &mut ByteWriter, matrix: &QbclMatrix) {
     for value in matrix.pivot {
         out.write_f32(value);
     }
-    let compressed = zlib_compress(&encode_voxels(matrix));
+    let compressed = dependencies.compress_zlib(&encode_voxels(matrix));
     out.write_len(compressed.len());
     out.write_bytes(&compressed);
 }
 
 /// Writes a model body: the 36-byte transform chunk then the child nodes.
-fn write_model(out: &mut ByteWriter, model: &QbclModel) {
+fn write_model<D: CompressZlib>(dependencies: &D, out: &mut ByteWriter, model: &QbclModel) {
     out.write_bytes(&model.transform);
-    write_children(out, &model.children);
+    write_children(dependencies, out, &model.children);
 }
 
 /// Writes a compound body: a matrix grid then the child nodes.
-fn write_compound(out: &mut ByteWriter, compound: &QbclCompound) {
-    write_matrix(out, &compound.matrix);
-    write_children(out, &compound.children);
+fn write_compound<D: CompressZlib>(
+    dependencies: &D,
+    out: &mut ByteWriter,
+    compound: &QbclCompound,
+) {
+    write_matrix(dependencies, out, &compound.matrix);
+    write_children(dependencies, out, &compound.children);
 }
 
 /// Writes a `u32` child count then each child node.
-fn write_children(out: &mut ByteWriter, children: &[QbclNode]) {
+fn write_children<D: CompressZlib>(dependencies: &D, out: &mut ByteWriter, children: &[QbclNode]) {
     out.write_len(children.len());
     for child in children {
-        write_node(out, child);
+        write_node(dependencies, out, child);
     }
 }
 

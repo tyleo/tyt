@@ -1,4 +1,5 @@
 use crate::{QubicleQbclMetadata, QubicleQbclNode, QubicleQbclThumbnail};
+#[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
 /// The `qubicle-qbcl` ext payload stashed on a [`VoxMain`](voxcore::VoxMain):
@@ -8,28 +9,29 @@ use serde::{Deserialize, Serialize};
 /// Matrix and compound grids become native objects sharing one palette, and the
 /// scene tree becomes the hierarchy nodes; this holds the rest, with the
 /// per-node entries aligned by index with the hierarchy nodes.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct QubicleQbclExt {
     /// The version of Qubicle that wrote the file, packed.
-    #[serde(rename = "program-version")]
+    #[cfg_attr(feature = "ext", serde(rename = "program-version"))]
     pub program_version: u32,
 
     /// The file-format version.
-    #[serde(rename = "file-version")]
+    #[cfg_attr(feature = "ext", serde(rename = "file-version"))]
     pub file_version: u32,
 
     /// The preview thumbnail from the header.
-    #[serde(default)]
+    #[cfg_attr(feature = "ext", serde(default))]
     pub thumbnail: QubicleQbclThumbnail,
 
     /// The seven free-text metadata strings.
-    #[serde(default)]
+    #[cfg_attr(feature = "ext", serde(default))]
     pub metadata: QubicleQbclMetadata,
 
     /// The 16-byte header chunk of unconfirmed purpose, preserved verbatim.
     pub guid: [u8; 16],
 
     /// Per scene-node provenance, aligned by index with the hierarchy nodes.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub nodes: Vec<QubicleQbclNode>,
 }

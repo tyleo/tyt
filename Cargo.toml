@@ -33,6 +33,7 @@ members = [
     "projects/voxel-formats/mvox-voxcore",
     "projects/voxel-formats/qbcl",
     "projects/voxel-formats/qbcl-codec",
+    "projects/voxel-formats/qbcl-voxcore",
     "projects/voxel-formats/vmax",
     "projects/voxel-formats/vmax-codec",
     "projects/voxel-formats/vmax-voxcore",
@@ -77,6 +78,7 @@ mvox-codec = { path = "projects/voxel-formats/mvox-codec" }
 mvox-voxcore = { path = "projects/voxel-formats/mvox-voxcore" }
 qbcl = { path = "projects/voxel-formats/qbcl" }
 qbcl-codec = { path = "projects/voxel-formats/qbcl-codec" }
+qbcl-voxcore = { path = "projects/voxel-formats/qbcl-voxcore" }
 vmax = { path = "projects/voxel-formats/vmax" }
 vmax-codec = { path = "projects/voxel-formats/vmax-codec" }
 vmax-voxcore = { path = "projects/voxel-formats/vmax-voxcore" }

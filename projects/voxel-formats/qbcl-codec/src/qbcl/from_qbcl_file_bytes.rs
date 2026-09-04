@@ -1,4 +1,4 @@
-use crate::{ByteReader, Result, invalid, zlib_decompress};
+use crate::{ByteReader, DecompressZlib, Error, Result, invalid};
 use qbcl::qbcl::{
     QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode, QbclNodeBody,
     QbclThumbnail, QbclVoxel,
@@ -25,14 +25,15 @@ const RLE_MASK: u8 = 2;
 /// rejected rather than overflowing the stack.
 const MAX_DEPTH: usize = 4096;
 
-/// Parses a Qubicle Construction Library `.qbcl` file into a [`QbclFile`].
+/// Parses a Qubicle Construction Library `.qbcl` file into a [`QbclFile`]
+/// through `dependencies`.
 ///
 /// Reads the header, preview thumbnail, the seven metadata strings, and the
 /// scene tree in turn, zlib-decompressing and run-length-decoding each matrix's
 /// voxel grid. Parsing is bounds-checked, so a truncated or malformed file is
 /// rejected rather than masked. An unknown node type id is rejected, since the
 /// format gives no per-node length with which to skip it.
-pub fn from_qbcl_file_bytes(bytes: &[u8]) -> Result<QbclFile> {
+pub fn from_qbcl_file_bytes<D: DecompressZlib>(dependencies: &D, bytes: &[u8]) -> Result<QbclFile> {
     let mut reader = ByteReader::new(bytes);
 
     let magic = reader.read_array::<4>()?;
@@ -52,7 +53,7 @@ pub fn from_qbcl_file_bytes(bytes: &[u8]) -> Result<QbclFile> {
     let thumbnail = read_thumbnail(&mut reader)?;
     let metadata = read_metadata(&mut reader)?;
     let guid = reader.read_array::<16>()?;
-    let root = read_node(&mut reader, 0)?;
+    let root = read_node(dependencies, &mut reader, 0)?;
 
     if !reader.is_empty() {
         return Err(invalid(format!(
@@ -114,7 +115,11 @@ fn read_len_string(reader: &mut ByteReader) -> Result<String> {
 
 /// Reads one node: the common header (type, name, and editor flags) then a
 /// type-specific body.
-fn read_node(reader: &mut ByteReader, depth: usize) -> Result<QbclNode> {
+fn read_node<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<QbclNode> {
     if depth > MAX_DEPTH {
         return Err(invalid(format!(
             "scene tree is nested deeper than {MAX_DEPTH} nodes"
@@ -126,9 +131,9 @@ fn read_node(reader: &mut ByteReader, depth: usize) -> Result<QbclNode> {
     let [visible, _flag, locked] = reader.read_array::<3>()?; // Middle flag always 1.
 
     let body = match type_id {
-        NODE_MATRIX => QbclNodeBody::Matrix(read_matrix(reader)?),
-        NODE_MODEL => QbclNodeBody::Model(read_model(reader, depth)?),
-        NODE_COMPOUND => QbclNodeBody::Compound(read_compound(reader, depth)?),
+        NODE_MATRIX => QbclNodeBody::Matrix(read_matrix(dependencies, reader)?),
+        NODE_MODEL => QbclNodeBody::Model(read_model(dependencies, reader, depth)?),
+        NODE_COMPOUND => QbclNodeBody::Compound(read_compound(dependencies, reader, depth)?),
         other => return Err(invalid(format!("unknown .qbcl node type id {other}"))),
     };
 
@@ -141,12 +146,12 @@ fn read_node(reader: &mut ByteReader, depth: usize) -> Result<QbclNode> {
 }
 
 /// Reads a matrix body: size, position, pivot, then the compressed voxel grid.
-fn read_matrix(reader: &mut ByteReader) -> Result<QbclMatrix> {
+fn read_matrix<D: DecompressZlib>(dependencies: &D, reader: &mut ByteReader) -> Result<QbclMatrix> {
     let size = [reader.read_u32()?, reader.read_u32()?, reader.read_u32()?];
     let position = [reader.read_i32()?, reader.read_i32()?, reader.read_i32()?];
     let pivot = [reader.read_f32()?, reader.read_f32()?, reader.read_f32()?];
     let data_size = reader.read_u32()? as usize;
-    let voxels = read_voxels(size, reader.read_bytes(data_size)?)?;
+    let voxels = read_voxels(dependencies, size, reader.read_bytes(data_size)?)?;
     Ok(QbclMatrix {
         size,
         position,
@@ -156,9 +161,13 @@ fn read_matrix(reader: &mut ByteReader) -> Result<QbclMatrix> {
 }
 
 /// Reads a model body: the 36-byte transform chunk then the child nodes.
-fn read_model(reader: &mut ByteReader, depth: usize) -> Result<QbclModel> {
+fn read_model<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<QbclModel> {
     let transform = reader.read_array::<36>()?;
-    let children = read_children(reader, depth)?;
+    let children = read_children(dependencies, reader, depth)?;
     Ok(QbclModel {
         transform,
         children,
@@ -166,21 +175,29 @@ fn read_model(reader: &mut ByteReader, depth: usize) -> Result<QbclModel> {
 }
 
 /// Reads a compound body: a matrix grid then the child nodes.
-fn read_compound(reader: &mut ByteReader, depth: usize) -> Result<QbclCompound> {
-    let matrix = read_matrix(reader)?;
-    let children = read_children(reader, depth)?;
+fn read_compound<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<QbclCompound> {
+    let matrix = read_matrix(dependencies, reader)?;
+    let children = read_children(dependencies, reader, depth)?;
     Ok(QbclCompound { matrix, children })
 }
 
 /// Reads a `u32` child count then that many child nodes, each one level deeper.
-fn read_children(reader: &mut ByteReader, depth: usize) -> Result<Vec<QbclNode>> {
+fn read_children<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<Vec<QbclNode>> {
     let count = reader.read_u32()? as usize;
     // A node header is at least 15 bytes (type, unknown, a zero-length name, and
     // three flag bytes), so a count larger than the remaining bytes allow is
     // malformed.
     let mut children = Vec::with_capacity(count.min(reader.remaining().len() / 15));
     for _ in 0..count {
-        children.push(read_node(reader, depth + 1)?);
+        children.push(read_node(dependencies, reader, depth + 1)?);
     }
     Ok(children)
 }
@@ -188,7 +205,11 @@ fn read_children(reader: &mut ByteReader, depth: usize) -> Result<Vec<QbclNode>>
 /// Decompresses and run-length-decodes a matrix's voxel grid into its dense
 /// cells, in storage order. The grid is stored column by column (one column per
 /// `(x, z)`, `x` outermost), each column a run of `size[1]` cells along `y`.
-fn read_voxels(size: [u32; 3], compressed: &[u8]) -> Result<Vec<QbclVoxel>> {
+fn read_voxels<D: DecompressZlib>(
+    dependencies: &D,
+    size: [u32; 3],
+    compressed: &[u8],
+) -> Result<Vec<QbclVoxel>> {
     let [size_x, size_y, size_z] = size.map(|value| value as usize);
     let total = voxel_count(size)?;
     let columns = size_x.checked_mul(size_z).ok_or_else(|| {
@@ -197,7 +218,9 @@ fn read_voxels(size: [u32; 3], compressed: &[u8]) -> Result<Vec<QbclVoxel>> {
         ))
     })?;
 
-    let raw = zlib_decompress(compressed)?;
+    let raw = dependencies
+        .decompress_zlib(compressed)
+        .map_err(Error::Zlib)?;
     let mut inner = ByteReader::new(&raw);
 
     let mut voxels = Vec::with_capacity(total);
@@ -280,9 +303,12 @@ fn voxel_count(size: [u32; 3]) -> Result<usize> {
         })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::qbcl::{from_qbcl_file_bytes, to_qbcl_file_bytes};
+    use crate::{
+        DependenciesImpl,
+        qbcl::{from_qbcl_file_bytes, to_qbcl_file_bytes},
+    };
     use qbcl::qbcl::{
         QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode,
         QbclNodeBody, QbclThumbnail, QbclVoxel,
@@ -383,20 +409,30 @@ mod tests {
     #[test]
     fn round_trips_full_file() {
         let file = sample_file();
-        let bytes = to_qbcl_file_bytes(&file);
-        assert_eq!(from_qbcl_file_bytes(&bytes).unwrap(), file);
+        let bytes = to_qbcl_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_qbcl_file_bytes(&DependenciesImpl, &bytes).unwrap(),
+            file
+        );
     }
 
     #[test]
     fn round_trips_empty_file() {
         let file = QbclFile::default();
-        let bytes = to_qbcl_file_bytes(&file);
-        assert_eq!(from_qbcl_file_bytes(&bytes).unwrap(), file);
+        let bytes = to_qbcl_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_qbcl_file_bytes(&DependenciesImpl, &bytes).unwrap(),
+            file
+        );
     }
 
     #[test]
     fn indexes_voxels_by_coordinate() {
-        let decoded = from_qbcl_file_bytes(&to_qbcl_file_bytes(&sample_file())).unwrap();
+        let decoded = from_qbcl_file_bytes(
+            &DependenciesImpl,
+            &to_qbcl_file_bytes(&DependenciesImpl, &sample_file()),
+        )
+        .unwrap();
         let QbclNodeBody::Model(model) = &decoded.root.body else {
             panic!("root is a model");
         };
@@ -412,7 +448,11 @@ mod tests {
 
     #[test]
     fn preserves_node_flags() {
-        let decoded = from_qbcl_file_bytes(&to_qbcl_file_bytes(&sample_file())).unwrap();
+        let decoded = from_qbcl_file_bytes(
+            &DependenciesImpl,
+            &to_qbcl_file_bytes(&DependenciesImpl, &sample_file()),
+        )
+        .unwrap();
         let QbclNodeBody::Model(model) = &decoded.root.body else {
             panic!("root is a model");
         };
@@ -422,29 +462,29 @@ mod tests {
 
     #[test]
     fn rejects_bad_magic() {
-        let mut bytes = to_qbcl_file_bytes(&QbclFile::default());
+        let mut bytes = to_qbcl_file_bytes(&DependenciesImpl, &QbclFile::default());
         bytes[0] = b'X';
-        assert!(from_qbcl_file_bytes(&bytes).is_err());
+        assert!(from_qbcl_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
     fn rejects_unsupported_version() {
-        let mut bytes = to_qbcl_file_bytes(&QbclFile::default());
+        let mut bytes = to_qbcl_file_bytes(&DependenciesImpl, &QbclFile::default());
         // The file version is the u32 after the 4-byte magic and program version.
         bytes[8] = 9;
-        assert!(from_qbcl_file_bytes(&bytes).is_err());
+        assert!(from_qbcl_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
     fn rejects_trailing_bytes() {
-        let mut bytes = to_qbcl_file_bytes(&QbclFile::default());
+        let mut bytes = to_qbcl_file_bytes(&DependenciesImpl, &QbclFile::default());
         bytes.push(0);
-        assert!(from_qbcl_file_bytes(&bytes).is_err());
+        assert!(from_qbcl_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
     fn rejects_truncated() {
-        assert!(from_qbcl_file_bytes(b"").is_err());
-        assert!(from_qbcl_file_bytes(b"QBCL").is_err());
+        assert!(from_qbcl_file_bytes(&DependenciesImpl, b"").is_err());
+        assert!(from_qbcl_file_bytes(&DependenciesImpl, b"QBCL").is_err());
     }
 }

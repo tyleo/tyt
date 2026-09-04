@@ -1,10 +1,9 @@
-use crate::{QubicleQbclVoxMain, Result, from_qbcl_file};
-use qbcl_codec::qbcl::from_qbcl_file_bytes;
+use crate::{QBCL_DEPENDENCIES, QubicleQbclVoxMain, Result};
+use qbcl_voxcore::codec::from_qbcl_bytes as raw_from_qbcl_bytes;
 
 /// Loads the bytes of a Qubicle Construction Library `.qbcl` file into a
-/// [`QubicleQbclVoxMain`]. The bytes are decoded with [`qbcl_codec`] and the
-/// result is loaded into voxcore's in-memory form.
+/// [`QubicleQbclVoxMain`]. The state is the one
+/// [`from_qbcl_file`](crate::from_qbcl_file) loads.
 pub fn from_qbcl_bytes(bytes: &[u8]) -> Result<QubicleQbclVoxMain> {
-    let file = from_qbcl_file_bytes(bytes)?;
-    from_qbcl_file(&file)
+    Ok(raw_from_qbcl_bytes(&QBCL_DEPENDENCIES, bytes)?)
 }

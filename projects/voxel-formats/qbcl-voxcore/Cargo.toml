@@ -1,0 +1,34 @@
+[package]
+name = "qbcl-voxcore"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Converts between Qubicle files and the voxcore state."
+keywords = ["qubicle", "qb", "qbt", "voxel", "conversion"]
+categories = ["encoding", "game-development", "graphics"]
+
+[dependencies]
+branded-id = "0.1.7"
+qbcl = { version = "0.1.1", default-features = false, features = [
+    "qb",
+    "qbt",
+    "qbcl",
+] }
+qbcl-codec = { version = "0.1.1", default-features = false, features = [
+    "qb",
+    "qbt",
+    "qbcl",
+], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+ty-math = "0.2.0"
+voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
+
+[dev-dependencies]
+qbcl-codec = { version = "0.1.1", features = ["impl"] }
+
+[features]
+default = ["codec", "ext"]
+codec = ["dep:qbcl-codec"]
+ext = ["dep:serde", "voxcore/json"]
+impl = ["qbcl-codec?/impl"]

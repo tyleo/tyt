@@ -1272,6 +1272,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "qbcl-voxcore"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "qbcl",
+ "qbcl-codec",
+ "serde",
+ "ty-math",
+ "voxcore",
+]
+
+[[package]]
 name = "qoi"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2144,6 +2156,7 @@ dependencies = [
  "png",
  "qbcl",
  "qbcl-codec",
+ "qbcl-voxcore",
  "serde",
  "serde_json",
  "treegrid",

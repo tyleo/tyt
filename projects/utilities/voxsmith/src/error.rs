@@ -9,7 +9,7 @@ use mvox_voxcore::Error as MVoxError;
 #[cfg(feature = "select")]
 use pathspec::Error as PathSpecError;
 #[cfg(feature = "qbcl")]
-use qbcl_codec::Error as QbclError;
+use qbcl_voxcore::Error as QbclError;
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -51,7 +51,7 @@ pub enum Error {
     #[cfg(feature = "goxl")]
     Goxl(GoxlError),
 
-    /// Decoding a Qubicle `.qb` / `.qbt` / `.qbcl` file failed.
+    /// Converting a Qubicle `.qb` / `.qbt` / `.qbcl` file failed.
     #[cfg(feature = "qbcl")]
     Qbcl(QbclError),
 

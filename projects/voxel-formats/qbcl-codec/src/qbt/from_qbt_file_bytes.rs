@@ -1,4 +1,4 @@
-use crate::{ByteReader, Result, invalid, zlib_decompress};
+use crate::{ByteReader, DecompressZlib, Error, Result, invalid};
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
 };
@@ -16,14 +16,15 @@ const NODE_COMPOUND: u32 = 2;
 /// rejected rather than overflowing the stack.
 const MAX_DEPTH: usize = 4096;
 
-/// Parses a Qubicle Binary Tree `.qbt` file into a [`QbtFile`].
+/// Parses a Qubicle Binary Tree `.qbt` file into a [`QbtFile`] through
+/// `dependencies`.
 ///
 /// Reads the header, the `COLORMAP` palette, and the `DATATREE` scene tree in
 /// turn, zlib-decompressing each matrix's voxel grid. A node whose type id this
 /// crate does not model is preserved verbatim on a [`QbtNode::Unknown`].
 /// Parsing is bounds-checked, so a truncated or malformed file is rejected
 /// rather than masked.
-pub fn from_qbt_file_bytes(bytes: &[u8]) -> Result<QbtFile> {
+pub fn from_qbt_file_bytes<D: DecompressZlib>(dependencies: &D, bytes: &[u8]) -> Result<QbtFile> {
     let mut reader = ByteReader::new(bytes);
 
     let magic = reader.read_array::<4>()?;
@@ -43,7 +44,7 @@ pub fn from_qbt_file_bytes(bytes: &[u8]) -> Result<QbtFile> {
             "expected a DATATREE section, found {caption:?}"
         )));
     }
-    let root = read_node(&mut reader, 0)?;
+    let root = read_node(dependencies, &mut reader, 0)?;
 
     if !reader.is_empty() {
         return Err(invalid(format!(
@@ -80,7 +81,11 @@ fn read_color_map(reader: &mut ByteReader) -> Result<Vec<QbtColor>> {
 /// Reads one node: its type id and data-size header, then the body. A known
 /// node is parsed in place; an unknown node's `data_size` bytes are kept
 /// verbatim.
-fn read_node(reader: &mut ByteReader, depth: usize) -> Result<QbtNode> {
+fn read_node<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<QbtNode> {
     if depth > MAX_DEPTH {
         return Err(invalid(format!(
             "scene tree is nested deeper than {MAX_DEPTH} nodes"
@@ -89,9 +94,13 @@ fn read_node(reader: &mut ByteReader, depth: usize) -> Result<QbtNode> {
     let type_id = reader.read_u32()?;
     let data_size = reader.read_u32()? as usize;
     match type_id {
-        NODE_MATRIX => Ok(QbtNode::Matrix(read_matrix(reader)?)),
-        NODE_MODEL => Ok(QbtNode::Model(read_model(reader, depth)?)),
-        NODE_COMPOUND => Ok(QbtNode::Compound(read_compound(reader, depth)?)),
+        NODE_MATRIX => Ok(QbtNode::Matrix(read_matrix(dependencies, reader)?)),
+        NODE_MODEL => Ok(QbtNode::Model(read_model(dependencies, reader, depth)?)),
+        NODE_COMPOUND => Ok(QbtNode::Compound(read_compound(
+            dependencies,
+            reader,
+            depth,
+        )?)),
         other => Ok(QbtNode::Unknown(QbtUnknownNode {
             type_id: other,
             data: reader.read_bytes(data_size)?.to_vec(),
@@ -100,7 +109,7 @@ fn read_node(reader: &mut ByteReader, depth: usize) -> Result<QbtNode> {
 }
 
 /// Reads a matrix node body: name, transform, size, then its voxel grid.
-fn read_matrix(reader: &mut ByteReader) -> Result<QbtMatrix> {
+fn read_matrix<D: DecompressZlib>(dependencies: &D, reader: &mut ByteReader) -> Result<QbtMatrix> {
     let name_len = reader.read_u32()? as usize;
     let name = reader.read_string(name_len)?;
     let position = [reader.read_i32()?, reader.read_i32()?, reader.read_i32()?];
@@ -108,7 +117,7 @@ fn read_matrix(reader: &mut ByteReader) -> Result<QbtMatrix> {
     let pivot = [reader.read_f32()?, reader.read_f32()?, reader.read_f32()?];
     let size = [reader.read_u32()?, reader.read_u32()?, reader.read_u32()?];
     let voxel_data_size = reader.read_u32()? as usize;
-    let voxels = read_voxels(size, reader.read_bytes(voxel_data_size)?)?;
+    let voxels = read_voxels(dependencies, size, reader.read_bytes(voxel_data_size)?)?;
     Ok(QbtMatrix {
         name,
         position,
@@ -121,13 +130,19 @@ fn read_matrix(reader: &mut ByteReader) -> Result<QbtMatrix> {
 
 /// Decompresses and splits a matrix's voxel data into its dense grid. The
 /// decompressed length must match the size exactly.
-fn read_voxels(size: [u32; 3], compressed: &[u8]) -> Result<Vec<QbtVoxel>> {
+fn read_voxels<D: DecompressZlib>(
+    dependencies: &D,
+    size: [u32; 3],
+    compressed: &[u8],
+) -> Result<Vec<QbtVoxel>> {
     let expected = voxel_count(size)?.checked_mul(4).ok_or_else(|| {
         invalid(format!(
             "matrix size {size:?} overflows the addressable range"
         ))
     })?;
-    let raw = zlib_decompress(compressed)?;
+    let raw = dependencies
+        .decompress_zlib(compressed)
+        .map_err(Error::Zlib)?;
     if raw.len() != expected {
         return Err(invalid(format!(
             "decompressed voxel data is {} bytes, but size {size:?} needs {expected}",
@@ -146,27 +161,39 @@ fn read_voxels(size: [u32; 3], compressed: &[u8]) -> Result<Vec<QbtVoxel>> {
 }
 
 /// Reads a model node body: a child count then that many child nodes.
-fn read_model(reader: &mut ByteReader, depth: usize) -> Result<QbtModel> {
+fn read_model<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<QbtModel> {
     Ok(QbtModel {
-        children: read_children(reader, depth)?,
+        children: read_children(dependencies, reader, depth)?,
     })
 }
 
 /// Reads a compound node body: a matrix grid then a child count and child nodes.
-fn read_compound(reader: &mut ByteReader, depth: usize) -> Result<QbtCompound> {
-    let matrix = read_matrix(reader)?;
-    let children = read_children(reader, depth)?;
+fn read_compound<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<QbtCompound> {
+    let matrix = read_matrix(dependencies, reader)?;
+    let children = read_children(dependencies, reader, depth)?;
     Ok(QbtCompound { matrix, children })
 }
 
 /// Reads a `u32` child count then that many child nodes, each one level deeper.
-fn read_children(reader: &mut ByteReader, depth: usize) -> Result<Vec<QbtNode>> {
+fn read_children<D: DecompressZlib>(
+    dependencies: &D,
+    reader: &mut ByteReader,
+    depth: usize,
+) -> Result<Vec<QbtNode>> {
     let count = reader.read_u32()? as usize;
     // A child node is at least eight bytes (its type id and data size), so a
     // count larger than the remaining bytes allow is malformed.
     let mut children = Vec::with_capacity(count.min(reader.remaining().len() / 8));
     for _ in 0..count {
-        children.push(read_node(reader, depth + 1)?);
+        children.push(read_node(dependencies, reader, depth + 1)?);
     }
     Ok(children)
 }
@@ -183,9 +210,12 @@ fn voxel_count(size: [u32; 3]) -> Result<usize> {
         })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::qbt::{from_qbt_file_bytes, to_qbt_file_bytes};
+    use crate::{
+        DependenciesImpl,
+        qbt::{from_qbt_file_bytes, to_qbt_file_bytes},
+    };
     use qbcl::qbt::{
         QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
     };
@@ -241,21 +271,31 @@ mod tests {
     #[test]
     fn round_trips_full_file() {
         let file = sample_file();
-        let bytes = to_qbt_file_bytes(&file);
-        assert_eq!(from_qbt_file_bytes(&bytes).unwrap(), file);
+        let bytes = to_qbt_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_qbt_file_bytes(&DependenciesImpl, &bytes).unwrap(),
+            file
+        );
     }
 
     #[test]
     fn round_trips_empty_file() {
         let file = QbtFile::default();
-        let bytes = to_qbt_file_bytes(&file);
-        assert_eq!(from_qbt_file_bytes(&bytes).unwrap(), file);
+        let bytes = to_qbt_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_qbt_file_bytes(&DependenciesImpl, &bytes).unwrap(),
+            file
+        );
     }
 
     #[test]
     fn indexes_voxels_by_coordinate() {
         let file = sample_file();
-        let decoded = from_qbt_file_bytes(&to_qbt_file_bytes(&file)).unwrap();
+        let decoded = from_qbt_file_bytes(
+            &DependenciesImpl,
+            &to_qbt_file_bytes(&DependenciesImpl, &file),
+        )
+        .unwrap();
         let QbtNode::Model(model) = &decoded.root else {
             panic!("root is a model");
         };
@@ -272,7 +312,7 @@ mod tests {
         // The reader ignores a known node's data-size field, so a round trip
         // cannot catch a wrong value; check it against the bytes directly. The
         // root node's size must cover every byte after its own header.
-        let bytes = to_qbt_file_bytes(&sample_file());
+        let bytes = to_qbt_file_bytes(&DependenciesImpl, &sample_file());
         let mut pos = 4 + 2 + 12; // magic, version, global scale
         assert_eq!(&bytes[pos..pos + 8], b"COLORMAP");
         pos += 8;
@@ -287,21 +327,21 @@ mod tests {
 
     #[test]
     fn rejects_bad_magic() {
-        let mut bytes = to_qbt_file_bytes(&QbtFile::default());
+        let mut bytes = to_qbt_file_bytes(&DependenciesImpl, &QbtFile::default());
         bytes[0] = b'X';
-        assert!(from_qbt_file_bytes(&bytes).is_err());
+        assert!(from_qbt_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
     fn rejects_trailing_bytes() {
-        let mut bytes = to_qbt_file_bytes(&QbtFile::default());
+        let mut bytes = to_qbt_file_bytes(&DependenciesImpl, &QbtFile::default());
         bytes.push(0);
-        assert!(from_qbt_file_bytes(&bytes).is_err());
+        assert!(from_qbt_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
     fn rejects_truncated() {
-        assert!(from_qbt_file_bytes(b"").is_err());
-        assert!(from_qbt_file_bytes(b"QB 2").is_err());
+        assert!(from_qbt_file_bytes(&DependenciesImpl, b"").is_err());
+        assert!(from_qbt_file_bytes(&DependenciesImpl, b"QB 2").is_err());
     }
 }

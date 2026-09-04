@@ -8,12 +8,13 @@ description = "Reads and writes Qubicle (.qb / .qbt / .qbcl) files."
 keywords = ["qubicle", "qb", "qbt", "voxel", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
-[features]
-default = ["qb", "qbt", "qbcl"]
-qb = ["qbcl/qb"]
-qbt = ["qbcl/qbt", "dep:flate2"]
-qbcl = ["qbcl/qbcl", "dep:flate2"]
-
 [dependencies]
 flate2 = { version = "1", optional = true }
-qbcl = { version = "0.1.0", default-features = false }
+qbcl = { version = "0.1.1", default-features = false }
+
+[features]
+default = ["impl", "qb", "qbt", "qbcl"]
+impl = ["dep:flate2"]
+qb = ["qbcl/qb"]
+qbt = ["qbcl/qbt"]
+qbcl = ["qbcl/qbcl"]

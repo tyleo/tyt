@@ -1,4 +1,5 @@
 use crate::QubicleQbMatrix;
+#[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
 /// The `qubicle-qb` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
@@ -8,7 +9,8 @@ use serde::{Deserialize, Serialize};
 /// Each matrix's geometry and colors become a native object sharing one
 /// palette, placed by a hierarchy node; this holds the header flags and the
 /// per-matrix entries, aligned by index with the objects.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct QubicleQbExt {
     /// The format version from the header.
     pub version: u32,
@@ -17,7 +19,7 @@ pub struct QubicleQbExt {
     pub bgra: bool,
 
     /// Whether the authoring Z axis is right-handed rather than left-handed.
-    #[serde(rename = "right-handed")]
+    #[cfg_attr(feature = "ext", serde(rename = "right-handed"))]
     pub right_handed: bool,
 
     /// Whether voxel data was run-length encoded on disk.
@@ -25,10 +27,10 @@ pub struct QubicleQbExt {
 
     /// Whether a voxel's visibility byte is a per-face bitmask rather than a
     /// plain solid flag.
-    #[serde(rename = "visibility-mask-encoded")]
+    #[cfg_attr(feature = "ext", serde(rename = "visibility-mask-encoded"))]
     pub visibility_mask_encoded: bool,
 
     /// Per-matrix provenance, aligned by index with the objects.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub matrices: Vec<QubicleQbMatrix>,
 }

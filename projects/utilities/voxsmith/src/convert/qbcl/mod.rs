@@ -4,26 +4,13 @@ mod from_qbcl_bytes;
 mod from_qbcl_file;
 mod from_qbt_bytes;
 mod from_qbt_file;
-mod qubicle_qb_ext;
-mod qubicle_qb_matrix;
-mod qubicle_qb_vox_main;
-mod qubicle_qbcl_ext;
-mod qubicle_qbcl_metadata;
-mod qubicle_qbcl_node;
-mod qubicle_qbcl_node_body;
-mod qubicle_qbcl_thumbnail;
-mod qubicle_qbcl_vox_main;
-mod qubicle_qbt_ext;
-mod qubicle_qbt_node;
-mod qubicle_qbt_vox_main;
+mod qbcl_dependencies;
 mod to_qb_bytes;
 mod to_qb_file;
 mod to_qbcl_bytes;
 mod to_qbcl_file;
 mod to_qbt_bytes;
 mod to_qbt_file;
-#[cfg(feature = "ext")]
-mod vox_ext_codec;
 
 pub use from_qb_bytes::*;
 pub use from_qb_file::*;
@@ -31,21 +18,22 @@ pub use from_qbcl_bytes::*;
 pub use from_qbcl_file::*;
 pub use from_qbt_bytes::*;
 pub use from_qbt_file::*;
-pub use qubicle_qb_ext::*;
-pub use qubicle_qb_matrix::*;
-pub use qubicle_qb_vox_main::*;
-pub use qubicle_qbcl_ext::*;
-pub use qubicle_qbcl_metadata::*;
-pub use qubicle_qbcl_node::*;
-pub use qubicle_qbcl_node_body::*;
-pub use qubicle_qbcl_thumbnail::*;
-pub use qubicle_qbcl_vox_main::*;
-pub use qubicle_qbt_ext::*;
-pub use qubicle_qbt_node::*;
-pub use qubicle_qbt_vox_main::*;
+pub(crate) use qbcl_dependencies::*;
 pub use to_qb_bytes::*;
 pub use to_qb_file::*;
 pub use to_qbcl_bytes::*;
 pub use to_qbcl_file::*;
 pub use to_qbt_bytes::*;
 pub use to_qbt_file::*;
+
+// Re-exported so callers can name the decoded files the Qubicle conversions
+// exchange.
+pub use ::qbcl::{qb::QbFile, qbcl::QbclFile, qbt::QbtFile};
+
+// Re-exported so callers can name the states the Qubicle conversions exchange
+// and their exts.
+pub use ::qbcl_voxcore::{
+    QubicleQbExt, QubicleQbMatrix, QubicleQbVoxMain, QubicleQbclExt, QubicleQbclMetadata,
+    QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclThumbnail, QubicleQbclVoxMain, QubicleQbtExt,
+    QubicleQbtNode, QubicleQbtVoxMain,
+};

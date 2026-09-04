@@ -1,10 +1,8 @@
-use crate::{QubicleQbVoxMain, Result, from_qb_file};
-use qbcl_codec::qb::from_qb_file_bytes;
+use crate::{QubicleQbVoxMain, Result};
+use qbcl_voxcore::codec::from_qb_bytes as raw_from_qb_bytes;
 
 /// Loads the bytes of a Qubicle Binary `.qb` file into a [`QubicleQbVoxMain`].
-/// The bytes are decoded with [`qbcl_codec`] and the result is loaded into
-/// voxcore's in-memory form.
+/// The state is the one [`from_qb_file`](crate::from_qb_file) loads.
 pub fn from_qb_bytes(bytes: &[u8]) -> Result<QubicleQbVoxMain> {
-    let file = from_qb_file_bytes(bytes)?;
-    from_qb_file(&file)
+    Ok(raw_from_qb_bytes(bytes)?)
 }

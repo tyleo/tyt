@@ -27,12 +27,12 @@
 //! writes, to and from a decoded `GoxlFile` ([`from_goxl_file`] /
 //! [`to_goxl_file`]) and straight to and from `.gox` bytes
 //! ([`from_goxl_bytes`] / [`to_goxl_bytes`]), carrying the [`GoxelExt`].
-//! For the three Qubicle formats it converts to and from their
-//! decoded files ([`from_qb_file`] / [`to_qb_file`], [`from_qbt_file`] /
-//! [`to_qbt_file`], [`from_qbcl_file`] / [`to_qbcl_file`]) and straight to and
-//! from `.qb` / `.qbt` / `.qbcl` bytes (the matching `from_*_bytes` /
-//! `to_*_bytes`), carrying the [`QubicleQbExt`], [`QubicleQbtExt`], or
-//! [`QubicleQbclExt`].
+//! For the three Qubicle formats it fronts qbcl-voxcore's typed loads and
+//! writes, to and from their decoded files ([`from_qb_file`] /
+//! [`to_qb_file`], [`from_qbt_file`] / [`to_qbt_file`], [`from_qbcl_file`] /
+//! [`to_qbcl_file`]) and straight to and from `.qb` / `.qbt` / `.qbcl` bytes
+//! (the matching `from_*_bytes` / `to_*_bytes`), carrying the
+//! [`QubicleQbExt`], [`QubicleQbtExt`], or [`QubicleQbclExt`].
 
 #[cfg(not(feature = "_codec"))]
 compile_error!(
