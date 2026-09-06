@@ -21,6 +21,7 @@ members = [
     "projects/utilities/ty-math",
     "projects/utilities/ty-math-serde",
     "projects/utilities/ty-preferences",
+    "projects/utilities/voxconv",
     "projects/utilities/voxcore",
     "projects/utilities/voxsmith",
     "projects/utilities/vxl",
@@ -66,6 +67,7 @@ treeselect = { path = "projects/utilities/treeselect" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
 ty-preferences = { path = "projects/utilities/ty-preferences" }
+voxconv = { path = "projects/utilities/voxconv" }
 voxcore = { path = "projects/utilities/voxcore" }
 voxsmith = { path = "projects/utilities/voxsmith" }
 vxl = { path = "projects/utilities/vxl" }

@@ -14,3 +14,7 @@ pub use from_qbt_bytes::*;
 pub use to_qb_bytes::*;
 pub use to_qbcl_bytes::*;
 pub use to_qbt_bytes::*;
+
+// Re-exported so a caller can name the dependencies the functions here take
+// and bind them through the codec's impl behind `impl`.
+pub use qbcl_codec::dependencies;

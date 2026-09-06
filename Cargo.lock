@@ -2101,6 +2101,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "voxconv"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "goxl-voxcore",
+ "mvox-voxcore",
+ "qbcl-voxcore",
+ "ty-math",
+ "vmax",
+ "vmax-voxcore",
+ "voxcore",
+ "voxj",
+ "voxj-voxcore",
+]
+
+[[package]]
 name = "voxcore"
 version = "0.2.1"
 dependencies = [

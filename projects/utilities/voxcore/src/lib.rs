@@ -2,6 +2,7 @@
 
 //! Core types for working with voxels.
 
+pub mod check;
 #[cfg(feature = "color")]
 pub mod color;
 pub mod ext;

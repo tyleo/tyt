@@ -11,7 +11,7 @@ use voxj::{
 /// block, and records the edit state automatically, reproducing the document
 /// that function writes.
 pub struct VoxjFileBuilder<'a, T, D> {
-    dependencies: &'a D,
+    pub(crate) dependencies: &'a D,
     state: &'a VoxMain<T>,
     position_encoding: Option<PositionEncoding>,
     sample_encoding: Option<SampleEncoding>,

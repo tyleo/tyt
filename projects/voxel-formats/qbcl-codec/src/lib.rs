@@ -12,6 +12,8 @@ compile_error!("qbcl-codec needs at least one format feature enabled: qb, qbt, o
 
 // Public API
 
+pub mod dependencies;
+
 #[cfg(feature = "qb")]
 pub mod qb;
 
@@ -21,23 +23,12 @@ pub mod qbcl;
 #[cfg(feature = "qbt")]
 pub mod qbt;
 
-mod compress_zlib;
-mod decompress_zlib;
 mod error;
 mod result;
 
-pub use compress_zlib::*;
-pub use decompress_zlib::*;
+pub use dependencies::*;
 pub use error::*;
 pub use result::*;
-
-// Optional API
-
-#[cfg(feature = "impl")]
-mod dependencies_impl;
-
-#[cfg(feature = "impl")]
-pub use dependencies_impl::*;
 
 // Internal API
 

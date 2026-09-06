@@ -3,6 +3,12 @@
 
 mod from_vmax_package;
 mod to_vmax_package;
+mod vmax_file_builder_codec;
 
 pub use from_vmax_package::*;
 pub use to_vmax_package::*;
+pub use vmax_file_builder_codec::*;
+
+// Re-exported so a caller can name the dependencies the functions here take
+// and bind them through the codec's impl behind `impl`.
+pub use vmax_codec::dependencies;

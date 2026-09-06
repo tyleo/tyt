@@ -1,0 +1,72 @@
+[package]
+name = "voxconv"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Reads and writes voxel file formats through the voxcore state."
+keywords = ["voxel", "conversion", "3d", "vox", "voxj"]
+categories = ["encoding", "game-development", "graphics"]
+
+[dependencies]
+goxl-voxcore = { version = "0.1.0", default-features = false, optional = true }
+mvox-voxcore = { version = "0.1.0", default-features = false, optional = true }
+qbcl-voxcore = { version = "0.1.0", default-features = false, optional = true }
+vmax = { version = "0.1.8", default-features = false, optional = true }
+vmax-voxcore = { version = "0.1.0", default-features = false, optional = true }
+voxcore = { version = "0.2.1", default-features = false }
+voxj = { version = "0.1.3", default-features = false, optional = true }
+voxj-voxcore = { version = "0.2.0", default-features = false, optional = true }
+
+[dev-dependencies]
+branded-id = "0.1.7"
+ty-math = { version = "0.2.0", default-features = false }
+
+[features]
+default = ["codec", "ext", "goxl", "impl", "mvox", "qbcl", "vmax", "voxj"]
+
+# Each format feature fronts that format's `-voxcore` bridge crate and adds
+# the format to the format enums.
+# `vmax` and `voxj` also take the format crate for the values their writer
+# options carry. `qbcl` covers `.qb`, `.qbt`, and `.qbcl` because all three
+# share the `qbcl` crate family.
+goxl = ["dep:goxl-voxcore", "_format"]
+mvox = ["dep:mvox-voxcore", "_format"]
+qbcl = ["dep:qbcl-voxcore", "_format"]
+vmax = ["dep:vmax", "dep:vmax-voxcore", "_format"]
+voxj = ["dep:voxj", "dep:voxj-voxcore", "_format"]
+
+# Each format's ext in its block form, the `VoxMap` a state's ext moves
+# through between slot types. `codec` implies it.
+ext = [
+    "goxl-voxcore?/ext",
+    "mvox-voxcore?/ext",
+    "qbcl-voxcore?/ext",
+    "vmax-voxcore?/ext",
+]
+
+# The read and write functions over every enabled format's files, plus the
+# document checks. Each bridge's `codec` feature brings that format's codec
+# crate, reached through the bridge.
+codec = [
+    "ext",
+    "goxl-voxcore?/codec",
+    "mvox-voxcore?/codec",
+    "qbcl-voxcore?/codec",
+    "vmax-voxcore?/codec",
+    "voxj-voxcore?/codec",
+]
+
+# `DependenciesImpl`: std's filesystem and each enabled format's codec impl
+# through its bridge.
+impl = [
+    "codec",
+    "goxl-voxcore?/impl",
+    "qbcl-voxcore?/impl",
+    "vmax-voxcore?/impl",
+    "voxj-voxcore?/impl",
+]
+
+# A private marker every format feature enables, so the crate can require at
+# least one format at compile time.
+_format = []

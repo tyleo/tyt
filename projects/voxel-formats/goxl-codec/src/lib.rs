@@ -10,8 +10,8 @@
 
 // Public API
 
-mod decode_png;
-mod encode_png;
+pub mod dependencies;
+
 mod error;
 mod from_gox_file_bytes;
 mod goxl_rgba_image;
@@ -19,22 +19,13 @@ mod result;
 mod to_gox_file_bytes;
 mod validate_gox_file;
 
-pub use decode_png::*;
-pub use encode_png::*;
+pub use dependencies::*;
 pub use error::*;
 pub use from_gox_file_bytes::*;
 pub use goxl_rgba_image::*;
 pub use result::*;
 pub use to_gox_file_bytes::*;
 pub use validate_gox_file::*;
-
-// Optional API
-
-#[cfg(feature = "impl")]
-mod dependencies_impl;
-
-#[cfg(feature = "impl")]
-pub use dependencies_impl::*;
 
 // Internal API
 
