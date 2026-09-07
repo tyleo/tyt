@@ -1,7 +1,4 @@
-use crate::{
-    Result, VoxDocumentFile, WriteFormat,
-    codec::{Dependencies, internal},
-};
+use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, internal};
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Encodes a state as a document's files. The ext `T` moves into the
@@ -34,10 +31,10 @@ pub fn write<D: Dependencies, T: VoxExtBlockCodec>(
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, ReadFormat, WriteFormat,
-        codec::{read, test_state, write},
+        DependenciesImpl, ReadFormat, WriteFormat, read, test_state,
         vmax::VMaxWriteOptions,
         voxj::{VoxjSerialization, VoxjWriteOptions},
+        write,
     };
     use voxcore::{VoxMain, VoxMap};
 

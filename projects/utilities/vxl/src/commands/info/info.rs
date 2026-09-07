@@ -1,6 +1,9 @@
 use crate::{Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser, file_name};
 use clap::Parser;
-use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, codec};
+use voxconv::{
+    DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, read, read_document_files,
+    voxj_version_from_bytes,
+};
 use voxcore::{VoxMain, VoxMap};
 use voxsmith::operations::info::{InfoDocument, InfoLayout, info};
 
@@ -30,11 +33,11 @@ impl Info {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let from = self.input.resolve_format()?;
 
-        let files = codec::read_document_files(&dependencies, from, &self.input.path)?;
+        let files = read_document_files(&dependencies, from, &self.input.path)?;
 
         // The verbatim ext keeps any source's block, so the report can say
         // whether the document carries one.
-        let state: VoxMain<Option<VoxMap>> = codec::read(&VoxconvDependenciesImpl, from, &files)?;
+        let state: VoxMain<Option<VoxMap>> = read(&VoxconvDependenciesImpl, from, &files)?;
 
         let format_version = match from {
             ReadFormat::Voxj => {
@@ -42,7 +45,7 @@ impl Info {
                     .first()
                     .expect("the read accepted a single-file document");
 
-                Some(codec::voxj_version_from_bytes(
+                Some(voxj_version_from_bytes(
                     &VoxconvDependenciesImpl,
                     &file.bytes,
                 )?)

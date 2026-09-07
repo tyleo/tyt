@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::retype_ext, vmax::VMaxWriteOptions};
+use crate::{Result, VoxDocumentFile, retype_ext, vmax::VMaxWriteOptions};
 use vmax_voxcore::{
     VmaxFileBuilder,
     codec::{

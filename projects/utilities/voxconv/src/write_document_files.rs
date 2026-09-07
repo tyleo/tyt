@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::WriteFile};
+use crate::{Result, VoxDocumentFile, WriteFile};
 use std::path::Path;
 
 /// Writes a document's files under `output`: an empty-path entry to `output`
@@ -23,10 +23,7 @@ pub fn write_document_files<D: WriteFile>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        VoxDocumentFile,
-        codec::{WriteFile, write_document_files},
-    };
+    use crate::{VoxDocumentFile, WriteFile, write_document_files};
     use std::{
         cell::RefCell,
         io::Result as IOResult,

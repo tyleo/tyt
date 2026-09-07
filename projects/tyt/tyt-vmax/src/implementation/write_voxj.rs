@@ -1,8 +1,9 @@
 use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
 use std::path::Path;
 use voxconv::{
-    DependenciesImpl, ReadFormat, WriteFormat, codec,
+    DependenciesImpl, ReadFormat, WriteFormat, load,
     voxj::{PositionEncoding, SampleEncoding, VoxjSerialization, VoxjWriteOptions},
+    write,
 };
 use voxcore::{VoxMain, VoxMap};
 
@@ -10,7 +11,7 @@ use voxcore::{VoxMain, VoxMap};
 /// stdout, round-tripping through voxcore.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
     // The `vmax` ext rides through as a block into the document's `ext` block.
-    let state: VoxMain<Option<VoxMap>> = codec::load(&DependenciesImpl, ReadFormat::VMax, input)?;
+    let state: VoxMain<Option<VoxMap>> = load(&DependenciesImpl, ReadFormat::VMax, input)?;
 
     let (position_encoding, sample_encoding) = block_encoding(encoding);
 
@@ -21,7 +22,7 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
         ..VoxjWriteOptions::default()
     };
 
-    let files = codec::write(&DependenciesImpl, &WriteFormat::Voxj(options), state)?;
+    let files = write(&DependenciesImpl, &WriteFormat::Voxj(options), state)?;
 
     let file = files.first().expect("the Voxel Json writer emits one file");
 

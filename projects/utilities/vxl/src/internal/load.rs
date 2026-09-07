@@ -1,6 +1,6 @@
 use crate::{Dependencies, Result};
 use std::path::Path;
-use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, codec};
+use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, read, read_document_files};
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Loads the document at `input`, read as `from`, into a state whose ext
@@ -11,7 +11,7 @@ pub(crate) fn load<D: Dependencies, T: VoxExtBlockCodec>(
     input: &Path,
     from: ReadFormat,
 ) -> Result<VoxMain<T>> {
-    let files = codec::read_document_files(dependencies, from, input)?;
+    let files = read_document_files(dependencies, from, input)?;
 
-    Ok(codec::read(&VoxconvDependenciesImpl, from, &files)?)
+    Ok(read(&VoxconvDependenciesImpl, from, &files)?)
 }

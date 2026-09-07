@@ -1,4 +1,4 @@
-use crate::{Result, codec::Dependencies};
+use crate::{Dependencies, Result};
 use voxj_voxcore::codec::voxj_version_from_bytes as raw_voxj_version_from_bytes;
 
 /// The format version of a `.voxj` or `.voxjz` document, read from the bytes
@@ -11,9 +11,8 @@ pub fn voxj_version_from_bytes<D: Dependencies>(dependencies: &D, bytes: &[u8]) 
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, WriteFormat,
-        codec::{test_state, voxj_version_from_bytes, write},
-        voxj::VoxjWriteOptions,
+        DependenciesImpl, WriteFormat, test_state, voxj::VoxjWriteOptions, voxj_version_from_bytes,
+        write,
     };
 
     #[test]

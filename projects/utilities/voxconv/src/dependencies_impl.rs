@@ -1,4 +1,4 @@
-use crate::codec::{Dependencies, DirectoryEntry, ListDir, ReadFile, WriteFile};
+use crate::{Dependencies, DirectoryEntry, ListDir, ReadFile, WriteFile};
 #[cfg(feature = "goxl")]
 use goxl_voxcore::codec::dependencies::DependenciesImpl as GoxlDependenciesImpl;
 #[cfg(feature = "qbcl")]

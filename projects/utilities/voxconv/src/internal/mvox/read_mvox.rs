@@ -1,7 +1,4 @@
-use crate::{
-    Result, VoxDocumentFile,
-    codec::{retype_ext, single_file_bytes},
-};
+use crate::{Result, VoxDocumentFile, retype_ext, single_file_bytes};
 use mvox_voxcore::codec::from_mvox_bytes;
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 

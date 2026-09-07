@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::retype_ext};
+use crate::{Result, VoxDocumentFile, retype_ext};
 use vmax_voxcore::codec::{
     dependencies::{DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse},
     from_vmax_package,

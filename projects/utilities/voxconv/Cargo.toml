@@ -23,36 +23,26 @@ branded-id = "0.1.7"
 ty-math = { version = "0.2.0", default-features = false }
 
 [features]
-default = ["codec", "ext", "goxl", "impl", "mvox", "qbcl", "vmax", "voxj"]
+default = ["goxl", "impl", "mvox", "qbcl", "vmax", "voxj"]
 
-goxl = ["dep:goxl-voxcore", "_format"]
-mvox = ["dep:mvox-voxcore", "_format"]
-qbcl = ["dep:qbcl-voxcore", "_format"]
-vmax = ["dep:vmax", "dep:vmax-voxcore", "_format"]
-voxj = ["dep:voxj", "dep:voxj-voxcore", "_format"]
+goxl = ["dep:goxl-voxcore", "goxl-voxcore/codec", "goxl-voxcore/ext"]
 
-ext = [
-    "goxl-voxcore?/ext",
-    "mvox-voxcore?/ext",
-    "qbcl-voxcore?/ext",
-    "vmax-voxcore?/ext",
+mvox = ["dep:mvox-voxcore", "mvox-voxcore/codec", "mvox-voxcore/ext"]
+
+qbcl = ["dep:qbcl-voxcore", "qbcl-voxcore/codec", "qbcl-voxcore/ext"]
+
+vmax = [
+    "dep:vmax",
+    "dep:vmax-voxcore",
+    "vmax-voxcore/codec",
+    "vmax-voxcore/ext",
 ]
 
-codec = [
-    "ext",
-    "goxl-voxcore?/codec",
-    "mvox-voxcore?/codec",
-    "qbcl-voxcore?/codec",
-    "vmax-voxcore?/codec",
-    "voxj-voxcore?/codec",
-]
+voxj = ["dep:voxj", "dep:voxj-voxcore", "voxj-voxcore/codec"]
 
 impl = [
-    "codec",
     "goxl-voxcore?/impl",
     "qbcl-voxcore?/impl",
     "vmax-voxcore?/impl",
     "voxj-voxcore?/impl",
 ]
-
-_format = []

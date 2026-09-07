@@ -1,7 +1,4 @@
-use crate::{
-    Error, ReadFormat, Result, VoxDocumentFile,
-    codec::{DirectoryEntry, ListDir, ReadFile},
-};
+use crate::{DirectoryEntry, Error, ListDir, ReadFile, ReadFormat, Result, VoxDocumentFile};
 use std::path::Path;
 
 /// The files of the document at `input`: one entry with an empty path for a
@@ -71,8 +68,7 @@ fn entry_name(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ReadFormat, VoxDocumentFile,
-        codec::{DirectoryEntry, ListDir, ReadFile, read_document_files},
+        DirectoryEntry, ListDir, ReadFile, ReadFormat, VoxDocumentFile, read_document_files,
     };
     use std::{
         collections::BTreeMap,

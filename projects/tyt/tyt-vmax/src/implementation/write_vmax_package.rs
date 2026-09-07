@@ -1,7 +1,7 @@
 use crate::{ColorFormat, Result};
 use std::path::Path;
 use voxconv::{
-    DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat, codec,
+    DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat, read, save,
     vmax::{VMaxColorFormat, VMaxWriteOptions},
 };
 use voxcore::{VoxMain, VoxMap};
@@ -17,14 +17,14 @@ pub(crate) fn write_vmax_package(
     let files = [VoxDocumentFile::single(voxj_bytes.to_vec())];
 
     // A `vmax` block in the document's `ext` decodes back into the package.
-    let state: VoxMain<Option<VoxMap>> = codec::read(&DependenciesImpl, ReadFormat::Voxj, &files)?;
+    let state: VoxMain<Option<VoxMap>> = read(&DependenciesImpl, ReadFormat::Voxj, &files)?;
 
     let options = VMaxWriteOptions {
         color_format: vmax_color_format(color_format),
         scene_camera: None,
     };
 
-    codec::save(
+    save(
         &DependenciesImpl,
         &WriteFormat::VMax(options),
         state,

@@ -1,4 +1,4 @@
-use crate::codec::DirectoryEntry;
+use crate::DirectoryEntry;
 use std::{io::Result as IOResult, path::Path};
 
 /// Lists a directory.

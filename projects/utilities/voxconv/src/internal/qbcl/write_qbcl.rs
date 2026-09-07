@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::retype_ext};
+use crate::{Result, VoxDocumentFile, retype_ext};
 use qbcl_voxcore::codec::{dependencies::CompressZlib, to_qbcl_bytes};
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 

@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::retype_ext};
+use crate::{Result, VoxDocumentFile, retype_ext};
 use goxl_voxcore::codec::{dependencies::EncodePng, to_goxl_bytes};
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 

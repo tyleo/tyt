@@ -1,4 +1,4 @@
-use crate::{Result, codec::check_from_voxj};
+use crate::{Result, check_from_voxj};
 use voxcore::check::VoxCheck;
 use voxj::dependencies::DecodeBase64;
 use voxj_voxcore::codec::{

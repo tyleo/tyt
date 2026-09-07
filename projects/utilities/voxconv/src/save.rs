@@ -1,12 +1,9 @@
-use crate::{
-    Result, WriteFormat,
-    codec::{Dependencies, WriteFile, write, write_document_files},
-};
+use crate::{Dependencies, Result, WriteFile, WriteFormat, write, write_document_files};
 use std::path::Path;
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
-/// Writes a state as the document at `output`: [`write`](crate::codec::write) then
-/// [`write_document_files`](crate::codec::write_document_files).
+/// Writes a state as the document at `output`: [`write`](crate::write) then
+/// [`write_document_files`](crate::write_document_files).
 pub fn save<D: Dependencies + WriteFile, T: VoxExtBlockCodec>(
     dependencies: &D,
     format: &WriteFormat,
@@ -21,11 +18,8 @@ pub fn save<D: Dependencies + WriteFile, T: VoxExtBlockCodec>(
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, ReadFormat, WriteFormat,
-        codec::{
-            Dependencies, DirectoryEntry, ListDir, ReadFile, WriteFile, load, save, test_state,
-        },
-        vmax::VMaxWriteOptions,
+        Dependencies, DependenciesImpl, DirectoryEntry, ListDir, ReadFile, ReadFormat, WriteFile,
+        WriteFormat, load, save, test_state, vmax::VMaxWriteOptions,
     };
     use std::{
         cell::RefCell,

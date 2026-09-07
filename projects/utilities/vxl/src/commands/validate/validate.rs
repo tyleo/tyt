@@ -1,7 +1,9 @@
 use crate::{Dependencies, Result, VoxelInput, cli_value_parser, file_name};
 use clap::Parser;
 use std::io::{Error as IOError, ErrorKind};
-use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, codec};
+use voxconv::{
+    DependenciesImpl as VoxconvDependenciesImpl, check_document_files, read_document_files,
+};
 use voxcore::check;
 use voxsmith::operations::validate::{ValidateLayout, validate};
 
@@ -28,9 +30,9 @@ impl Validate {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let from = self.input.resolve_format()?;
 
-        let files = codec::read_document_files(&dependencies, from, &self.input.path)?;
+        let files = read_document_files(&dependencies, from, &self.input.path)?;
 
-        let checks = codec::check_document_files(&VoxconvDependenciesImpl, from, &files)?;
+        let checks = check_document_files(&VoxconvDependenciesImpl, from, &files)?;
 
         let output = validate(&checks, &file_name(&self.input.path), self.layout);
 

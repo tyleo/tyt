@@ -1,6 +1,8 @@
 use crate::{Dependencies, Result};
 use std::path::Path;
-use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, WriteFormat, codec};
+use voxconv::{
+    DependenciesImpl as VoxconvDependenciesImpl, WriteFormat, write, write_document_files,
+};
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Saves `state` as the document at `output`, written as `to`: the encode
@@ -11,7 +13,7 @@ pub(crate) fn save<D: Dependencies, T: VoxExtBlockCodec>(
     state: VoxMain<T>,
     output: &Path,
 ) -> Result<()> {
-    let files = codec::write(&VoxconvDependenciesImpl, to, state)?;
+    let files = write(&VoxconvDependenciesImpl, to, state)?;
 
-    Ok(codec::write_document_files(dependencies, output, &files)?)
+    Ok(write_document_files(dependencies, output, &files)?)
 }

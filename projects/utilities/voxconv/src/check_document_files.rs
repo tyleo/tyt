@@ -1,9 +1,6 @@
+use crate::{Dependencies, ReadFormat, Result, VoxDocumentFile, read};
 #[cfg(feature = "voxj")]
-use crate::codec::{check_voxj, single_file_bytes};
-use crate::{
-    ReadFormat, Result, VoxDocumentFile,
-    codec::{Dependencies, read},
-};
+use crate::{check_voxj, single_file_bytes};
 use voxcore::check::VoxCheck;
 
 /// Checks a document's files: first whether they decode as `format` into a
@@ -43,9 +40,8 @@ pub fn check_document_files<D: Dependencies>(
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat,
-        codec::{check_document_files, test_state, write},
-        voxj::VoxjWriteOptions,
+        DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat, check_document_files,
+        test_state, voxj::VoxjWriteOptions, write,
     };
     use voxcore::check::VoxCheckStatus;
 

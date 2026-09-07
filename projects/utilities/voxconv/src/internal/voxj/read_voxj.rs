@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::single_file_bytes};
+use crate::{Result, VoxDocumentFile, single_file_bytes};
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 use voxj::dependencies::DecodeBase64;
 use voxj_voxcore::codec::{
