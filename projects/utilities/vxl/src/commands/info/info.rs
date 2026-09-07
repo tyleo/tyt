@@ -29,7 +29,7 @@ impl Info {
 
         let files = codec::read_document_files(&dependencies, from, &self.input.path)?;
 
-        // The raw slot keeps any source's ext as a block, so the report can say
+        // The verbatim ext keeps any source's block, so the report can say
         // whether the document carries one.
         let state: VoxMain<Option<VoxMap>> = codec::read(&VoxconvDependenciesImpl, from, &files)?;
 

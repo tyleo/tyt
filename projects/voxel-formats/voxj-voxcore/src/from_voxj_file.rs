@@ -4,7 +4,7 @@ use crate::{
     vox_value_pool_from_voxj_value_pool,
 };
 use branded_id::U32Id;
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 use voxj::{
     DecodeBase64, VoxjFile,
     objects::{decode_voxj_object, voxj_palette_material_counts},
@@ -24,8 +24,8 @@ use voxj::{
 /// 2. object geometry is malformed
 /// 3. a checked insertion rejects a cross-reference
 /// 4. the `ext` block holds a non-finite number or a repeated key
-/// 5. the slot owns the `ext` block but cannot decode it
-pub fn from_voxj_file<T: VoxExtSlot, D: DecodeBase64>(
+/// 5. the state's ext type owns the `ext` block but cannot decode it
+pub fn from_voxj_file<T: VoxExtBlockCodec, D: DecodeBase64>(
     dependencies: &D,
     file: &VoxjFile,
 ) -> Result<VoxMain<T>> {
@@ -83,7 +83,7 @@ pub fn from_voxj_file<T: VoxExtSlot, D: DecodeBase64>(
     )?;
 
     let ext = main.ext.as_ref().map(vox_map_from_voxj_map).transpose()?;
-    let ext = T::from_vox_ext(ext.as_ref())?;
+    let ext = T::from_vox_ext_block(ext.as_ref())?;
 
     Ok(state.map_ext(|()| ext))
 }

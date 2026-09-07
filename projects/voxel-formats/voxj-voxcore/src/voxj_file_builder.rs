@@ -1,5 +1,5 @@
 use crate::{EditStateMode, Result, write_voxj};
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 use voxj::{
     CostVoxjObject, EncodeBase64, VoxjFile,
     objects::{PositionEncoding, SampleEncoding},
@@ -7,7 +7,7 @@ use voxj::{
 
 /// Builds a [`VoxjFile`] from a [`VoxMain`], the configurable form of
 /// [`to_voxj_file`](crate::to_voxj_file). It defaults to searching each
-/// object's block encodings for the lowest cost, persists the slot's `ext`
+/// object's block encodings for the lowest cost, persists the state's `ext`
 /// block, and records the edit state automatically, reproducing the document
 /// that function writes.
 pub struct VoxjFileBuilder<'a, T, D> {
@@ -19,7 +19,7 @@ pub struct VoxjFileBuilder<'a, T, D> {
     edit_state: EditStateMode,
 }
 
-impl<'a, T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject> VoxjFileBuilder<'a, T, D> {
+impl<'a, T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject> VoxjFileBuilder<'a, T, D> {
     /// Starts a builder encoding `state` into a Voxel Json document.
     ///
     /// # Arguments
@@ -50,7 +50,7 @@ impl<'a, T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject> VoxjFileBuilder<'a, T,
         self
     }
 
-    /// Keeps (the default) or drops the slot's `ext` extension block.
+    /// Keeps (the default) or drops the state's `ext` extension block.
     pub fn ext(mut self, ext: bool) -> Self {
         self.ext = ext;
         self

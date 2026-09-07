@@ -4,7 +4,7 @@ use crate::{
     voxj_palette_from_vox_palette, voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
-use voxcore::{VoxMain, VoxObject, ext::VoxExtSlot};
+use voxcore::{VoxMain, VoxObject, ext::VoxExtBlockCodec};
 use voxj::{
     CostVoxjObject, EncodeBase64, VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain,
     VoxjRuntimeState,
@@ -35,9 +35,9 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 ///   lowest cost.
 /// * `sample` - sample-block encoding, or `None` to search for the lowest
 ///   cost.
-/// * `ext` - when false, omits the slot's `ext` extension block.
+/// * `ext` - when false, omits the state's `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj<T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject>(
+pub fn write_voxj<T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject>(
     dependencies: &D,
     state: &VoxMain<T>,
     position: Option<PositionEncoding>,
@@ -94,7 +94,7 @@ pub fn write_voxj<T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject>(
     let ext = if ext {
         state
             .ext()
-            .to_vox_ext()?
+            .to_vox_ext_block()?
             .as_ref()
             .map(voxj_map_from_vox_map)
     } else {

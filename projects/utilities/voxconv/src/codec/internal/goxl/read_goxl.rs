@@ -1,14 +1,14 @@
 use crate::{
     Result, VoxDocumentFile,
-    codec::{into_ext_slot, single_file_bytes},
+    codec::{retype_ext, single_file_bytes},
 };
 use goxl_voxcore::codec::{dependencies::DecodePng, from_goxl_bytes};
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Decodes a `.gox` file into a state.
-pub fn read_goxl<D: DecodePng, T: VoxExtSlot>(
+pub fn read_goxl<D: DecodePng, T: VoxExtBlockCodec>(
     dependencies: &D,
     files: &[VoxDocumentFile],
 ) -> Result<VoxMain<T>> {
-    into_ext_slot(from_goxl_bytes(dependencies, single_file_bytes(files)?)?)
+    retype_ext(from_goxl_bytes(dependencies, single_file_bytes(files)?)?)
 }

@@ -5,7 +5,7 @@
 //! [`from_mvox_file`] loads a decoded [`MVoxFile`](mvox::MVoxFile) into a
 //! [`MVoxVoxMain`], and [`to_mvox_file`] writes one back. The
 //! MagicaVoxel state with no native voxcore home rides in the
-//! [`MVoxExt`] on the state's ext slot, so a loaded file writes back
+//! [`MVoxExt`] the state carries as its ext, so a loaded file writes back
 //! exactly. A state without one, such as one loaded from another format, has
 //! its file synthesized from the bare scene. The [`codec`] module, behind the
 //! default `codec` feature, goes straight to and from `.vox` bytes over

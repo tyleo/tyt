@@ -25,7 +25,7 @@ pub enum Error {
     /// Reading or writing a document's files failed.
     Io(IOError),
 
-    /// A state's ext failed to move between slot types through its block
+    /// A state's ext failed to move between ext types through its block
     /// form.
     Ext(ExtError),
 

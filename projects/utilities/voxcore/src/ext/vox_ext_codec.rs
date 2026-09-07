@@ -1,20 +1,21 @@
 use crate::{VoxMap, ext::Result};
 
-/// A state ext with a value-tree form that a document write persists in an
-/// ext block and a load reads back. The typed loads and writes handle an
-/// `Option` slot of this ext through
-/// [`VoxExtSlot`](crate::ext::VoxExtSlot)'s blanket impl.
+/// One format's ext as its entry in a document's ext block. A format's ext
+/// type implements this to encode itself under the format's vendor key and to
+/// find itself in a block again. The other half is
+/// [`VoxExtBlockCodec`](crate::ext::VoxExtBlockCodec), the whole block as the
+/// ext a state carries, which may be nothing. Its blanket impl makes an
+/// `Option` of this ext a whole-block codec.
 ///
-/// Each format keeps its ext under its vendor key of the block. The key says
-/// which format owns the ext, and a loader expecting another format sees a
-/// foreign block instead of a decode error.
+/// The vendor key says which format owns the entry, so a loader expecting
+/// another format sees a foreign block instead of a decode error.
 pub trait VoxExtCodec: Sized {
-    /// Encodes the ext into an ext block.
+    /// Encodes the ext as a block holding one entry under the format's key.
     fn to_vox_ext(&self) -> Result<VoxMap>;
 
-    /// Decodes the ext this codec owns from an ext block, or `None` when the
-    /// block belongs to another format. A block this codec owns but cannot
-    /// decode is an error.
+    /// Decodes the ext from its entry in `ext`, or `None` when the block
+    /// belongs to another format. An entry this codec owns but cannot decode
+    /// is an error.
     fn from_vox_ext(ext: &VoxMap) -> Result<Option<Self>>;
 }
 

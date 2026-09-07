@@ -35,8 +35,8 @@ supplies those and voxj's.
 
 ## The ext block
 
-The loaders and writers are generic over the state's ext slot through
-voxcore's `VoxExtSlot`. Loading types the document's `ext` block into the
-slot. Writing persists the block the slot encodes unless the builder drops
-it. The unit slot carries no ext. A `VoxjVoxMain` carries the block verbatim
-as a voxcore value tree, whichever format owns it.
+The loaders and writers are generic over the state's ext through voxcore's
+`VoxExtBlockCodec`. Loading decodes the document's `ext` block into the ext.
+Writing persists the block the ext encodes unless the builder drops it. A
+`()` ext carries nothing. A `VoxjVoxMain` carries the block verbatim as a
+voxcore value tree, whichever format owns it.

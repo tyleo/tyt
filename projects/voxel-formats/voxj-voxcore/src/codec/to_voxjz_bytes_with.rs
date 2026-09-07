@@ -1,5 +1,5 @@
 use crate::{Result, VoxjFileBuilder};
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 use voxj::{
     CostVoxjObject, EncodeBase64,
     objects::{PositionEncoding, SampleEncoding},
@@ -11,7 +11,7 @@ use voxj_codec::{Deflate, EncodeVoxjJson, to_voxjz_file_bytes};
 /// to every object. For the lowest-cost search instead, see
 /// [`to_voxjz_bytes`](crate::codec::to_voxjz_bytes).
 pub fn to_voxjz_bytes_with<
-    T: VoxExtSlot,
+    T: VoxExtBlockCodec,
     D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate,
 >(
     dependencies: &D,

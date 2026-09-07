@@ -1,4 +1,4 @@
-use crate::{Result, VoxDocumentFile, codec::into_ext_slot, vmax::VMaxWriteOptions};
+use crate::{Result, VoxDocumentFile, codec::retype_ext, vmax::VMaxWriteOptions};
 use vmax_voxcore::{
     VmaxFileBuilder,
     codec::{
@@ -6,7 +6,7 @@ use vmax_voxcore::{
         dependencies::{CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson},
     },
 };
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Encodes a state as a `.vmax` package's files.
 pub fn write_vmax<D, T>(
@@ -16,9 +16,9 @@ pub fn write_vmax<D, T>(
 ) -> Result<Vec<VoxDocumentFile>>
 where
     D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
-    T: VoxExtSlot,
+    T: VoxExtBlockCodec,
 {
-    let state = into_ext_slot(state)?;
+    let state = retype_ext(state)?;
 
     let mut builder = VmaxFileBuilder::new(&state).color_format(options.color_format);
 

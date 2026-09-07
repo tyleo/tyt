@@ -2,13 +2,13 @@ use crate::{
     ReadFormat, Result, VoxDocumentFile,
     codec::{Dependencies, internal},
 };
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Decodes a document's files into a state. The format's ext moves into the
 /// slot `T` through its block form. A single-file format takes exactly one
 /// file. A package takes every file
 /// [`read_document_files`](crate::codec::read_document_files) lists.
-pub fn read<D: Dependencies, T: VoxExtSlot>(
+pub fn read<D: Dependencies, T: VoxExtBlockCodec>(
     dependencies: &D,
     format: ReadFormat,
     files: &[VoxDocumentFile],

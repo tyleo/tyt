@@ -2,13 +2,13 @@ use crate::{
     Result, VoxDocumentFile, WriteFormat,
     codec::{Dependencies, internal},
 };
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
-/// Encodes a state as a document's files. The slot `T` moves into the
-/// format's ext through its block form. A slot holding another format's
+/// Encodes a state as a document's files. The ext `T` moves into the
+/// format's ext through its block form. A state carrying another format's
 /// ext, or none, writes the format's default ext. The state is consumed
 /// because the format's writer needs it in the format's ext type.
-pub fn write<D: Dependencies, T: VoxExtSlot>(
+pub fn write<D: Dependencies, T: VoxExtBlockCodec>(
     dependencies: &D,
     format: &WriteFormat,
     state: VoxMain<T>,
@@ -85,7 +85,7 @@ mod tests {
     /// A format's ext survives its own round trip as a keyed block, and a
     /// foreign block writes another format's default ext.
     #[test]
-    fn exts_ride_the_raw_slot_between_formats() {
+    fn exts_ride_the_raw_ext_between_formats() {
         let vmax = WriteFormat::VMax(VMaxWriteOptions::default());
 
         let files = write(&DependenciesImpl, &vmax, test_state(())).unwrap();
@@ -112,9 +112,9 @@ mod tests {
         assert_eq!(loaded.object_count(), 1);
     }
 
-    /// The unit slot drops every ext on the way in.
+    /// The `()` ext drops every block on the way in.
     #[test]
-    fn the_unit_slot_drops_the_ext() {
+    fn the_unit_ext_drops_the_block() {
         let files = write(&DependenciesImpl, &WriteFormat::Goxl, test_state(())).unwrap();
 
         let loaded: VoxMain<()> = read(&DependenciesImpl, ReadFormat::Goxl, &files).unwrap();

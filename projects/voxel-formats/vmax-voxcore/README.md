@@ -31,10 +31,10 @@ This crate's `impl` feature turns it on.
 
 ## The ext
 
-The Voxel Max state with no native voxcore home rides in the `VMaxExt`
-the loader stashes on the state's ext slot, so a document loaded from a
-package writes back exactly. A state without an ext, such as a state loaded
-from another format, has its document synthesized from the bare scene. The `ext`
+The Voxel Max state with no native voxcore home rides in the `VMaxExt`. The
+loader stores it as the state's ext, so a document loaded from a package
+writes back exactly. A state without an ext, such as a state loaded from
+another format, has its document synthesized from the bare scene. The `ext`
 feature, on by default, keys the ext into a document's `ext` block under the
 `vmax` key through voxcore's `VoxExtCodec`. A Voxel Json document carries
 the ext in that block.

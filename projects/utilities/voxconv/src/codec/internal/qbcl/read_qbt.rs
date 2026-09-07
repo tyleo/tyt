@@ -1,14 +1,14 @@
 use crate::{
     Result, VoxDocumentFile,
-    codec::{into_ext_slot, single_file_bytes},
+    codec::{retype_ext, single_file_bytes},
 };
 use qbcl_voxcore::codec::{dependencies::DecompressZlib, from_qbt_bytes};
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Decodes a `.qbt` file into a state.
-pub fn read_qbt<D: DecompressZlib, T: VoxExtSlot>(
+pub fn read_qbt<D: DecompressZlib, T: VoxExtBlockCodec>(
     dependencies: &D,
     files: &[VoxDocumentFile],
 ) -> Result<VoxMain<T>> {
-    into_ext_slot(from_qbt_bytes(dependencies, single_file_bytes(files)?)?)
+    retype_ext(from_qbt_bytes(dependencies, single_file_bytes(files)?)?)
 }

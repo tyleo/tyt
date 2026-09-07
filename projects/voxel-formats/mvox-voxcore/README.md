@@ -21,10 +21,10 @@ from `.vox` bytes over `mvox-codec`:
 
 ## The ext
 
-The MagicaVoxel state with no native voxcore home rides in the
-`MVoxExt` the loader stashes on the state's ext slot, so a file loaded
-from MagicaVoxel writes back exactly. A state without an ext, such as a state
-loaded from another format, has its file synthesized from the bare scene. The
-`ext` feature, on by default, keys the ext into a document's `ext` block under
-the `mvox` key through voxcore's `VoxExtCodec`. A Voxel Json document
-carries the ext in that block.
+The MagicaVoxel state with no native voxcore home rides in the `MVoxExt`.
+The loader stores it as the state's ext, so a file loaded from MagicaVoxel
+writes back exactly. A state without an ext, such as a state loaded from
+another format, has its file synthesized from the bare scene. The `ext`
+feature, on by default, keys the ext into a document's `ext` block under the
+`mvox` key through voxcore's `VoxExtCodec`. A Voxel Json document carries
+the ext in that block.

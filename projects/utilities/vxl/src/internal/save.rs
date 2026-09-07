@@ -1,11 +1,11 @@
 use crate::{Dependencies, Result};
 use std::path::Path;
 use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, WriteFormat, codec};
-use voxcore::{VoxMain, ext::VoxExtSlot};
+use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
 /// Saves `state` as the document at `output`, written as `to`: the encode
 /// through voxconv's impl, the files through `dependencies`.
-pub(crate) fn save<D: Dependencies, T: VoxExtSlot>(
+pub(crate) fn save<D: Dependencies, T: VoxExtBlockCodec>(
     dependencies: &D,
     to: &WriteFormat,
     state: VoxMain<T>,

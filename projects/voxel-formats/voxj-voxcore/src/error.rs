@@ -14,7 +14,7 @@ pub enum Error {
     #[cfg(feature = "codec")]
     Codec(CodecError),
 
-    /// A slot's ext failed to encode to or decode from its block form.
+    /// A state's ext failed to encode to or decode from its block form.
     Ext(ExtError),
 
     /// Voxel data was readable but semantically malformed.

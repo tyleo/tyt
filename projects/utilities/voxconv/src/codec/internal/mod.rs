@@ -9,10 +9,10 @@ pub(crate) use single_file_bytes::*;
 // Shared by the formats whose ext moves through the block form.
 
 #[cfg(any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax"))]
-mod into_ext_slot;
+mod retype_ext;
 
 #[cfg(any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax"))]
-pub(crate) use into_ext_slot::*;
+pub(crate) use retype_ext::*;
 
 // One folder per format.
 

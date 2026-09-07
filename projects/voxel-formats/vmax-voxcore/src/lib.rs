@@ -6,7 +6,7 @@
 //! [`VMaxVoxMain`], and [`to_vmax_file`] writes one back, with
 //! [`VmaxFileBuilder`] for control over the color format and the scene
 //! camera. The Voxel Max state with no native voxcore home rides in the
-//! [`VMaxExt`] on the state's ext slot, so a loaded document writes back
+//! [`VMaxExt`] the state carries as its ext, so a loaded document writes back
 //! exactly. A state without one, such as one loaded from another format, has
 //! its document synthesized from the bare scene. The [`codec`] module, behind
 //! the default `codec` feature, goes straight to and from a package's files.

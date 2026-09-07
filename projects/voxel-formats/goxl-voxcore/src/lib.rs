@@ -4,8 +4,8 @@
 //!
 //! [`from_goxl_file`] loads a [`GoxlFile`](goxl::GoxlFile) into a
 //! [`GoxlVoxMain`], and [`to_goxl_file`] writes one back. The Goxel state
-//! with no native voxcore home rides in the [`GoxlExt`] on the state's ext
-//! slot, so a loaded file writes back exactly. A state without one, such as
+//! with no native voxcore home rides in the [`GoxlExt`] the state carries as
+//! its ext, so a loaded file writes back exactly. A state without one, such as
 //! one loaded from another format, has its file synthesized from the bare
 //! scene. The [`codec`] module, behind the default `codec` feature, goes
 //! straight to and from `.gox` bytes. It takes the codec's dependencies,

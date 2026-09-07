@@ -30,10 +30,10 @@ crate's `impl` feature turns on the codec's.
 ## The ext
 
 The Qubicle state with no native voxcore home rides in the format's ext:
-`QbExt`, `QbtExt`, or `QbclExt`. The loader stashes it on
-the state's ext slot, so a loaded file writes back exactly. The `.qb` and
-`.qbt` writers require it. The `.qbcl` writer synthesizes a file from the bare
-scene when the ext is absent, such as for a state loaded from another format.
-The `ext` feature, on by default, keys each ext into a document's `ext` block
-under its `qb`, `qbt`, or `qbcl` key through voxcore's
-`VoxExtCodec`. A Voxel Json document carries the ext in that block.
+`QbExt`, `QbtExt`, or `QbclExt`. The loader stores it as the state's ext, so
+a loaded file writes back exactly. The `.qb` and `.qbt` writers require it.
+The `.qbcl` writer synthesizes a file from the bare scene when the ext is
+absent, such as for a state loaded from another format. The `ext` feature,
+on by default, keys each ext into a document's `ext` block under its `qb`,
+`qbt`, or `qbcl` key through voxcore's `VoxExtCodec`. A Voxel Json document
+carries the ext in that block.

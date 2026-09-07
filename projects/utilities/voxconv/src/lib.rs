@@ -5,14 +5,15 @@
 //! Each format's `-voxcore` bridge crate owns its conversion. This crate
 //! fronts them. [`ReadFormat`] and [`WriteFormat`] pick a bridge. A document
 //! travels as a list of [`VoxDocumentFile`]. A state's ext moves between the
-//! bridge's typed ext and whatever slot the caller's
-//! [`VoxMain`](voxcore::VoxMain) uses, through voxcore's
-//! [`VoxExtSlot`](voxcore::ext::VoxExtSlot). The `codec` module, behind the
-//! `codec` feature, holds the functions that move a document through a
-//! bridge and the document checks, each over the caller's dependencies. A
-//! check comes back as voxcore's [`VoxCheck`](voxcore::check::VoxCheck), so
-//! a renderer elsewhere lays every format's checks out the same way. The
-//! `vmax` and `voxj` modules hold those formats' writer options.
+//! bridge's typed ext and whatever ext type the caller's
+//! [`VoxMain`](voxcore::VoxMain) carries, through voxcore's
+//! [`VoxExtBlockCodec`](voxcore::ext::VoxExtBlockCodec). The `codec`
+//! module, behind the `codec` feature, holds the functions that move a
+//! document through a bridge and the document checks, each over the caller's
+//! dependencies. A check comes back as voxcore's
+//! [`VoxCheck`](voxcore::check::VoxCheck), so a renderer elsewhere lays every
+//! format's checks out the same way. The `vmax` and `voxj` modules hold those
+//! formats' writer options.
 
 #[cfg(not(feature = "_format"))]
 compile_error!(

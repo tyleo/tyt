@@ -7,13 +7,12 @@
 //! [`from_qbt_file`] / [`to_qbt_file`] for Qubicle Binary Tree, and
 //! [`from_qbcl_file`] / [`to_qbcl_file`] for Qubicle Construction Library.
 //! The Qubicle state with no native voxcore home rides in the format's ext
-//! ([`QbExt`], [`QbtExt`], or [`QbclExt`]) on the
-//! state's ext slot, so a loaded file writes back exactly. The `.qb` and
-//! `.qbt` writers require it. A state without one, such as one loaded from
-//! another format, has its `.qbcl` file synthesized from the bare scene. The
-//! [`codec`] module, behind the
-//! default `codec` feature, goes straight to and from file bytes. Its `.qbt`
-//! and `.qbcl` conversions take the codec's dependencies, which
+//! ([`QbExt`], [`QbtExt`], or [`QbclExt`]) the state carries as its ext, so
+//! a loaded file writes back exactly. The `.qb` and `.qbt` writers require
+//! it. A state without one, such as one loaded from another format, has its
+//! `.qbcl` file synthesized from the bare scene. The [`codec`] module, behind
+//! the default `codec` feature, goes straight to and from file bytes. Its
+//! `.qbt` and `.qbcl` conversions take the codec's dependencies, which
 //! `qbcl_codec::DependenciesImpl` supplies. The `ext` feature keys each ext
 //! into a document's `ext` block through voxcore's
 //! [`VoxExtCodec`](voxcore::ext::VoxExtCodec).

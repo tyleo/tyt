@@ -2,8 +2,8 @@ use branded_id::U32Id;
 use ty_math::TyVector3U32;
 use voxcore::{VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
-/// One `baseColor` palette and one tight 1x1x1 object sampling its one
-/// material, with `ext` in the slot. The object sits under a root node so
+/// A state carrying `ext`, with one `baseColor` palette and one tight 1x1x1
+/// object sampling its one material. The object sits under a root node so
 /// every format's writer emits it.
 pub fn test_state<T>(ext: T) -> VoxMain<T> {
     let mut state = VoxMain::default();
