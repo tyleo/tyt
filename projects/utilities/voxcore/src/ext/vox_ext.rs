@@ -5,11 +5,13 @@ use std::{any::Any, fmt::Debug};
 /// The ext a [`VoxMain`](crate::VoxMain) carries: the whole ext block a
 /// document persists, plus the hooks the state fires when a listing moves.
 ///
-/// A format ext aligns its entries with the scene by listing index. A
-/// mutation that shifts a listing fires the matching hook after it succeeds,
-/// with the index the entity had. The ext drops or inserts its entry in step.
-/// A batch release fires once with every index, descending, so an ext can
-/// remove entries in place. Every hook defaults to a no-op.
+/// A format ext aligns its entries with the scene by listing index. A retain
+/// or move fires its hook after the mutation, and a release fires its hook
+/// before it, once every check has passed. The `did` or `will` in a hook's
+/// name says which. Each carries the index the entity had, and the ext drops
+/// or inserts its entry in step. A batch release fires once with every index,
+/// descending, so an ext can remove entries in place. Every hook defaults to
+/// a no-op.
 ///
 /// [`to_vox_ext`](Self::to_vox_ext) returns the block. An empty map means no
 /// block, and a writer omits it. The trait is object-safe, so a state can
@@ -29,45 +31,48 @@ pub trait VoxExt: Any + Debug {
     fn clone_box(&self) -> Box<dyn VoxExt>;
 
     /// A hierarchy node was retained at listing `index`.
-    fn hierarchy_node_retained(&mut self, _index: usize) {}
+    fn hierarchy_node_did_retain(&mut self, _index: usize) {}
 
-    /// The hierarchy node at listing `index` was released.
-    fn hierarchy_node_released(&mut self, _index: usize) {}
+    /// The hierarchy node at listing `index` is about to be released.
+    fn hierarchy_node_will_release(&mut self, _index: usize) {}
 
     /// An object was retained at listing `index`.
-    fn object_retained(&mut self, _index: usize) {}
+    fn object_did_retain(&mut self, _index: usize) {}
 
-    /// The object at listing `index` was released.
-    fn object_released(&mut self, _index: usize) {}
+    /// The object at listing `index` is about to be released.
+    fn object_will_release(&mut self, _index: usize) {}
 
     /// The object at listing `from` moved to `to`.
-    fn object_moved(&mut self, _from: usize, _to: usize) {}
+    fn object_did_move(&mut self, _from: usize, _to: usize) {}
 
     /// A palette was retained at listing `index`.
-    fn palette_retained(&mut self, _index: usize) {}
+    fn palette_did_retain(&mut self, _index: usize) {}
 
-    /// The palette at listing `index` was released.
-    fn palette_released(&mut self, _index: usize) {}
+    /// The palette at listing `index` is about to be released.
+    fn palette_will_release(&mut self, _index: usize) {}
 
     /// The palette at listing `from` moved to `to`.
-    fn palette_moved(&mut self, _from: usize, _to: usize) {}
+    fn palette_did_move(&mut self, _from: usize, _to: usize) {}
 
     /// A material was retained at `index` in the palette at listing
     /// `palette`.
-    fn material_retained(&mut self, _palette: usize, _index: usize) {}
+    fn material_did_retain(&mut self, _palette: usize, _index: usize) {}
 
-    /// The materials at `indices`, descending, were released from the
-    /// palette at listing `palette`.
-    fn materials_released(&mut self, _palette: usize, _indices: &[usize]) {}
+    /// The materials at `indices`, descending, are about to be released from
+    /// the palette at listing `palette`.
+    fn materials_will_release(&mut self, _palette: usize, _indices: &[usize]) {}
 
     /// The samples of the palette at listing `palette` were repainted in one
     /// pass: each `(from, to)` pair moved the samples of material `from` onto
     /// material `to`. The listing itself did not move.
-    fn materials_repainted(&mut self, _palette: usize, _remap: &[(usize, usize)]) {}
+    fn materials_did_repaint(&mut self, _palette: usize, _remap: &[(usize, usize)]) {}
 
-    /// Voxel `voxel` of the object at listing `object` was retained or
+    /// Voxel `voxel` of the object at listing `object` was retained.
+    fn voxel_did_retain(&mut self, _object: usize, _voxel: U32Id<BVoxVoxel>) {}
+
+    /// Voxel `voxel` of the object at listing `object` is about to be
     /// released.
-    fn voxel_changed(&mut self, _object: usize, _voxel: U32Id<BVoxVoxel>) {}
+    fn voxel_will_release(&mut self, _object: usize, _voxel: U32Id<BVoxVoxel>) {}
 }
 
 /// No ext. Encodes no block and ignores every hook.
@@ -103,75 +108,81 @@ impl<E: VoxExt + Clone> VoxExt for Option<E> {
         Box::new(self.clone())
     }
 
-    fn hierarchy_node_retained(&mut self, index: usize) {
+    fn hierarchy_node_did_retain(&mut self, index: usize) {
         if let Some(ext) = self {
-            ext.hierarchy_node_retained(index);
+            ext.hierarchy_node_did_retain(index);
         }
     }
 
-    fn hierarchy_node_released(&mut self, index: usize) {
+    fn hierarchy_node_will_release(&mut self, index: usize) {
         if let Some(ext) = self {
-            ext.hierarchy_node_released(index);
+            ext.hierarchy_node_will_release(index);
         }
     }
 
-    fn object_retained(&mut self, index: usize) {
+    fn object_did_retain(&mut self, index: usize) {
         if let Some(ext) = self {
-            ext.object_retained(index);
+            ext.object_did_retain(index);
         }
     }
 
-    fn object_released(&mut self, index: usize) {
+    fn object_will_release(&mut self, index: usize) {
         if let Some(ext) = self {
-            ext.object_released(index);
+            ext.object_will_release(index);
         }
     }
 
-    fn object_moved(&mut self, from: usize, to: usize) {
+    fn object_did_move(&mut self, from: usize, to: usize) {
         if let Some(ext) = self {
-            ext.object_moved(from, to);
+            ext.object_did_move(from, to);
         }
     }
 
-    fn palette_retained(&mut self, index: usize) {
+    fn palette_did_retain(&mut self, index: usize) {
         if let Some(ext) = self {
-            ext.palette_retained(index);
+            ext.palette_did_retain(index);
         }
     }
 
-    fn palette_released(&mut self, index: usize) {
+    fn palette_will_release(&mut self, index: usize) {
         if let Some(ext) = self {
-            ext.palette_released(index);
+            ext.palette_will_release(index);
         }
     }
 
-    fn palette_moved(&mut self, from: usize, to: usize) {
+    fn palette_did_move(&mut self, from: usize, to: usize) {
         if let Some(ext) = self {
-            ext.palette_moved(from, to);
+            ext.palette_did_move(from, to);
         }
     }
 
-    fn material_retained(&mut self, palette: usize, index: usize) {
+    fn material_did_retain(&mut self, palette: usize, index: usize) {
         if let Some(ext) = self {
-            ext.material_retained(palette, index);
+            ext.material_did_retain(palette, index);
         }
     }
 
-    fn materials_released(&mut self, palette: usize, indices: &[usize]) {
+    fn materials_will_release(&mut self, palette: usize, indices: &[usize]) {
         if let Some(ext) = self {
-            ext.materials_released(palette, indices);
+            ext.materials_will_release(palette, indices);
         }
     }
 
-    fn materials_repainted(&mut self, palette: usize, remap: &[(usize, usize)]) {
+    fn materials_did_repaint(&mut self, palette: usize, remap: &[(usize, usize)]) {
         if let Some(ext) = self {
-            ext.materials_repainted(palette, remap);
+            ext.materials_did_repaint(palette, remap);
         }
     }
 
-    fn voxel_changed(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+    fn voxel_did_retain(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
         if let Some(ext) = self {
-            ext.voxel_changed(object, voxel);
+            ext.voxel_did_retain(object, voxel);
+        }
+    }
+
+    fn voxel_will_release(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+        if let Some(ext) = self {
+            ext.voxel_will_release(object, voxel);
         }
     }
 }
@@ -191,52 +202,56 @@ impl VoxExt for Box<dyn VoxExt> {
         (**self).clone_box()
     }
 
-    fn hierarchy_node_retained(&mut self, index: usize) {
-        (**self).hierarchy_node_retained(index);
+    fn hierarchy_node_did_retain(&mut self, index: usize) {
+        (**self).hierarchy_node_did_retain(index);
     }
 
-    fn hierarchy_node_released(&mut self, index: usize) {
-        (**self).hierarchy_node_released(index);
+    fn hierarchy_node_will_release(&mut self, index: usize) {
+        (**self).hierarchy_node_will_release(index);
     }
 
-    fn object_retained(&mut self, index: usize) {
-        (**self).object_retained(index);
+    fn object_did_retain(&mut self, index: usize) {
+        (**self).object_did_retain(index);
     }
 
-    fn object_released(&mut self, index: usize) {
-        (**self).object_released(index);
+    fn object_will_release(&mut self, index: usize) {
+        (**self).object_will_release(index);
     }
 
-    fn object_moved(&mut self, from: usize, to: usize) {
-        (**self).object_moved(from, to);
+    fn object_did_move(&mut self, from: usize, to: usize) {
+        (**self).object_did_move(from, to);
     }
 
-    fn palette_retained(&mut self, index: usize) {
-        (**self).palette_retained(index);
+    fn palette_did_retain(&mut self, index: usize) {
+        (**self).palette_did_retain(index);
     }
 
-    fn palette_released(&mut self, index: usize) {
-        (**self).palette_released(index);
+    fn palette_will_release(&mut self, index: usize) {
+        (**self).palette_will_release(index);
     }
 
-    fn palette_moved(&mut self, from: usize, to: usize) {
-        (**self).palette_moved(from, to);
+    fn palette_did_move(&mut self, from: usize, to: usize) {
+        (**self).palette_did_move(from, to);
     }
 
-    fn material_retained(&mut self, palette: usize, index: usize) {
-        (**self).material_retained(palette, index);
+    fn material_did_retain(&mut self, palette: usize, index: usize) {
+        (**self).material_did_retain(palette, index);
     }
 
-    fn materials_released(&mut self, palette: usize, indices: &[usize]) {
-        (**self).materials_released(palette, indices);
+    fn materials_will_release(&mut self, palette: usize, indices: &[usize]) {
+        (**self).materials_will_release(palette, indices);
     }
 
-    fn materials_repainted(&mut self, palette: usize, remap: &[(usize, usize)]) {
-        (**self).materials_repainted(palette, remap);
+    fn materials_did_repaint(&mut self, palette: usize, remap: &[(usize, usize)]) {
+        (**self).materials_did_repaint(palette, remap);
     }
 
-    fn voxel_changed(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
-        (**self).voxel_changed(object, voxel);
+    fn voxel_did_retain(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+        (**self).voxel_did_retain(object, voxel);
+    }
+
+    fn voxel_will_release(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+        (**self).voxel_will_release(object, voxel);
     }
 }
 
@@ -274,55 +289,60 @@ mod tests {
             Box::new(self.clone())
         }
 
-        fn hierarchy_node_retained(&mut self, index: usize) {
+        fn hierarchy_node_did_retain(&mut self, index: usize) {
             self.0.push(format!("node retained {index}"));
         }
 
-        fn hierarchy_node_released(&mut self, index: usize) {
+        fn hierarchy_node_will_release(&mut self, index: usize) {
             self.0.push(format!("node released {index}"));
         }
 
-        fn object_retained(&mut self, index: usize) {
+        fn object_did_retain(&mut self, index: usize) {
             self.0.push(format!("object retained {index}"));
         }
 
-        fn object_released(&mut self, index: usize) {
+        fn object_will_release(&mut self, index: usize) {
             self.0.push(format!("object released {index}"));
         }
 
-        fn object_moved(&mut self, from: usize, to: usize) {
+        fn object_did_move(&mut self, from: usize, to: usize) {
             self.0.push(format!("object moved {from} {to}"));
         }
 
-        fn palette_retained(&mut self, index: usize) {
+        fn palette_did_retain(&mut self, index: usize) {
             self.0.push(format!("palette retained {index}"));
         }
 
-        fn palette_released(&mut self, index: usize) {
+        fn palette_will_release(&mut self, index: usize) {
             self.0.push(format!("palette released {index}"));
         }
 
-        fn palette_moved(&mut self, from: usize, to: usize) {
+        fn palette_did_move(&mut self, from: usize, to: usize) {
             self.0.push(format!("palette moved {from} {to}"));
         }
 
-        fn material_retained(&mut self, palette: usize, index: usize) {
+        fn material_did_retain(&mut self, palette: usize, index: usize) {
             self.0.push(format!("material retained {palette} {index}"));
         }
 
-        fn materials_released(&mut self, palette: usize, indices: &[usize]) {
+        fn materials_will_release(&mut self, palette: usize, indices: &[usize]) {
             self.0
                 .push(format!("materials released {palette} {indices:?}"));
         }
 
-        fn materials_repainted(&mut self, palette: usize, remap: &[(usize, usize)]) {
+        fn materials_did_repaint(&mut self, palette: usize, remap: &[(usize, usize)]) {
             self.0
                 .push(format!("materials repainted {palette} {remap:?}"));
         }
 
-        fn voxel_changed(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+        fn voxel_did_retain(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
             self.0
-                .push(format!("voxel changed {object} {}", voxel.to_u32()));
+                .push(format!("voxel retained {object} {}", voxel.to_u32()));
+        }
+
+        fn voxel_will_release(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+            self.0
+                .push(format!("voxel released {object} {}", voxel.to_u32()));
         }
     }
 
@@ -489,7 +509,7 @@ mod tests {
 
         assert_eq!(
             events(&state)[2..],
-            ["voxel changed 1 0", "voxel changed 1 0"]
+            ["voxel retained 1 0", "voxel released 1 0"]
         );
     }
 

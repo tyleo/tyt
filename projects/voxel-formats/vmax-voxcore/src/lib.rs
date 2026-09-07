@@ -7,8 +7,11 @@
 //! [`VmaxFileBuilder`] for control over the color format and the scene
 //! camera. The Voxel Max state with no native voxcore home rides in the
 //! [`VMaxExt`] the state carries as its ext, so a loaded document writes back
-//! exactly. A state without one, such as one loaded from another format, has
-//! its document synthesized from the bare scene. The [`codec`] module, behind
+//! exactly. The ext follows the listings through the
+//! [`VoxExt`](voxcore::ext::VoxExt) hooks, so a state mutated after the load
+//! still writes back with the surviving provenance. A state without one, such
+//! as one loaded from another format, has its document synthesized from the
+//! bare scene. The [`codec`] module, behind
 //! the default `codec` feature, goes straight to and from a package's files.
 //! It takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
 //! supplies. The `ext` feature keys the ext into a document's `ext` block

@@ -33,8 +33,12 @@ This crate's `impl` feature turns it on.
 
 The Voxel Max state with no native voxcore home rides in the `VMaxExt`. The
 loader stores it as the state's ext, so a document loaded from a package
-writes back exactly. A state without an ext, such as a state loaded from
-another format, has its document synthesized from the bare scene. The `ext`
+writes back exactly. The ext follows the state's listings through voxcore's
+`VoxExt` hooks. A node, object, palette, or material released or reordered
+after the load still writes back with the surviving provenance, and a node
+retained after the load writes like a synthesized one. A state without an
+ext, such as a state loaded from another format, has its document
+synthesized from the bare scene. The `ext`
 feature, on by default, keys the ext into a document's `ext` block under the
 `vmax` key through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries
 the ext in that block.

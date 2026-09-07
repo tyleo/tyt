@@ -13,11 +13,11 @@ pub fn to_vmax_file(state: &VMaxVoxMain, vmax_color_format: VMaxColorFormat) -> 
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VMaxColorFormat, VMaxExt, VMaxVoxMain, VmaxFileBuilder, from_vmax_file,
-        to_vmax_file,
+        SceneCameraSource, VMaxColorFormat, VMaxExt, VMaxExtNode, VMaxVoxMain, VmaxFileBuilder,
+        from_vmax_file, to_vmax_file,
     };
     use branded_id::U32Id;
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
     use ty_math::{
         TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
     };
@@ -273,6 +273,183 @@ mod tests {
 
         let error = to_vmax_file(&state, VMaxColorFormat::All).unwrap_err();
         assert!(error.to_string().contains(BASE_COLOR), "{error}");
+    }
+
+    /// `sample()` with two more objects under the group, each with its own
+    /// contents file and editor state.
+    fn three_object_sample() -> VMaxFile {
+        let mut file = sample();
+        let object = file.scene_json_file.objects[0].clone();
+        let contents = file.contents_files["contents.vmaxb"].clone();
+        for (id, suffix) in [("o2", "2"), ("o3", "3")] {
+            let data = format!("contents{suffix}.vmaxb");
+            file.scene_json_file.objects.push(VMaxObject {
+                name: id.to_owned(),
+                data: data.clone(),
+                history: format!("history{suffix}.vmaxhb"),
+                id: id.to_owned(),
+                ..object.clone()
+            });
+            file.contents_files.insert(
+                data,
+                VMaxContentsVmaxbFile {
+                    uuid: format!("u{suffix}"),
+                    ..contents.clone()
+                },
+            );
+        }
+        file
+    }
+
+    /// Releasing a middle node, its object, and the object's palette, then
+    /// compacting, leaves the survivors' provenance aligned. The rebuilt
+    /// document carries their ids and editor state, and reloads to the loaded
+    /// ext minus the released entries.
+    #[test]
+    fn released_entities_leave_the_survivors_provenance_aligned() {
+        let file = three_object_sample();
+        let mut state = from_vmax_file(&file).unwrap();
+        let original = state
+            .ext()
+            .clone()
+            .expect("a loaded document carries its ext");
+
+        // The group, node 0, places nodes 1..=3. Node 2 places object 1, which
+        // folds palette 1.
+        let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
+        let doomed_node_id = U32Id::<BVoxHierarchyNode>::from_u32(2);
+        let doomed_object_id = U32Id::<BVoxObject>::from_u32(1);
+        let doomed_palette_id = U32Id::<BVoxPalette>::from_u32(1);
+        let mut group = state.hierarchy_node(group_id).unwrap().clone();
+        group.child_node_ids.retain(|&id| id != doomed_node_id);
+        state.set_hierarchy_node(group_id, group).unwrap();
+        state.release_hierarchy_node(doomed_node_id).unwrap();
+        state.release_object(doomed_object_id).unwrap();
+        state.release_palette(doomed_palette_id).unwrap();
+        state.gc();
+
+        let mut expected = original;
+        expected.hierarchy_nodes.remove(2);
+        expected.object_states.remove(1);
+        expected.palettes.remove(1);
+        assert_eq!(state.ext(), &Some(expected.clone()));
+
+        let rebuilt = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let ids: Vec<&str> = rebuilt
+            .scene_json_file
+            .objects
+            .iter()
+            .map(|object| object.id.as_str())
+            .collect();
+        assert_eq!(ids, ["o", "o3"]);
+        let uuids: BTreeSet<&str> = rebuilt
+            .contents_files
+            .values()
+            .map(|contents| contents.uuid.as_str())
+            .collect();
+        assert_eq!(uuids, BTreeSet::from(["u", "u3"]));
+
+        let reloaded = from_vmax_file(&rebuilt).unwrap();
+        assert_eq!(reloaded.ext(), &Some(expected));
+    }
+
+    /// A node retained after the load takes a default entry, which the writer
+    /// fills in like a synthesized node: a fresh id, no parent for a root, and
+    /// the default anchor tokens.
+    #[test]
+    fn a_node_retained_after_the_load_writes_like_a_synthesized_node() {
+        let mut state = from_vmax_file(&sample()).unwrap();
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        let object_id = state
+            .retain_object(color_object(
+                palette_id,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        let node_id = state
+            .retain_hierarchy_node(object_node("added", object_id.to_u32(), at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state.push_root_hierarchy_node_id(node_id).unwrap();
+
+        let ext = state.ext().as_ref().unwrap();
+        assert_eq!(ext.hierarchy_nodes.len(), 3);
+        assert_eq!(ext.hierarchy_nodes[2], VMaxExtNode::default());
+        assert_eq!(ext.object_states.len(), 2);
+        assert_eq!(ext.object_states[1], None);
+
+        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let added = file
+            .scene_json_file
+            .objects
+            .iter()
+            .find(|object| object.name == "added")
+            .expect("the retained node writes as an object");
+        assert_eq!(added.id, "00000000-0000-0000-0000-000000000001");
+        assert_eq!(added.parent_id, None);
+        assert_eq!(added.t_al, "f");
+
+        let reloaded = from_vmax_file(&file).unwrap();
+        assert_eq!(reloaded.ext().as_ref().unwrap().hierarchy_nodes.len(), 3);
+    }
+
+    /// A reduction repaints onto a survivor, releases the rest, prunes the
+    /// value pools, and compacts. The survivor's slot rides in the ext, so the
+    /// document still draws its exact material even though its value ids were
+    /// renumbered, and the reload records the one slot.
+    #[test]
+    fn a_reduction_keeps_the_survivors_material_slot_through_prune_and_gc() {
+        let mut state = from_vmax_file(&sample()).unwrap();
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        // The folded materials sort by color cell then slot: material 0 draws
+        // cell 2 in slot 1 and material 1 draws cell 4 in slot 0. Keep material
+        // 0, whose slot the pools stop recording once slot 0's values are
+        // pruned away and its own renumber to 0.
+        let doomed_id = U32Id::<BVoxMaterial>::from_u32(1);
+        let survivor_id = U32Id::<BVoxMaterial>::from_u32(0);
+        state
+            .repaint_materials(palette_id, &HashMap::from([(doomed_id, survivor_id)]))
+            .unwrap();
+        state.release_material(palette_id, doomed_id).unwrap();
+        state.prune_value_pools();
+        state.gc();
+        assert_eq!(
+            state.ext().as_ref().unwrap().palettes[0]
+                .as_ref()
+                .unwrap()
+                .slots,
+            [1]
+        );
+
+        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let voxels = contents_voxels(&file, "contents.vmaxb");
+        assert!(voxels.iter().all(|voxel| voxel.material_idx == 1));
+        let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
+        assert_eq!(settings.materials[1], material("2", 0.5, 0.25, 2.0, false));
+
+        let reloaded = from_vmax_file(&file).unwrap();
+        let palette = reloaded.ext().as_ref().unwrap().palettes[0]
+            .as_ref()
+            .unwrap();
+        assert_eq!(palette.slots, [1]);
+        assert_eq!(palette.materials.len(), 8);
+    }
+
+    /// An ext whose lists fall out of step with the listings is malformed, so
+    /// the writer errors instead of pairing entries by a shifted index.
+    #[test]
+    fn an_ext_out_of_step_with_its_listings_errors() {
+        let mut state = from_vmax_file(&sample()).unwrap();
+        let mut ext = state.ext().clone().unwrap();
+        ext.hierarchy_nodes.pop();
+        state.set_ext(Some(ext));
+        assert!(to_vmax_file(&state, VMaxColorFormat::Png).is_err());
+
+        let mut state = from_vmax_file(&sample()).unwrap();
+        let mut ext = state.ext().clone().unwrap();
+        ext.object_states.pop();
+        state.set_ext(Some(ext));
+        assert!(to_vmax_file(&state, VMaxColorFormat::Png).is_err());
     }
 
     #[test]
@@ -1786,8 +1963,9 @@ mod tests {
                 cam: Some(cam),
                 ..Default::default()
             },
+            hierarchy_nodes: vec![VMaxExtNode::default(); state.hierarchy_node_count()],
             palettes: vec![None; state.palette_count()],
-            ..Default::default()
+            object_states: vec![None; state.object_count()],
         };
         state.set_ext(Some(vmax_ext));
         state.validate().unwrap();

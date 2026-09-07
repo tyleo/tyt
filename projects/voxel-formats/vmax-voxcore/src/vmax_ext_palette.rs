@@ -3,9 +3,9 @@ use crate::VMaxExtMaterial;
 use serde::{Deserialize, Serialize};
 
 /// Per-palette Voxel Max provenance preserved in the `vmax` ext, kept
-/// aligned by index with the palettes: a material palette's display name and
-/// its exact material list, neither of which the folded voxcore palette carries
-/// losslessly.
+/// aligned by index with the palettes: a material palette's display name, its
+/// exact material list, and the slot each folded material draws. The folded
+/// voxcore palette carries none of them losslessly.
 ///
 /// The palette folds each voxel's color and material into one material per
 /// distinct color-plus-material combination, and its value pools carry a
@@ -21,4 +21,10 @@ pub struct VMaxExtPalette {
     /// `material_idx` selects. Empty for a color-only palette.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub materials: Vec<VMaxExtMaterial>,
+
+    /// The slot in `materials` each folded material draws, aligned by index
+    /// with the palette's materials and kept in step by the material hooks.
+    /// All zero for a color-only palette.
+    #[cfg_attr(feature = "ext", serde(rename = "material-slots"))]
+    pub slots: Vec<u8>,
 }

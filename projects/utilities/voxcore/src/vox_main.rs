@@ -681,7 +681,7 @@ impl<T: VoxExt> VoxMain<T> {
         let node_id = self.runtime_state.hierarchy_node_ids.retain();
         self.runtime_state.hierarchy_nodes.retain(node_id, node);
         self.ext
-            .hierarchy_node_retained(self.node_listing_index(node_id));
+            .hierarchy_node_did_retain(self.node_listing_index(node_id));
         Ok(node_id)
     }
 
@@ -746,7 +746,7 @@ impl<T: VoxExt> VoxMain<T> {
 
         for &node_id in &ids {
             self.ext
-                .hierarchy_node_retained(self.node_listing_index(node_id));
+                .hierarchy_node_did_retain(self.node_listing_index(node_id));
         }
 
         Ok(ids)
@@ -779,12 +779,12 @@ impl<T: VoxExt> VoxMain<T> {
             });
         }
 
-        let index = self.node_listing_index(id);
+        self.ext
+            .hierarchy_node_will_release(self.node_listing_index(id));
 
         // Safety: a retained node id has a value.
         unsafe { self.runtime_state.hierarchy_nodes.release(id) };
         self.runtime_state.hierarchy_node_ids.release_stable(id);
-        self.ext.hierarchy_node_released(index);
         Ok(())
     }
 
@@ -930,7 +930,7 @@ impl<T: VoxExt> VoxMain<T> {
             .iter_materials()
             .position(|id| id == material_id)
             .expect("a retained material has a listing index");
-        self.ext.material_retained(palette_index, index);
+        self.ext.material_did_retain(palette_index, index);
         Ok(material_id)
     }
 
@@ -1035,11 +1035,13 @@ impl<T: VoxExt> VoxMain<T> {
         // Back to front: a release shifts the materials listed after it, so
         // dropping the last one first leaves nothing to shift and keeps the
         // batch linear where front-to-back release is quadratic.
+        self.ext
+            .materials_will_release(palette_index, &doomed_indices);
+
         for material_id in doomed_ids.into_iter().rev() {
             palette_ref.release_material(material_id);
         }
 
-        self.ext.materials_released(palette_index, &doomed_indices);
         Ok(())
     }
 
@@ -1100,7 +1102,7 @@ impl<T: VoxExt> VoxMain<T> {
             object.repaint_materials(palette_id, replacement_ids);
         }
 
-        self.ext.materials_repainted(palette_index, &remap);
+        self.ext.materials_did_repaint(palette_index, &remap);
         Ok(())
     }
 
@@ -1135,7 +1137,7 @@ impl<T: VoxExt> VoxMain<T> {
         let object_id = self.runtime_state.object_ids.retain();
         self.runtime_state.objects.retain(object_id, object);
         self.ext
-            .object_retained(self.object_listing_index(object_id));
+            .object_did_retain(self.object_listing_index(object_id));
         Ok(object_id)
     }
 
@@ -1162,12 +1164,11 @@ impl<T: VoxExt> VoxMain<T> {
             });
         }
 
-        let index = self.object_listing_index(id);
+        self.ext.object_will_release(self.object_listing_index(id));
 
         // Safety: a retained object id has a value.
         unsafe { self.runtime_state.objects.release(id) };
         self.runtime_state.object_ids.release_stable(id);
-        self.ext.object_released(index);
         Ok(())
     }
 
@@ -1187,7 +1188,7 @@ impl<T: VoxExt> VoxMain<T> {
 
         let from = self.object_listing_index(id);
         self.runtime_state.object_ids.move_to(id, index);
-        self.ext.object_moved(from, index);
+        self.ext.object_did_move(from, index);
         Ok(())
     }
 
@@ -1238,7 +1239,7 @@ impl<T: VoxExt> VoxMain<T> {
         let palette_id = self.runtime_state.palette_ids.retain();
         self.runtime_state.palettes.retain(palette_id, palette);
         self.ext
-            .palette_retained(self.palette_listing_index(palette_id));
+            .palette_did_retain(self.palette_listing_index(palette_id));
         Ok(palette_id)
     }
 
@@ -1266,12 +1267,12 @@ impl<T: VoxExt> VoxMain<T> {
             });
         }
 
-        let index = self.palette_listing_index(id);
+        self.ext
+            .palette_will_release(self.palette_listing_index(id));
 
         // Safety: a retained palette id has a value; its Drop frees its cells.
         unsafe { self.runtime_state.palettes.release(id) };
         self.runtime_state.palette_ids.release_stable(id);
-        self.ext.palette_released(index);
         Ok(())
     }
 
@@ -1291,7 +1292,7 @@ impl<T: VoxExt> VoxMain<T> {
 
         let from = self.palette_listing_index(id);
         self.runtime_state.palette_ids.move_to(id, index);
-        self.ext.palette_moved(from, index);
+        self.ext.palette_did_move(from, index);
         Ok(())
     }
 
@@ -1655,8 +1656,8 @@ impl<T: VoxExt> VoxMain<T> {
         // Safety: the object id is retained; the grid and arity were checked.
         unsafe { self.runtime_state.objects.get_mut(object_id) }
             .retain_voxel(voxel_id, sample_ids)?;
-        let index = self.object_listing_index(object_id);
-        self.ext.voxel_changed(index, voxel_id);
+        self.ext
+            .voxel_did_retain(self.object_listing_index(object_id), voxel_id);
         Ok(())
     }
 
@@ -1673,10 +1674,18 @@ impl<T: VoxExt> VoxMain<T> {
         }
 
         // Safety: the object id is retained.
-        unsafe { self.runtime_state.objects.get_mut(object_id) }.release_voxel(voxel_id)?;
-        let index = self.object_listing_index(object_id);
-        self.ext.voxel_changed(index, voxel_id);
-        Ok(())
+        if unsafe { self.runtime_state.objects.get(object_id) }
+            .voxel_position(voxel_id)
+            .is_none()
+        {
+            return Err(Error::UnknownVoxel { voxel_id });
+        }
+
+        self.ext
+            .voxel_will_release(self.object_listing_index(object_id), voxel_id);
+
+        // Safety: the object id is retained; the grid was checked.
+        unsafe { self.runtime_state.objects.get_mut(object_id) }.release_voxel(voxel_id)
     }
 }
 

@@ -48,7 +48,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut state = VoxMain::default();
 
-    // One folded palette per distinct object, aligned by palette id with the
+    // One folded palette per distinct object, aligned by listing index with the
     // ext provenance carrying its name and exact material list. Instances reuse
     // an object, so they share its palette rather than deduping by source.
     let mut palette_provenance: Vec<Option<VMaxExtPalette>> = Vec::new();
@@ -87,7 +87,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
-    // Each object's preserved editor state, aligned by object id with the
+    // Each object's preserved editor state, aligned by listing index with the
     // objects, read off the contents files.
     let object_states: Vec<Option<VMaxExtObjectState>> = object_data
         .iter()
@@ -420,6 +420,7 @@ fn folded_palette(
         .collect();
     keys.sort_unstable();
     keys.dedup();
+    let slots: Vec<u8> = keys.iter().map(|key| key.1).collect();
     let mut combo_material_ids: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
     for key in keys {
         let color_index = u32::from(key.0).saturating_sub(1);
@@ -444,6 +445,7 @@ fn folded_palette(
     let provenance = VMaxExtPalette {
         name,
         materials: materials.iter().map(vmax_ext_material).collect(),
+        slots,
     };
     Ok(FoldedPalette {
         palette_id,

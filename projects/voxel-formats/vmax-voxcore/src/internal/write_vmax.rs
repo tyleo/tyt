@@ -4,7 +4,7 @@ use crate::{
     tighten,
 };
 use branded_id::U32Id;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use ty_math::{
     TyBoundsF64, TyLinSrgbaF64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64,
     TyVector3I32, TyVector3U32, ZERO_LENGTH_TOLERANCE,
@@ -96,8 +96,9 @@ pub fn write_vmax(
     let had_ext = state.ext().is_some();
     let (vmax_ext, placements) = match state.ext() {
         Some(ext) => {
+            check_alignment(state, ext)?;
             let vmax_ext = ext.clone();
-            let placements = ext_placements(state, &vmax_ext)?;
+            let placements = ext_placements(state, &vmax_ext);
             (vmax_ext, placements)
         }
         None => {
@@ -106,6 +107,18 @@ pub fn write_vmax(
             (vmax_ext, placements)
         }
     };
+
+    // The ext's lists align with the listings, not the ids.
+    let object_indices: HashMap<U32Id<BVoxObject>, usize> = state
+        .iter_objects()
+        .enumerate()
+        .map(|(index, (object_id, _))| (object_id, index))
+        .collect();
+    let palette_indices: HashMap<U32Id<BVoxPalette>, usize> = state
+        .iter_palettes()
+        .enumerate()
+        .map(|(index, (palette_id, _))| (palette_id, index))
+        .collect();
 
     let mut objects: Vec<VMaxObject> = Vec::new();
     let mut groups: Vec<VMaxGroup> = Vec::new();
@@ -148,7 +161,13 @@ pub fn write_vmax(
             let object = state.object(object_id).expect("a valid node child object");
             let folded = folded_ref(state, object);
             let plan = match folded.as_ref() {
-                Some(folded) => material_plan(state, folded, &vmax_ext.palettes)?,
+                Some(folded) => {
+                    let provenance = vmax_ext
+                        .palettes
+                        .get(palette_indices[&folded.palette_id])
+                        .and_then(|palette| palette.as_ref());
+                    material_plan(state, folded, provenance)?
+                }
                 None => MaterialPlan::default(),
             };
             let suffix = suffix(object_id);
@@ -171,7 +190,7 @@ pub fn write_vmax(
                 object_placement(tight.bounds(), tight.origin(), edit_bounds, edit_origin);
             let object_state = vmax_ext
                 .object_states
-                .get(object_id.to_u32() as usize)
+                .get(object_indices[&object_id])
                 .and_then(|s| s.clone());
 
             // Instances share one contents file: rebuild it once.
@@ -421,36 +440,87 @@ struct Placement<'a> {
     ext: VMaxExtNode,
 }
 
-/// Pairs each voxcore node with its ext entry by index, the placement the
-/// lossless path emits. A vmax-origin scene is a tree with one ext node per
-/// voxcore node, so this reproduces it exactly.
-///
-/// An ext carrying no hierarchy at all, such as one holding only a camera,
-/// defaults every entry. One carrying a short list errors instead: it names
-/// some nodes and not others, and a defaulted entry would write an all-zero id
-/// and bounds Voxel Max cannot resolve.
-fn ext_placements<'a>(state: &'a VMaxVoxMain, vmax_ext: &VMaxExt) -> Result<Vec<Placement<'a>>> {
-    let node_count = state.hierarchy_node_count();
-    let stored = vmax_ext.hierarchy_nodes.len();
-    if stored != 0 && stored < node_count {
-        return Err(Error::invalid(format!(
-            "vmax ext has {stored} hierarchy nodes but the state has {node_count}"
-        )));
+/// Checks that each aligned list of the ext is as long as its listing. The
+/// hooks keep them in step, so a mismatch is a malformed ext.
+fn check_alignment(state: &VMaxVoxMain, vmax_ext: &VMaxExt) -> Result<()> {
+    let lists = [
+        (
+            "hierarchy nodes",
+            vmax_ext.hierarchy_nodes.len(),
+            state.hierarchy_node_count(),
+        ),
+        ("palettes", vmax_ext.palettes.len(), state.palette_count()),
+        (
+            "object states",
+            vmax_ext.object_states.len(),
+            state.object_count(),
+        ),
+    ];
+    for (list, stored, count) in lists {
+        if stored != count {
+            return Err(Error::invalid(format!(
+                "vmax ext has {stored} {list} but the state has {count}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Pairs each voxcore node with its ext entry by listing index, the placement
+/// the lossless path emits. A vmax-origin scene is a tree with one ext node
+/// per voxcore node, so this reproduces it exactly. An entry with no id was
+/// inserted by a hook for a node retained after the load, so it is filled in
+/// like a synthesized node: a fresh UUID no other entry uses, its first
+/// parent's id, the node's rotation, and the default anchor tokens.
+fn ext_placements<'a>(state: &'a VMaxVoxMain, vmax_ext: &VMaxExt) -> Vec<Placement<'a>> {
+    // Every id first, so a child can link to an inserted parent anywhere in
+    // the listing.
+    let taken: HashSet<&str> = vmax_ext
+        .hierarchy_nodes
+        .iter()
+        .map(|node| node.id.as_str())
+        .collect();
+    let mut counter = 0usize;
+    let ids: Vec<String> = vmax_ext
+        .hierarchy_nodes
+        .iter()
+        .map(|node| {
+            if !node.id.is_empty() {
+                return node.id.clone();
+            }
+            loop {
+                let id = synth_uuid(counter);
+                counter += 1;
+                if !taken.contains(id.as_str()) {
+                    return id;
+                }
+            }
+        })
+        .collect();
+
+    let mut parent_indices: HashMap<U32Id<BVoxHierarchyNode>, usize> = HashMap::new();
+    for (index, (_, node)) in state.iter_hierarchy_nodes().enumerate() {
+        for &child_id in &node.child_node_ids {
+            parent_indices.entry(child_id).or_insert(index);
+        }
     }
 
-    Ok(state
+    state
         .iter_hierarchy_nodes()
         .enumerate()
-        .map(|(index, (node_id, node))| Placement {
-            node_id,
-            node,
-            ext: vmax_ext
-                .hierarchy_nodes
-                .get(index)
-                .cloned()
-                .unwrap_or_default(),
+        .map(|(index, (node_id, node))| {
+            let stored = &vmax_ext.hierarchy_nodes[index];
+            let ext = if stored.id.is_empty() {
+                let parent_id = parent_indices
+                    .get(&node_id)
+                    .map(|&parent_index| ids[parent_index].clone());
+                synthesized_node(ids[index].clone(), parent_id, node)
+            } else {
+                stored.clone()
+            };
+            Placement { node_id, node, ext }
         })
-        .collect())
+        .collect()
 }
 
 /// Walks the hierarchy from the roots, emitting one [`Placement`] per node-path
@@ -492,12 +562,20 @@ fn push_placement<'a>(
         .expect("a valid hierarchy node");
     let ext_id = synth_uuid(*counter);
     *counter += 1;
-    // The content box and placement are derived from the native bounds and node
-    // transform on write, so a synthesized node carries the default anchor
-    // tokens; its rotation is encoded from the node's live quaternion, and its
-    // parent links this occurrence's id.
-    let ext = VMaxExtNode {
-        id: ext_id.clone(),
+    let ext = synthesized_node(ext_id.clone(), parent_id, node);
+    placements.push(Placement { node_id, node, ext });
+    for &child_id in &node.child_node_ids {
+        push_placement(state, child_id, Some(ext_id.clone()), counter, placements);
+    }
+}
+
+/// The provenance of a node the document never carried. The content box and
+/// placement are derived from the native bounds and node transform on write,
+/// so it holds the ids, the node's rotation encoded from its live quaternion,
+/// and the default anchor tokens.
+fn synthesized_node(id: String, parent_id: Option<String>, node: &VoxHierarchyNode) -> VMaxExtNode {
+    VMaxExtNode {
+        id,
         parent_id,
         index: None,
         rotation: Some(axis_angle(node.transform.rotation)),
@@ -505,10 +583,6 @@ fn push_placement<'a>(
         pivot_face: Some(DEFAULT_PIVOT_FACE.to_owned()),
         pivot_align: Some(DEFAULT_PIVOT_ALIGN.to_owned()),
         selected: None,
-    };
-    placements.push(Placement { node_id, node, ext });
-    for &child_id in &node.child_node_ids {
-        push_placement(state, child_id, Some(ext_id.clone()), counter, placements);
     }
 }
 
@@ -678,19 +752,15 @@ struct MaterialPlan {
 }
 
 /// Reconstructs the Voxel Max materials for a folded palette. A
-/// Voxel-Max-origin state carries the exact list in its ext, whose value pools
-/// hold one value per material so a material's index is its value id into the
-/// first material property; a state loaded from another format has no such
-/// list, so the materials are derived from the value pools, one per distinct
-/// material signature.
+/// Voxel-Max-origin state carries the exact list in its ext along with the
+/// slot each folded material draws. A state loaded from another format has no
+/// such list, so the materials are derived from the value pools, one per
+/// distinct material signature.
 fn material_plan(
     state: &VMaxVoxMain,
     folded: &FoldedRef,
-    ext_palettes: &[Option<VMaxExtPalette>],
+    provenance: Option<&VMaxExtPalette>,
 ) -> Result<MaterialPlan> {
-    let provenance = ext_palettes
-        .get(folded.palette_id.to_u32() as usize)
-        .and_then(|palette| palette.as_ref());
     let name = provenance
         .map(|palette| palette.name.clone())
         .unwrap_or_default();
@@ -711,23 +781,26 @@ fn material_plan(
         });
     }
 
-    // A Voxel-Max-origin list came from a real document, so it is within budget:
-    // the 0-based value id is the material byte, below the material count. A
-    // hand-edited ext can still exceed the single-byte budget, so it is checked.
+    // The slot list follows the palette's materials through the hooks, so a
+    // mismatch is a malformed ext. A hand-edited slot can still exceed the
+    // slots a palette holds, so it is checked.
     if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
-        let first_property_id = folded.material_property_ids[0].1;
+        let stored = provenance.slots.len();
+        let count = palette.material_count();
+        if stored != count {
+            return Err(Error::invalid(format!(
+                "vmax ext palette has {stored} material slots but the palette has {count} materials"
+            )));
+        }
         let mut material_indices = HashMap::new();
-        for material_id in palette.iter_materials() {
-            let index = palette
-                .value_id(material_id, first_property_id)
-                .map_or(0, |value_id| value_id.to_u32());
-            if index >= MATERIAL_SLOTS as u32 {
+        for (material_id, &slot) in palette.iter_materials().zip(&provenance.slots) {
+            if usize::from(slot) >= MATERIAL_SLOTS {
                 return Err(Error::invalid(format!(
-                    "a voxel references material {index}, but a Voxel Max palette holds only \
+                    "a voxel references material {slot}, but a Voxel Max palette holds only \
                      {MATERIAL_SLOTS} material slots"
                 )));
             }
-            material_indices.insert(material_id, index as u8);
+            material_indices.insert(material_id, slot);
         }
         let materials = provenance
             .materials

@@ -126,8 +126,9 @@ never reads the ext.
 
 A format ext aligns its entries with the scene by listing index. A mutation
 that moves a listing would leave it stale. The state tells the ext through
-`VoxExt`, and every mutation carries that bound. Each listing move fires a
-hook after it succeeds, with the index the entity had. The ext drops or
+`VoxExt`, and every mutation carries that bound. A retain or move fires its
+hook after the mutation, and a release fires its hook before it, once every
+check has passed. Each carries the index the entity had. The ext drops or
 inserts its entry in step. Every hook defaults to a no-op. `()` ignores them
 all. The trait is object-safe, so `VoxMain<Box<dyn VoxExt>>` carries
 whichever format's ext a file turned out to hold.
@@ -149,7 +150,7 @@ impl VoxExt for Released {
         Box::new(self.clone())
     }
 
-    fn object_released(&mut self, index: usize) {
+    fn object_will_release(&mut self, index: usize) {
         self.0.push(index);
     }
 }
