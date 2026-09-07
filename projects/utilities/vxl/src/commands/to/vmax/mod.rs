@@ -1,8 +1,10 @@
-mod camera_view;
-mod resolve_scene_camera;
-mod to_vmax;
-mod vmax_color_format;
+// Public API
 
-pub use camera_view::*;
-pub(crate) use resolve_scene_camera::*;
+mod to_vmax;
+
 pub use to_vmax::*;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;

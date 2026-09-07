@@ -1,30 +1,11 @@
-mod atlas;
-mod channel_packing;
-mod computed_occlusion_unsupported;
+// Public API
+
 #[allow(clippy::module_inception)]
 mod mesh;
-mod mesh_method;
-mod parse_atlas_shape;
-mod parse_material_channel;
-mod property_binding;
-mod resolve_material_channel;
-mod resource_storage;
-mod texture;
-mod texture_arg;
-mod texture_bundle;
-mod texture_map;
-mod texture_name;
 
-pub use atlas::*;
-pub use channel_packing::*;
-pub(crate) use computed_occlusion_unsupported::*;
 pub use mesh::*;
-pub use parse_atlas_shape::*;
-pub use parse_material_channel::*;
-pub use property_binding::*;
-pub(crate) use resolve_material_channel::*;
-pub use texture::*;
-pub use texture_arg::*;
-pub use texture_bundle::*;
-pub use texture_map::*;
-pub use texture_name::*;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;

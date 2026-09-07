@@ -1,4 +1,5 @@
-mod convert;
+// Public API
+
 #[allow(clippy::module_inception)]
 mod to;
 mod to_command;
@@ -8,7 +9,6 @@ mod to_qbcl;
 mod vmax;
 mod voxj;
 
-pub(crate) use convert::*;
 pub use to::*;
 pub use to_command::*;
 pub use to_goxl::*;
@@ -16,3 +16,8 @@ pub use to_mvox::*;
 pub use to_qbcl::*;
 pub use vmax::*;
 pub use voxj::*;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;
