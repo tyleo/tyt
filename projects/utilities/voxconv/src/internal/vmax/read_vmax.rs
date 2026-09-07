@@ -1,7 +1,7 @@
 use crate::{Result, VoxDocumentFile, retype_ext};
 use vmax_voxcore::codec::{
     dependencies::{DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse},
-    from_vmax_package,
+    from_vmax_package_with_ext,
 };
 use voxcore::{VoxMain, ext::VoxExtBlockCodec};
 
@@ -13,7 +13,7 @@ where
 {
     let paths = files.iter().map(|file| file.path.clone()).collect();
 
-    let state = from_vmax_package(
+    let state = from_vmax_package_with_ext(
         dependencies,
         || Ok(paths),
         |path| {

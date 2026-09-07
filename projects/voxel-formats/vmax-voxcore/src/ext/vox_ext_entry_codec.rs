@@ -1,4 +1,4 @@
-use crate::VMaxExt;
+use crate::ext::VMaxExt;
 use voxcore::{
     VoxValue,
     ext::{

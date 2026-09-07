@@ -14,7 +14,7 @@ pub trait VmaxFileBuilderCodec {
         W: FnMut(&str, &[u8]) -> CodecResult<()>;
 }
 
-impl VmaxFileBuilderCodec for VmaxFileBuilder<'_> {
+impl<T> VmaxFileBuilderCodec for VmaxFileBuilder<'_, T> {
     fn to_vmax_package<D, W>(self, dependencies: &D, write: W) -> Result<()>
     where
         D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,

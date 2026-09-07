@@ -2,20 +2,15 @@
 
 //! Converts between Voxel Max packages and the voxcore state.
 //!
-//! [`from_vmax_file`] loads a [`VMaxFile`](vmax::VMaxFile) into a
-//! [`VMaxVoxMain`], and [`to_vmax_file`] writes one back, with
-//! [`VmaxFileBuilder`] for control over the color format and the scene
-//! camera. The Voxel Max state with no native voxcore home rides in the
-//! [`VMaxExt`] the state carries as its ext, so a loaded document writes back
-//! exactly. The ext follows the listings through the
-//! [`VoxExt`](voxcore::ext::VoxExt) hooks, so a state mutated after the load
-//! still writes back with the surviving provenance. A state without one, such
-//! as one loaded from another format, has its document synthesized from the
-//! bare scene. The [`codec`] module, behind
-//! the default `codec` feature, goes straight to and from a package's files.
-//! It takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
-//! supplies. The `ext` feature keys the ext into a document's `ext` block
-//! through voxcore's [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
+//! [`from_vmax_file`] loads a [`VMaxFile`](vmax::VMaxFile) into a bare
+//! [`VoxMain`](voxcore::VoxMain). [`to_vmax_file`] writes one back as a
+//! document synthesized from the scene. [`VmaxFileBuilder`] adds control over
+//! the color format and the scene camera. The [`codec`] module, behind the
+//! default `codec` feature, goes straight to and from a package's files. It
+//! takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
+//! supplies. The `ext` feature, on by default, opens the `ext` module. There
+//! the Voxel Max state with no native voxcore home rides as the state's ext.
+//! The `_with_ext` converters write a loaded document back exactly.
 
 // Public API
 
@@ -25,14 +20,7 @@ mod result;
 mod scene_camera_source;
 mod to_vmax_file;
 mod vmax_color_format;
-mod vmax_ext;
-mod vmax_ext_material;
-mod vmax_ext_material_dispersion;
-mod vmax_ext_node;
-mod vmax_ext_object_state;
-mod vmax_ext_palette;
 mod vmax_file_builder;
-mod vmax_vox_main;
 
 pub use error::*;
 pub use from_vmax_file::*;
@@ -40,14 +28,7 @@ pub use result::*;
 pub use scene_camera_source::*;
 pub use to_vmax_file::*;
 pub use vmax_color_format::*;
-pub use vmax_ext::*;
-pub use vmax_ext_material::*;
-pub use vmax_ext_material_dispersion::*;
-pub use vmax_ext_node::*;
-pub use vmax_ext_object_state::*;
-pub use vmax_ext_palette::*;
 pub use vmax_file_builder::*;
-pub use vmax_vox_main::*;
 
 // Optional API
 
@@ -55,7 +36,10 @@ pub use vmax_vox_main::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_entry_codec;
+pub mod ext;
+
+#[cfg(not(feature = "ext"))]
+mod ext;
 
 // Internal API
 

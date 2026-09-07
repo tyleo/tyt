@@ -20,7 +20,7 @@ where
 {
     let state = retype_ext(state)?;
 
-    let mut builder = VmaxFileBuilder::new(&state).color_format(options.color_format);
+    let mut builder = VmaxFileBuilder::new_with_ext(&state).color_format(options.color_format);
 
     if let Some(scene_camera) = options.scene_camera {
         builder = builder.scene_camera(scene_camera);

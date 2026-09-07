@@ -1,4 +1,4 @@
-use crate::VMaxExtMaterialDispersion;
+use crate::ext::VMaxExtMaterialDispersion;
 #[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 

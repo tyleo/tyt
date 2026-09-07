@@ -1,7 +1,7 @@
 use crate::{
-    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VMaxColorFormat, VMaxExt,
-    VMaxExtMaterial, VMaxExtNode, VMaxExtPalette, VMaxVoxMain, pbr_factor_to_vm_coefficient,
-    tighten,
+    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VMaxColorFormat,
+    ext::{VMaxExt, VMaxExtMaterial, VMaxExtNode, VMaxExtPalette},
+    pbr_factor_to_vm_coefficient, tighten,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -18,7 +18,7 @@ use vmax::{
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, BVoxValuePoolValue,
-    VoxHierarchyNode, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     color::value_pool_color,
     material::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, ROUGHNESS, TRANSMISSION,
@@ -82,19 +82,20 @@ const SYNTH_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
 /// [`to_vmax_file`](crate::to_vmax_file) and
 /// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 ///
-/// A state carrying the [`VMaxExt`] the forward path writes is rebuilt
-/// from it, and editor session artifacts voxcore does not model are dropped. A
-/// state without an ext, such as one loaded from another format, has its ext
-/// synthesized from the bare voxcore scene by [`synthesize_vmax_ext`] and
-/// the rest of this path runs unchanged. `scene_camera` overrides the scene
-/// camera the document opens with, or keeps the path's own when `None`.
-pub fn write_vmax(
-    state: &VMaxVoxMain,
+/// A state whose [`VMaxExt`] the forward path wrote is rebuilt from it, minus
+/// the editor session artifacts voxcore does not model. A state without one,
+/// such as a bare state or one loaded from another format, gets an ext
+/// synthesized from the voxcore scene by [`synthesize_vmax_ext`]. The rest of
+/// the path runs unchanged. `scene_camera` overrides the scene camera the
+/// document opens with, or keeps the path's own when `None`.
+pub fn write_vmax<T>(
+    state: &VoxMain<T>,
+    vmax_ext: Option<&VMaxExt>,
     vmax_color_format: VMaxColorFormat,
     scene_camera: Option<SceneCameraSource>,
 ) -> Result<VMaxFile> {
-    let had_ext = state.ext().is_some();
-    let (vmax_ext, placements) = match state.ext() {
+    let had_ext = vmax_ext.is_some();
+    let (vmax_ext, placements) = match vmax_ext {
         Some(ext) => {
             check_alignment(state, ext)?;
             let vmax_ext = ext.clone();
@@ -442,7 +443,7 @@ struct Placement<'a> {
 
 /// Checks that each aligned list of the ext is as long as its listing. The
 /// hooks keep them in step, so a mismatch is a malformed ext.
-fn check_alignment(state: &VMaxVoxMain, vmax_ext: &VMaxExt) -> Result<()> {
+fn check_alignment<T>(state: &VoxMain<T>, vmax_ext: &VMaxExt) -> Result<()> {
     let lists = [
         (
             "hierarchy nodes",
@@ -472,7 +473,7 @@ fn check_alignment(state: &VMaxVoxMain, vmax_ext: &VMaxExt) -> Result<()> {
 /// inserted by a hook for a node retained after the load, so it is filled in
 /// like a synthesized node: a fresh UUID no other entry uses, its first
 /// parent's id, the node's rotation, and the default anchor tokens.
-fn ext_placements<'a>(state: &'a VMaxVoxMain, vmax_ext: &VMaxExt) -> Vec<Placement<'a>> {
+fn ext_placements<'a, T>(state: &'a VoxMain<T>, vmax_ext: &VMaxExt) -> Vec<Placement<'a>> {
     // Every id first, so a child can link to an inserted parent anywhere in
     // the listing.
     let taken: HashSet<&str> = vmax_ext
@@ -536,7 +537,7 @@ fn ext_placements<'a>(state: &'a VMaxVoxMain, vmax_ext: &VMaxExt) -> Vec<Placeme
 /// the voxcore quaternion is not inverted to, and the material palette name is
 /// left empty. Node translation and scale, the hierarchy, colors, and any
 /// material palette survive.
-fn synthesize_placements(state: &VMaxVoxMain) -> Vec<Placement<'_>> {
+fn synthesize_placements<T>(state: &VoxMain<T>) -> Vec<Placement<'_>> {
     let mut placements = Vec::new();
     let mut counter = 0usize;
     for &root_id in state.root_hierarchy_node_ids() {
@@ -550,8 +551,8 @@ fn synthesize_placements(state: &VMaxVoxMain) -> Vec<Placement<'_>> {
 /// node reached by several paths becomes a distinct scene node per path; child
 /// nodes attach to this occurrence's id, which is also the id of the node's
 /// first object.
-fn push_placement<'a>(
-    state: &'a VMaxVoxMain,
+fn push_placement<'a, T>(
+    state: &'a VoxMain<T>,
     node_id: U32Id<BVoxHierarchyNode>,
     parent_id: Option<String>,
     counter: &mut usize,
@@ -591,7 +592,7 @@ fn synthesized_node(id: String, parent_id: Option<String>, node: &VoxHierarchyNo
 /// with no per-node home: a fallback scene version, a neutral camera, an empty
 /// name for each palette, and no preserved object state. Per-node provenance
 /// comes from [`synthesize_placements`].
-fn synthesize_vmax_ext(state: &VMaxVoxMain) -> VMaxExt {
+fn synthesize_vmax_ext<T>(state: &VoxMain<T>) -> VMaxExt {
     VMaxExt {
         scene: VMaxSceneJsonFile {
             v: FALLBACK_CONTENT_VERSION,
@@ -725,7 +726,7 @@ struct FoldedRef {
 
 /// The one folded palette an object references on its single layer, or `None`
 /// when it references no layer.
-fn folded_ref(state: &VMaxVoxMain, object: &VoxObject) -> Option<FoldedRef> {
+fn folded_ref<T>(state: &VoxMain<T>, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
     let color_property_id = palette.property_id_by_name(BASE_COLOR);
@@ -756,8 +757,8 @@ struct MaterialPlan {
 /// slot each folded material draws. A state loaded from another format has no
 /// such list, so the materials are derived from the value pools, one per
 /// distinct material signature.
-fn material_plan(
-    state: &VMaxVoxMain,
+fn material_plan<T>(
+    state: &VoxMain<T>,
     folded: &FoldedRef,
     provenance: Option<&VMaxExtPalette>,
 ) -> Result<MaterialPlan> {
@@ -825,8 +826,8 @@ fn material_plan(
 /// [`MATERIAL_SLOTS`], since a Voxel Max palette holds only that many, so a
 /// cross-format source with too many materials cannot be represented rather
 /// than silently wrapping.
-fn derive_materials(
-    state: &VMaxVoxMain,
+fn derive_materials<T>(
+    state: &VoxMain<T>,
     folded: &FoldedRef,
     palette: &VoxPalette,
     name: String,
@@ -903,8 +904,8 @@ fn derive_materials(
 /// value pool at the signature's value id. Metalness and roughness map from the
 /// 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`].
-fn derived_material(
-    state: &VMaxVoxMain,
+fn derived_material<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     properties: &[(String, U32Id<BVoxProperty>)],
     slot: usize,
@@ -1028,8 +1029,8 @@ fn unbound_scalar(value: Option<f64>, key: &str) -> f64 {
 }
 
 /// The `f64` value at `value_id` in a property's `float` value pool, or `None`.
-fn value_pool_scalar(
-    state: &VMaxVoxMain,
+fn value_pool_scalar<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -1041,8 +1042,8 @@ fn value_pool_scalar(
 }
 
 /// The `bool` value at `value_id` in a property's `bool` value pool, or `None`.
-fn value_pool_flag(
-    state: &VMaxVoxMain,
+fn value_pool_flag<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -1054,8 +1055,8 @@ fn value_pool_flag(
 }
 
 /// The value pool a property draws from.
-fn property_value_pool(
-    state: &VMaxVoxMain,
+fn property_value_pool<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
@@ -1069,8 +1070,8 @@ fn property_value_pool(
 /// Re-bases the tight object's voxels to absolute model space, recovering each
 /// one's `color_idx` from its material's `baseColor` value id and its
 /// `material_idx` from the material plan. A colorless voxel takes index 1.
-fn reconstruct_voxels(
-    state: &VMaxVoxMain,
+fn reconstruct_voxels<T>(
+    state: &VoxMain<T>,
     object: &VoxObject,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
@@ -1114,8 +1115,8 @@ fn reconstruct_voxels(
 /// `baseColor`. Errors when the color value id reaches
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
-fn voxel_color_index(
-    state: &VMaxVoxMain,
+fn voxel_color_index<T>(
+    state: &VoxMain<T>,
     folded: &FoldedRef,
     material_id: U32Id<BVoxMaterial>,
 ) -> Result<u8> {
@@ -1139,8 +1140,8 @@ fn voxel_color_index(
 /// material sidecar the first time the folded palette is seen. An object with no
 /// color property borrows the default palette name and writes no file.
 #[allow(clippy::too_many_arguments)]
-fn build_palette(
-    state: &VMaxVoxMain,
+fn build_palette<T>(
+    state: &VoxMain<T>,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
     palette_files: &mut HashMap<U32Id<BVoxPalette>, String>,
@@ -1212,8 +1213,8 @@ fn build_palette(
 ///
 /// Errors when the bound value pool holds no color, since a transparent stand-in
 /// would write a model Voxel Max renders as empty.
-fn color_palette_colors(
-    state: &VMaxVoxMain,
+fn color_palette_colors<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
 ) -> Result<Vec<[u8; 4]>> {
@@ -1334,8 +1335,8 @@ fn default_material(slot: usize) -> VMaxMaterial {
 /// `current`. Empty for a palette with no materials, which Voxel Max renders
 /// with its own defaults. Voxel Max reads a voxel's material from this map, not
 /// the per-voxel byte.
-fn color_material_map(
-    state: &VMaxVoxMain,
+fn color_material_map<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
     plan: &MaterialPlan,
@@ -1407,8 +1408,8 @@ fn object_from_node(
 /// is derived here rather than kept in the ext. Memoized by node id so a
 /// subtree shared across parents is walked once. A node with no geometry
 /// collapses to a zero box.
-fn subtree_box_local(
-    state: &VMaxVoxMain,
+fn subtree_box_local<T>(
+    state: &VoxMain<T>,
     node_id: U32Id<BVoxHierarchyNode>,
     memo: &mut HashMap<u32, ([f64; 3], [f64; 3])>,
 ) -> ([f64; 3], [f64; 3]) {
@@ -1456,7 +1457,7 @@ fn subtree_box_local(
 /// frame: the tight runtime grid `[origin, origin + bounds]`. An empty object
 /// has no runtime extent of its own, so it frames its build volume instead,
 /// matching the content box the write path gives it.
-fn object_box_local(state: &VMaxVoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
+fn object_box_local<T>(state: &VoxMain<T>, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
     let object = state.object(object_id).expect("a valid child object");
     let (tight, (edit_bounds, edit_origin)) = tighten(object);
     let bounds = tight.bounds();

@@ -6,10 +6,10 @@ in-memory `VoxMain` and back.
 
 ## Document conversion
 
-- `from_vmax_file` / `to_vmax_file`: between a parsed `VMaxFile` and a
-  `VMaxVoxMain`. Geometry, palettes, and hierarchy become native voxcore
+- `from_vmax_file` / `to_vmax_file`: between a parsed `VMaxFile` and a bare
+  `VoxMain<()>`. Geometry, palettes, and hierarchy become native voxcore
   entities. Each object's snapshots are decoded on the fly and re-encoded on
-  write.
+  write. The writer synthesizes the document from the scene.
 - `VmaxFileBuilder`: the configurable writer. `VMaxColorFormat` picks
   where each palette's colors are stored. `SceneCameraSource` picks the scene
   camera the document opens with.
@@ -19,7 +19,7 @@ in-memory `VoxMain` and back.
 The `codec` module, behind the default `codec` feature, goes straight to and
 from a package's files over `vmax-codec`:
 
-- `codec::from_vmax_package`: a package's files into a `VMaxVoxMain`,
+- `codec::from_vmax_package`: a package's files into a bare `VoxMain<()>`,
   read through the caller's list and resolve closures.
 - `codec::to_vmax_package`: a state to a package's files, written through the
   caller's write closure.
@@ -31,14 +31,20 @@ This crate's `impl` feature turns it on.
 
 ## The ext
 
-The Voxel Max state with no native voxcore home rides in the `VMaxExt`. The
-loader stores it as the state's ext, so a document loaded from a package
-writes back exactly. The ext follows the state's listings through voxcore's
-`VoxExt` hooks. A node, object, palette, or material released or reordered
-after the load still writes back with the surviving provenance, and a node
-retained after the load writes like a synthesized one. A state without an
-ext, such as a state loaded from another format, has its document
-synthesized from the bare scene. The `ext`
-feature, on by default, keys the ext into a document's `ext` block under the
-`vmax` key through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries
-the ext in that block.
+`VMaxExt` holds the Voxel Max state with no native voxcore home. The bare
+converters drop it on load and synthesize it on write. The `ext` feature, on
+by default, opens the `ext` module, where the typed path keeps it:
+
+- `ext::from_vmax_file_with_ext` loads a document into a `VMaxVoxMain`, a
+  `VoxMain<Option<VMaxExt>>` carrying the ext. `ext::to_vmax_file_with_ext`
+  writes it back exactly. `VmaxFileBuilder::new_with_ext` is the
+  configurable form.
+- `codec::from_vmax_package_with_ext` and `codec::to_vmax_package_with_ext`
+  do the same for a package's files.
+
+The ext follows the state's listings through voxcore's `VoxExt` hooks. A
+node, object, palette, or material released or reordered after the load
+still writes back with the surviving provenance. A node retained after the
+load writes like a synthesized one. In a document's `ext` block the ext is
+the `vmax` entry, through voxcore's `VoxExtEntryCodec`. A Voxel Json
+document carries the ext in that block.

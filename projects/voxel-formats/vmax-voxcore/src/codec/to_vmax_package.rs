@@ -1,10 +1,11 @@
-use crate::{Result, VMaxColorFormat, VMaxVoxMain, to_vmax_file};
+use crate::{Result, VMaxColorFormat, to_vmax_file};
 use vmax_codec::{
     CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result as CodecResult,
     to_vmax_package as write_vmax_package,
 };
+use voxcore::VoxMain;
 
-/// Writes a [`VMaxVoxMain`] to a `.vmax` package through `dependencies`,
+/// Writes a bare [`VoxMain`] to a `.vmax` package through `dependencies`,
 /// the package form of [`to_vmax_file`] and the inverse of
 /// [`from_vmax_package`](crate::codec::from_vmax_package). For control over
 /// the scene camera, build the file with
@@ -18,7 +19,7 @@ use vmax_codec::{
 ///   implies.
 pub fn to_vmax_package<D, W>(
     dependencies: &D,
-    state: &VMaxVoxMain,
+    state: &VoxMain<()>,
     vmax_color_format: VMaxColorFormat,
     write: W,
 ) -> Result<()>
@@ -33,7 +34,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        VMaxColorFormat, VMaxVoxMain,
+        VMaxColorFormat,
         codec::{from_vmax_package, to_vmax_package},
     };
     use branded_id::U32Id;
@@ -46,7 +47,7 @@ mod tests {
     };
 
     /// A state placing one red voxel at the origin.
-    fn red_voxel_state() -> VMaxVoxMain {
+    fn red_voxel_state() -> VoxMain<()> {
         let mut state = VoxMain::default();
         let color = lin_srgba_f64_from_srgba_u8(TySrgbaU8::from([0xFF, 0, 0, 0xFF]));
         let value_pool_id =
@@ -108,6 +109,5 @@ mod tests {
         assert_eq!(reloaded.object_count(), 1);
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         assert_eq!(object.live_count(), 1);
-        assert!(reloaded.ext().is_some(), "a loaded package carries its ext");
     }
 }
