@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
+    dependencies::mesh::{EncodeBase64, EncodePng},
     operations::mesh::{MaterialMeshRequest, MeshFiles, MeshTarget, build_material_document},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use voxcore::{VoxMain, VoxObject};
 
@@ -11,21 +11,30 @@ use voxcore::{VoxMain, VoxObject};
 /// `request.storage` asks for. The geometry buffer embeds as a base64 data URI,
 /// and embedded images embed as their own data URIs, so the document is a single
 /// self-contained file. An object with no live voxels writes a valid glTF with
-/// an empty scene.
-pub fn object_to_material_gltf<T>(
+/// an empty scene. `dependencies` encodes the atlas images and the base64 of
+/// every data URI.
+pub fn object_to_material_gltf<D: EncodeBase64 + EncodePng, T>(
+    dependencies: &D,
     state: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
 ) -> Result<MeshFiles> {
-    let mut built = build_material_document(state, object, request, MeshTarget::Gltf)?;
+    let mut built =
+        build_material_document(dependencies, state, object, request, MeshTarget::Gltf)?;
 
     if !built.blob.is_empty() {
         let uri = format!(
             "data:application/octet-stream;base64,{}",
-            STANDARD.encode(&built.blob)
+            dependencies.encode_base64(&built.blob)
         );
 
         built.document["buffers"][0]["uri"] = Value::String(uri);
+    }
+
+    for (index, png) in &built.data_uri_images {
+        let uri = format!("data:image/png;base64,{}", dependencies.encode_base64(png));
+
+        built.document["images"][*index]["uri"] = Value::String(uri);
     }
 
     let mesh = serde_json::to_vec(&built.document).map_err(Error::invalid)?;
@@ -36,11 +45,14 @@ pub fn object_to_material_gltf<T>(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::operations::mesh::{
-        AtlasShape, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest, MaterialSlot,
-        MeshMethod, ResourceStorage, object_to_material_gltf,
+    use crate::{
+        dependencies::DependenciesImpl,
+        operations::mesh::{
+            AtlasShape, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest,
+            MaterialSlot, MeshMethod, ResourceStorage, object_to_material_gltf,
+        },
     };
     use branded_id::U32Id;
     use gltf::Gltf;
@@ -84,9 +96,14 @@ mod tests {
             shape: AtlasShape::Fit,
         };
 
-        object_to_material_gltf(&state, state.object(object_id).unwrap(), &request)
-            .unwrap()
-            .mesh
+        object_to_material_gltf(
+            &DependenciesImpl,
+            &state,
+            state.object(object_id).unwrap(),
+            &request,
+        )
+        .unwrap()
+        .mesh
     }
 
     #[test]

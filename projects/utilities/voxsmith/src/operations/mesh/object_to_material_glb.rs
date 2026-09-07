@@ -1,9 +1,10 @@
 use crate::{
     Error, Result,
-    operations::mesh::{MaterialMeshRequest, MeshFiles, MeshTarget, build_material_document},
+    dependencies::mesh::EncodePng,
+    operations::mesh::{
+        MaterialMeshRequest, MeshFiles, MeshTarget, build_material_document, glb_bytes,
+    },
 };
-use gltf::binary::{Glb, Header};
-use std::borrow::Cow;
 use voxcore::{VoxMain, VoxObject};
 
 /// Meshes `object` material-aware and writes it as a binary glTF (`.glb`) with a
@@ -11,37 +12,31 @@ use voxcore::{VoxMain, VoxObject};
 /// `request.storage` asks for. `state` resolves the object's referenced
 /// palettes; embedded images share the GLB binary chunk with the geometry. An
 /// object with no live voxels writes a valid glTF with an empty scene.
-pub fn object_to_material_glb<T>(
+/// `dependencies` encodes the atlas images.
+pub fn object_to_material_glb<D: EncodePng, T>(
+    dependencies: &D,
     state: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
 ) -> Result<MeshFiles> {
-    let built = build_material_document(state, object, request, MeshTarget::Glb)?;
+    let built = build_material_document(dependencies, state, object, request, MeshTarget::Glb)?;
 
     let json = serde_json::to_vec(&built.document).map_err(Error::invalid)?;
 
-    let glb = Glb {
-        // `to_vec` recomputes the length, so the header length is a placeholder.
-        header: Header {
-            magic: *b"glTF",
-            version: 2,
-            length: 0,
-        },
-        json: Cow::Owned(json),
-        bin: (!built.blob.is_empty()).then_some(Cow::Owned(built.blob)),
-    };
-
     Ok(MeshFiles {
-        mesh: glb.to_vec()?,
+        mesh: glb_bytes(&json, &built.blob)?,
         sidecars: built.sidecars,
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::operations::mesh::{
-        AtlasShape, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot, MeshMethod,
-        ResourceStorage, object_to_material_glb,
+    use crate::{
+        dependencies::DependenciesImpl,
+        operations::mesh::{
+            AtlasShape, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot, MeshMethod,
+            ResourceStorage, object_to_material_glb,
+        },
     };
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
@@ -105,6 +100,7 @@ mod tests {
     fn embeds_a_base_color_material_and_a_uv_set() {
         let (state, object_id) = red_blue_bar();
         let files = object_to_material_glb(
+            &DependenciesImpl,
             &state,
             state.object(object_id).unwrap(),
             &albedo_request(ResourceStorage::Embedded),
@@ -177,6 +173,7 @@ mod tests {
         let object_id = state.retain_object(object).unwrap();
 
         let result = object_to_material_glb(
+            &DependenciesImpl,
             &state,
             state.object(object_id).unwrap(),
             &albedo_request(ResourceStorage::Embedded),
@@ -194,6 +191,7 @@ mod tests {
     fn external_storage_writes_a_sidecar_and_references_it() {
         let (state, object_id) = red_blue_bar();
         let files = object_to_material_glb(
+            &DependenciesImpl,
             &state,
             state.object(object_id).unwrap(),
             &albedo_request(ResourceStorage::External),

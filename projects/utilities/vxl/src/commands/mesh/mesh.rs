@@ -13,6 +13,7 @@ use std::{
 };
 use voxcore::VoxMain;
 use voxsmith::{
+    dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::mesh::{
         AtlasShape, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod, ResourceStorage,
         mesh, select_objects,
@@ -226,7 +227,7 @@ impl Mesh {
             .object(object_id)
             .expect("the selection resolved an id from the state's objects");
 
-        let files = mesh(&state, object, format, &request)?;
+        let files = mesh(&VoxsmithDependenciesImpl, &state, object, format, &request)?;
 
         dependencies.write_file(&output, &files.mesh)?;
 

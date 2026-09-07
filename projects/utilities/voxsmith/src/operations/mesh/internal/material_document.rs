@@ -1,13 +1,13 @@
 use crate::{
-    Result,
+    Error, Result,
+    dependencies::mesh::EncodePng,
     operations::mesh::{
         MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage, UsedMaterials,
-        atlas_dimensions, bake_atlas_pixels, check_material_maps, encode_rgba8_png,
-        material_scalar, max_emissive_strength, mesh_slices, resolve_used_materials, texel_center,
+        atlas_dimensions, bake_atlas_image, check_material_maps, material_scalar,
+        max_emissive_strength, mesh_slices, resolve_used_materials, texel_center,
     },
     utilities::check_gltf_property_ranges,
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
 use ty_math::{TyVector3Ext, TyVector3F32};
 use voxcore::{
@@ -37,6 +37,11 @@ pub(crate) struct MaterialDocument {
 
     /// Loose files to write beside the mesh, each a relative name and bytes.
     pub(crate) sidecars: Vec<(String, Vec<u8>)>,
+
+    /// The images a text glTF embeds as data URIs, each an index into the
+    /// document's `images` and the PNG. Empty under GLB, whose images share
+    /// the buffer.
+    pub(crate) data_uri_images: Vec<(usize, Vec<u8>)>,
 }
 
 /// Meshes `object` material-aware and lays it out as a glTF document with a
@@ -45,10 +50,12 @@ pub(crate) struct MaterialDocument {
 /// Each requested map becomes one image and texture. Recognized maps fill
 /// their glTF slot and the rest are listed under the material's `extras`.
 /// `target` decides how embedded images travel, and `request.storage` whether
-/// they are embedded, loose, or both. An object with no geometry yields an
-/// empty scene. Errors if a layer references a palette `state` does not hold,
-/// or if a vocabulary property's value is outside its glTF range.
-pub(crate) fn build_material_document<T>(
+/// they are embedded, loose, or both. `dependencies` encodes the images. An
+/// object with no geometry yields an empty scene. Errors if a layer references
+/// a palette `state` does not hold, or if a vocabulary property's value is
+/// outside its glTF range.
+pub(crate) fn build_material_document<D: EncodePng, T>(
+    dependencies: &D,
     state: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
@@ -83,6 +90,7 @@ pub(crate) fn build_material_document<T>(
             }),
             blob: Vec::new(),
             sidecars: Vec::new(),
+            data_uri_images: Vec::new(),
         });
     }
 
@@ -152,10 +160,11 @@ pub(crate) fn build_material_document<T>(
     let mut images = Vec::with_capacity(request.maps.len());
     let mut textures = Vec::with_capacity(request.maps.len());
     let mut sidecars = Vec::new();
+    let mut data_uri_images = Vec::new();
 
     for map in &request.maps {
-        let pixels = bake_atlas_pixels(&used, &map.bake, atlas_width, atlas_height)?;
-        let png = encode_rgba8_png(atlas_width, atlas_height, &pixels)?;
+        let image = bake_atlas_image(&used, &map.bake, atlas_width, atlas_height)?;
+        let png = dependencies.encode_png(&image).map_err(Error::Png)?;
 
         let image = match placement(request.storage, target) {
             Placement::Buffer => {
@@ -172,7 +181,9 @@ pub(crate) fn build_material_document<T>(
                 json!({ "bufferView": view, "mimeType": "image/png" })
             }
             Placement::DataUri => {
-                json!({ "uri": format!("data:image/png;base64,{}", STANDARD.encode(&png)) })
+                // The text writer fills in the `uri` once it has the base64.
+                data_uri_images.push((images.len(), png.clone()));
+                json!({ "mimeType": "image/png" })
             }
             Placement::ExternalUri => json!({ "uri": map.name }),
         };
@@ -235,6 +246,7 @@ pub(crate) fn build_material_document<T>(
         document,
         blob,
         sidecars,
+        data_uri_images,
     })
 }
 

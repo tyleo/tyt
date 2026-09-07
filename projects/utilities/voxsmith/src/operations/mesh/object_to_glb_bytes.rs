@@ -1,9 +1,7 @@
 use crate::{
     Error, Result,
-    operations::mesh::{MeshMethod, object_to_gltf_document},
+    operations::mesh::{MeshMethod, glb_bytes, object_to_gltf_document},
 };
-use gltf::binary::{Glb, Header};
-use std::borrow::Cow;
 use voxcore::VoxObject;
 
 /// Meshes `object` with `method` and writes it as a binary glTF (`.glb`): a
@@ -18,18 +16,7 @@ pub fn object_to_glb_bytes(object: &VoxObject, method: MeshMethod, scale: f64) -
 
     let json = serde_json::to_vec(&document).map_err(Error::invalid)?;
 
-    let glb = Glb {
-        // `to_vec` recomputes the length, so the header length is a placeholder.
-        header: Header {
-            magic: *b"glTF",
-            version: 2,
-            length: 0,
-        },
-        json: Cow::Owned(json),
-        bin: (!blob.is_empty()).then_some(Cow::Owned(blob)),
-    };
-
-    Ok(glb.to_vec()?)
+    glb_bytes(&json, &blob)
 }
 
 #[cfg(test)]

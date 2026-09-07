@@ -459,7 +459,7 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
     world.yup_to_zup()
 }
 
-#[cfg(all(test, feature = "mesh"))]
+#[cfg(test)]
 mod tests {
     use crate::{
         Result,
@@ -1223,9 +1223,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(feature = "impl", feature = "mesh"))]
     fn khr_extension_factors_round_trip_through_a_mesh_export() {
-        use crate::operations::mesh::{
-            AtlasShape, MaterialMeshRequest, MeshMethod, ResourceStorage, object_to_material_glb,
+        use crate::{
+            dependencies::DependenciesImpl,
+            operations::mesh::{
+                AtlasShape, MaterialMeshRequest, MeshMethod, ResourceStorage,
+                object_to_material_glb,
+            },
         };
         use gltf::Gltf;
 
@@ -1253,7 +1258,7 @@ mod tests {
             shape: AtlasShape::Fit,
         };
 
-        let files = object_to_material_glb(&state, object, &request).unwrap();
+        let files = object_to_material_glb(&DependenciesImpl, &state, object, &request).unwrap();
         let gltf = Gltf::from_slice(&files.mesh).unwrap();
         let material = gltf.materials().next().unwrap();
 

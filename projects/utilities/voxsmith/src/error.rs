@@ -1,4 +1,4 @@
-#[cfg(feature = "_gltf")]
+#[cfg(feature = "voxelize")]
 use gltf::Error as GltfError;
 #[cfg(feature = "_pathspec")]
 use pathspec::Error as PathSpecError;
@@ -19,8 +19,12 @@ pub enum Error {
     /// A voxcore construction, mutation, or insertion was rejected.
     Vox(VoxError),
 
+    /// A material atlas image could not be encoded as PNG.
+    #[cfg(feature = "mesh")]
+    Png(String),
+
     /// Reading a glTF or GLB mesh failed.
-    #[cfg(feature = "_gltf")]
+    #[cfg(feature = "voxelize")]
     Gltf(GltfError),
 
     /// A report layout rejected an option it does not consume.
@@ -44,7 +48,9 @@ impl Display for Error {
         match self {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
-            #[cfg(feature = "_gltf")]
+            #[cfg(feature = "mesh")]
+            Error::Png(message) => write!(f, "could not encode PNG: {message}"),
+            #[cfg(feature = "voxelize")]
             Error::Gltf(error) => error.fmt(f),
             #[cfg(feature = "_treegrid")]
             Error::TreeGrid(error) => error.fmt(f),
@@ -59,7 +65,9 @@ impl StdError for Error {
         match self {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
-            #[cfg(feature = "_gltf")]
+            #[cfg(feature = "mesh")]
+            Error::Png(_) => None,
+            #[cfg(feature = "voxelize")]
             Error::Gltf(error) => Some(error),
             #[cfg(feature = "_treegrid")]
             Error::TreeGrid(error) => Some(error),
@@ -75,7 +83,7 @@ impl From<VoxError> for Error {
     }
 }
 
-#[cfg(feature = "_gltf")]
+#[cfg(feature = "voxelize")]
 impl From<GltfError> for Error {
     fn from(error: GltfError) -> Self {
         Error::Gltf(error)

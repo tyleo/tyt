@@ -19,6 +19,7 @@ voxconv = "0.1.0"
 voxcore = { version = "0.2.1", default-features = false }
 voxsmith = { version = "0.2.0", default-features = false, features = [
     "hierarchy_show",
+    "impl",
     "info",
     "mesh",
     "palette_list",

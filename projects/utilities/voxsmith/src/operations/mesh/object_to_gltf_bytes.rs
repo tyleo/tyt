@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
+    dependencies::mesh::EncodeBase64,
     operations::mesh::{MeshMethod, object_to_gltf_document},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use voxcore::VoxObject;
 
@@ -14,13 +14,19 @@ use voxcore::VoxObject;
 /// uniform scale to every vertex; glTF is meter-native, so the mesh opens at
 /// that size. Geometry is Y-up, the inverse of the voxelizer's Z-up mapping. An
 /// object with no live voxels writes a valid glTF with an empty scene.
-pub fn object_to_gltf_bytes(object: &VoxObject, method: MeshMethod, scale: f64) -> Result<Vec<u8>> {
+/// `dependencies` encodes the base64.
+pub fn object_to_gltf_bytes<D: EncodeBase64>(
+    dependencies: &D,
+    object: &VoxObject,
+    method: MeshMethod,
+    scale: f64,
+) -> Result<Vec<u8>> {
     let (mut document, blob) = object_to_gltf_document(object, method, scale);
 
     if !blob.is_empty() {
         let uri = format!(
             "data:application/octet-stream;base64,{}",
-            STANDARD.encode(&blob)
+            dependencies.encode_base64(&blob)
         );
 
         document["buffers"][0]["uri"] = Value::String(uri);
@@ -29,9 +35,12 @@ pub fn object_to_gltf_bytes(object: &VoxObject, method: MeshMethod, scale: f64) 
     serde_json::to_vec(&document).map_err(Error::invalid)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::operations::mesh::{MeshMethod, object_to_gltf_bytes};
+    use crate::{
+        dependencies::DependenciesImpl,
+        operations::mesh::{MeshMethod, object_to_gltf_bytes},
+    };
     use gltf::import_slice;
     use ty_math::TyVector3U32;
     use voxcore::VoxObject;
@@ -42,7 +51,8 @@ mod tests {
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[]).unwrap();
 
-        let bytes = object_to_gltf_bytes(&object, MeshMethod::Culled, 1.0).unwrap();
+        let bytes =
+            object_to_gltf_bytes(&DependenciesImpl, &object, MeshMethod::Culled, 1.0).unwrap();
 
         // Text JSON with an embedded base64 buffer, not a binary GLB.
         let text = String::from_utf8(bytes).unwrap();

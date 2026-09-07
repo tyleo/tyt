@@ -13,7 +13,6 @@ serde_json = { version = "1", optional = true }
 ty-math = { version = "0.2.0", default-features = false }
 
 [dev-dependencies]
-# Derives the ext structs the keyed-transcode tests round-trip.
 serde = { version = "1", features = ["derive"] }
 
 [features]

@@ -1,5 +1,6 @@
 // Public API
 
+mod atlas_image;
 mod atlas_shape;
 mod color_channel;
 mod material_atlas;
@@ -22,6 +23,7 @@ mod object_to_mesh_geometry;
 mod resource_storage;
 mod select_objects;
 
+pub use atlas_image::*;
 pub use atlas_shape::*;
 pub use color_channel::*;
 pub use material_atlas::*;

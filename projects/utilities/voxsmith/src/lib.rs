@@ -11,9 +11,15 @@
 //! glTF. `voxelize` turns a glTF mesh into a state. `utilities` holds what the
 //! operations share: palette reduction, dithering, color spaces, the index and
 //! vector selectors, the glTF property ranges, and a palette's property names.
+//! The mesh writer's PNG and base64 encoders come from the caller through
+//! [`EncodePng`](dependencies::mesh::EncodePng) and
+//! [`EncodeBase64`](dependencies::mesh::EncodeBase64).
+//! [`DependenciesImpl`](dependencies::DependenciesImpl), behind the `impl`
+//! feature, binds them over `png` and `base64`.
 
 // Public API
 
+pub mod dependencies;
 pub mod operations;
 pub mod utilities;
 

@@ -1,8 +1,8 @@
 use crate::{
-    Result,
+    Error, Result,
+    dependencies::mesh::EncodePng,
     operations::mesh::{
-        AtlasShape, MaterialBake, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
-        resolve_used_materials,
+        AtlasShape, MaterialBake, atlas_dimensions, bake_atlas_image, resolve_used_materials,
     },
     utilities::check_gltf_property_ranges,
 };
@@ -28,10 +28,11 @@ pub struct MaterialAtlas {
 /// `state` resolves the object's referenced palettes. This is the
 /// geometry-free material bake the palette atlas shares with the textured
 /// mesh writer, and the surface a bake-only material command builds on.
-/// Errors if a layer references a palette `state` does not hold, if a
-/// vocabulary property carries a value outside its glTF range, or if `shape`
-/// is too small to hold the materials.
-pub fn object_to_material_atlas<T>(
+/// `dependencies` encodes each image. Errors if a layer references a palette
+/// `state` does not hold, if a vocabulary property carries a value outside its
+/// glTF range, or if `shape` is too small to hold the materials.
+pub fn object_to_material_atlas<D: EncodePng, T>(
+    dependencies: &D,
     state: &VoxMain<T>,
     object: &VoxObject,
     bakes: &[MaterialBake],
@@ -48,9 +49,9 @@ pub fn object_to_material_atlas<T>(
     let mut images = Vec::with_capacity(bakes.len());
 
     for bake in bakes {
-        let pixels = bake_atlas_pixels(&used, bake, width, height)?;
+        let image = bake_atlas_image(&used, bake, width, height)?;
 
-        images.push(encode_rgba8_png(width, height, &pixels)?);
+        images.push(dependencies.encode_png(&image).map_err(Error::Png)?);
     }
 
     Ok(MaterialAtlas {
@@ -60,10 +61,11 @@ pub fn object_to_material_atlas<T>(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::operations::mesh::{
-        AtlasShape, MaterialBake, MaterialChannel, object_to_material_atlas,
+    use crate::{
+        dependencies::DependenciesImpl,
+        operations::mesh::{AtlasShape, MaterialBake, MaterialChannel, object_to_material_atlas},
     };
     use branded_id::U32Id;
     use std::io::Cursor;
@@ -120,6 +122,7 @@ mod tests {
         ];
 
         let atlas = object_to_material_atlas(
+            &DependenciesImpl,
             &state,
             state.object(object_id).unwrap(),
             &bakes,
@@ -157,6 +160,7 @@ mod tests {
         let object_id = state.retain_object(object).unwrap();
 
         let error = object_to_material_atlas(
+            &DependenciesImpl,
             &state,
             state.object(object_id).unwrap(),
             &[MaterialBake::RgbaColor],
@@ -177,6 +181,7 @@ mod tests {
         let object_id = state.retain_object(object).unwrap();
 
         let atlas = object_to_material_atlas(
+            &DependenciesImpl,
             &state,
             state.object(object_id).unwrap(),
             &[MaterialBake::RgbaColor],

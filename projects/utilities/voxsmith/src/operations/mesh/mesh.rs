@@ -1,5 +1,6 @@
 use crate::{
     Result,
+    dependencies::mesh::{EncodeBase64, EncodePng},
     operations::mesh::{
         MaterialMeshRequest, MeshFiles, MeshFormat, object_to_glb_bytes, object_to_gltf_bytes,
         object_to_material_glb, object_to_material_gltf,
@@ -11,8 +12,10 @@ use voxcore::{VoxMain, VoxObject};
 /// pure geometry: no material and no images, so `request.storage` and
 /// `request.shape` have nothing to place. Otherwise it bakes the object's
 /// flattened layer materials into the requested maps, which the mesh samples,
-/// with any loose images as sidecars.
-pub fn mesh<T>(
+/// with any loose images as sidecars. `dependencies` encodes the atlas images
+/// and the base64 of a text glTF's data URIs.
+pub fn mesh<D: EncodeBase64 + EncodePng, T>(
+    dependencies: &D,
     state: &VoxMain<T>,
     object: &VoxObject,
     format: MeshFormat,
@@ -20,7 +23,9 @@ pub fn mesh<T>(
 ) -> Result<MeshFiles> {
     if request.maps.is_empty() {
         let mesh = match format {
-            MeshFormat::Gltf => object_to_gltf_bytes(object, request.method, request.scale)?,
+            MeshFormat::Gltf => {
+                object_to_gltf_bytes(dependencies, object, request.method, request.scale)?
+            }
             MeshFormat::Glb => object_to_glb_bytes(object, request.method, request.scale)?,
         };
 
@@ -31,7 +36,7 @@ pub fn mesh<T>(
     }
 
     match format {
-        MeshFormat::Gltf => object_to_material_gltf(state, object, request),
-        MeshFormat::Glb => object_to_material_glb(state, object, request),
+        MeshFormat::Gltf => object_to_material_gltf(dependencies, state, object, request),
+        MeshFormat::Glb => object_to_material_glb(dependencies, state, object, request),
     }
 }
