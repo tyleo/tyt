@@ -1,25 +1,24 @@
 use crate::{
-    Dependencies, Error, Format, Result, Width, cli_value_parser, commands::parse_property_selector,
+    Dependencies, Error, Result, VoxelInput, Width, cli_value_parser,
+    commands::parse_property_selector, load,
 };
 use clap::Parser;
 use std::{
     io::{Error as IOError, ErrorKind},
     num::NonZeroU8,
-    path::PathBuf,
 };
-use voxsmith::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector};
+use voxcore::VoxMain;
+use voxsmith::{
+    PaletteShowLabel, PaletteShowLayout, PaletteShowOptions, PaletteShowTableShape,
+    PropertySelector, render_palette_show,
+};
 
 /// Prints one or more palette value collections.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "show")]
 pub struct PaletteShow {
-    /// The input voxel file, in any supported format.
-    #[arg(value_name = "input")]
-    input: PathBuf,
-
-    /// Source format of the input. Inferred from its extension when omitted.
-    #[arg(value_name = "from", long)]
-    from: Option<Format>,
+    #[command(flatten)]
+    input: VoxelInput,
 
     /// A repeatable selector naming a value collection, four fields:
     /// `<palette> <property> <presentation> <reading>`. The palette is an
@@ -88,15 +87,31 @@ impl PaletteShow {
                 .map_err(|message| Error::IO(IOError::new(ErrorKind::InvalidInput, message)))?
         };
 
-        dependencies.palette_show(
-            &self.input,
-            self.from,
-            &selectors,
-            self.layout,
-            self.label,
-            self.header_level,
-            self.table_shape,
-            self.width,
-        )
+        let from = self.input.resolve_format()?;
+
+        let state: VoxMain = load(&dependencies, &self.input.path, from)?;
+
+        let options = PaletteShowOptions {
+            layout: self.layout,
+            label: self.label,
+            header_level: self.header_level,
+            table_shape: self.table_shape,
+            width: resolve_width(&dependencies, self.width),
+        };
+
+        let output = render_palette_show(&state, &selectors, &options)?;
+
+        Ok(dependencies.write_stdout(output.as_bytes())?)
+    }
+}
+
+/// The column budget a `Width` resolves to, or `None` for no wrapping. A
+/// `Terminal` width with no terminal on stdout, as when the output is piped,
+/// also resolves to no wrapping.
+fn resolve_width<D: Dependencies>(dependencies: &D, width: Width) -> Option<usize> {
+    match width {
+        Width::Unlimited => None,
+        Width::Columns(columns) => Some(columns),
+        Width::Terminal => dependencies.terminal_columns(),
     }
 }

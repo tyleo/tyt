@@ -1,30 +1,34 @@
 use crate::{
-    Dependencies, Format, Result,
-    commands::{CameraView, ColorFormat},
+    Dependencies, Result, VoxelInput, cli_value_parser,
+    commands::{CameraView, convert, resolve_scene_camera},
 };
 use clap::Parser;
 use std::path::PathBuf;
+use voxconv::{
+    WriteFormat,
+    vmax::{VMaxColorFormat, VMaxWriteOptions},
+};
 
 /// Converts a voxel file to the Voxel Max format.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "vmax")]
 pub struct ToVmax {
-    /// The input voxel file, in any supported format.
-    #[arg(value_name = "input")]
-    input: PathBuf,
+    #[command(flatten)]
+    input: VoxelInput,
 
     /// The output `.vmax` package directory to create. Defaults to the input
     /// path with a `.vmax` extension.
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
 
-    /// Source format of the input. Inferred from its extension when omitted.
-    #[arg(value_name = "from", long)]
-    from: Option<Format>,
-
     /// Where to store object colors in the package.
-    #[arg(value_name = "color-format", long, default_value = "png")]
-    color_format: ColorFormat,
+    #[arg(
+        value_name = "color-format",
+        long,
+        default_value = "png",
+        value_parser = cli_value_parser::<VMaxColorFormat>()
+    )]
+    color_format: VMaxColorFormat,
 
     /// Which scene camera the rebuilt document opens with. Omitted, the input's
     /// `vmax` ext camera is kept when present, else the empty default.
@@ -34,15 +38,15 @@ pub struct ToVmax {
 
 impl ToVmax {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let output = self
-            .output
-            .unwrap_or_else(|| self.input.with_extension("vmax"));
-        dependencies.to_vmax(
-            &self.input,
-            self.from,
-            &output,
-            self.color_format,
-            self.camera,
-        )
+        let from = self.input.resolve_format()?;
+
+        let to = WriteFormat::VMax(VMaxWriteOptions {
+            color_format: self.color_format,
+            scene_camera: resolve_scene_camera(self.camera),
+        });
+
+        let output = self.input.output_path(self.output, to.extension());
+
+        convert(&dependencies, &self.input.path, from, &output, &to)
     }
 }

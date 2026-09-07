@@ -1,19 +1,20 @@
 use crate::{
-    Dependencies, Error, Format, PositiveF64, Result, cli_value_parser,
+    Dependencies, Error, PositiveF64, Result, VoxelInput, cli_value_parser,
     commands::{
         Atlas, PropertyBinding, Texture, TextureArg, TextureMap, TextureName,
         computed_occlusion_unsupported, parse_atlas_shape,
     },
-    parse_index_range, require_file_name,
+    load, parse_index_range, require_file_name,
 };
 use clap::Parser;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
+use voxcore::VoxMain;
 use voxsmith::{
     AtlasShape, IndexRange, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod,
-    ResourceStorage,
+    ResourceStorage, object_to_mesh_files, select_objects,
 };
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
@@ -21,9 +22,8 @@ use voxsmith::{
 #[derive(Clone, Debug, Parser)]
 #[command(name = "mesh")]
 pub struct Mesh {
-    /// The input voxel file, in any supported format.
-    #[arg(value_name = "input")]
-    input: PathBuf,
+    #[command(flatten)]
+    input: VoxelInput,
 
     /// The output mesh. Defaults to the input path with the mesh extension.
     #[arg(value_name = "output")]
@@ -33,10 +33,6 @@ pub struct Mesh {
     /// the output extension when omitted, defaulting to `.glb`.
     #[arg(value_name = "to", long, value_parser = cli_value_parser::<MeshFormat>())]
     to: Option<MeshFormat>,
-
-    /// Source voxel format. Inferred from the input extension when omitted.
-    #[arg(value_name = "from", long)]
-    from: Option<Format>,
 
     /// Real-world edge length of one voxel in meters, applied as a uniform scale
     /// to every output vertex. The mesh twin of `voxelize`'s `--voxel-size`.
@@ -166,9 +162,8 @@ impl Mesh {
             .unwrap_or(MeshFormat::Glb);
 
         let output = self
-            .output
-            .clone()
-            .unwrap_or_else(|| self.input.with_extension(format.extension()));
+            .input
+            .output_path(self.output.clone(), format.extension());
 
         // The unwrap atlas, and the computed-occlusion maps only it can hold, are
         // a later pass; only the palette atlas bakes for now. This runs before
@@ -189,12 +184,11 @@ impl Mesh {
 
         let maps = self.resolve_maps(&output)?;
 
-        let object_indices = dependencies.resolve_objects(
-            &self.input,
-            self.from,
-            &self.select,
-            &self.select_index,
-        )?;
+        let from = self.input.resolve_format()?;
+
+        let state: VoxMain = load(&dependencies, &self.input.path, from)?;
+
+        let object_indices = select_objects(&state, &self.select, &self.select_index)?;
 
         // `mesh` outputs one object, so the selection must name exactly one; the
         // resolver stays flag-agnostic and this policy, with its flag-named
@@ -225,14 +219,23 @@ impl Mesh {
             shape: self.texture_shape,
         };
 
-        dependencies.mesh_object(
-            &self.input,
-            self.from,
-            &output,
-            format,
-            object_index,
-            &request,
-        )
+        let (_, object) = state
+            .iter_objects()
+            .nth(object_index)
+            .expect("the selection resolved an index into the state's objects");
+
+        let files = object_to_mesh_files(&state, object, format, &request)?;
+
+        dependencies.write_file(&output, &files.mesh)?;
+
+        // Loose images go beside the mesh, named as the document references them.
+        let directory = output.parent().unwrap_or_else(|| Path::new("."));
+
+        for (name, bytes) in &files.sidecars {
+            dependencies.write_file(&directory.join(name), bytes)?;
+        }
+
+        Ok(())
     }
 
     /// Resolves the `--texture` presets, then the `--texture-map` custom maps,

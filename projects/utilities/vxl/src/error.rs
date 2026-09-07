@@ -4,6 +4,8 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     io::Error as IOError,
 };
+use voxconv::Error as VoxconvError;
+use voxsmith::Error as VoxsmithError;
 
 /// An error from this crate.
 #[derive(Debug)]
@@ -49,9 +51,14 @@ impl From<IOError> for Error {
     }
 }
 
-#[cfg(feature = "impl")]
-impl From<voxsmith::Error> for Error {
-    fn from(e: voxsmith::Error) -> Self {
+impl From<VoxconvError> for Error {
+    fn from(e: VoxconvError) -> Self {
+        Error::IO(IOError::other(e))
+    }
+}
+
+impl From<VoxsmithError> for Error {
+    fn from(e: VoxsmithError) -> Self {
         Error::IO(IOError::other(e))
     }
 }

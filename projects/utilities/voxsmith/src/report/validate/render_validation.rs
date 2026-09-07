@@ -1,12 +1,12 @@
-use crate::{ValidateLayout, VoxjCheck, VoxjCheckStatus, failed_check_count};
+use crate::ValidateLayout;
 use treegrid::{
     TreeGrid, TreeGridJsonValue, TreeGridJsonValueCells, TreeGridLabel, TreeGridRenderJson,
 };
+use voxcore::check::{VoxCheck, VoxCheckStatus, failed_check_count};
 
-/// Renders the report over a document's spec `checks`, as
-/// [`check_voxj_bytes`](crate::check_voxj_bytes) runs them, in `layout`,
-/// under the document's `name`.
-pub fn render_validation(checks: &[VoxjCheck], name: &str, layout: ValidateLayout) -> String {
+/// Renders the report over a document's `checks` in `layout`, under the
+/// document's `name`.
+pub fn render_validation(checks: &[VoxCheck], name: &str, layout: ValidateLayout) -> String {
     match layout {
         ValidateLayout::Tables => render_markdown(checks, name),
         ValidateLayout::JsonPretty => build_json_grid(checks, name).render_json_pretty(),
@@ -16,15 +16,15 @@ pub fn render_validation(checks: &[VoxjCheck], name: &str, layout: ValidateLayou
 
 /// A file-name heading, one line per check with its result, failing checks
 /// listing their messages, and a closing pass/fail summary.
-fn render_markdown(checks: &[VoxjCheck], name: &str) -> String {
+fn render_markdown(checks: &[VoxCheck], name: &str) -> String {
     let mut output = format!("# {name}\n\n");
     for check in checks {
         match &check.status {
-            VoxjCheckStatus::Passed => output.push_str(&format!("- {}: pass\n", check.name)),
-            VoxjCheckStatus::Unverifiable => {
+            VoxCheckStatus::Passed => output.push_str(&format!("- {}: pass\n", check.name)),
+            VoxCheckStatus::Unverifiable => {
                 output.push_str(&format!("- {}: unverifiable\n", check.name));
             }
-            VoxjCheckStatus::Failed(messages) => {
+            VoxCheckStatus::Failed(messages) => {
                 output.push_str(&format!("- {}: fail\n", check.name));
                 for message in messages {
                     output.push_str(&format!("  - {message}\n"));
@@ -47,7 +47,7 @@ fn render_markdown(checks: &[VoxjCheck], name: &str) -> String {
 /// and `valid` roots, then a `checks` root with one child per check bearing
 /// its status as a string value, a failed check's messages under a
 /// `failures` child.
-fn build_json_grid(checks: &[VoxjCheck], name: &str) -> TreeGrid<TreeGridJsonValueCells> {
+fn build_json_grid(checks: &[VoxCheck], name: &str) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
     let name_root_id = grid.retain_root(TreeGridLabel::bare("name"));
     grid.push_value(name_root_id, TreeGridJsonValue::new(name));
@@ -61,13 +61,13 @@ fn build_json_grid(checks: &[VoxjCheck], name: &str) -> TreeGrid<TreeGridJsonVal
     for check in checks {
         let node_id = grid.retain_child(root_id, TreeGridLabel::bare(check.name));
         match &check.status {
-            VoxjCheckStatus::Passed => {
+            VoxCheckStatus::Passed => {
                 grid.push_value(node_id, TreeGridJsonValue::new("passed"));
             }
-            VoxjCheckStatus::Unverifiable => {
+            VoxCheckStatus::Unverifiable => {
                 grid.push_value(node_id, TreeGridJsonValue::new("unverifiable"));
             }
-            VoxjCheckStatus::Failed(messages) => {
+            VoxCheckStatus::Failed(messages) => {
                 grid.push_value(node_id, TreeGridJsonValue::new("failed"));
                 let failures_id = grid.retain_child(node_id, TreeGridLabel::bare("failures"));
                 for message in messages {
@@ -86,25 +86,26 @@ fn plural(count: usize) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ValidateLayout, VoxjCheck, VoxjCheckStatus, render_validation};
+    use crate::{ValidateLayout, render_validation};
     use serde_json::Value;
+    use voxcore::check::{VoxCheck, VoxCheckStatus};
 
     /// One passing, one failing (with a message), and the unverifiable check.
-    fn checks() -> Vec<VoxjCheck> {
+    fn checks() -> Vec<VoxCheck> {
         vec![
-            VoxjCheck {
+            VoxCheck {
                 name: "version",
-                status: VoxjCheckStatus::Passed,
+                status: VoxCheckStatus::Passed,
             },
-            VoxjCheck {
+            VoxCheck {
                 name: "indices",
-                status: VoxjCheckStatus::Failed(vec![
+                status: VoxCheckStatus::Failed(vec![
                     "object 0 references palette 5, but the document has 1 palettes".to_owned(),
                 ]),
             },
-            VoxjCheck {
+            VoxCheck {
                 name: "sample-order",
-                status: VoxjCheckStatus::Unverifiable,
+                status: VoxCheckStatus::Unverifiable,
             },
         ]
     }
@@ -126,13 +127,13 @@ mod tests {
     #[test]
     fn tables_reports_all_passed() {
         let checks = vec![
-            VoxjCheck {
+            VoxCheck {
                 name: "version",
-                status: VoxjCheckStatus::Passed,
+                status: VoxCheckStatus::Passed,
             },
-            VoxjCheck {
+            VoxCheck {
                 name: "sample-order",
-                status: VoxjCheckStatus::Unverifiable,
+                status: VoxCheckStatus::Unverifiable,
             },
         ];
         let output = render_validation(&checks, "ok.voxj", ValidateLayout::Tables);

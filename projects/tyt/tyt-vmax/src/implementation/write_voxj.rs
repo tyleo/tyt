@@ -1,52 +1,42 @@
 use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
-use std::{io::ErrorKind, path::Path};
-use voxsmith::{PositionEncoding, SampleEncoding, VoxjFileBuilder, from_vmax_package};
+use std::path::Path;
+use voxconv::{
+    DependenciesImpl, ReadFormat, WriteFormat, codec,
+    voxj::{PositionEncoding, SampleEncoding, VoxjSerialization, VoxjWriteOptions},
+};
+use voxcore::{VoxMain, VoxMap};
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
-    // The `vmax` ext carries the provenance with no native voxj home.
-    let state = from_vmax_package(
-        // List every package-relative file path, descending one level into
-        // subdirectories (only `QuickLook/`) so its thumbnails keep their prefix.
-        || {
-            let mut paths = Vec::new();
-            for entry in tyt_injection::list_dir(input)? {
-                let Some(name) = entry.file_name().and_then(|n| n.to_str()) else {
-                    continue;
-                };
-                if entry.is_dir() {
-                    for child in tyt_injection::list_dir(&entry)? {
-                        if let Some(child) = child.file_name().and_then(|n| n.to_str()) {
-                            paths.push(format!("{name}/{child}"));
-                        }
-                    }
-                } else {
-                    paths.push(name.to_owned());
-                }
-            }
-            Ok(paths)
-        },
-        |name| match tyt_injection::read_file(&input.join(name)) {
-            Ok(bytes) => Ok(Some(bytes)),
-            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e),
-        },
-    )?;
+    // The `vmax` ext rides through as a block into the document's `ext` block.
+    let state: VoxMain<Option<VoxMap>> = codec::load(&DependenciesImpl, ReadFormat::VMax, input)?;
 
-    // The builder keys the ext into the document's `ext` block.
-    let (position, sample) = block_encoding(encoding);
-    let builder = VoxjFileBuilder::new(&state)
-        .position_encoding(position)
-        .sample_encoding(sample);
-    let bytes = match format {
-        VoxjFormat::Json => builder.to_voxj_bytes()?,
-        VoxjFormat::PrettyJson => builder.to_voxj_pretty_bytes()?,
-        VoxjFormat::Zip => builder.to_voxjz_bytes()?,
+    let (position_encoding, sample_encoding) = block_encoding(encoding);
+
+    let options = VoxjWriteOptions {
+        serialization: serialization(format),
+        position_encoding,
+        sample_encoding,
+        ..VoxjWriteOptions::default()
     };
 
-    tyt_injection::write_stdout(&bytes)?;
+    let files = codec::write(&DependenciesImpl, &WriteFormat::Voxj(options), state)?;
+
+    let file = files.first().expect("the Voxel Json writer emits one file");
+
+    tyt_injection::write_stdout(&file.bytes)?;
+
     Ok(())
+}
+
+/// Maps a CLI output form to the voxconv serialization.
+fn serialization(format: VoxjFormat) -> VoxjSerialization {
+    match format {
+        VoxjFormat::Json => VoxjSerialization::Compact,
+        VoxjFormat::PrettyJson => VoxjSerialization::Pretty,
+        VoxjFormat::Zip => VoxjSerialization::Zip,
+    }
 }
 
 /// Maps a CLI encoding choice to per-block codec encodings.

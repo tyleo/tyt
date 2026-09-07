@@ -3,6 +3,8 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     io::Error as IOError,
 };
+#[cfg(feature = "impl")]
+use voxconv::Error as VoxconvError;
 
 /// An error from this crate.
 #[derive(Debug)]
@@ -40,8 +42,8 @@ impl From<vmax_codec::Error> for Error {
 }
 
 #[cfg(feature = "impl")]
-impl From<voxsmith::Error> for Error {
-    fn from(e: voxsmith::Error) -> Self {
+impl From<VoxconvError> for Error {
+    fn from(e: VoxconvError) -> Self {
         Error::IO(IOError::other(e))
     }
 }

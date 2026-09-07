@@ -45,13 +45,13 @@ fn build_records_grid<T>(state: &VoxMain<T>, document: &InfoDocument<'_>) -> Tre
         &mut grid,
         document_root_id,
         "format",
-        document.format.name().to_string(),
+        document.format.to_string(),
     );
-    if let Some(version) = document.voxj_version {
+    if let Some(version) = document.format_version {
         retain_cell(
             &mut grid,
             document_root_id,
-            "voxj_version",
+            "format_version",
             version.to_string(),
         );
     }
@@ -145,13 +145,13 @@ fn build_json_grid<T>(
         &mut grid,
         document_root_id,
         "format",
-        TreeGridJsonValue::new(document.format.name()),
+        TreeGridJsonValue::new(document.format),
     );
-    if let Some(version) = document.voxj_version {
+    if let Some(version) = document.format_version {
         retain_field(
             &mut grid,
             document_root_id,
-            "voxj_version",
+            "format_version",
             TreeGridJsonValue::int(i64::from(version)),
         );
     }
@@ -315,7 +315,7 @@ fn yes_no(flag: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use crate::{InfoDocument, InfoLayout, VoxelFormat, render_info};
+    use crate::{InfoDocument, InfoLayout, render_info};
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
@@ -346,12 +346,12 @@ mod tests {
         state
     }
 
-    /// A Voxel Json source stamped `voxj_version`, carrying no ext block.
-    fn voxj_document(name: &str, voxj_version: u32) -> InfoDocument<'_> {
+    /// A Voxel Json source at `format_version`, carrying no ext block.
+    fn voxj_document(name: &str, format_version: u32) -> InfoDocument<'_> {
         InfoDocument {
             name,
-            format: VoxelFormat::Voxj,
-            voxj_version: Some(voxj_version),
+            format: "voxj",
+            format_version: Some(format_version),
             has_ext: false,
         }
     }
@@ -367,12 +367,12 @@ mod tests {
             output,
             "# test.voxj\n\n\
              ## document\n\n\
-             | label        | value |\n\
-             | ------------ | ----- |\n\
-             | format       | voxj  |\n\
-             | voxj_version | 2     |\n\
-             | has_ext      | no    |\n\
-             | has_edit     | no    |\n\
+             | label          | value |\n\
+             | -------------- | ----- |\n\
+             | format         | voxj  |\n\
+             | format_version | 2     |\n\
+             | has_ext        | no    |\n\
+             | has_edit       | no    |\n\
              \n## palettes\n\n\
              | label | properties | materials |\n\
              | ----- | ---------- | --------- |\n\
@@ -395,7 +395,7 @@ mod tests {
             output,
             "[{\"label\":\"document\",\"children\":[\
              {\"label\":\"format\",\"values\":[\"voxj\"]},\
-             {\"label\":\"voxj_version\",\"values\":[2]},\
+             {\"label\":\"format_version\",\"values\":[2]},\
              {\"label\":\"has_ext\",\"values\":[false]},\
              {\"label\":\"has_edit\",\"values\":[false]}]},\
              {\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
@@ -424,19 +424,19 @@ mod tests {
     }
 
     #[test]
-    fn omits_voxj_version_for_other_formats() {
+    fn omits_format_version_without_one() {
         let document = InfoDocument {
             name: "model.mvox",
-            format: VoxelFormat::MVox,
-            voxj_version: None,
+            format: "mvox",
+            format_version: None,
             has_ext: false,
         };
         let tables = render_info(&tight_state(), &document, InfoLayout::Tables);
         assert!(tables.contains("| format   | mvox  |\n"));
-        assert!(!tables.contains("voxj_version"));
+        assert!(!tables.contains("format_version"));
 
         let json = render_info(&tight_state(), &document, InfoLayout::JsonCompact);
-        assert!(!json.contains("voxj_version"));
+        assert!(!json.contains("format_version"));
     }
 
     #[test]
@@ -451,7 +451,7 @@ mod tests {
 
         let document = voxj_document("sample.voxj", 1);
         let tables = render_info(&state, &document, InfoLayout::Tables);
-        assert!(tables.contains("| has_edit     | yes   |\n"));
+        assert!(tables.contains("| has_edit       | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
         assert!(
             tables.contains(

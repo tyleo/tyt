@@ -1,6 +1,10 @@
 use crate::{ColorFormat, Result};
-use std::{fs, path::Path};
-use voxsmith::{VMaxColorFormat, from_voxj_bytes, to_vmax_package};
+use std::path::Path;
+use voxconv::{
+    DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat, codec,
+    vmax::{VMaxColorFormat, VMaxWriteOptions},
+};
+use voxcore::{VoxMain, VoxMap};
 
 /// Converts Voxel Json bytes into a `.vmax` package directory at `output`,
 /// round-tripping through voxcore. `color_format` selects where each palette's
@@ -10,14 +14,23 @@ pub(crate) fn write_vmax_package(
     output: &Path,
     color_format: ColorFormat,
 ) -> Result<()> {
-    let state = from_voxj_bytes(voxj_bytes)?;
-    to_vmax_package(&state, vmax_color_format(color_format), |name, bytes| {
-        let path = output.join(name);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        tyt_injection::write_file(&path, bytes)
-    })?;
+    let files = [VoxDocumentFile::single(voxj_bytes.to_vec())];
+
+    // A `vmax` block in the document's `ext` decodes back into the package.
+    let state: VoxMain<Option<VoxMap>> = codec::read(&DependenciesImpl, ReadFormat::Voxj, &files)?;
+
+    let options = VMaxWriteOptions {
+        color_format: vmax_color_format(color_format),
+        scene_camera: None,
+    };
+
+    codec::save(
+        &DependenciesImpl,
+        &WriteFormat::VMax(options),
+        state,
+        output,
+    )?;
+
     Ok(())
 }
 

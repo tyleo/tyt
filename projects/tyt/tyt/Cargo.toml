@@ -30,5 +30,5 @@ vxl = { version = "0.1.0" }
 
 [features]
 default = ["impl"]
-impl = ["tyt-claude/impl", "tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meshy/impl", "tyt-meta/impl", "tyt-oai/impl", "tyt-vmax/impl", "vxl/impl"]
+impl = ["tyt-claude/impl", "tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meshy/impl", "tyt-meta/impl", "tyt-oai/impl", "tyt-vmax/impl"]
 bin = ["impl", "dep:clap_complete"]

@@ -1,19 +1,19 @@
-use crate::{Dependencies, Error, Format, Result, cli_value_parser};
+use crate::{Dependencies, Error, Result, VoxelInput, cli_value_parser, load};
 use clap::Parser;
-use std::{
-    io::{Error as IOError, ErrorKind},
-    path::PathBuf,
+use std::io::{Error as IOError, ErrorKind};
+use voxcore::VoxMain;
+use voxsmith::{
+    HierarchyShowLayout, HierarchyShowOptions, HierarchyViews, OriginView, PatternView,
+    TransformView, render_hierarchy_show,
 };
-use voxsmith::{HierarchyShowLayout, HierarchyViews, OriginView, PatternView, TransformView};
 
 /// Prints the scene graph as a box-glyph tree or as JSON records, marking
 /// instanced nodes and listing unplaced nodes and orphan objects.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "show")]
 pub struct HierarchyShow {
-    /// The input voxel file, in any supported format.
-    #[arg(value_name = "input")]
-    input: PathBuf,
+    #[command(flatten)]
+    input: VoxelInput,
 
     /// Gitignore-style patterns matched against node and object paths. When set,
     /// only matched nodes and objects and their ancestors print. A plain pattern
@@ -21,10 +21,6 @@ pub struct HierarchyShow {
     /// the last matching pattern wins. Repeat to pass several.
     #[arg(value_name = "pattern")]
     patterns: Vec<String>,
-
-    /// Source format of the input. Inferred from its extension when omitted.
-    #[arg(value_name = "from", long)]
-    from: Option<Format>,
 
     /// How to render the scene graph, and the serialization to emit.
     #[arg(
@@ -142,14 +138,20 @@ impl HierarchyShow {
             collapse_descendants: self.collapse_descendants,
         });
 
-        dependencies.hierarchy_show(
-            &self.input,
-            self.from,
+        let from = self.input.resolve_format()?;
+
+        let state: VoxMain = load(&dependencies, &self.input.path, from)?;
+
+        let options = HierarchyShowOptions {
             pattern,
-            self.layout,
-            self.collapse_instances,
+            layout: self.layout,
+            collapse_instances: self.collapse_instances,
             views,
-        )
+        };
+
+        let output = render_hierarchy_show(&state, &options)?;
+
+        Ok(dependencies.write_stdout(output.as_bytes())?)
     }
 }
 

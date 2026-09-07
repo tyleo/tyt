@@ -15,11 +15,12 @@ required-features = ["bin"]
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
-libc = { version = "0.2", optional = true }
+voxconv = "0.1.0"
 voxcore = { version = "0.2.1", default-features = false }
 voxsmith = { version = "0.2.0", features = ["gltf", "report"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
-default = ["impl"]
-impl = ["dep:libc"]
-bin = ["impl", "dep:clap_complete"]
+bin = ["dep:clap_complete"]

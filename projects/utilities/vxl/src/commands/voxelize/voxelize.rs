@@ -1,11 +1,17 @@
 use crate::{
     Dependencies, Error, NoneOr, Result, Rgba, VoxjEncodingOptions, cli_value_parser,
     commands::{GridResolutionOptions, QuantizeOptions},
+    save,
 };
 use clap::Parser;
 use std::path::PathBuf;
+use voxconv::{
+    WriteFormat,
+    voxj::{EditStateMode, VoxjWriteOptions},
+};
 use voxsmith::{
-    FillMode, MaterialMode, MeshFormat, OutOfRangeProperty, SurfaceMode, VoxelizeOptions,
+    FillMode, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelizeOptions, from_gltf_bytes,
+    from_mesh,
 };
 
 /// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
@@ -20,10 +26,6 @@ pub struct Voxelize {
     /// path with a `.voxj` extension, or `.voxjz` when `--format zip`.
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
-
-    /// Source mesh format. Inferred from the input extension when omitted.
-    #[arg(value_name = "from", long, value_parser = cli_value_parser::<MeshFormat>())]
-    from: Option<MeshFormat>,
 
     #[command(flatten)]
     resolution_options: GridResolutionOptions,
@@ -94,11 +96,17 @@ impl Voxelize {
 
         self.validate_fill_color()?;
 
-        let (format, output) = self
+        let (write_options, output) = self
             .encoding_options
             .resolve_output(&self.input, self.output);
 
-        let encoding = self.encoding_options.encoding();
+        // A voxelized mesh has neither a source ext to carry nor an editor
+        // build volume to record.
+        let write_options = VoxjWriteOptions {
+            ext: false,
+            edit_state: EditStateMode::Never,
+            ..write_options
+        };
 
         let options = VoxelizeOptions {
             resolution,
@@ -111,7 +119,23 @@ impl Voxelize {
             reduction: self.quantize_options.resolve(),
         };
 
-        dependencies.voxelize(&self.input, self.from, &output, &options, encoding, format)
+        let mesh = from_gltf_bytes(&dependencies.read_file(&self.input)?)?;
+
+        // The final fallback when neither `--name` nor the glTF names the object.
+        let stem = self
+            .input
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("voxelized");
+
+        let state = from_mesh(&mesh, stem, &options)?;
+
+        save(
+            &dependencies,
+            &WriteFormat::Voxj(write_options),
+            state,
+            &output,
+        )
     }
 
     /// Rejects a `--fill-color` that a sampling-mode surface shell would drop.

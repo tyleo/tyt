@@ -1,5 +1,4 @@
-mod edit_state;
+mod edit_state_mode;
 mod to_voxj;
 
-pub use edit_state::*;
 pub use to_voxj::*;

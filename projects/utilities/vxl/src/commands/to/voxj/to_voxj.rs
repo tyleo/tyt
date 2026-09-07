@@ -1,23 +1,21 @@
-use crate::{Dependencies, Format, Result, VoxjEncodingOptions, commands::EditState};
+use crate::{
+    Dependencies, Result, VoxelInput, VoxjEncodingOptions, cli_value_parser, commands::convert,
+};
 use clap::{ArgAction, Parser};
 use std::path::PathBuf;
+use voxconv::{WriteFormat, voxj::EditStateMode};
 
 /// Converts a voxel file to the Voxel JSON format.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "voxj")]
 pub struct ToVoxj {
-    /// The input voxel file, in any supported format.
-    #[arg(value_name = "input")]
-    input: PathBuf,
+    #[command(flatten)]
+    input: VoxelInput,
 
     /// The output `.voxj` or `.voxjz` document to write. Defaults to the input
     /// path with a `.voxj` extension, or `.voxjz` when `--format zip`.
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
-
-    /// Source format of the input. Inferred from its extension when omitted.
-    #[arg(value_name = "from", long)]
-    from: Option<Format>,
 
     #[command(flatten)]
     encoding_options: VoxjEncodingOptions,
@@ -35,24 +33,33 @@ pub struct ToVoxj {
 
     /// When to record each object's editor build volume. `auto` records it only
     /// when an object has margin around its live voxels.
-    #[arg(value_name = "edit-state", long, default_value = "auto")]
-    edit_state: EditState,
+    #[arg(
+        value_name = "edit-state",
+        long,
+        default_value = "auto",
+        value_parser = cli_value_parser::<EditStateMode>()
+    )]
+    edit_state: EditStateMode,
 }
 
 impl ToVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let encoding = self.encoding_options.encoding();
-        let (format, output) = self
+        let from = self.input.resolve_format()?;
+
+        let (mut options, output) = self
             .encoding_options
-            .resolve_output(&self.input, self.output);
-        dependencies.to_voxj(
-            &self.input,
-            self.from,
+            .resolve_output(&self.input.path, self.output);
+
+        options.ext = self.ext;
+
+        options.edit_state = self.edit_state;
+
+        convert(
+            &dependencies,
+            &self.input.path,
+            from,
             &output,
-            encoding,
-            format,
-            self.ext,
-            self.edit_state,
+            &WriteFormat::Voxj(options),
         )
     }
 }

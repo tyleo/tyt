@@ -1974,7 +1974,8 @@ dependencies = [
  "tyt-common",
  "tyt-injection",
  "vmax-codec",
- "voxsmith",
+ "voxconv",
+ "voxcore",
 ]
 
 [[package]]
@@ -2194,6 +2195,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "libc",
+ "voxconv",
  "voxcore",
  "voxsmith",
 ]

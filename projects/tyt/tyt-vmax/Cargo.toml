@@ -24,7 +24,13 @@ ty-math = { version = "0.2.0", optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
 vmax-codec = { version = "0.2.0", optional = true }
-voxsmith = { version = "0.2.0", optional = true }
+voxconv = { version = "0.1.0", default-features = false, features = [
+    "codec",
+    "impl",
+    "vmax",
+    "voxj",
+], optional = true }
+voxcore = { version = "0.2.1", default-features = false, optional = true }
 
 [features]
 default = ["impl"]
@@ -32,6 +38,7 @@ impl = [
     "dep:ty-math",
     "dep:tyt-injection",
     "dep:vmax-codec",
-    "dep:voxsmith",
+    "dep:voxconv",
+    "dep:voxcore",
 ]
 bin = ["impl", "dep:clap_complete"]
