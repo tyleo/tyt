@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::ReductionMethod;
+use voxsmith::utilities::ReductionMethod;
 
 impl CliValue for ReductionMethod {
     const VARIANTS: &'static [Self] = &[

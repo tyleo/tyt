@@ -2,7 +2,7 @@ use crate::{Dependencies, Result, VoxelInput, cli_value_parser, file_name};
 use clap::Parser;
 use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, codec};
 use voxcore::{VoxMain, VoxMap};
-use voxsmith::{InfoDocument, InfoLayout, render_info};
+use voxsmith::operations::info::{InfoDocument, InfoLayout, info};
 
 /// Reports what a document contains, surfacing the format internals.
 #[derive(Clone, Debug, Parser)]
@@ -56,7 +56,7 @@ impl Info {
             has_ext: state.ext().is_some(),
         };
 
-        let output = render_info(&state, &document, self.layout);
+        let output = info(&state, &document, self.layout);
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

@@ -1,4 +1,4 @@
-use voxsmith::PaletteRef;
+use voxsmith::operations::palette_show::PaletteRef;
 
 /// Parses the palette field of a `--property` selector: `*` for every
 /// palette, else a non-negative index.
@@ -15,7 +15,7 @@ pub fn parse_palette_ref(text: &str) -> Result<PaletteRef, String> {
 #[cfg(test)]
 mod tests {
     use crate::commands::parse_palette_ref;
-    use voxsmith::PaletteRef;
+    use voxsmith::operations::palette_show::PaletteRef;
 
     #[test]
     fn parses_a_star_and_an_index() {

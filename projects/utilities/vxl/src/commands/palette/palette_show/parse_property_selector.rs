@@ -2,7 +2,9 @@ use crate::{
     CliValue,
     commands::{parse_palette_ref, parse_property_ref},
 };
-use voxsmith::{PaletteShowPresentation, PaletteShowReading, PropertySelector};
+use voxsmith::operations::palette_show::{
+    PaletteShowPresentation, PaletteShowReading, PropertySelector,
+};
 
 /// Parses one `--property <palette> <property> <presentation> <reading>`
 /// selector for `palette show` from its four fields. `*` matches every palette
@@ -25,7 +27,10 @@ pub fn parse_property_selector(
 mod tests {
     use crate::commands::parse_property_selector;
     use voxsmith::{
-        PaletteRef, PaletteShowPresentation, PaletteShowReading, PropertyRef, VectorComponent,
+        operations::palette_show::{
+            PaletteRef, PaletteShowPresentation, PaletteShowReading, PropertyRef,
+        },
+        utilities::VectorComponent,
     };
 
     #[test]

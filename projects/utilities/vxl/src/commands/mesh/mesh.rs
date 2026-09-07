@@ -13,8 +13,11 @@ use std::{
 };
 use voxcore::VoxMain;
 use voxsmith::{
-    AtlasShape, IndexRange, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod,
-    ResourceStorage, object_to_mesh_files, select_objects,
+    operations::mesh::{
+        AtlasShape, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod, ResourceStorage,
+        mesh, select_objects,
+    },
+    utilities::IndexRange,
 };
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
@@ -188,13 +191,13 @@ impl Mesh {
 
         let state: VoxMain = load(&dependencies, &self.input.path, from)?;
 
-        let object_indices = select_objects(&state, &self.select, &self.select_index)?;
+        let object_ids = select_objects(&state, &self.select, &self.select_index)?;
 
         // `mesh` outputs one object, so the selection must name exactly one; the
         // resolver stays flag-agnostic and this policy, with its flag-named
         // guidance, lives here on the command.
-        let object_index = match object_indices.as_slice() {
-            [object_index] => *object_index,
+        let object_id = match object_ids.as_slice() {
+            [object_id] => *object_id,
 
             [] => {
                 return Err(Error::usage(
@@ -202,11 +205,11 @@ impl Mesh {
                 ));
             }
 
-            object_indices => {
+            object_ids => {
                 return Err(Error::usage(format!(
                     "the selection resolved to {} objects, but `mesh` outputs exactly one; \
                      narrow it with --select or --select-index",
-                    object_indices.len(),
+                    object_ids.len(),
                 )));
             }
         };
@@ -219,12 +222,11 @@ impl Mesh {
             shape: self.texture_shape,
         };
 
-        let (_, object) = state
-            .iter_objects()
-            .nth(object_index)
-            .expect("the selection resolved an index into the state's objects");
+        let object = state
+            .object(object_id)
+            .expect("the selection resolved an id from the state's objects");
 
-        let files = object_to_mesh_files(&state, object, format, &request)?;
+        let files = mesh(&state, object, format, &request)?;
 
         dependencies.write_file(&output, &files.mesh)?;
 
@@ -382,7 +384,7 @@ mod tests {
     use super::Mesh;
     use clap::{CommandFactory, Parser};
     use std::path::Path;
-    use voxsmith::AtlasShape;
+    use voxsmith::operations::mesh::AtlasShape;
 
     /// The resolved map file names for `args`, meshed to `output`, in order.
     fn names(args: &[&str], output: &str) -> Vec<String> {

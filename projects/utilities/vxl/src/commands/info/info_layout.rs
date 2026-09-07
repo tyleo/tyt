@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::InfoLayout;
+use voxsmith::operations::info::InfoLayout;
 
 impl CliValue for InfoLayout {
     const VARIANTS: &'static [Self] = &[

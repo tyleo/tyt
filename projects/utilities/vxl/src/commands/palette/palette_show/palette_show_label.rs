@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::PaletteShowLabel;
+use voxsmith::operations::palette_show::PaletteShowLabel;
 
 impl CliValue for PaletteShowLabel {
     const VARIANTS: &'static [Self] = &[

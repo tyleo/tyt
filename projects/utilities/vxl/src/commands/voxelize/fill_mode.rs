@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::FillMode;
+use voxsmith::operations::voxelize::FillMode;
 
 impl CliValue for FillMode {
     const VARIANTS: &'static [Self] = &[FillMode::Solid, FillMode::Surface];

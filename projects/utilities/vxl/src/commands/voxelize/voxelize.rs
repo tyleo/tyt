@@ -9,9 +9,9 @@ use voxconv::{
     WriteFormat,
     voxj::{EditStateMode, VoxjWriteOptions},
 };
-use voxsmith::{
+use voxsmith::operations::voxelize::{
     FillMode, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelizeOptions, from_gltf_bytes,
-    from_mesh,
+    voxelize,
 };
 
 /// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
@@ -128,7 +128,7 @@ impl Voxelize {
             .and_then(|stem| stem.to_str())
             .unwrap_or("voxelized");
 
-        let state = from_mesh(&mesh, stem, &options)?;
+        let state = voxelize(&mesh, stem, &options)?;
 
         save(
             &dependencies,

@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::MeshFormat;
+use voxsmith::operations::mesh::MeshFormat;
 
 impl CliValue for MeshFormat {
     const VARIANTS: &'static [Self] = &[MeshFormat::Gltf, MeshFormat::Glb];

@@ -3,7 +3,7 @@ use clap::Parser;
 use std::io::{Error as IOError, ErrorKind};
 use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, codec};
 use voxcore::check;
-use voxsmith::{ValidateLayout, render_validation};
+use voxsmith::operations::validate::{ValidateLayout, validate};
 
 /// Checks a voxel document against its format's spec.
 #[derive(Clone, Debug, Parser)]
@@ -32,7 +32,7 @@ impl Validate {
 
         let checks = codec::check_document_files(&VoxconvDependenciesImpl, from, &files)?;
 
-        let output = render_validation(&checks, &file_name(&self.input.path), self.layout);
+        let output = validate(&checks, &file_name(&self.input.path), self.layout);
 
         dependencies.write_stdout(output.as_bytes())?;
 

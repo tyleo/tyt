@@ -1,6 +1,6 @@
 use crate::{CliValue, Error, PositiveF64, Result};
 use clap::{ArgGroup, Args};
-use voxsmith::{GridResolution, ResolutionAxis};
+use voxsmith::operations::voxelize::{GridResolution, ResolutionAxis};
 
 /// The `voxelize` grid-resolution controls. Flattened onto the command, which
 /// takes at most one of the two flags and defaults to one voxel per meter when
@@ -63,7 +63,7 @@ impl GridResolutionOptions {
 mod tests {
     use crate::commands::GridResolutionOptions;
     use clap::Parser;
-    use voxsmith::{GridResolution, ResolutionAxis};
+    use voxsmith::operations::voxelize::{GridResolution, ResolutionAxis};
 
     /// A throwaway command flattening the grid-resolution options, so their flags
     /// parse as they do on `voxelize`.

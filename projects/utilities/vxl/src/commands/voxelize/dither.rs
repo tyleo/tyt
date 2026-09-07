@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::Dither;
+use voxsmith::utilities::Dither;
 
 impl CliValue for Dither {
     const VARIANTS: &'static [Self] = &[Dither::None, Dither::FloydSteinberg, Dither::Ordered];

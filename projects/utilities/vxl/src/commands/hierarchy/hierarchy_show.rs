@@ -2,9 +2,9 @@ use crate::{Dependencies, Error, Result, VoxelInput, cli_value_parser, load};
 use clap::Parser;
 use std::io::{Error as IOError, ErrorKind};
 use voxcore::VoxMain;
-use voxsmith::{
+use voxsmith::operations::hierarchy_show::{
     HierarchyShowLayout, HierarchyShowOptions, HierarchyViews, OriginView, PatternView,
-    TransformView, render_hierarchy_show,
+    TransformView, hierarchy_show,
 };
 
 /// Prints the scene graph as a box-glyph tree or as JSON records, marking
@@ -149,7 +149,7 @@ impl HierarchyShow {
             views,
         };
 
-        let output = render_hierarchy_show(&state, &options)?;
+        let output = hierarchy_show(&state, &options)?;
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }
@@ -239,7 +239,7 @@ mod tests {
         hierarchy::hierarchy_show::{parse_origin_view, parse_precision_arg, parse_transform_view},
     };
     use clap::Parser;
-    use voxsmith::HierarchyShowLayout;
+    use voxsmith::operations::hierarchy_show::HierarchyShowLayout;
 
     fn strings(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()

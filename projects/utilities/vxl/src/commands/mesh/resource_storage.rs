@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::ResourceStorage;
+use voxsmith::operations::mesh::ResourceStorage;
 
 impl CliValue for ResourceStorage {
     const VARIANTS: &'static [Self] = &[

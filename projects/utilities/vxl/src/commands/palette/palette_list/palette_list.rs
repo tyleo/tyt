@@ -1,7 +1,10 @@
 use crate::{Dependencies, Result, VoxelInput, cli_value_parser, load, parse_index_range};
 use clap::{ArgAction, Parser};
 use voxcore::VoxMain;
-use voxsmith::{IndexRange, PaletteListFields, PaletteListLayout, render_palette_list};
+use voxsmith::{
+    operations::palette_list::{PaletteListFields, PaletteListLayout, palette_list},
+    utilities::IndexRange,
+};
 
 /// Lists every palette in a document, one row apiece.
 #[derive(Clone, Debug, Parser)]
@@ -71,7 +74,7 @@ impl PaletteList {
 
         let state: VoxMain = load(&dependencies, &self.input.path, from)?;
 
-        let output = render_palette_list(&state, &self.filters, fields, self.layout)?;
+        let output = palette_list(&state, &self.filters, fields, self.layout)?;
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

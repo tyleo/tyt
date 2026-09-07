@@ -1,4 +1,4 @@
-use voxsmith::AtlasShape;
+use voxsmith::operations::mesh::AtlasShape;
 
 /// Parses a `--texture-shape` value: the keyword `line`, `fit`, `square`, or
 /// `pot`, else a positive integer square side in pixels.
@@ -25,7 +25,7 @@ pub fn parse_atlas_shape(text: &str) -> Result<AtlasShape, String> {
 #[cfg(test)]
 mod tests {
     use crate::commands::parse_atlas_shape;
-    use voxsmith::AtlasShape;
+    use voxsmith::operations::mesh::AtlasShape;
 
     #[test]
     fn parses_each_keyword() {

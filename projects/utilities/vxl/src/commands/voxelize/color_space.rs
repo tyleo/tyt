@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::ColorSpace;
+use voxsmith::utilities::ColorSpace;
 
 impl CliValue for ColorSpace {
     const VARIANTS: &'static [Self] = &[ColorSpace::Oklab, ColorSpace::Lab, ColorSpace::Srgb];

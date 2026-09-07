@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::MaterialMode;
+use voxsmith::operations::voxelize::MaterialMode;
 
 impl CliValue for MaterialMode {
     const VARIANTS: &'static [Self] = &[

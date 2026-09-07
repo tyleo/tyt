@@ -3,7 +3,7 @@ use crate::{
     commands::{ChannelPacking, PropertyBinding},
     require_file_name,
 };
-use voxsmith::{MaterialMap, MaterialSlot};
+use voxsmith::operations::mesh::{MaterialMap, MaterialSlot};
 
 /// A `--texture-map` value: a custom map's file name paired with its channel
 /// packing. Pairing the flag's two flat tokens into this typed value at parse
@@ -39,7 +39,7 @@ impl TextureMap {
 #[cfg(test)]
 mod tests {
     use crate::commands::TextureMap;
-    use voxsmith::{MaterialBake, MaterialSlot};
+    use voxsmith::operations::mesh::{MaterialBake, MaterialSlot};
 
     #[test]
     fn pairs_a_name_and_channels() {

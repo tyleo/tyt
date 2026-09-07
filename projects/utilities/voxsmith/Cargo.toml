@@ -17,23 +17,8 @@ gltf = { version = "1.4.1", default-features = false, features = [
     "KHR_materials_ior",
     "KHR_materials_transmission",
 ], optional = true }
-goxl = { version = "0.1.0", optional = true }
-goxl-codec = { version = "0.1.0", optional = true }
-goxl-voxcore = { version = "0.1.0", default-features = false, features = [
-    "codec",
-], optional = true }
-mvox = { version = "0.1.0", optional = true }
-mvox-voxcore = { version = "0.1.0", default-features = false, features = [
-    "codec",
-], optional = true }
 pathspec = { version = "0.1.0", optional = true }
 png = { version = "0.18.1", optional = true }
-qbcl = { version = "0.1.1", optional = true }
-qbcl-codec = { version = "0.1.1", optional = true }
-qbcl-voxcore = { version = "0.1.0", default-features = false, features = [
-    "codec",
-], optional = true }
-serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", optional = true }
 treegrid = { version = "0.1.0", features = [
     "json",
@@ -41,63 +26,37 @@ treegrid = { version = "0.1.0", features = [
 ], optional = true }
 treeselect = { version = "0.1.0", optional = true }
 ty-math = "0.2.0"
-vmax = { version = "0.1.8", optional = true }
-vmax-codec = { version = "0.2.0", optional = true }
-vmax-voxcore = { version = "0.1.0", default-features = false, features = [
-    "codec",
-], optional = true }
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
-voxj = { version = "0.1.3", optional = true }
-voxj-codec = { version = "0.2.0", optional = true }
-voxj-voxcore = { version = "0.2.0", features = ["codec"], optional = true }
 
 [features]
-default = ["ext", "goxl", "mvox", "qbcl", "vmax", "voxj"]
-
-# Each codec feature gates its format crates and the voxsmith modules that
-# convert that format. `qbcl` covers `.qb`, `.qbt`, and `.qbcl` because all
-# three share the `qbcl` crate family. Every codec feature fronts its
-# `-voxcore` bridge crate, which owns the conversion. `ext` gates each
-# format's `VoxExtCodec` impl, which keys its ext into a document `ext` block
-# through voxcore's serde transcode.
-ext = [
-    "voxcore/json",
-    "goxl-voxcore?/ext",
-    "mvox-voxcore?/ext",
-    "qbcl-voxcore?/ext",
-    "vmax-voxcore?/ext",
+default = [
+    "hierarchy_show",
+    "info",
+    "mesh",
+    "palette_list",
+    "palette_show",
+    "validate",
+    "voxelize",
 ]
-goxl = ["dep:goxl", "dep:goxl-codec", "dep:goxl-voxcore", "_codec"]
-mvox = ["dep:mvox", "dep:mvox-voxcore", "_codec"]
-qbcl = ["dep:qbcl", "dep:qbcl-codec", "dep:qbcl-voxcore", "_codec"]
-vmax = ["dep:vmax", "dep:vmax-codec", "dep:vmax-voxcore", "_codec"]
-voxj = ["dep:voxj", "dep:voxj-codec", "dep:voxj-voxcore", "_codec"]
 
-# glTF meshing both ways. The reader loads a `Mesh` for the voxelizer. The
-# `VoxObject`-to-glTF mesher and its `.gltf` / `.glb` writer add `serde_json`
-# to build the document, `base64` to embed the buffer in text glTF, and `png`
-# to encode the baked material atlas images. Because meshing is no voxel
-# codec, it leaves `_codec` off.
-gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
+# One feature per operation, named as vxl names the command.
+hierarchy_show = ["_pathspec", "_treegrid", "dep:treeselect"]
+info = ["_treegrid"]
+# The glTF writer adds `serde_json` to build the document, `base64` to embed
+# the buffer in text glTF, and `png` to encode the baked material atlas.
+mesh = ["_gltf", "_pathspec", "dep:base64", "dep:png", "dep:serde_json"]
+palette_list = ["_treegrid"]
+# `serde_json` carries json-pool values into the palette report.
+palette_show = ["_treegrid", "dep:serde_json"]
+validate = ["_treegrid"]
+voxelize = ["_gltf"]
 
-# The inspection reports over a loaded state, rendered to text, markdown, or
-# JSON through treegrid. `serde_json` carries json-pool values into the
-# palette report. `select` filters the hierarchy report by pattern, and
-# treeselect propagates that filter over the scene tree.
-report = ["dep:treegrid", "dep:serde_json", "dep:treeselect", "select"]
+_gltf = ["dep:gltf"]
 
-# Selecting a state's nodes and objects by hierarchy path: gitignore-style
-# globs through pathspec.
-select = ["dep:pathspec"]
+# gitignore-style globs for hierarchy patterns and object selection.
+_pathspec = ["dep:pathspec"]
 
-
-# A private marker every codec feature enables, so voxsmith can require at
-# least one codec at compile time.
-_codec = []
-
-# Marks that a mesh front end such as `gltf` is on. It gates the generic
-# `Mesh` type and the voxelizer.
-_mesh = []
+_treegrid = ["dep:treegrid"]
 
 [dev-dependencies]
 # Encodes the small base-color PNGs the per-texel voxelizer tests embed in a

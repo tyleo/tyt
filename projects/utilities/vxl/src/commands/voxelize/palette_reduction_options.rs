@@ -1,6 +1,6 @@
 use crate::cli_value_parser;
 use clap::{ArgAction, Args};
-use voxsmith::{ColorSpace, Dither, PaletteReduction, ReductionMethod};
+use voxsmith::utilities::{ColorSpace, Dither, PaletteReduction, ReductionMethod};
 
 /// The shared palette-reduction controls: clustering method, color space,
 /// dither, and unused-value policy. Voxelize maps its own `--quantize-*` flags

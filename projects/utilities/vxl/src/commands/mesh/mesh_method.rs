@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::MeshMethod;
+use voxsmith::operations::mesh::MeshMethod;
 
 impl CliValue for MeshMethod {
     const VARIANTS: &'static [Self] = &[MeshMethod::Greedy, MeshMethod::Culled, MeshMethod::Naive];

@@ -1,5 +1,8 @@
 use crate::CliValue;
-use voxsmith::{ColorChannel, MaterialChannel, VectorComponent};
+use voxsmith::{
+    operations::mesh::{ColorChannel, MaterialChannel},
+    utilities::VectorComponent,
+};
 
 /// Parses one `--texture-map` channel expression. `0` and `1` are the
 /// constants, `computed-occlusion` the geometry-derived occlusion, a leading
@@ -60,10 +63,8 @@ fn color_channel(component: VectorComponent) -> ColorChannel {
 #[cfg(test)]
 mod tests {
     use crate::commands::parse_material_channel;
-    use voxsmith::{
-        ColorChannel, MaterialChannel,
-        voxcore::material::{BASE_COLOR, METALLIC, ROUGHNESS},
-    };
+    use voxcore::material::{BASE_COLOR, METALLIC, ROUGHNESS};
+    use voxsmith::operations::mesh::{ColorChannel, MaterialChannel};
 
     fn property(key: &str, invert: bool) -> MaterialChannel {
         MaterialChannel::Property {

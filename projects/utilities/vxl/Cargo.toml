@@ -17,7 +17,15 @@ clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 voxconv = "0.1.0"
 voxcore = { version = "0.2.1", default-features = false }
-voxsmith = { version = "0.2.0", features = ["gltf", "report"] }
+voxsmith = { version = "0.2.0", default-features = false, features = [
+    "hierarchy_show",
+    "info",
+    "mesh",
+    "palette_list",
+    "palette_show",
+    "validate",
+    "voxelize",
+] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

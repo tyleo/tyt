@@ -1,4 +1,4 @@
-use voxsmith::IndexRange;
+use voxsmith::utilities::IndexRange;
 
 /// Parses an index selector for a clap argument: one index such as `5`, or an
 /// inclusive range `a-b` such as `2-5`, ordered start to end.

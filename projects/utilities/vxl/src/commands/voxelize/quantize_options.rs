@@ -1,6 +1,6 @@
 use crate::{NoneOr, PositiveCount, cli_value_parser, commands::PaletteReductionOptions};
 use clap::{ArgAction, Args};
-use voxsmith::{ColorSpace, Dither, PaletteReduction, ReductionMethod};
+use voxsmith::utilities::{ColorSpace, Dither, PaletteReduction, ReductionMethod};
 
 /// `voxelize`'s color-quantization controls: the shared method, space, and
 /// dither under a `--quantize-*` prefix, plus its own material cap. Maps onto

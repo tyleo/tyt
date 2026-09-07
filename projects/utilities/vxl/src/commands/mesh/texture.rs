@@ -1,7 +1,7 @@
 use crate::commands::ChannelPacking;
 use clap::ValueEnum;
 use voxcore::material::{EMISSIVE_STRENGTH, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS};
-use voxsmith::{MaterialBake, MaterialChannel, MaterialMap, MaterialSlot};
+use voxsmith::operations::mesh::{MaterialBake, MaterialChannel, MaterialMap, MaterialSlot};
 
 /// A single-map material preset. The left side of `--texture-name` and each map
 /// a `--texture` bakes; the bundle-inclusive `--texture` value is
@@ -160,10 +160,8 @@ fn packing(
 #[cfg(test)]
 mod tests {
     use crate::commands::{ChannelPacking, Texture};
-    use voxsmith::{
-        MaterialBake, MaterialChannel,
-        voxcore::material::{METALLIC, ROUGHNESS},
-    };
+    use voxcore::material::{METALLIC, ROUGHNESS};
+    use voxsmith::operations::mesh::{MaterialBake, MaterialChannel};
 
     fn property(key: &str, invert: bool) -> MaterialChannel {
         MaterialChannel::Property {

@@ -3,7 +3,7 @@ use crate::{
     commands::{PropertyBinding, parse_material_channel, resolve_material_channel},
 };
 use std::{result::Result as StdResult, str::FromStr};
-use voxsmith::{MaterialBake, MaterialChannel};
+use voxsmith::operations::mesh::{MaterialBake, MaterialChannel};
 
 /// A material-map channel packing: a [`MaterialChannel`] per named RGBA
 /// channel.
@@ -113,10 +113,8 @@ impl FromStr for ChannelPacking {
 #[cfg(test)]
 mod tests {
     use crate::commands::ChannelPacking;
-    use voxsmith::{
-        MaterialChannel,
-        voxcore::material::{EMISSIVE_STRENGTH, METALLIC, ROUGHNESS},
-    };
+    use voxcore::material::{EMISSIVE_STRENGTH, METALLIC, ROUGHNESS};
+    use voxsmith::operations::mesh::MaterialChannel;
 
     fn property(key: &str, invert: bool) -> MaterialChannel {
         MaterialChannel::Property {

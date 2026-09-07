@@ -2,7 +2,7 @@ use crate::{
     Result,
     commands::{PropertyBinding, computed_occlusion_unsupported},
 };
-use voxsmith::MaterialChannel;
+use voxsmith::operations::mesh::MaterialChannel;
 
 /// Resolves a parsed channel's property key against the `--define-property`
 /// bindings and rejects `computed-occlusion` under the palette atlas. The
@@ -45,10 +45,8 @@ pub(crate) fn resolve_material_channel(
 #[cfg(test)]
 mod tests {
     use crate::commands::{PropertyBinding, resolve_material_channel};
-    use voxsmith::{
-        ColorChannel, MaterialChannel,
-        voxcore::material::{BASE_COLOR, METALLIC, ROUGHNESS},
-    };
+    use voxcore::material::{BASE_COLOR, METALLIC, ROUGHNESS};
+    use voxsmith::operations::mesh::{ColorChannel, MaterialChannel};
 
     fn property(key: &str, invert: bool) -> MaterialChannel {
         MaterialChannel::Property {

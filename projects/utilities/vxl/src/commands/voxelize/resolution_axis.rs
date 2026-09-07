@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::ResolutionAxis;
+use voxsmith::operations::voxelize::ResolutionAxis;
 
 impl CliValue for ResolutionAxis {
     const VARIANTS: &'static [Self] = &[

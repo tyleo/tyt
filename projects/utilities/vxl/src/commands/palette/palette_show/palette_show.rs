@@ -8,9 +8,9 @@ use std::{
     num::NonZeroU8,
 };
 use voxcore::VoxMain;
-use voxsmith::{
+use voxsmith::operations::palette_show::{
     PaletteShowLabel, PaletteShowLayout, PaletteShowOptions, PaletteShowTableShape,
-    PropertySelector, render_palette_show,
+    PropertySelector, palette_show,
 };
 
 /// Prints one or more palette value collections.
@@ -99,7 +99,7 @@ impl PaletteShow {
             width: resolve_width(&dependencies, self.width),
         };
 
-        let output = render_palette_show(&state, &selectors, &options)?;
+        let output = palette_show(&state, &selectors, &options)?;
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

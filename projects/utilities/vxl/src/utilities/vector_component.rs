@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::VectorComponent;
+use voxsmith::utilities::VectorComponent;
 
 impl CliValue for VectorComponent {
     const VARIANTS: &'static [Self] = &[
@@ -43,7 +43,7 @@ impl CliValue for VectorComponent {
 #[cfg(test)]
 mod tests {
     use crate::CliValue;
-    use voxsmith::VectorComponent;
+    use voxsmith::utilities::VectorComponent;
 
     #[test]
     fn parses_the_color_aliases() {

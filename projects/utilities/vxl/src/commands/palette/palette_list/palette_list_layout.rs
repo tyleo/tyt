@@ -1,5 +1,5 @@
 use crate::CliValue;
-use voxsmith::PaletteListLayout;
+use voxsmith::operations::palette_list::PaletteListLayout;
 
 impl CliValue for PaletteListLayout {
     const VARIANTS: &'static [Self] = &[
