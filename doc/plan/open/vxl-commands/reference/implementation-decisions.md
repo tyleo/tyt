@@ -927,3 +927,28 @@ descendant re-selected. The tree layer selects on the union of node and object
 placements, then shows a node when it is selected or leads to a selection and an
 object when it is selected; the collapse features key on the match roots, the
 selected placements whose parent is unselected.
+
+## Shared object selection
+
+`ObjectSelection` is a `clap::Args` group in vxl's `internal`, the two selector
+flags plus `has_selectors` and `resolve`, flattened by `mesh`, `info`, and every
+`to` target the way `VoxelInput` is. `resolve` owns one policy, that a selector
+matching nothing is a usage error naming both flags; `mesh` keeps its
+exactly-one policy on top, where an empty result can only mean a document with
+no objects. `select_objects` moved from voxsmith's `mesh` module to
+`utilities`, which made `pathspec` an unconditional dependency and retired the
+`_pathspec` marker feature; it is one globset-backed crate that every selecting
+command enabled anyway.
+
+`info` takes the resolved ids rather than a pruned state, so the objects
+section keeps document indices as labels and the document and palettes
+sections stay whole. `to` prunes through voxsmith's `keep_objects`, which finds
+the nodes whose subtree still places a kept object, rewrites the survivors'
+child lists with voxcore's checked `set_hierarchy_node`, empties and releases
+the rest, and releases the dropped objects. `convert` then compacts with `gc`,
+because the writers index nodes and objects by id, and skips the pass when no
+selector is given so a plain conversion is untouched. `set_hierarchy_node` was
+added to voxcore in place of a release-everything-and-re-retain rebuild, which
+would have leaned on the id pool's post-`gc` numbering to predict batch ids; a
+checked replacement keeps the invariants at the mutation point like every other
+`VoxMain` edit.

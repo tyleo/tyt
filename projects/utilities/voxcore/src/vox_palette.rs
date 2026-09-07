@@ -160,12 +160,6 @@ impl VoxPalette {
         self.material_ids.len()
     }
 
-    /// The position of material `id` in the material order, or `None` if `id`
-    /// is not one of this palette's materials.
-    pub fn material_index(&self, id: U32Id<BVoxMaterial>) -> Option<usize> {
-        self.material_ids.index_of(id)
-    }
-
     /// Moves material `id` to position `index` in the material order, shifting
     /// the materials between its old and new positions one slot. Errors,
     /// changing nothing, if `id` is not one of this palette's materials or
@@ -291,12 +285,6 @@ impl VoxPalette {
     /// the name index.
     pub fn property_id_by_name(&self, name: &str) -> Option<U32Id<BVoxProperty>> {
         self.property_id_by_name.get(name).copied()
-    }
-
-    /// The position of property `id` in the property order, or `None` if `id`
-    /// is not one of this palette's properties.
-    pub fn property_index(&self, id: U32Id<BVoxProperty>) -> Option<usize> {
-        self.property_ids.index_of(id)
     }
 
     /// The value id `material_id` draws for `property_id`, identifying a value
@@ -692,7 +680,13 @@ mod tests {
             .retain_property("c".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
 
-        assert_eq!(palette.property_index(b_id), Some(1));
+        assert_eq!(
+            palette
+                .iter_properties()
+                .map(|(property_id, _)| property_id)
+                .collect::<Vec<_>>(),
+            [a_id, b_id, c_id]
+        );
 
         assert_eq!(palette.move_property(c_id, 0), Ok(()));
         assert_eq!(
@@ -702,7 +696,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             [c_id, a_id, b_id]
         );
-        assert_eq!(palette.property_index(c_id), Some(0));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
@@ -715,7 +708,6 @@ mod tests {
                 property_id: U32Id::from_u32(9)
             })
         );
-        assert_eq!(palette.property_index(U32Id::from_u32(9)), None);
         assert_eq!(
             palette
                 .iter_properties()
@@ -731,14 +723,16 @@ mod tests {
         let first_id = palette.retain_material(vec![]).unwrap();
         let second_id = palette.retain_material(vec![]).unwrap();
         let third_id = palette.retain_material(vec![]).unwrap();
-        assert_eq!(palette.material_index(second_id), Some(1));
+        assert_eq!(
+            palette.iter_materials().collect::<Vec<_>>(),
+            [first_id, second_id, third_id]
+        );
 
         assert_eq!(palette.move_material(first_id, 2), Ok(()));
         assert_eq!(
             palette.iter_materials().collect::<Vec<_>>(),
             [second_id, third_id, first_id]
         );
-        assert_eq!(palette.material_index(first_id), Some(2));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
@@ -751,7 +745,6 @@ mod tests {
                 material_id: U32Id::from_u32(9)
             })
         );
-        assert_eq!(palette.material_index(U32Id::from_u32(9)), None);
         assert_eq!(
             palette.iter_materials().collect::<Vec<_>>(),
             [second_id, third_id, first_id]

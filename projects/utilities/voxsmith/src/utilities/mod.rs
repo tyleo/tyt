@@ -10,6 +10,7 @@ mod property_names;
 mod reduce_palette;
 mod reduction_method;
 mod scalar_range;
+mod select_objects;
 mod vector_component;
 
 pub use check_gltf_property_ranges::*;
@@ -24,4 +25,5 @@ pub use property_names::*;
 pub use reduce_palette::*;
 pub use reduction_method::*;
 pub use scalar_range::*;
+pub use select_objects::*;
 pub use vector_component::*;

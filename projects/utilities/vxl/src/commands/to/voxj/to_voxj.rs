@@ -1,5 +1,6 @@
 use crate::{
-    Dependencies, Result, VoxelInput, VoxjEncodingOptions, cli_value_parser, commands::convert,
+    Dependencies, ObjectSelection, Result, VoxelInput, VoxjEncodingOptions, cli_value_parser,
+    commands::convert,
 };
 use clap::{ArgAction, Parser};
 use std::path::PathBuf;
@@ -40,6 +41,9 @@ pub struct ToVoxj {
         value_parser = cli_value_parser::<EditStateMode>()
     )]
     edit_state: EditStateMode,
+
+    #[command(flatten)]
+    selection: ObjectSelection,
 }
 
 impl ToVoxj {
@@ -60,6 +64,7 @@ impl ToVoxj {
             from,
             &output,
             &WriteFormat::Voxj(options),
+            &self.selection,
         )
     }
 }

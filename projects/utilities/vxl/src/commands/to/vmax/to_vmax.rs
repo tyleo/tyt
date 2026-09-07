@@ -1,5 +1,5 @@
 use crate::{
-    Dependencies, Result, VoxelInput, cli_value_parser,
+    Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser,
     commands::{CameraView, convert, resolve_scene_camera},
 };
 use clap::Parser;
@@ -34,6 +34,9 @@ pub struct ToVmax {
     /// `vmax` ext camera is kept when present, else the empty default.
     #[arg(value_name = "camera", long)]
     camera: Option<CameraView>,
+
+    #[command(flatten)]
+    selection: ObjectSelection,
 }
 
 impl ToVmax {
@@ -47,6 +50,13 @@ impl ToVmax {
 
         let output = self.input.output_path(self.output, to.extension());
 
-        convert(&dependencies, &self.input.path, from, &output, &to)
+        convert(
+            &dependencies,
+            &self.input.path,
+            from,
+            &output,
+            &to,
+            &self.selection,
+        )
     }
 }

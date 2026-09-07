@@ -7,10 +7,11 @@
 //! state and encodes one back. `operations` holds a module per vxl command,
 //! each behind a feature of the same name. `info`, `validate`,
 //! `hierarchy_show`, `palette_list`, and `palette_show` render reports through
-//! treegrid. `mesh` writes one object, picked by hierarchy path or index, to
-//! glTF. `voxelize` turns a glTF mesh into a state. `utilities` holds what the
-//! operations share: palette reduction, dithering, color spaces, the index and
-//! vector selectors, the glTF property ranges, and a palette's property names.
+//! treegrid. `mesh` writes one object to glTF. `to` prunes a state to a chosen
+//! set of objects for conversion. `voxelize` turns a glTF mesh into a state.
+//! `utilities` holds what the operations share: palette reduction, dithering,
+//! color spaces, the object, index, and vector selectors, the glTF property
+//! ranges, and a palette's property names.
 //! The mesh writer's PNG and base64 encoders come from the caller through
 //! [`EncodePng`](dependencies::mesh::EncodePng) and
 //! [`EncodeBase64`](dependencies::mesh::EncodeBase64).

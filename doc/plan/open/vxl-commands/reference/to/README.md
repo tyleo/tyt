@@ -20,5 +20,16 @@ The format targets are:
 - `mvox`: the MagicaVoxel `.vox` file.
 - `qbcl`: the Qubicle `.qbcl` file.
 
-Only `voxj` carries format-specific options in this plan; see its page. The
-other targets convert with the shared options above.
+Every target takes:
+
+1. `--from <format>`: source voxel format. Inferred from the input extension
+   when omitted.
+2. `--select <glob>` / `--select-index <index>`: write only the selected
+   objects; see [Object selectors](../conventions.md#object-selectors). The
+   written hierarchy is the smallest that still places every selected object:
+   a node survives when its subtree places one, keeping its transform and its
+   surviving children in order, and roots, node order, and object order are
+   preserved. Palettes and value pools ride through untouched. Given no
+   selector, the whole document converts.
+
+Only `voxj` carries format-specific options in this plan; see its page.

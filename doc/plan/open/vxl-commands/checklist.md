@@ -37,6 +37,11 @@ off as they land.
 - [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
+- [x] `ObjectSelection`, the shared `--select` / `--select-index` clap group
+      with the no-match usage error, flattened by `mesh`, `info`, and every
+      `to` target; voxsmith resolves it with `utilities::select_objects` and
+      prunes for `to` with `operations::to::keep_objects` over voxcore's
+      `set_hierarchy_node`.
 - [x] `--atlas` layout `ValueEnum`: `palette` shipped, one texel per distinct
       flattened material the object uses, its layers merged per property name
       by the format's layer-override resolution; `unwrap` (per-mesh UV) hidden
@@ -217,6 +222,12 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       palette property sets and material counts, and `editState` / `ext`
       presence, with tests. Pending:
       per-object encodings and the root / instanced / unplaced node breakdown.
+- [x] `--select` / `--select-index` narrow the objects section.
+
+### to ([reference/to/README.md](reference/to/README.md))
+
+- [x] `--select` / `--select-index` write only the selected objects, the
+      hierarchy pruned to what still places them.
 
 ## Finishing
 

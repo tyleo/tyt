@@ -210,12 +210,6 @@ impl VoxObject {
         self.layer_ids.len()
     }
 
-    /// The position of layer `id` in the layer order, or `None` if `id` is not
-    /// one of this object's layers.
-    pub fn layer_index(&self, id: U32Id<BVoxLayer>) -> Option<usize> {
-        self.layer_ids.index_of(id)
-    }
-
     /// The palette id layer `id` references, or `None` if `id` is not one of
     /// this object's layers.
     pub fn layer_palette_id(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
@@ -676,7 +670,13 @@ mod tests {
         let second_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(0));
         let third_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(2), material_id(0));
 
-        assert_eq!(object.layer_index(second_id), Some(1));
+        assert_eq!(
+            object
+                .iter_layers()
+                .map(|(layer_id, _)| layer_id)
+                .collect::<Vec<_>>(),
+            [first_id, second_id, third_id]
+        );
 
         assert_eq!(object.move_layer(third_id, 0), Ok(()));
         assert_eq!(
@@ -686,7 +686,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             [third_id, first_id, second_id]
         );
-        assert_eq!(object.layer_index(third_id), Some(0));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
@@ -699,7 +698,6 @@ mod tests {
                 layer_id: U32Id::from_u32(9)
             })
         );
-        assert_eq!(object.layer_index(U32Id::from_u32(9)), None);
         assert_eq!(
             object
                 .iter_layers()

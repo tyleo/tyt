@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, VoxelInput, cli_value_parser, file_name};
+use crate::{Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser, file_name};
 use clap::Parser;
 use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, codec};
 use voxcore::{VoxMain, VoxMap};
@@ -19,6 +19,9 @@ pub struct Info {
         value_parser = cli_value_parser::<InfoLayout>()
     )]
     layout: InfoLayout,
+
+    #[command(flatten)]
+    selection: ObjectSelection,
 }
 
 impl Info {
@@ -56,7 +59,9 @@ impl Info {
             has_ext: state.ext().is_some(),
         };
 
-        let output = info(&state, &document, self.layout);
+        let object_ids = self.selection.resolve(&state)?;
+
+        let output = info(&state, &object_ids, &document, self.layout);
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

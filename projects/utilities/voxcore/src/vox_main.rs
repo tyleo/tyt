@@ -566,6 +566,65 @@ impl<T> VoxMain<T> {
             })
     }
 
+    /// Replaces hierarchy node `id` with `node`, keeping its id, its listing
+    /// position, its parents, and its place in the roots. Errors, changing
+    /// nothing, if:
+    ///
+    /// 1. `id` is not one of this state's nodes
+    /// 2. a child node or child object is not one of this state's
+    /// 3. a child repeats
+    /// 4. the transform is malformed
+    /// 5. a child node reaches `id` through `child_node_ids`, closing a cycle
+    ///
+    /// An error reports `node` as a batch of one, at listing index `0`.
+    pub fn set_hierarchy_node(
+        &mut self,
+        id: U32Id<BVoxHierarchyNode>,
+        node: VoxHierarchyNode,
+    ) -> Result<()> {
+        if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
+            return Err(Error::UnknownHierarchyNode { node_id: id });
+        }
+
+        self.check_inserted_node(&node, 0, &HashSet::new())?;
+
+        if self.reaches_hierarchy_node(&node.child_node_ids, id) {
+            return Err(Error::InsertedCycle { index: 0 });
+        }
+
+        // Safety: a retained node id has a value.
+        *unsafe { self.runtime_state.hierarchy_nodes.get_mut(id) } = node;
+        Ok(())
+    }
+
+    /// Whether `target` is one of `from` or reachable from any of them through
+    /// `child_node_ids`. The walk is iterative, so a deep chain cannot
+    /// overflow the stack, and visits a shared node once.
+    fn reaches_hierarchy_node(
+        &self,
+        from: &[U32Id<BVoxHierarchyNode>],
+        target: U32Id<BVoxHierarchyNode>,
+    ) -> bool {
+        let mut visited = HashSet::new();
+        let mut stack: Vec<U32Id<BVoxHierarchyNode>> = from.to_vec();
+
+        while let Some(node_id) = stack.pop() {
+            if node_id == target {
+                return true;
+            }
+
+            if !visited.insert(node_id) {
+                continue;
+            }
+
+            if let Some(node) = self.hierarchy_node(node_id) {
+                stack.extend(node.child_node_ids.iter().copied());
+            }
+        }
+
+        false
+    }
+
     /// Retains a layer referencing `palette_id` to object `object_id`, after
     /// its existing layers, back-filling every voxel with `default_material_id`
     /// and returning the layer's id. Errors, changing nothing, if:
@@ -932,12 +991,6 @@ impl<T> VoxMain<T> {
         self.runtime_state.object_ids.len()
     }
 
-    /// The listing position of object `id`, or `None` if `id` is not one of
-    /// this state's objects.
-    pub fn object_index(&self, id: U32Id<BVoxObject>) -> Option<usize> {
-        self.runtime_state.object_ids.index_of(id)
-    }
-
     /// Sets the grid origin of object `object_id`. Errors, changing nothing, if
     /// `object_id` is not one of this state's.
     pub fn set_object_origin(
@@ -1114,12 +1167,6 @@ impl<T> VoxMain<T> {
     /// Number of shared palettes.
     pub fn palette_count(&self) -> usize {
         self.runtime_state.palette_ids.len()
-    }
-
-    /// The listing position of palette `id`, or `None` if `id` is not one of
-    /// this state's palettes.
-    pub fn palette_index(&self, id: U32Id<BVoxPalette>) -> Option<usize> {
-        self.runtime_state.palette_ids.index_of(id)
     }
 
     /// Retains a property named `name` on `value_pool_id` to palette
@@ -1466,12 +1513,6 @@ impl<T> VoxMain<T> {
     /// Number of shared value pools.
     pub fn value_pool_count(&self) -> usize {
         self.runtime_state.value_pool_ids.len()
-    }
-
-    /// The listing position of value pool `id`, or `None` if `id` is not one of
-    /// this state's value pools.
-    pub fn value_pool_index(&self, id: U32Id<BVoxValuePool>) -> Option<usize> {
-        self.runtime_state.value_pool_ids.index_of(id)
     }
 
     /// Makes the voxel at `voxel_id` in object `object_id` live with one
@@ -2141,6 +2182,113 @@ mod tests {
         assert_eq!(ids, [node_id(0), node_id(1)]);
         state.set_root_hierarchy_node_ids(vec![ids[0]]).unwrap();
         assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn set_hierarchy_node_replaces_the_node_and_keeps_its_references() {
+        let mut state: VoxMain = VoxMain::default();
+        let a_id = state.retain_object(unit_object("a")).unwrap();
+        let b_id = state.retain_object(unit_object("b")).unwrap();
+        let child_id = state
+            .retain_hierarchy_node(node_with_objects(vec![a_id, b_id]))
+            .unwrap();
+        let parent_id = state
+            .retain_hierarchy_node(node_with_children(vec![child_id]))
+            .unwrap();
+        state.set_root_hierarchy_node_ids(vec![parent_id]).unwrap();
+
+        state
+            .set_hierarchy_node(
+                child_id,
+                VoxHierarchyNode {
+                    name: "renamed".to_owned(),
+                    ..node_with_objects(vec![b_id])
+                },
+            )
+            .unwrap();
+
+        let child = state.hierarchy_node(child_id).unwrap();
+        assert_eq!(child.name, "renamed");
+        assert_eq!(child.child_object_ids, [b_id]);
+        let listing: Vec<_> = state.iter_hierarchy_nodes().map(|(id, _)| id).collect();
+        assert_eq!(listing, [child_id, parent_id]);
+        assert_eq!(
+            state.hierarchy_node(parent_id).unwrap().child_node_ids,
+            [child_id]
+        );
+        assert_eq!(state.root_hierarchy_node_ids(), [parent_id]);
+        assert_eq!(state.validate(), Ok(()));
+
+        // The object the node stopped placing can now be released.
+        state.release_object(a_id).unwrap();
+    }
+
+    #[test]
+    fn set_hierarchy_node_rejects_an_unknown_node() {
+        let mut state: VoxMain = VoxMain::default();
+
+        assert!(matches!(
+            state.set_hierarchy_node(node_id(0), VoxHierarchyNode::default()),
+            Err(Error::UnknownHierarchyNode { .. })
+        ));
+    }
+
+    #[test]
+    fn set_hierarchy_node_rejects_a_cycle() {
+        let mut state: VoxMain = VoxMain::default();
+        // A chain 0 -> 1 -> 2.
+        let ids = state
+            .retain_hierarchy_nodes(vec![
+                node_with_children(vec![node_id(1)]),
+                node_with_children(vec![node_id(2)]),
+                VoxHierarchyNode::default(),
+            ])
+            .unwrap();
+
+        // Pointing the leaf back at the head closes a cycle, as does a node
+        // listing itself.
+        assert!(matches!(
+            state.set_hierarchy_node(ids[2], node_with_children(vec![ids[0]])),
+            Err(Error::InsertedCycle { index: 0 })
+        ));
+        assert!(matches!(
+            state.set_hierarchy_node(ids[1], node_with_children(vec![ids[1]])),
+            Err(Error::InsertedCycle { index: 0 })
+        ));
+
+        // Nothing changed. Reaching the leaf both directly and through node 1
+        // is sharing, not a cycle.
+        assert!(
+            state
+                .hierarchy_node(ids[2])
+                .unwrap()
+                .child_node_ids
+                .is_empty()
+        );
+        state
+            .set_hierarchy_node(ids[0], node_with_children(vec![ids[1], ids[2]]))
+            .unwrap();
+        assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn set_hierarchy_node_rejects_a_dangling_or_repeated_child() {
+        let mut state: VoxMain = VoxMain::default();
+        let a_id = state.retain_object(unit_object("a")).unwrap();
+        let id = state
+            .retain_hierarchy_node(node_with_objects(vec![a_id]))
+            .unwrap();
+
+        assert!(matches!(
+            state.set_hierarchy_node(id, node_with_children(vec![node_id(9)])),
+            Err(Error::UnknownHierarchyNode { .. })
+        ));
+        assert!(matches!(
+            state.set_hierarchy_node(id, node_with_objects(vec![a_id, a_id])),
+            Err(Error::InsertedDuplicateChildObject { index: 0, .. })
+        ));
+
+        assert_eq!(state.hierarchy_node(id).unwrap().child_object_ids, [a_id]);
     }
 
     #[test]
@@ -2831,8 +2979,8 @@ mod tests {
     fn release_object_preserves_the_survivors_order() {
         let mut state: VoxMain = VoxMain::default();
         let a_id = state.retain_object(unit_object("a")).unwrap();
-        let b_id = state.retain_object(unit_object("b")).unwrap();
-        let c_id = state.retain_object(unit_object("c")).unwrap();
+        state.retain_object(unit_object("b")).unwrap();
+        state.retain_object(unit_object("c")).unwrap();
 
         // Releasing the first of three is the smallest case a swap-remove would
         // get wrong, listing "c" before "b".
@@ -2846,9 +2994,6 @@ mod tests {
         assert_eq!(d_id, a_id);
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
         assert_eq!(names, ["b", "c", "d"]);
-        assert_eq!(state.object_index(b_id), Some(0));
-        assert_eq!(state.object_index(c_id), Some(1));
-        assert_eq!(state.object_index(d_id), Some(2));
     }
 
     #[test]
@@ -3006,12 +3151,11 @@ mod tests {
         let mut state: VoxMain = VoxMain::default();
         let a_id = state.retain_object(unit_object("a")).unwrap();
         let b_id = state.retain_object(unit_object("b")).unwrap();
-        let c_id = state.retain_object(unit_object("c")).unwrap();
+        state.retain_object(unit_object("c")).unwrap();
 
         assert_eq!(state.move_object(a_id, 2), Ok(()));
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
         assert_eq!(names, ["b", "c", "a"]);
-        assert_eq!(state.object_index(a_id), Some(2));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
@@ -3026,8 +3170,6 @@ mod tests {
             Err(Error::UnknownObject { object_id: b_id })
         );
 
-        assert_eq!(state.object_index(b_id), None);
-        assert_eq!(state.object_index(c_id), Some(0));
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
         assert_eq!(names, ["c", "a"]);
     }
@@ -3048,8 +3190,6 @@ mod tests {
             [b_id, a_id]
         );
 
-        assert_eq!(state.palette_index(b_id), Some(0));
-
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
             state.move_palette(b_id, 2),
@@ -3062,8 +3202,6 @@ mod tests {
                 palette_id: palette_id(9)
             })
         );
-
-        assert_eq!(state.palette_index(U32Id::from_u32(9)), None);
     }
 
     #[test]
@@ -3082,8 +3220,6 @@ mod tests {
             [b_id, a_id]
         );
 
-        assert_eq!(state.value_pool_index(b_id), Some(0));
-
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
             state.move_value_pool(b_id, 2),
@@ -3096,8 +3232,6 @@ mod tests {
                 value_pool_id: value_pool_id(9)
             })
         );
-
-        assert_eq!(state.value_pool_index(U32Id::from_u32(9)), None);
     }
 
     #[test]

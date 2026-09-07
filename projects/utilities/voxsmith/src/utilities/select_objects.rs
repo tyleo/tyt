@@ -178,11 +178,9 @@ fn object_paths<T>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        operations::mesh::{
-            select_objects::NodeId, select_objects::ObjectId, select_objects::select_objects,
-        },
-        utilities::IndexRange,
+    use crate::utilities::{
+        IndexRange,
+        select_objects::{NodeId, ObjectId, select_objects},
     };
     use ty_math::TyVector3U32;
     use voxcore::{VoxHierarchyNode, VoxMain, VoxObject};

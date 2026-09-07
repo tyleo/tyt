@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, VoxelInput, commands::convert};
+use crate::{Dependencies, ObjectSelection, Result, VoxelInput, commands::convert};
 use clap::Parser;
 use std::path::PathBuf;
 use voxconv::WriteFormat;
@@ -14,6 +14,9 @@ pub struct ToMvox {
     /// `.vox` extension.
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
+
+    #[command(flatten)]
+    selection: ObjectSelection,
 }
 
 impl ToMvox {
@@ -24,6 +27,13 @@ impl ToMvox {
 
         let output = self.input.output_path(self.output, to.extension());
 
-        convert(&dependencies, &self.input.path, from, &output, &to)
+        convert(
+            &dependencies,
+            &self.input.path,
+            from,
+            &output,
+            &to,
+            &self.selection,
+        )
     }
 }

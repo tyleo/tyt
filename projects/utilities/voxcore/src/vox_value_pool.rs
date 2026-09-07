@@ -333,12 +333,6 @@ impl VoxValuePool {
         self.value_ids.is_retained(id).then(|| self.value_ref(id))
     }
 
-    /// The listing position of value `id`, or `None` if `id` is not one of this
-    /// value pool's values.
-    pub fn value_index(&self, id: U32Id<BVoxValuePoolValue>) -> Option<usize> {
-        self.value_ids.index_of(id)
-    }
-
     /// The typed ref for a retained `id`.
     fn value_ref(&self, id: U32Id<BVoxValuePoolValue>) -> VoxValuePoolValueRef<'_> {
         // Safety: the id is retained, so it has a value in the column.
@@ -529,7 +523,6 @@ mod tests {
             .collect();
 
         assert_eq!(order, ["a", "c", "b"]);
-        assert_eq!(value_pool.value_index(b_id), Some(2));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(

@@ -21,7 +21,6 @@ mod object_to_material_glb;
 mod object_to_material_gltf;
 mod object_to_mesh_geometry;
 mod resource_storage;
-mod select_objects;
 
 pub use atlas_image::*;
 pub use atlas_shape::*;
@@ -43,7 +42,6 @@ pub use object_to_material_glb::*;
 pub use object_to_material_gltf::*;
 pub use object_to_mesh_geometry::*;
 pub use resource_storage::*;
-pub use select_objects::*;
 
 // Internal API
 

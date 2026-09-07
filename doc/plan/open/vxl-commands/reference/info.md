@@ -22,3 +22,7 @@ present; and the root, instanced, and unplaced nodes in the hierarchy.
    labels and values in their native JSON types, a bounds or
    origin triple as a three-number series, and absent fields (`voxj_version`,
    `edit_bounds`) omitted.
+2. `--select <glob>` / `--select-index <index>`: narrow the objects section to
+   the selected objects, labeled by their document index; the document and
+   palettes sections stay document-wide. See
+   [Object selectors](conventions.md#object-selectors).

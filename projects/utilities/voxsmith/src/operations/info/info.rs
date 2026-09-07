@@ -9,34 +9,52 @@ use treegrid::{
     TreeGridRecordsTableOptions, TreeGridRenderJson, TreeGridRenderTables, TreeGridTableShape,
     TreeGridValue,
 };
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{BVoxObject, VoxMain, VoxObject};
 
 /// The record sections' heading level, beneath the `# {name}` title.
 const SECTION_LEVEL: NonZeroU8 = NonZeroU8::new(2).unwrap();
 
 /// Renders the report on what `state` contains, in `layout`: the facts in
-/// `document`, then the state's palettes and objects.
-pub fn info<T>(state: &VoxMain<T>, document: &InfoDocument<'_>, layout: InfoLayout) -> String {
+/// `document`, then the state's palettes, then the objects in `object_ids`.
+/// Every id in `object_ids` must be one of `state`'s objects.
+pub fn info<T>(
+    state: &VoxMain<T>,
+    object_ids: &[U32Id<BVoxObject>],
+    document: &InfoDocument<'_>,
+    layout: InfoLayout,
+) -> String {
     match layout {
-        InfoLayout::Tables => render_tables(state, document),
-        InfoLayout::JsonPretty => build_json_grid(state, document).render_json_pretty(),
-        InfoLayout::JsonCompact => build_json_grid(state, document).render_json_compact(),
+        InfoLayout::Tables => render_tables(state, object_ids, document),
+        InfoLayout::JsonPretty => build_json_grid(state, object_ids, document).render_json_pretty(),
+        InfoLayout::JsonCompact => {
+            build_json_grid(state, object_ids, document).render_json_compact()
+        }
     }
 }
 
 /// The report as a file-name heading over three record-table sections:
 /// document, palettes, objects.
-fn render_tables<T>(state: &VoxMain<T>, document: &InfoDocument<'_>) -> String {
-    let tables = build_records_grid(state, document).render_tables(&TreeGridTableShape::Records(
-        TreeGridRecordsTableOptions::default().with_level(SECTION_LEVEL),
-    ));
+fn render_tables<T>(
+    state: &VoxMain<T>,
+    object_ids: &[U32Id<BVoxObject>],
+    document: &InfoDocument<'_>,
+) -> String {
+    let tables = build_records_grid(state, object_ids, document).render_tables(
+        &TreeGridTableShape::Records(
+            TreeGridRecordsTableOptions::default().with_level(SECTION_LEVEL),
+        ),
+    );
     format!("# {}\n\n{tables}", document.name)
 }
 
 /// The flat forest the markdown tables render: `document`, `palettes`, and
 /// `objects` section roots whose rows bake every cell as one pre-formatted
 /// value under its column's label.
-fn build_records_grid<T>(state: &VoxMain<T>, document: &InfoDocument<'_>) -> TreeGrid {
+fn build_records_grid<T>(
+    state: &VoxMain<T>,
+    object_ids: &[U32Id<BVoxObject>],
+    document: &InfoDocument<'_>,
+) -> TreeGrid {
     let mut grid = TreeGrid::new();
 
     let document_root_id = grid.retain_root(TreeGridLabel::bare("document"));
@@ -88,7 +106,7 @@ fn build_records_grid<T>(state: &VoxMain<T>, document: &InfoDocument<'_>) -> Tre
     }
 
     let objects_root_id = grid.retain_root(TreeGridLabel::bare("objects"));
-    for (object_id, object) in state.iter_objects() {
+    for (object_id, object) in objects(state, object_ids) {
         let row_id = grid.retain_child(
             objects_root_id,
             TreeGridLabel::bare(object_id.to_u32().to_string()),
@@ -135,6 +153,7 @@ fn retain_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str
 /// typed value under its label.
 fn build_json_grid<T>(
     state: &VoxMain<T>,
+    object_ids: &[U32Id<BVoxObject>],
     document: &InfoDocument<'_>,
 ) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
@@ -186,7 +205,7 @@ fn build_json_grid<T>(
     }
 
     let objects_root_id = grid.retain_root(TreeGridLabel::bare("objects"));
-    for (object_id, object) in state.iter_objects() {
+    for (object_id, object) in objects(state, object_ids) {
         let branch_id = grid.retain_child(
             objects_root_id,
             TreeGridLabel::bare(object_id.to_u32().to_string()),
@@ -267,6 +286,20 @@ fn retain_triple(
     }
 }
 
+/// Each id in `object_ids` paired with its object.
+fn objects<'a, T>(
+    state: &'a VoxMain<T>,
+    object_ids: &'a [U32Id<BVoxObject>],
+) -> impl Iterator<Item = (U32Id<BVoxObject>, &'a VoxObject)> + 'a {
+    object_ids.iter().map(|&object_id| {
+        let object = state
+            .object(object_id)
+            .expect("the caller's object ids are the state's");
+
+        (object_id, object)
+    })
+}
+
 /// Whether any object has an [`edit_bounds`] build volume.
 fn has_edit<T>(state: &VoxMain<T>) -> bool {
     state
@@ -318,7 +351,20 @@ mod tests {
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+
+    /// Every object of `state`, in listing order.
+    fn all_objects(state: &VoxMain) -> Vec<U32Id<BVoxObject>> {
+        state
+            .iter_objects()
+            .map(|(object_id, _)| object_id)
+            .collect()
+    }
+
+    /// Renders every object of `state` in `layout`.
+    fn info_all(state: &VoxMain, document: &InfoDocument<'_>, layout: InfoLayout) -> String {
+        info(state, &all_objects(state), document, layout)
+    }
 
     /// One `baseColor` palette and one tight 1x1x1 object sampling its one
     /// material.
@@ -357,7 +403,7 @@ mod tests {
 
     #[test]
     fn tables_lists_document_palette_and_object_sections() {
-        let output = info(
+        let output = info_all(
             &tight_state(),
             &voxj_document("test.voxj", 2),
             InfoLayout::Tables,
@@ -385,7 +431,7 @@ mod tests {
 
     #[test]
     fn json_compact_nests_the_envelope_fields_under_each_section() {
-        let output = info(
+        let output = info_all(
             &tight_state(),
             &voxj_document("test.voxj", 2),
             InfoLayout::JsonCompact,
@@ -413,8 +459,8 @@ mod tests {
     fn json_pretty_is_multiline_and_matches_compact() {
         let state = tight_state();
         let document = voxj_document("test.voxj", 2);
-        let pretty = info(&state, &document, InfoLayout::JsonPretty);
-        let compact = info(&state, &document, InfoLayout::JsonCompact);
+        let pretty = info_all(&state, &document, InfoLayout::JsonPretty);
+        let compact = info_all(&state, &document, InfoLayout::JsonCompact);
         assert!(pretty.starts_with("[\n"));
         assert!(pretty.contains("\"label\": \"document\""));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
@@ -430,11 +476,11 @@ mod tests {
             format_version: None,
             has_ext: false,
         };
-        let tables = info(&tight_state(), &document, InfoLayout::Tables);
+        let tables = info_all(&tight_state(), &document, InfoLayout::Tables);
         assert!(tables.contains("| format   | mvox  |\n"));
         assert!(!tables.contains("format_version"));
 
-        let json = info(&tight_state(), &document, InfoLayout::JsonCompact);
+        let json = info_all(&tight_state(), &document, InfoLayout::JsonCompact);
         assert!(!json.contains("format_version"));
     }
 
@@ -449,7 +495,7 @@ mod tests {
         state.retain_object(object).unwrap();
 
         let document = voxj_document("sample.voxj", 1);
-        let tables = info(&state, &document, InfoLayout::Tables);
+        let tables = info_all(&state, &document, InfoLayout::Tables);
         assert!(tables.contains("| has_edit       | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
         assert!(
@@ -458,7 +504,7 @@ mod tests {
             )
         );
 
-        let json = info(&state, &document, InfoLayout::JsonCompact);
+        let json = info_all(&state, &document, InfoLayout::JsonCompact);
         assert!(json.contains("{\"label\":\"has_edit\",\"values\":[true]}"));
         assert!(json.contains(
             "{\"label\":\"bounds\",\"values\":[1,1,1]},\
@@ -499,16 +545,38 @@ mod tests {
         state.retain_object(object).unwrap();
 
         let document = voxj_document("layered.voxj", 1);
-        let tables = info(&state, &document, InfoLayout::Tables);
+        let tables = info_all(&state, &document, InfoLayout::Tables);
         assert!(tables.contains("| 0     | emissiveStrength | 1         |\n"));
         assert!(tables.contains("| 1     | baseColor        | 1         |\n"));
 
-        let json = info(&state, &document, InfoLayout::JsonCompact);
+        let json = info_all(&state, &document, InfoLayout::JsonCompact);
         assert!(json.contains(
             "{\"label\":\"0\",\"children\":[{\"label\":\"properties\",\"children\":[\
              {\"label\":\"emissiveStrength\"}]},\
              {\"label\":\"materials\",\"values\":[1]}]}"
         ));
         assert!(json.contains("{\"label\":\"layers\",\"values\":[2]}"));
+    }
+
+    #[test]
+    fn a_selection_narrows_the_objects_section_and_keeps_document_labels() {
+        let mut state = tight_state();
+        let object = VoxObject::new("second".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        let second_id = state.retain_object(object).unwrap();
+
+        let document = voxj_document("test.voxj", 2);
+        let tables = info(&state, &[second_id], &document, InfoLayout::Tables);
+
+        // Only the selected object appears, under its document index. The
+        // palettes section stays whole.
+        assert!(tables.contains("| 0     | baseColor  | 1         |\n"));
+        assert!(!tables.contains("| 0     | body"));
+        assert!(tables.contains("| 1     | second | 0x0x0  | 2x1x1"));
+
+        let json = info(&state, &[second_id], &document, InfoLayout::JsonCompact);
+        assert!(json.contains(
+            "{\"label\":\"objects\",\"children\":[{\"label\":\"1\",\"children\":[\
+             {\"label\":\"name\",\"values\":[\"second\"]}"
+        ));
     }
 }

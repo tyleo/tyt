@@ -15,6 +15,9 @@ pub mod palette_list;
 #[cfg(feature = "palette_show")]
 pub mod palette_show;
 
+#[cfg(feature = "to")]
+pub mod to;
+
 #[cfg(feature = "validate")]
 pub mod validate;
 

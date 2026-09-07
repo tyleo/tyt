@@ -1,6 +1,5 @@
 #[cfg(feature = "voxelize")]
 use gltf::Error as GltfError;
-#[cfg(feature = "_pathspec")]
 use pathspec::Error as PathSpecError;
 use std::{
     error::Error as StdError,
@@ -32,7 +31,6 @@ pub enum Error {
     TreeGrid(TreeGridError),
 
     /// A hierarchy-path pattern is not a valid gitignore-style glob.
-    #[cfg(feature = "_pathspec")]
     PathSpec(PathSpecError),
 }
 
@@ -54,7 +52,6 @@ impl Display for Error {
             Error::Gltf(error) => error.fmt(f),
             #[cfg(feature = "_treegrid")]
             Error::TreeGrid(error) => error.fmt(f),
-            #[cfg(feature = "_pathspec")]
             Error::PathSpec(error) => error.fmt(f),
         }
     }
@@ -71,7 +68,6 @@ impl StdError for Error {
             Error::Gltf(error) => Some(error),
             #[cfg(feature = "_treegrid")]
             Error::TreeGrid(error) => Some(error),
-            #[cfg(feature = "_pathspec")]
             Error::PathSpec(error) => Some(error),
         }
     }
@@ -97,7 +93,6 @@ impl From<TreeGridError> for Error {
     }
 }
 
-#[cfg(feature = "_pathspec")]
 impl From<PathSpecError> for Error {
     fn from(error: PathSpecError) -> Self {
         Error::PathSpec(error)

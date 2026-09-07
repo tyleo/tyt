@@ -61,8 +61,9 @@ one rule set, matched by the `pathspec` engine:
 ## Object selectors
 
 [`mesh`](mesh.md) and [`material`](material.md) choose which objects to output,
-and [`palette quantize`](palette/quantize.md) and
-[`palette remap`](palette/remap.md) choose which objects to dither, with two
+[`to`](to/README.md) which objects to write, [`info`](info.md) which objects to
+report, and [`palette quantize`](palette/quantize.md) and
+[`palette remap`](palette/remap.md) which objects to dither, with two
 repeatable options, one per addressing mode, so a value is never parsed as
 either an index or a glob. Selection targets objects; under `mesh` each matched
 object is meshed as pure geometry with no hierarchy-node transform, so a path is
@@ -86,9 +87,11 @@ only the selection key, not placement.
    as its path. Names are not unique, so a glob may match several objects.
 
 Both options repeat, and every `--select-index` and `--select` value unions its
-matches. Given neither, every object is selected. `material` outputs the
-selection, and `quantize` and `remap` dither it; `mesh` outputs it too but for
-now requires it to resolve to a single object (see [mesh](mesh.md)).
+matches. Given neither, every object is selected; given one that matches
+nothing, the command errors rather than quietly selecting nothing. `material`
+outputs the selection, `to` writes it, `info` reports it, and `quantize` and
+`remap` dither it; `mesh` outputs it too but for now requires it to resolve to
+a single object (see [mesh](mesh.md)).
 
 Baking a matched node's subtree and transforms into one larger placed mesh,
 rather than selecting its objects as pure geometry, is a separate mode left for a

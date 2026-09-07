@@ -140,34 +140,34 @@ pub enum Error {
         material_id: U32Id<BVoxMaterial>,
     },
 
-    /// An inserted hierarchy node, at this listing index in its batch, lists
-    /// the same child node more than once.
+    /// An inserted or replaced hierarchy node, at this listing index in its
+    /// batch, lists the same child node more than once.
     InsertedDuplicateChildNode {
         index: usize,
         child_id: U32Id<BVoxHierarchyNode>,
     },
 
-    /// An inserted hierarchy node, at this listing index in its batch, places
-    /// the same object more than once.
+    /// An inserted or replaced hierarchy node, at this listing index in its
+    /// batch, places the same object more than once.
     InsertedDuplicateChildObject {
         index: usize,
         object_id: U32Id<BVoxObject>,
     },
 
-    /// An inserted hierarchy node, at this listing index in its batch, has a
-    /// non-finite transform position or scale component.
+    /// An inserted or replaced hierarchy node, at this listing index in its
+    /// batch, has a non-finite transform position or scale component.
     InsertedNonFiniteTransform { index: usize },
 
-    /// An inserted hierarchy node, at this listing index in its batch, has a
-    /// zero transform scale component.
+    /// An inserted or replaced hierarchy node, at this listing index in its
+    /// batch, has a zero transform scale component.
     InsertedZeroScale { index: usize },
 
-    /// An inserted hierarchy node, at this listing index in its batch, has a
-    /// transform rotation that is not a unit quaternion.
+    /// An inserted or replaced hierarchy node, at this listing index in its
+    /// batch, has a transform rotation that is not a unit quaternion.
     InsertedNonUnitRotation { index: usize },
 
-    /// An inserted batch of hierarchy nodes contains a `child_node_ids` cycle
-    /// reaching the node at this listing index.
+    /// The `child_node_ids` of an inserted or replaced batch of hierarchy
+    /// nodes form a cycle reaching the node at this listing index in the batch.
     InsertedCycle { index: usize },
 
     /// A value pool holds a value outside its kind's value domain.
@@ -441,35 +441,31 @@ impl Display for Error {
             ),
             Error::InsertedDuplicateChildNode { index, child_id } => write!(
                 f,
-                "the inserted hierarchy node at listing index {index} lists child node {} more \
-                 than once",
+                "the hierarchy node at listing index {index} lists child node {} more than once",
                 child_id.to_u32()
             ),
             Error::InsertedDuplicateChildObject { index, object_id } => write!(
                 f,
-                "the inserted hierarchy node at listing index {index} places object {} more than \
-                 once",
+                "the hierarchy node at listing index {index} places object {} more than once",
                 object_id.to_u32()
             ),
             Error::InsertedNonFiniteTransform { index } => write!(
                 f,
-                "the inserted hierarchy node at listing index {index} has a non-finite transform \
-                 position or scale component"
+                "the hierarchy node at listing index {index} has a non-finite transform position \
+                 or scale component"
             ),
             Error::InsertedZeroScale { index } => write!(
                 f,
-                "the inserted hierarchy node at listing index {index} has a zero transform scale \
-                 component"
+                "the hierarchy node at listing index {index} has a zero transform scale component"
             ),
             Error::InsertedNonUnitRotation { index } => write!(
                 f,
-                "the inserted hierarchy node at listing index {index} has a transform rotation \
-                 that is not a unit quaternion"
+                "the hierarchy node at listing index {index} has a transform rotation that is not \
+                 a unit quaternion"
             ),
             Error::InsertedCycle { index } => write!(
                 f,
-                "the inserted hierarchy nodes contain a cycle reaching the node at listing index \
-                 {index}"
+                "the hierarchy nodes contain a cycle reaching the node at listing index {index}"
             ),
             Error::ValuePoolValue {
                 value_pool_id,

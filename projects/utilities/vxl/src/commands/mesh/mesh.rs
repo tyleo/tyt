@@ -1,10 +1,10 @@
 use crate::{
-    Dependencies, Error, PositiveF64, Result, VoxelInput, cli_value_parser,
+    Dependencies, Error, ObjectSelection, PositiveF64, Result, VoxelInput, cli_value_parser,
     commands::{
         Atlas, PropertyBinding, Texture, TextureArg, TextureMap, TextureName,
         computed_occlusion_unsupported, parse_atlas_shape,
     },
-    load, parse_index_range, require_file_name,
+    load, require_file_name,
 };
 use clap::Parser;
 use std::{
@@ -15,10 +15,8 @@ use voxcore::VoxMain;
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::mesh::{
-        AtlasShape, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod, ResourceStorage,
-        mesh, select_objects,
+        AtlasShape, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod, ResourceStorage, mesh,
     },
-    utilities::IndexRange,
 };
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
@@ -143,16 +141,8 @@ pub struct Mesh {
     )]
     texture_storage: Option<ResourceStorage>,
 
-    /// Choose the object by hierarchy-path glob, matched as `hierarchy show`
-    /// matches node paths, so a node path selects its subtree. Repeatable;
-    /// unions with `--select-index`.
-    #[arg(value_name = "select", long)]
-    select: Vec<String>,
-
-    /// Choose the object by index, an integer or an `a-b` range. Repeatable;
-    /// unions with `--select`.
-    #[arg(value_name = "select-index", long, value_parser = parse_index_range)]
-    select_index: Vec<IndexRange>,
+    #[command(flatten)]
+    selection: ObjectSelection,
 }
 
 impl Mesh {
@@ -192,19 +182,15 @@ impl Mesh {
 
         let state: VoxMain = load(&dependencies, &self.input.path, from)?;
 
-        let object_ids = select_objects(&state, &self.select, &self.select_index)?;
+        let object_ids = self.selection.resolve(&state)?;
 
-        // `mesh` outputs one object, so the selection must name exactly one; the
-        // resolver stays flag-agnostic and this policy, with its flag-named
-        // guidance, lives here on the command.
+        // `mesh` outputs one object, so the selection must resolve to exactly
+        // one. `resolve` already rejects a selector matching nothing; an empty
+        // result here is a document with no objects at all.
         let object_id = match object_ids.as_slice() {
             [object_id] => *object_id,
 
-            [] => {
-                return Err(Error::usage(
-                    "no object matched the selection; check --select and --select-index",
-                ));
-            }
+            [] => return Err(Error::usage("the document has no objects to mesh")),
 
             object_ids => {
                 return Err(Error::usage(format!(
