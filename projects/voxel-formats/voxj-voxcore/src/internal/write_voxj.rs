@@ -4,7 +4,7 @@ use crate::{
     voxj_palette_from_vox_palette, voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
-use voxcore::{VoxMain, VoxObject, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, VoxObject, ext::VoxExt};
 use voxj::{
     CostVoxjObject, EncodeBase64, VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain,
     VoxjRuntimeState,
@@ -37,7 +37,7 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 ///   cost.
 /// * `ext` - when false, omits the state's `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj<T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject>(
+pub fn write_voxj<T: VoxExt, D: EncodeBase64 + CostVoxjObject>(
     dependencies: &D,
     state: &VoxMain<T>,
     position: Option<PositionEncoding>,
@@ -92,11 +92,9 @@ pub fn write_voxj<T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject>(
     });
 
     let ext = if ext {
-        state
-            .ext()
-            .to_vox_ext_block()?
-            .as_ref()
-            .map(voxj_map_from_vox_map)
+        let block = state.ext().to_vox_ext()?;
+
+        (!block.0.is_empty()).then(|| voxj_map_from_vox_map(&block))
     } else {
         None
     };

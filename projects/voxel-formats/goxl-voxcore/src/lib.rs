@@ -11,7 +11,7 @@
 //! straight to and from `.gox` bytes. It takes the codec's dependencies,
 //! which `goxl_codec::DependenciesImpl` supplies. The `ext` feature keys the
 //! ext into a document's `ext` block through voxcore's
-//! [`VoxExtCodec`](voxcore::ext::VoxExtCodec).
+//! [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Public API
 
@@ -49,4 +49,4 @@ pub use to_goxl_file::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_codec;
+mod vox_ext_entry_codec;

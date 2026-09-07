@@ -1,15 +1,12 @@
 use crate::{Result, to_voxj_file};
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 use voxj::{CostVoxjObject, EncodeBase64};
 use voxj_codec::{Deflate, EncodeVoxjJson, to_voxjz_file_bytes};
 
 /// Writes a [`VoxMain`] to a `.voxjz` zip archive holding one compact
 /// `.voxj` member, choosing each object's block encodings by the lowest
 /// cost. The document is stamped with the current voxj format version.
-pub fn to_voxjz_bytes<
-    T: VoxExtBlockCodec,
-    D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate,
->(
+pub fn to_voxjz_bytes<T: VoxExt, D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate>(
     dependencies: &D,
     state: &VoxMain<T>,
 ) -> Result<Vec<u8>> {

@@ -10,7 +10,7 @@
 //! its file synthesized from the bare scene. The [`codec`] module, behind the
 //! default `codec` feature, goes straight to and from `.vox` bytes over
 //! mvox-codec. The `ext` feature keys the ext into a document's `ext` block
-//! through voxcore's [`VoxExtCodec`](voxcore::ext::VoxExtCodec).
+//! through voxcore's [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Public API
 
@@ -50,4 +50,4 @@ pub use to_mvox_file::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_codec;
+mod vox_ext_entry_codec;

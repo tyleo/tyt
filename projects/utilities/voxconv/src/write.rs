@@ -1,11 +1,11 @@
 use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, internal};
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 
 /// Encodes a state as a document's files. The ext `T` moves into the
 /// format's ext through its block form. A state carrying another format's
 /// ext, or none, writes the format's default ext. The state is consumed
 /// because the format's writer needs it in the format's ext type.
-pub fn write<D: Dependencies, T: VoxExtBlockCodec>(
+pub fn write<D: Dependencies, T: VoxExt>(
     dependencies: &D,
     format: &WriteFormat,
     state: VoxMain<T>,

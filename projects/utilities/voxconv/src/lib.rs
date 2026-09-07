@@ -6,8 +6,9 @@
 //! fronts them. [`ReadFormat`] and [`WriteFormat`] pick a bridge. A document
 //! travels as a list of [`VoxDocumentFile`]. A state's ext moves between the
 //! bridge's typed ext and whatever ext type the caller's
-//! [`VoxMain`](voxcore::VoxMain) carries, through voxcore's
-//! [`VoxExtBlockCodec`](voxcore::ext::VoxExtBlockCodec). [`read()`] and
+//! [`VoxMain`](voxcore::VoxMain) carries: through voxcore's
+//! [`VoxExtBlockCodec`](voxcore::ext::VoxExtBlockCodec) on a read and
+//! [`VoxExt`](voxcore::ext::VoxExt) on a write. [`read()`] and
 //! [`write()`] move a document through a bridge over the caller's
 //! [`Dependencies`]. [`load()`] and [`save()`] start and end at a path
 //! instead of the files. [`check_document_files()`] returns each check as

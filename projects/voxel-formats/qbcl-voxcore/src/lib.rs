@@ -15,7 +15,7 @@
 //! `.qbt` and `.qbcl` conversions take the codec's dependencies, which
 //! `qbcl_codec::DependenciesImpl` supplies. The `ext` feature keys each ext
 //! into a document's `ext` block through voxcore's
-//! [`VoxExtCodec`](voxcore::ext::VoxExtCodec).
+//! [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Public API
 
@@ -67,4 +67,4 @@ pub use to_qbt_file::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_codec;
+mod vox_ext_entry_codec;

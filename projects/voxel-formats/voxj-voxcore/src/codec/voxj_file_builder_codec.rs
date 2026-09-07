@@ -1,5 +1,5 @@
 use crate::{Result, VoxjFileBuilder};
-use voxcore::ext::VoxExtBlockCodec;
+use voxcore::ext::VoxExt;
 use voxj::{CostVoxjObject, EncodeBase64};
 use voxj_codec::{
     Deflate, EncodeVoxjJson, to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes,
@@ -20,8 +20,8 @@ pub trait VoxjFileBuilderCodec {
     fn to_voxjz_bytes(self) -> Result<Vec<u8>>;
 }
 
-impl<T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate>
-    VoxjFileBuilderCodec for VoxjFileBuilder<'_, T, D>
+impl<T: VoxExt, D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate> VoxjFileBuilderCodec
+    for VoxjFileBuilder<'_, T, D>
 {
     fn to_voxj_bytes(self) -> Result<Vec<u8>> {
         let dependencies = self.dependencies;

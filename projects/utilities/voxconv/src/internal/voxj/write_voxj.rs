@@ -2,7 +2,7 @@ use crate::{
     Result, VoxDocumentFile,
     voxj::{VoxjSerialization, VoxjWriteOptions},
 };
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 use voxj::dependencies::{CostVoxjObject, EncodeBase64};
 use voxj_voxcore::{
     VoxjFileBuilder,
@@ -14,10 +14,7 @@ use voxj_voxcore::{
 
 /// Encodes a state as a Voxel Json document. The slot's block persists as
 /// the document's `ext` block.
-pub fn write_voxj<
-    D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate,
-    T: VoxExtBlockCodec,
->(
+pub fn write_voxj<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate, T: VoxExt>(
     dependencies: &D,
     state: &VoxMain<T>,
     options: VoxjWriteOptions,

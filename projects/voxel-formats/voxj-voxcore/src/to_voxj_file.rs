@@ -1,5 +1,5 @@
 use crate::{EditStateMode, Result, write_voxj};
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 use voxj::{CostVoxjObject, EncodeBase64, VoxjFile};
 
 /// Encodes a [`VoxMain`] into a [`VoxjFile`], choosing each object's block
@@ -8,7 +8,7 @@ use voxj::{CostVoxjObject, EncodeBase64, VoxjFile};
 /// `voxj::DependenciesImpl`, and the body behind the `.voxj` and `.voxjz`
 /// writers. For control over the block encodings, the ext block, or the edit
 /// state, use [`VoxjFileBuilder`](crate::VoxjFileBuilder).
-pub fn to_voxj_file<T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject>(
+pub fn to_voxj_file<T: VoxExt, D: EncodeBase64 + CostVoxjObject>(
     dependencies: &D,
     state: &VoxMain<T>,
 ) -> Result<VoxjFile> {

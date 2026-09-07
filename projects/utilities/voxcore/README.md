@@ -122,29 +122,66 @@ state would make a round trip through voxcore lossy. A bridge's loader stores
 its format's ext as the state's `T`, and its writer reads the ext back. A
 document loaded from a format writes back to that format exactly. A state
 carrying another format's ext, or none, writes from the bare scene. The core
-assigns the ext no meaning and never reads it. A mutation of the scene leaves
-the ext untouched, so an ext that indexes the scene is the caller's to keep
-current.
+never reads the ext.
 
-The `ext` module moves an ext through a Voxel Json document's `ext` block.
-The format state survives a trip through `.voxj` too. The block holds one
-entry per format under the format's vendor key. `VoxExtCodec` is one format's
-entry: the ext type encodes itself under its key and finds itself in a block
-again, or reports the block as another format's. `VoxExtBlockCodec` is the
-whole block, the ext a state carries. That ext may be nothing. The loaders
-and writers take it as the bound on `T`. Impls cover `()`, an `Option` of any
-codec, and through that `Option<VoxMap>`, which keeps a block verbatim.
+A format ext aligns its entries with the scene by listing index. A mutation
+that moves a listing would leave it stale. The state tells the ext through
+`VoxExt`, and every mutation carries that bound. Each listing move fires a
+hook after it succeeds, with the index the entity had. The ext drops or
+inserts its entry in step. Every hook defaults to a no-op. `()` ignores them
+all. The trait is object-safe, so `VoxMain<Box<dyn VoxExt>>` carries
+whichever format's ext a file turned out to hold.
 
 ```rust
-let state: VoxMain<Option<VoxMap>> = state.map_ext(|()| Some(VoxMap::default()));
+#[derive(Clone, Debug, Default)]
+struct Released(Vec<usize>);
 
-let block = state.ext().to_vox_ext_block()?;
-assert_eq!(block, Some(VoxMap::default()));
+impl VoxExt for Released {
+    fn to_vox_ext(&self) -> ext::Result<VoxMap> {
+        Ok(VoxMap::default())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn VoxExt> {
+        Box::new(self.clone())
+    }
+
+    fn object_released(&mut self, index: usize) {
+        self.0.push(index);
+    }
+}
+
+let mut state: VoxMain<Released> = VoxMain::default();
+let first_id = state.retain_object(first)?;
+state.retain_object(second)?;
+state.release_object(first_id)?;
+assert_eq!(state.ext().0, [0]);
+```
+
+The `ext` module also moves an ext through a Voxel Json document's `ext`
+block. The format state survives a trip through `.voxj`. The block holds one
+entry per format under the format's vendor key. `VoxExtEntryCodec` is one
+format's entry: the ext type encodes itself as the value under its `KEY` and
+decodes from that value. `decode_entry` finds the entry in a block or reports
+the block as another format's. `VoxExt::to_vox_ext` is the whole block a
+state persists. An empty map means no block. `VoxExtBlockCodec` builds a
+state's ext from a loaded block: `()` drops it, an `Option` of a format ext
+decodes its entry, and `VoxMap` keeps the block verbatim.
+
+```rust
+let block = state.ext().to_vox_ext()?;
+assert!(block.0.is_empty());
+
+let ext = VoxMap::from_vox_ext_block(Some(&block))?;
+let verbatim: VoxMain<VoxMap> = state.map_ext(|_| ext);
 ```
 
 ## Features
 
 The `color` feature adds the `color` module: the sRGB transfer at the 8-bit
 boundary and color reads over palettes. The `json` feature adds the
-`ext::json` module: the serde transcode behind a format's `VoxExtCodec` impl.
-Both are on by default.
+`ext::json` module: the serde transcode behind a format's `VoxExtEntryCodec`
+impl. Both are on by default.

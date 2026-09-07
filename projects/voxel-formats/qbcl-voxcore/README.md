@@ -35,5 +35,5 @@ a loaded file writes back exactly. The `.qb` and `.qbt` writers require it.
 The `.qbcl` writer synthesizes a file from the bare scene when the ext is
 absent, such as for a state loaded from another format. The `ext` feature,
 on by default, keys each ext into a document's `ext` block under its `qb`,
-`qbt`, or `qbcl` key through voxcore's `VoxExtCodec`. A Voxel Json document
+`qbt`, or `qbcl` key through voxcore's `VoxExtEntryCodec`. A Voxel Json document
 carries the ext in that block.

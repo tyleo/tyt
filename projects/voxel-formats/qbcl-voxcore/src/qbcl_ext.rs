@@ -1,6 +1,15 @@
 use crate::{QbclExtMetadata, QbclExtNode, QbclExtThumbnail};
 #[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
+use std::any::Any;
+#[cfg(not(feature = "ext"))]
+use voxcore::ext::Error;
+#[cfg(feature = "ext")]
+use voxcore::ext::encode_entry;
+use voxcore::{
+    VoxMap,
+    ext::{Result, VoxExt},
+};
 
 /// The `qbcl` ext payload stashed on a [`VoxMain`](voxcore::VoxMain):
 /// the Qubicle Construction Library `.qbcl` state with no native voxcore home,
@@ -34,4 +43,28 @@ pub struct QbclExt {
     /// Per scene-node provenance, aligned by index with the hierarchy nodes.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub nodes: Vec<QbclExtNode>,
+}
+
+/// The Qubicle Project ext as a state's ext. Its block is the `qbcl` entry.
+/// Encoding it needs the `ext` feature.
+impl VoxExt for QbclExt {
+    #[cfg(feature = "ext")]
+    fn to_vox_ext(&self) -> Result<VoxMap> {
+        encode_entry(self)
+    }
+
+    #[cfg(not(feature = "ext"))]
+    fn to_vox_ext(&self) -> Result<VoxMap> {
+        Err(Error::Invalid(
+            "the Qubicle Project ext encodes its block only with the `ext` feature".to_owned(),
+        ))
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn VoxExt> {
+        Box::new(self.clone())
+    }
 }

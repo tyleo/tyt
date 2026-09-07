@@ -1,6 +1,6 @@
 use branded_id::U32Id;
 use std::collections::HashSet;
-use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, material::BASE_COLOR};
+use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, ext::VoxExt, material::BASE_COLOR};
 
 /// Reorders `palette_id`'s `baseColor` colors to material order: each
 /// material's color in turn, then the colors no material uses. Rendering is
@@ -8,7 +8,7 @@ use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, material::BASE_COLOR};
 ///
 /// Requires a referentially valid state, which
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) checks.
-pub fn order_palette_colors<T>(state: &mut VoxMain<T>, palette_id: U32Id<BVoxPalette>) {
+pub fn order_palette_colors<T: VoxExt>(state: &mut VoxMain<T>, palette_id: U32Id<BVoxPalette>) {
     let Some(palette_ref) = state.palette(palette_id) else {
         return;
     };

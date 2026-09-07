@@ -12,9 +12,10 @@
 //! the default `codec` feature, goes straight to and from `.voxj` / `.voxjz`
 //! bytes and takes the codec's dependencies too.
 //! `voxj_codec::DependenciesImpl` supplies those and voxj's. The document's
-//! `ext` block goes through the state's ext, typed by its
-//! [`VoxExtBlockCodec`](voxcore::ext::VoxExtBlockCodec) impl. A
-//! [`VoxjVoxMain`] carries the block verbatim, whichever format owns it.
+//! `ext` block loads into the state's ext through its
+//! [`VoxExtBlockCodec`](voxcore::ext::VoxExtBlockCodec) impl and writes back
+//! through [`VoxExt`](voxcore::ext::VoxExt). A [`VoxjVoxMain`] carries the
+//! block verbatim, whichever format owns it.
 
 // Public API
 

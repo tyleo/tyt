@@ -1,7 +1,9 @@
 use crate::Result;
 use branded_id::U32Id;
 use std::collections::{HashMap, HashSet};
-use voxcore::{BVoxHierarchyNode, BVoxObject, Error as VoxError, VoxHierarchyNode, VoxMain};
+use voxcore::{
+    BVoxHierarchyNode, BVoxObject, Error as VoxError, VoxHierarchyNode, VoxMain, ext::VoxExt,
+};
 
 /// A hierarchy-node id.
 type NodeId = U32Id<BVoxHierarchyNode>;
@@ -16,7 +18,7 @@ type ObjectId = U32Id<BVoxObject>;
 /// listings. Palettes and value pools are untouched. The releases leave
 /// holes until [`VoxMain::gc`] renumbers. Errors, changing nothing, when an
 /// id is not one of the state's objects.
-pub fn keep_objects<T>(state: &mut VoxMain<T>, object_ids: &[ObjectId]) -> Result<()> {
+pub fn keep_objects<T: VoxExt>(state: &mut VoxMain<T>, object_ids: &[ObjectId]) -> Result<()> {
     for &object_id in object_ids {
         if state.object(object_id).is_none() {
             return Err(VoxError::UnknownObject { object_id }.into());

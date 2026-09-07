@@ -1,5 +1,5 @@
 use crate::{EditStateMode, Result, write_voxj};
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 use voxj::{
     CostVoxjObject, EncodeBase64, VoxjFile,
     objects::{PositionEncoding, SampleEncoding},
@@ -19,7 +19,7 @@ pub struct VoxjFileBuilder<'a, T, D> {
     edit_state: EditStateMode,
 }
 
-impl<'a, T: VoxExtBlockCodec, D: EncodeBase64 + CostVoxjObject> VoxjFileBuilder<'a, T, D> {
+impl<'a, T: VoxExt, D: EncodeBase64 + CostVoxjObject> VoxjFileBuilder<'a, T, D> {
     /// Starts a builder encoding `state` into a Voxel Json document.
     ///
     /// # Arguments

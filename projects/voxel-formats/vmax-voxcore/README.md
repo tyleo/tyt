@@ -36,5 +36,5 @@ loader stores it as the state's ext, so a document loaded from a package
 writes back exactly. A state without an ext, such as a state loaded from
 another format, has its document synthesized from the bare scene. The `ext`
 feature, on by default, keys the ext into a document's `ext` block under the
-`vmax` key through voxcore's `VoxExtCodec`. A Voxel Json document carries
+`vmax` key through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries
 the ext in that block.

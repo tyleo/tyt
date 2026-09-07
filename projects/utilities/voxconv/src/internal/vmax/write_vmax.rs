@@ -6,7 +6,7 @@ use vmax_voxcore::{
         dependencies::{CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson},
     },
 };
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 
 /// Encodes a state as a `.vmax` package's files.
 pub fn write_vmax<D, T>(
@@ -16,7 +16,7 @@ pub fn write_vmax<D, T>(
 ) -> Result<Vec<VoxDocumentFile>>
 where
     D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
-    T: VoxExtBlockCodec,
+    T: VoxExt,
 {
     let state = retype_ext(state)?;
 

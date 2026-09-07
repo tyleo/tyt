@@ -12,7 +12,7 @@
 //! the default `codec` feature, goes straight to and from a package's files.
 //! It takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
 //! supplies. The `ext` feature keys the ext into a document's `ext` block
-//! through voxcore's [`VoxExtCodec`](voxcore::ext::VoxExtCodec).
+//! through voxcore's [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Public API
 
@@ -52,7 +52,7 @@ pub use vmax_vox_main::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_codec;
+mod vox_ext_entry_codec;
 
 // Internal API
 

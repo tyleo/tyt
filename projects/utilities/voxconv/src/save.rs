@@ -1,10 +1,10 @@
 use crate::{Dependencies, Result, WriteFile, WriteFormat, write, write_document_files};
 use std::path::Path;
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 
 /// Writes a state as the document at `output`: [`write`](crate::write) then
 /// [`write_document_files`](crate::write_document_files).
-pub fn save<D: Dependencies + WriteFile, T: VoxExtBlockCodec>(
+pub fn save<D: Dependencies + WriteFile, T: VoxExt>(
     dependencies: &D,
     format: &WriteFormat,
     state: VoxMain<T>,

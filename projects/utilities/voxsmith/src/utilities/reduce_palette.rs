@@ -14,7 +14,7 @@ use ty_math::{
 };
 use voxcore::{
     BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain,
-    color::value_pool_color, material::BASE_COLOR,
+    color::value_pool_color, ext::VoxExt, material::BASE_COLOR,
 };
 
 /// Reduces `palette_id` in `state` to at most `reduction.max_materials`
@@ -29,7 +29,7 @@ use voxcore::{
 /// representative's whole material. Colorless materials are left untouched.
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit.
-pub fn reduce_palette<T>(
+pub fn reduce_palette<T: VoxExt>(
     state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     reduction: PaletteReduction,
@@ -56,7 +56,7 @@ pub fn reduce_palette<T>(
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit (leaving `method` / `space` / `dither` inert). The state
 /// is left compacted and valid.
-fn reduce_materials<T>(
+fn reduce_materials<T: VoxExt>(
     state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     max_materials: usize,
@@ -554,7 +554,7 @@ fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
 /// Snaps every live voxel sampling `palette` to a representative, diffusing the
 /// error per `dither`, so one merged color dithers across several
 /// representatives. Runs per referencing object in raster order.
-fn dither_voxels<T>(
+fn dither_voxels<T: VoxExt>(
     state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     clusters: &[Vec<Point>],
@@ -606,7 +606,7 @@ fn dither_voxels<T>(
 /// to the nearest representative, and reassign via
 /// [`VoxMain::retain_voxel`], swapping only this layer's material.
 #[allow(clippy::too_many_arguments)]
-fn dither_layer<T>(
+fn dither_layer<T: VoxExt>(
     state: &mut VoxMain<T>,
     object_id: U32Id<BVoxObject>,
     layer_id: U32Id<BVoxLayer>,

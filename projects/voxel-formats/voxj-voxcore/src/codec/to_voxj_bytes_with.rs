@@ -1,5 +1,5 @@
 use crate::{Result, VoxjFileBuilder};
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::{VoxMain, ext::VoxExt};
 use voxj::{
     CostVoxjObject, EncodeBase64,
     objects::{PositionEncoding, SampleEncoding},
@@ -9,10 +9,7 @@ use voxj_codec::{EncodeVoxjJson, to_voxj_file_bytes};
 /// Writes a [`VoxMain`] to compact `.voxj` JSON bytes with fixed
 /// `position` and `sample` block encodings applied to every object. For the
 /// lowest-cost search instead, see [`to_voxj_bytes`](crate::codec::to_voxj_bytes).
-pub fn to_voxj_bytes_with<
-    T: VoxExtBlockCodec,
-    D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson,
->(
+pub fn to_voxj_bytes_with<T: VoxExt, D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson>(
     dependencies: &D,
     state: &VoxMain<T>,
     position: PositionEncoding,
