@@ -2,44 +2,24 @@
 
 //! Converts between Goxel files and the voxcore state.
 //!
-//! [`from_goxl_file`] loads a [`GoxlFile`](goxl::GoxlFile) into a
-//! [`GoxlVoxMain`], and [`to_goxl_file`] writes one back. The Goxel state
-//! with no native voxcore home rides in the [`GoxlExt`] the state carries as
-//! its ext, so a loaded file writes back exactly. A state without one, such as
-//! one loaded from another format, has its file synthesized from the bare
-//! scene. The `codec` module, behind the default `codec` feature, goes
-//! straight to and from `.gox` bytes. It takes the codec's dependencies,
-//! which `goxl_codec::DependenciesImpl` supplies. The `ext` feature keys the
-//! ext into a document's `ext` block through voxcore's
-//! [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
+//! [`from_goxl_file`] loads a [`GoxlFile`](goxl::GoxlFile) into a bare
+//! [`VoxMain`](voxcore::VoxMain). [`to_goxl_file`] writes one back as a file
+//! synthesized from the scene. The `codec` module, behind the default `codec`
+//! feature, goes straight to and from `.gox` bytes. It takes the codec's
+//! dependencies, which `goxl_codec::DependenciesImpl` supplies. The `ext`
+//! feature, on by default, opens the `ext` module. There the Goxel state with
+//! no native voxcore home rides as the state's ext. The `_with_ext`
+//! converters write a loaded file back exactly.
 
 // Public API
 
 mod error;
 mod from_goxl_file;
-mod goxl_ext;
-mod goxl_ext_camera;
-mod goxl_ext_image;
-mod goxl_ext_layer;
-mod goxl_ext_light;
-mod goxl_ext_material;
-mod goxl_ext_preview;
-mod goxl_ext_unknown_chunk;
-mod goxl_vox_main;
 mod result;
 mod to_goxl_file;
 
 pub use error::*;
 pub use from_goxl_file::*;
-pub use goxl_ext::*;
-pub use goxl_ext_camera::*;
-pub use goxl_ext_image::*;
-pub use goxl_ext_layer::*;
-pub use goxl_ext_light::*;
-pub use goxl_ext_material::*;
-pub use goxl_ext_preview::*;
-pub use goxl_ext_unknown_chunk::*;
-pub use goxl_vox_main::*;
 pub use result::*;
 pub use to_goxl_file::*;
 
@@ -49,4 +29,12 @@ pub use to_goxl_file::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_entry_codec;
+pub mod ext;
+
+#[cfg(not(feature = "ext"))]
+mod ext;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;

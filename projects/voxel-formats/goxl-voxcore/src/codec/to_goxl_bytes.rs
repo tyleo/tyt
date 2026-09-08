@@ -1,11 +1,13 @@
-use crate::{GoxlVoxMain, Result, to_goxl_file};
+use crate::{Result, to_goxl_file};
 use goxl_codec::{EncodePng, to_gox_file_bytes};
+use voxcore::VoxMain;
 
-/// Writes a [`GoxlVoxMain`] to the bytes of a Goxel `.gox` file through
+/// Writes a bare [`VoxMain`] to the bytes of a Goxel `.gox` file through
 /// `dependencies`, the bytes form of [`to_goxl_file`] and the inverse of
 /// [`from_goxl_bytes`](crate::codec::from_goxl_bytes).
-pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &GoxlVoxMain) -> Result<Vec<u8>> {
+pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &VoxMain<()>) -> Result<Vec<u8>> {
     let file = to_goxl_file(state)?;
+
     Ok(to_gox_file_bytes(dependencies, &file))
 }
 
@@ -20,8 +22,8 @@ mod tests {
         color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
-    /// A state with no ext placing one red voxel at the origin.
-    fn red_voxel_state() -> VoxMain<Option<crate::GoxlExt>> {
+    /// A state placing one red voxel at the origin.
+    fn red_voxel_state() -> VoxMain<()> {
         let mut state = VoxMain::default();
         let color = lin_srgba_f64_from_srgba_u8(TySrgbaU8::from([0xFF, 0, 0, 0xFF]));
         let value_pool_id =
@@ -50,9 +52,9 @@ mod tests {
         state
     }
 
-    /// A state written to bytes reads back with the same geometry and gains
-    /// the ext, so the bytes functions compose the file conversion and the
-    /// codec the right way round.
+    /// A state written to bytes reads back with the same geometry, so the
+    /// bytes functions compose the file conversion and the codec the right
+    /// way round.
     #[test]
     fn round_trips_through_gox_bytes() {
         let bytes = to_goxl_bytes(&DependenciesImpl, &red_voxel_state()).unwrap();
@@ -62,6 +64,5 @@ mod tests {
         assert_eq!(reloaded.object_count(), 1);
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         assert_eq!(object.live_count(), 1);
-        assert!(reloaded.ext().is_some(), "a loaded file carries its ext");
     }
 }

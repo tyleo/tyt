@@ -1,18 +1,9 @@
-use crate::{
+use crate::ext::{
     GoxlExtCamera, GoxlExtImage, GoxlExtLayer, GoxlExtLight, GoxlExtMaterial, GoxlExtPreview,
     GoxlExtUnknownChunk,
 };
 #[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
-use std::any::Any;
-#[cfg(not(feature = "ext"))]
-use voxcore::ext::Error;
-#[cfg(feature = "ext")]
-use voxcore::ext::encode_entry;
-use voxcore::{
-    VoxMap,
-    ext::{Result, VoxExt},
-};
 
 /// The `goxl` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
 /// Goxel `.gox` state with no native voxcore home, kept so a file loaded from a
@@ -68,28 +59,4 @@ pub struct GoxlExt {
         )
     )]
     pub unknown_chunks: Vec<GoxlExtUnknownChunk>,
-}
-
-/// The Goxel ext as a state's ext. Its block is the `goxl` entry.
-/// Encoding it needs the `ext` feature.
-impl VoxExt for GoxlExt {
-    #[cfg(feature = "ext")]
-    fn to_vox_ext(&self) -> Result<VoxMap> {
-        encode_entry(self)
-    }
-
-    #[cfg(not(feature = "ext"))]
-    fn to_vox_ext(&self) -> Result<VoxMap> {
-        Err(Error::Invalid(
-            "the Goxel ext encodes its block only with the `ext` feature".to_owned(),
-        ))
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn VoxExt> {
-        Box::new(self.clone())
-    }
 }

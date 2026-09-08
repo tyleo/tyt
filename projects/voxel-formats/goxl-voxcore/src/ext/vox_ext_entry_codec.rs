@@ -1,4 +1,4 @@
-use crate::GoxlExt;
+use crate::ext::GoxlExt;
 use voxcore::{
     VoxValue,
     ext::{

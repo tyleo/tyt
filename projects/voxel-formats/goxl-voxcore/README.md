@@ -6,17 +6,19 @@ in-memory `VoxMain` and back.
 
 ## File conversion
 
-- `from_goxl_file` / `to_goxl_file`: between a parsed `GoxlFile` and a
-  `GoxlVoxMain`. The shared `BL16` voxel blocks become objects sharing one
+- `from_goxl_file` / `to_goxl_file`: between a parsed `GoxlFile` and a bare
+  `VoxMain<()>`. The shared `BL16` voxel blocks become objects sharing one
   `baseColor` palette. The `LAYR` layers become the hierarchy nodes that
-  place them.
+  place them. The writer synthesizes the file from the scene. Each object
+  placement becomes one layer at its world translation. Grouping, rotation,
+  and scale drop.
 
 ## Bytes conversion
 
 The `codec` module, behind the default `codec` feature, goes straight to and
 from `.gox` bytes over `goxl-codec`:
 
-- `codec::from_goxl_bytes`: `.gox` bytes into a `GoxlVoxMain`.
+- `codec::from_goxl_bytes`: `.gox` bytes into a bare `VoxMain<()>`.
 - `codec::to_goxl_bytes`: a state to `.gox` bytes.
 
 Each takes the codec's dependencies: `DecodePng` to load and `EncodePng` to
@@ -25,10 +27,16 @@ feature turns it on.
 
 ## The ext
 
-The Goxel state with no native voxcore home rides in the `GoxlExt`. The
-loader stores it as the state's ext, so a file loaded from Goxel writes back
-exactly. A state without an ext, such as a state loaded from another format,
-has its file synthesized from the bare scene. The `ext` feature, on by
-default, keys the ext into a document's `ext` block under the `goxl` key
-through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the ext in
-that block.
+`GoxlExt` holds the Goxel state with no native voxcore home. The bare
+converters drop it on load and synthesize the file on write. The `ext`
+feature, on by default, opens the `ext` module, where the typed path keeps
+the ext:
+
+- `ext::from_goxl_file_with_ext` loads a file into a `GoxlVoxMain`, a
+  `VoxMain<Option<GoxlExt>>` carrying the ext. `ext::to_goxl_file_with_ext`
+  writes the state back exactly.
+- `codec::from_goxl_bytes_with_ext` and `codec::to_goxl_bytes_with_ext` do
+  the same for `.gox` bytes.
+
+The ext enters a document's `ext` block as the `goxl` entry through voxcore's
+`VoxExtEntryCodec`. A Voxel Json document carries the ext in that block.

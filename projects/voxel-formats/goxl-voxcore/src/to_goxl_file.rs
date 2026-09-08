@@ -1,323 +1,200 @@
-use crate::{GoxlExtLayer, GoxlVoxMain, Result};
-use branded_id::U32Id;
-use goxl::{
-    GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
-    GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
-};
-use std::collections::{BTreeMap, HashSet};
-use ty_math::{TyVector3I32, TyVector3U32};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxObject, color::resolve_cell_color_or_transparent};
+use crate::{Result, write_goxl};
+use goxl::GoxlFile;
+use voxcore::VoxMain;
 
-/// Writes a [`GoxlVoxMain`] to a decoded Goxel [`GoxlFile`].
-///
-/// When the state carries the [`GoxlExt`](crate::GoxlExt) the forward path
-/// writes, the file is rebuilt losslessly from it, the inverse of
-/// [`from_goxl_file`](crate::from_goxl_file): each object emits one
-/// `16 x 16 x 16` block, and the layers, materials, cameras, light, preview,
-/// and image come from the ext. When the ext is absent, the file is
-/// synthesized from the bare scene instead by `synthesize_goxl`, so any
-/// source can be written to Goxel. An empty voxel is written back as the
-/// transparent zero voxel.
+/// Writes a bare [`VoxMain`] to a Goxel [`GoxlFile`] synthesized from its
+/// scene, the inverse of [`from_goxl_file`](crate::from_goxl_file). Goxel has
+/// flat layers of placed `16 x 16 x 16` blocks and no hierarchy, so each
+/// object placement becomes one layer at its world translation rounded to
+/// whole voxels. Grouping, rotation, and scale drop. The `ext` feature's
+/// `ext::to_goxl_file_with_ext` writes a loaded file back exactly.
 ///
 /// Errors when an object's `baseColor` draws from a non-color value pool.
-pub fn to_goxl_file(state: &GoxlVoxMain) -> Result<GoxlFile> {
-    let Some(ext) = state.ext().clone() else {
-        return synthesize_goxl(state);
+pub fn to_goxl_file(state: &VoxMain<()>) -> Result<GoxlFile> {
+    write_goxl(state, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{from_goxl_file, to_goxl_file};
+    use branded_id::U32Id;
+    use goxl::{GoxlBlock, GoxlFile};
+    use std::collections::BTreeSet;
+    use ty_math::{
+        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
+    };
+    use voxcore::{
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
-    // Each object is the author's build volume (a fixed Goxel 16-cube), so a
-    // block is written from it directly at the original positions, its voxel
-    // colors read through the object's `baseColor` layer.
-    let blocks = state
-        .iter_objects()
-        .map(|(_, object)| block_from_object(state, object))
-        .collect::<Result<_>>()?;
-
-    Ok(GoxlFile {
-        version: ext.version,
-        image: GoxlImage {
-            bounding_box: ext.image.bounding_box,
-            extra: GoxlDict(ext.image.extra),
-        },
-        preview: ext.preview.map(|preview| GoxlPreview {
-            width: preview.width,
-            height: preview.height,
-            pixels: preview.pixels,
-        }),
-        blocks,
-        materials: ext
-            .materials
-            .into_iter()
-            .map(|material| GoxlMaterial {
-                name: material.name,
-                base_color: material.base_color,
-                metallic: material.metallic,
-                roughness: material.roughness,
-                emission: material.emission,
-                extra: GoxlDict(material.extra),
-            })
-            .collect(),
-        layers: ext.layers.into_iter().map(layer_from_provenance).collect(),
-        cameras: ext
-            .cameras
-            .into_iter()
-            .map(|camera| GoxlCamera {
-                name: camera.name,
-                distance: camera.distance,
-                orthographic: camera.orthographic,
-                transform: camera.transform,
-                active: camera.active,
-                extra: GoxlDict(camera.extra),
-            })
-            .collect(),
-        light: ext.light.map(|light| GoxlLight {
-            pitch: light.pitch,
-            yaw: light.yaw,
-            intensity: light.intensity,
-            fixed: light.fixed,
-            ambient: light.ambient,
-            shadow: light.shadow,
-            extra: GoxlDict(light.extra),
-        }),
-        unknown_chunks: ext
-            .unknown_chunks
-            .into_iter()
-            .map(|chunk| GoxlUnknownChunk {
-                id: chunk.id,
-                data: chunk.data,
-            })
-            .collect(),
-    })
-}
-
-/// Synthesizes a Goxel file from a state that carries no `goxl` ext, such as
-/// one cross-loaded from another format.
-///
-/// Goxel has no scene hierarchy, only flat layers of placed `16 x 16 x 16`
-/// blocks, so the voxcore hierarchy is flattened: every object placement
-/// becomes one layer whose blocks are tiled from the object's grid and stamped
-/// at the placement's world translation, summed down the hierarchy from the
-/// roots. An object placed by no node is emitted once at the origin so no
-/// geometry is dropped, and an object placed by several nodes is duplicated at
-/// each placement.
-///
-/// Lossy only where Goxel cannot represent the source: node grouping collapses,
-/// since layers do not nest, and node rotation and scale are dropped, since
-/// only translation survives the flattening. That translation is rounded to
-/// whole voxels, since block positions are integer coordinates. Colors stay per
-/// voxel with no palette merge. A live voxel must be solid, but Goxel reads
-/// alpha 0 as an absent cell, so a fully transparent live color is written
-/// opaque, and a voxel with no resolvable color is written opaque black; any
-/// other alpha is kept.
-fn synthesize_goxl(state: &GoxlVoxMain) -> Result<GoxlFile> {
-    let mut builder = GoxlBuilder::default();
-    for &root_id in state.root_hierarchy_node_ids() {
-        builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0))?;
+    /// The linear-light components of a `#RRGGBBAA` hex string.
+    fn linear_rgba(hex: &str) -> [f64; 4] {
+        lin_srgba_f64_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
-    for (object_id, object) in state.iter_objects() {
-        if !builder.placed.contains(&object_id.to_u32()) {
-            builder.emit_object(
-                state,
-                object_id,
-                object,
-                TyVector3I32::new(0, 0, 0),
-                object.name(),
-            )?;
+
+    /// A bare state built straight from voxcore: a red-green object and a
+    /// blue object sharing one `rgba` palette, placed by a hierarchy of a
+    /// nested group and two roots. This is the cross-format synthesis input.
+    fn source_state() -> VoxMain<()> {
+        let mut state = VoxMain::default();
+
+        // One baseColor palette: a transparent placeholder, then red,
+        // green, blue.
+        let value_pool_id = state.retain_value_pool(
+            VoxValuePool::vec_4_float(
+                ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+                    .iter()
+                    .map(|hex| linear_rgba(hex))
+                    .collect(),
+            )
+            .unwrap(),
+        );
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        for index in 0..4 {
+            palette
+                .retain_material(vec![U32Id::from_u32(index)])
+                .expect("one value id for the one property");
         }
-    }
+        let palette_id = state.retain_palette(palette).unwrap();
+        let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
-    Ok(GoxlFile {
-        blocks: builder.blocks,
-        layers: builder.layers,
-        ..GoxlFile::default()
-    })
-}
+        // Object 0: a red then a green voxel along x.
+        let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
+            .expect("a 2x1x1 grid is within the dense limit");
+        wide.retain_layer(palette_id, material_id(0));
+        for (x, material_index) in [(0u32, 1u32), (1, 2)] {
+            let voxel_id = wide
+                .voxel_id(TyVector3U32::new(x, 0, 0))
+                .expect("a position within the grid");
+            wide.retain_voxel(voxel_id, &[material_id(material_index)])
+                .expect("one sample for the one layer");
+        }
+        state.retain_object(wide).unwrap();
 
-/// Accumulates a flattened Goxel scene: the shared blocks, the layers that
-/// place them, and the ids of objects already placed by a hierarchy node.
-#[derive(Default)]
-struct GoxlBuilder {
-    blocks: Vec<GoxlBlock>,
-    layers: Vec<GoxlLayer>,
-    placed: HashSet<u32>,
-    next_id: i32,
-}
+        // Object 1: a single blue voxel.
+        let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
+            .expect("a 1x1x1 grid is within the dense limit");
+        unit.retain_layer(palette_id, material_id(0));
+        let voxel_id = unit
+            .voxel_id(TyVector3U32::new(0, 0, 0))
+            .expect("a position within the grid");
+        unit.retain_voxel(voxel_id, &[material_id(3)])
+            .expect("one sample for the one layer");
+        state.retain_object(unit).unwrap();
 
-impl GoxlBuilder {
-    /// Walks one hierarchy node, summing its translation into the world
-    /// position, emitting a layer for each object it places, then recursing
-    /// into its child nodes.
-    fn emit_node(
-        &mut self,
-        state: &GoxlVoxMain,
-        node_id: U32Id<BVoxHierarchyNode>,
-        parent: TyVector3I32,
-    ) -> Result<()> {
-        let (name, child_object_ids, child_node_ids, world) = {
-            let node = state
-                .hierarchy_node(node_id)
-                .expect("a hierarchy id from the state resolves");
-            let position = node.transform.position;
-            let world = parent + position.round().as_ivec3();
-            (
-                node.name.clone(),
-                node.child_object_ids.clone(),
-                node.child_node_ids.clone(),
-                world,
+        let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
+        let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+        let placed_at = |x: f64, y: f64, z: f64| {
+            TyTransformF64::new(
+                TyVector3F64::new(x, y, z),
+                TyQuaternionF64::IDENTITY,
+                TyVector3F64::new(1.0, 1.0, 1.0),
             )
         };
 
-        for object_id in child_object_ids {
-            if let Some(object) = state.object(object_id) {
-                self.emit_object(state, object_id, object, world, &name)?;
-            }
-        }
-        for child_id in child_node_ids {
-            self.emit_node(state, child_id, world)?;
-        }
+        // node 0 groups node 1, which places object 0 at +5x; node 2 places
+        // object 1 at +3y. Nodes 0 and 2 are the roots.
+        state
+            .retain_hierarchy_nodes(vec![
+                VoxHierarchyNode {
+                    name: "group".to_owned(),
+                    child_node_ids: vec![node_id(1)],
+                    child_object_ids: Vec::new(),
+                    transform: TyTransformF64::default(),
+                },
+                VoxHierarchyNode {
+                    name: "wide".to_owned(),
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object_id(0)],
+                    transform: placed_at(5.0, 0.0, 0.0),
+                },
+                VoxHierarchyNode {
+                    name: "unit".to_owned(),
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object_id(1)],
+                    transform: placed_at(0.0, 3.0, 0.0),
+                },
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
+            .unwrap();
 
-        Ok(())
+        state.validate().expect("a well-formed source state");
+        state
     }
 
-    /// Emits one layer placing `object` at its world position. The grid is
-    /// tiled into `16 x 16 x 16` blocks, each stamped at the world position of
-    /// its lower corner; a tile holding no solid voxel is never emitted.
-    fn emit_object(
-        &mut self,
-        state: &GoxlVoxMain,
-        object_id: U32Id<BVoxObject>,
-        object: &VoxObject,
-        world: TyVector3I32,
-        name: &str,
-    ) -> Result<()> {
-        self.placed.insert(object_id.to_u32());
+    /// A solid voxel in world space: `x`, `y`, `z`, and an `rgba` color.
+    type WorldVoxel = (i32, i32, i32, (u8, u8, u8, u8));
 
-        // The object is the author's build volume, so each voxel sits at its
-        // original local position directly.
-        let cell_color = resolve_cell_color_or_transparent(state, object)?;
-        let edge = GoxlBlock::SIZE as i32;
+    /// The world voxels a file places: each layer block's solid cells decoded
+    /// to world coordinates and color, order-independent.
+    fn world_voxels(file: &GoxlFile) -> BTreeSet<WorldVoxel> {
         let stride = GoxlBlock::SIZE as usize;
-        let mut tiles: BTreeMap<[i32; 3], Vec<GoxlVoxel>> = BTreeMap::new();
-        for voxel_id in object.iter_live() {
-            let position = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            let world_position = (world + position.as_ivec3()).to_array();
-            let origin = [
-                world_position[0].div_euclid(edge) * edge,
-                world_position[1].div_euclid(edge) * edge,
-                world_position[2].div_euclid(edge) * edge,
-            ];
-            let local = [
-                (world_position[0] - origin[0]) as usize,
-                (world_position[1] - origin[1]) as usize,
-                (world_position[2] - origin[2]) as usize,
-            ];
-            let index = local[0] + stride * (local[1] + stride * local[2]);
-            let rgba = cell_color.color(voxel_id);
-            let block = tiles
-                .entry(origin)
-                .or_insert_with(|| vec![GoxlVoxel::default(); GoxlBlock::SIZE.pow(3) as usize]);
-            block[index] = solid_voxel(rgba);
-        }
-
-        let mut blocks = Vec::with_capacity(tiles.len());
-        for (origin, voxels) in tiles {
-            let block_index = self.blocks.len() as i32;
-            self.blocks.push(GoxlBlock { voxels });
-            blocks.push(GoxlLayerBlock {
-                block_index,
-                position: origin,
-            });
-        }
-
-        self.next_id += 1;
-        self.layers.push(GoxlLayer {
-            name: name.to_owned(),
-            id: self.next_id,
-            blocks,
-            ..GoxlLayer::default()
-        });
-
-        Ok(())
-    }
-}
-
-/// One solid Goxel voxel for a sampled `[r, g, b, a]` color. A live voxel must
-/// be present, but Goxel reads alpha 0 as an empty cell, so a fully transparent
-/// color is forced opaque; any other alpha is kept.
-fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
-    let alpha = if rgba[3] == 0 { 255 } else { rgba[3] };
-    GoxlVoxel {
-        r: rgba[0],
-        g: rgba[1],
-        b: rgba[2],
-        a: alpha,
-    }
-}
-
-/// Rebuilds a `16 x 16 x 16` block from an object: each grid cell takes its
-/// color from the voxel's sampled material through the object's
-/// `baseColor` layer, or the transparent zero voxel when empty.
-fn block_from_object(state: &GoxlVoxMain, object: &VoxObject) -> Result<GoxlBlock> {
-    let size = GoxlBlock::SIZE;
-    let cell_color = resolve_cell_color_or_transparent(state, object)?;
-    let mut voxels = Vec::with_capacity((size * size * size) as usize);
-
-    // Storage order is x fastest, then y, then z, matching the loop nesting.
-    for z in 0..size {
-        for y in 0..size {
-            for x in 0..size {
-                let voxel = object
-                    .voxel_id(TyVector3U32::new(x, y, z))
-                    .filter(|&voxel_id| object.is_live(voxel_id))
-                    .map(|voxel_id| {
-                        let [r, g, b, a] = cell_color.color(voxel_id);
-                        GoxlVoxel { r, g, b, a }
-                    })
-                    .unwrap_or_default();
-                voxels.push(voxel);
+        let mut set = BTreeSet::new();
+        for layer in &file.layers {
+            for placement in &layer.blocks {
+                let block = &file.blocks[placement.block_index as usize];
+                for (index, voxel) in block.voxels.iter().enumerate() {
+                    if voxel.is_empty() {
+                        continue;
+                    }
+                    let x = index % stride;
+                    let y = index / stride % stride;
+                    let z = index / (stride * stride);
+                    set.insert((
+                        placement.position[0] + x as i32,
+                        placement.position[1] + y as i32,
+                        placement.position[2] + z as i32,
+                        (voxel.r, voxel.g, voxel.b, voxel.a),
+                    ));
+                }
             }
         }
+        set
     }
 
-    Ok(GoxlBlock { voxels })
-}
-
-/// Rebuilds one layer from its ext provenance, restoring its placements and the
-/// clone or shape definition.
-fn layer_from_provenance(layer: GoxlExtLayer) -> GoxlLayer {
-    GoxlLayer {
-        name: layer.name,
-        id: layer.id,
-        base_id: layer.base_id,
-        material: layer.material,
-        mode: layer.mode,
-        visible: layer.visible,
-        transform: layer.transform,
-        blocks: layer
-            .placements
-            .into_iter()
-            .map(|(block_index, position)| GoxlLayerBlock {
-                block_index,
-                position,
-            })
-            .collect(),
-        bounding_box: layer.bounding_box,
-        image_path: layer.image_path,
-        shape: layer.shape.as_deref().and_then(shape_from_token),
-        color: layer.color,
-        extra: GoxlDict(layer.extra),
+    /// A default state has no objects, so the writer synthesizes an empty
+    /// file.
+    #[test]
+    fn synthesizes_an_empty_state_without_an_ext() {
+        let state = VoxMain::default();
+        let file = to_goxl_file(&state).unwrap();
+        assert!(file.blocks.is_empty());
+        assert!(file.layers.is_empty());
     }
-}
 
-/// The procedural shape for an on-disk shape name, or `None` for an
-/// unrecognized one.
-fn shape_from_token(token: &str) -> Option<GoxlShape> {
-    match token {
-        "sphere" => Some(GoxlShape::Sphere),
-        "cube" => Some(GoxlShape::Cube),
-        "cylinder" => Some(GoxlShape::Cylinder),
-        _ => None,
+    /// A bare state, such as one cross-loaded from another format, synthesizes
+    /// a file: the hierarchy flattens to layers of placed blocks whose world
+    /// voxels and colors match the source, one layer per placement named for
+    /// its node, and the file reads back into a valid state.
+    #[test]
+    fn synthesizes_a_file_without_an_ext() {
+        let state = source_state();
+        let file = to_goxl_file(&state).unwrap();
+
+        let red = (0xFF, 0, 0, 0xFF);
+        let green = (0, 0xFF, 0, 0xFF);
+        let blue = (0, 0, 0xFF, 0xFF);
+
+        // Object 0 is placed at +5x under a group, object 1 at +3y.
+        assert_eq!(
+            world_voxels(&file),
+            BTreeSet::from([(5, 0, 0, red), (6, 0, 0, green), (0, 3, 0, blue)])
+        );
+
+        assert_eq!(file.layers.len(), 2);
+        assert_eq!(file.layers[0].name, "wide");
+        assert_eq!(file.layers[1].name, "unit");
+
+        // Each object tiles to one block, and each block reads back as its own
+        // object in a valid state.
+        assert_eq!(file.blocks.len(), 2);
+        let reloaded = from_goxl_file(&file).unwrap();
+        assert_eq!(reloaded.object_count(), 2);
     }
 }
