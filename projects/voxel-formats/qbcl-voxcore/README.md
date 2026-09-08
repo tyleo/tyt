@@ -10,17 +10,17 @@ defines the file models for the three Qubicle formats: Qubicle Binary
 
 - `from_qb_file` / `to_qb_file`: between a decoded `QbFile` and a bare
   `VoxMain<()>`. Each matrix becomes an object placed by a hierarchy node.
-  The objects share one `baseColor` palette. The writer errors on a bare
-  state because a `.qb` file rebuilds only from its `qb` ext.
+  The objects share one `baseColor` palette. The writer synthesizes the file
+  from the scene. Each object placement becomes one matrix at its world
+  translation. Grouping, rotation, scale, and alpha drop.
 - `from_qbt_file` / `to_qbt_file`: between a decoded `QbtFile` and a bare
   `VoxMain<()>`. Matrix and compound grids become objects sharing one
-  palette. The scene tree becomes the hierarchy. The writer errors on a bare
-  state because a `.qbt` file rebuilds only from its `qbt` ext.
+  palette. The scene tree becomes the hierarchy. The writer synthesizes the
+  file from the scene under one root model. A group's translation folds into
+  its descendant matrices. Group names, rotation, scale, and alpha drop.
 - `from_qbcl_file` / `to_qbcl_file`: between a decoded `QbclFile` and a bare
-  `VoxMain<()>`. The loader works as the `.qbt` loader does. The writer
-  synthesizes the file from the scene under one root model. A group's
-  translation folds into its descendant matrices. Rotation, scale, and alpha
-  drop.
+  `VoxMain<()>`. The loader and the writer work as the `.qbt` pair does.
+  Group names are kept.
 
 ## Bytes conversion
 
@@ -38,8 +38,9 @@ both. This crate's `impl` feature turns on the codec's.
 ## The ext
 
 `QbExt`, `QbtExt`, and `QbclExt` hold the Qubicle state with no native
-voxcore home. The bare loaders drop it. The `ext` feature, on by default,
-opens the `ext` module, where the typed path keeps the ext:
+voxcore home. The bare converters drop it on load and synthesize the file on
+write. The `ext` feature, on by default, opens the `ext` module, where the
+typed path keeps the ext:
 
 - `ext::from_qb_file_with_ext` loads a file into a `QbVoxMain`, a
   `VoxMain<Option<QbExt>>` carrying the ext. `ext::to_qb_file_with_ext`

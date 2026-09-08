@@ -5,11 +5,12 @@ use qbcl::qbt::QbtFile;
 /// [`QbtFile`], the inverse of
 /// [`from_qbt_file_with_ext`](crate::ext::from_qbt_file_with_ext) and the
 /// typed form of [`to_qbt_file`](crate::to_qbt_file). A loaded file writes
-/// back exactly through its ext.
+/// back exactly through its ext. A state carrying none writes a synthesized
+/// file.
 ///
-/// Errors if the state carries no ext, its node entries do not line up with
-/// the hierarchy, the state does not have exactly one root, or a mask list
-/// does not match its object.
+/// Errors if the ext's node entries do not line up with the hierarchy, the
+/// state does not have exactly one root, or a mask list does not match its
+/// object.
 pub fn to_qbt_file_with_ext(state: &QbtVoxMain) -> Result<QbtFile> {
     write_qbt(state, state.ext().as_ref())
 }
@@ -96,9 +97,13 @@ mod tests {
         assert_eq!(to_qbt_file_with_ext(&state).unwrap(), file);
     }
 
+    /// A state carrying no ext writes a synthesized file.
     #[test]
-    fn errors_without_qbt_ext() {
-        let state = QbtVoxMain::default();
-        assert!(to_qbt_file_with_ext(&state).is_err());
+    fn synthesizes_without_an_ext() {
+        let file = to_qbt_file_with_ext(&QbtVoxMain::default()).unwrap();
+        let QbtNode::Model(model) = &file.root else {
+            panic!("synthesis roots under a model");
+        };
+        assert!(model.children.is_empty());
     }
 }

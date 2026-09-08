@@ -4,10 +4,10 @@ use voxcore::VoxMain;
 
 /// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a bare [`VoxMain`].
 /// Matrix and compound grids become objects sharing one `baseColor` palette,
-/// and the scene tree becomes the hierarchy nodes. Dropping the rest of the
-/// Qubicle state leaves [`to_qbt_file`](crate::to_qbt_file) nothing to
-/// rebuild a file from. The `ext` feature's `ext::from_qbt_file_with_ext`
-/// keeps that state instead.
+/// and the scene tree becomes the hierarchy nodes. The rest of the Qubicle
+/// state is dropped, so [`to_qbt_file`](crate::to_qbt_file) writes the state
+/// back as a synthesized file. The `ext` feature's
+/// `ext::from_qbt_file_with_ext` keeps that state instead.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.

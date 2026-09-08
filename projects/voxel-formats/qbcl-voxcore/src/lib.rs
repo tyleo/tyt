@@ -6,15 +6,14 @@
 //! decoded file: [`from_qb_file`] / [`to_qb_file`] for Qubicle Binary,
 //! [`from_qbt_file`] / [`to_qbt_file`] for Qubicle Binary Tree, and
 //! [`from_qbcl_file`] / [`to_qbcl_file`] for Qubicle Construction Library.
-//! A loader returns a bare [`VoxMain`](voxcore::VoxMain). The `.qbcl` writer
-//! synthesizes the file from the scene. The `.qb` and `.qbt` writers error on
-//! a bare state because they rebuild a file only from its ext. The `codec`
-//! module, behind the default `codec` feature, goes straight to and from file
-//! bytes. Its `.qbt` and `.qbcl` conversions take the codec's dependencies,
-//! which `qbcl_codec::DependenciesImpl` supplies. The `ext` feature, on by
-//! default, opens the `ext` module. There the Qubicle state with no native
-//! voxcore home rides as the state's ext. The `_with_ext` converters write a
-//! loaded file back exactly.
+//! A loader returns a bare [`VoxMain`](voxcore::VoxMain). A writer
+//! synthesizes the file from the scene. The `codec` module, behind the
+//! default `codec` feature, goes straight to and from file bytes. Its `.qbt`
+//! and `.qbcl` conversions take the codec's dependencies, which
+//! `qbcl_codec::DependenciesImpl` supplies. The `ext` feature, on by default,
+//! opens the `ext` module. There the Qubicle state with no native voxcore
+//! home rides as the state's ext. The `_with_ext` converters write a loaded
+//! file back exactly.
 
 // Public API
 

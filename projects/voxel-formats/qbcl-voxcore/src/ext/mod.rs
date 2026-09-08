@@ -1,7 +1,7 @@
 //! The Qubicle state with no native voxcore home, kept beside a loaded file's
-//! scene so the file writes back exactly. The `.qbcl` bare writer synthesizes
-//! the file from the scene instead. The `.qb` and `.qbt` bare writers error.
-//! The `ext` feature makes this module public and adds the typed path for
+//! scene so the file writes back exactly. The bare writers synthesize the
+//! file from the scene instead. The `ext` feature makes this module public
+//! and adds the typed path for
 //! each format: [`QbVoxMain`], [`QbtVoxMain`], and [`QbclVoxMain`] carry
 //! their ext, the `from_x_file_with_ext` loaders keep a loaded file's, and
 //! the `to_x_file_with_ext` writers write it back. Each ext enters a

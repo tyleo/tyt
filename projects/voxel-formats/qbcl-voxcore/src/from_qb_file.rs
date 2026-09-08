@@ -4,10 +4,10 @@ use voxcore::VoxMain;
 
 /// Loads a decoded Qubicle Binary [`QbFile`] into a bare [`VoxMain`]. Each
 /// matrix becomes an object sharing one `baseColor` palette, placed by a
-/// hierarchy node at the matrix's scene position. Dropping the rest of the
-/// Qubicle state leaves [`to_qb_file`](crate::to_qb_file) nothing to rebuild
-/// a file from. The `ext` feature's `ext::from_qb_file_with_ext` keeps that
-/// state instead.
+/// hierarchy node at the matrix's scene position. The rest of the Qubicle
+/// state is dropped, so [`to_qb_file`](crate::to_qb_file) writes the state
+/// back as a synthesized file. The `ext` feature's `ext::from_qb_file_with_ext`
+/// keeps that state instead.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.

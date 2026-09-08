@@ -1,5 +1,5 @@
 use crate::{
-    Error, Result,
+    Error, Result, SOLID_MASK,
     ext::{QbclExt, QbclExtNode, QbclExtNodeBody},
 };
 use branded_id::U32Id;
@@ -221,12 +221,6 @@ fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
         ))
     })
 }
-
-/// The visibility mask written for every synthesized solid voxel. Qubicle reads
-/// a zero mask as an empty cell and any non-zero mask as a solid voxel whose
-/// bits are a per-face visibility set; the exact bits are cosmetic, so this
-/// mirrors the codec's solid fixture.
-const SOLID_MASK: u8 = 0x7e;
 
 /// Synthesizes a Qubicle file from the bare scene of a state written without
 /// a `qbcl` ext, such as one cross-loaded from another format.

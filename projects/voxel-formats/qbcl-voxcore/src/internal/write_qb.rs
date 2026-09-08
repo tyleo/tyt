@@ -2,24 +2,26 @@ use crate::{
     Error, Result,
     ext::{QbExt, QbExtMatrix},
 };
+use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
-use voxcore::{VoxMain, VoxObject, color::resolve_cell_color_or_transparent};
+use std::collections::HashSet;
+use ty_math::TyVector3I32;
+use voxcore::{
+    BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject, color::resolve_cell_color_or_transparent,
+};
 
-/// Writes a state to a decoded Qubicle Binary [`QbFile`]. The file rebuilds
-/// only from `qb_ext`: each object emits one matrix, taking its name,
-/// position, and per-voxel visibility from the ext and its colors from the
-/// palette.
+/// Writes a state to a decoded Qubicle Binary [`QbFile`]. With `qb_ext`, a
+/// loaded file rebuilds exactly: each object emits one matrix, taking its
+/// name, position, and per-voxel visibility from the ext and its colors from
+/// the palette. Without it, `synthesize_qb` builds the file from the bare
+/// scene.
 ///
-/// Errors if:
-///
-/// 1. the ext is absent
-/// 2. its matrix entries do not line up with the objects
-/// 3. a visibility list does not match its object
+/// Errors when the ext's matrix entries do not line up with the objects or a
+/// visibility list does not match its object, and when an object's
+/// `baseColor` draws from a non-color value pool.
 pub fn write_qb<T>(state: &VoxMain<T>, qb_ext: Option<&QbExt>) -> Result<QbFile> {
     let Some(ext) = qb_ext else {
-        return Err(Error::invalid(
-            "state has no qb ext; cannot rebuild a Qubicle .qb file",
-        ));
+        return synthesize_qb(state);
     };
 
     let object_count = state.object_count();
@@ -103,4 +105,127 @@ fn matrix_from_object<T>(
         position: provenance.position,
         voxels,
     })
+}
+
+/// Synthesizes a Qubicle Binary file from the bare scene of a state written
+/// without a `qb` ext, such as one cross-loaded from another format.
+///
+/// Qubicle Binary has a flat matrix list and no hierarchy. Every object
+/// placement becomes one matrix at the placement's world translation, summed
+/// down the hierarchy from the roots and rounded to whole voxels. A node's
+/// first object takes the node's name and any further object its own name.
+/// An object placed by no node is emitted once at the origin so no geometry
+/// is dropped. An object placed by several nodes is duplicated at each
+/// placement.
+///
+/// Lossy only where Qubicle Binary cannot represent the source: grouping
+/// collapses, node rotation and scale are dropped, and a color's alpha is
+/// dropped because a Qubicle voxel stores none. The header is the default:
+/// `RGBA`, left-handed, uncompressed, with a plain solid visibility byte.
+fn synthesize_qb<T>(state: &VoxMain<T>) -> Result<QbFile> {
+    let mut builder = QbBuilder::default();
+    for &root_id in state.root_hierarchy_node_ids() {
+        builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0))?;
+    }
+    for (object_id, object) in state.iter_objects() {
+        if !builder.placed.contains(&object_id.to_u32()) {
+            builder.emit_matrix(state, object_id, object, [0, 0, 0], object.name())?;
+        }
+    }
+
+    Ok(QbFile {
+        matrices: builder.matrices,
+        ..QbFile::default()
+    })
+}
+
+/// Accumulates the flattened Qubicle Binary scene. `placed` lets the sweep
+/// emit an object no node places once.
+#[derive(Default)]
+struct QbBuilder {
+    matrices: Vec<QbMatrix>,
+    placed: HashSet<u32>,
+}
+
+impl QbBuilder {
+    /// Walks one hierarchy node and its subtree, summing translations into
+    /// the world position each matrix carries.
+    fn emit_node<T>(
+        &mut self,
+        state: &VoxMain<T>,
+        node_id: U32Id<BVoxHierarchyNode>,
+        parent: TyVector3I32,
+    ) -> Result<()> {
+        let (name, child_object_ids, child_node_ids, world) = {
+            let node = state
+                .hierarchy_node(node_id)
+                .expect("a hierarchy id from the state resolves");
+            let position = node.transform.position;
+            let world = parent + position.round().as_ivec3();
+            (
+                node.name.clone(),
+                node.child_object_ids.clone(),
+                node.child_node_ids.clone(),
+                world,
+            )
+        };
+
+        for (index, object_id) in child_object_ids.into_iter().enumerate() {
+            let Some(object) = state.object(object_id) else {
+                continue;
+            };
+            let matrix_name = if index == 0 {
+                name.as_str()
+            } else {
+                object.name()
+            };
+            self.emit_matrix(state, object_id, object, world.to_array(), matrix_name)?;
+        }
+        for child_id in child_node_ids {
+            self.emit_node(state, child_id, world)?;
+        }
+
+        Ok(())
+    }
+
+    /// Emits one matrix placing `object` at the world `position` and marks
+    /// the object placed so the sweep skips it.
+    fn emit_matrix<T>(
+        &mut self,
+        state: &VoxMain<T>,
+        object_id: U32Id<BVoxObject>,
+        object: &VoxObject,
+        position: [i32; 3],
+        name: &str,
+    ) -> Result<()> {
+        self.placed.insert(object_id.to_u32());
+
+        let bounds = object.bounds();
+        let [size_x, size_y, size_z] = bounds.to_array();
+        let volume = size_x as usize * size_y as usize * size_z as usize;
+        let mut voxels = vec![QbVoxel::default(); volume];
+
+        let cell_color = resolve_cell_color_or_transparent(state, object)?;
+        for voxel_id in object.iter_live() {
+            let cell = object
+                .voxel_position(voxel_id)
+                .expect("a live voxel is within the grid");
+            // A Qubicle voxel stores no alpha, so the sampled color's alpha is
+            // dropped.
+            let [r, g, b, _] = cell_color.color(voxel_id);
+            // Storage order: index = x + size_x * (y + size_y * z).
+            let index = cell.x as usize
+                + size_x as usize * (cell.y as usize + size_y as usize * cell.z as usize);
+            voxels[index] = QbVoxel::new(r, g, b);
+        }
+
+        self.matrices.push(QbMatrix {
+            name: name.to_owned(),
+            size: [size_x, size_y, size_z],
+            position,
+            voxels,
+        });
+
+        Ok(())
+    }
 }

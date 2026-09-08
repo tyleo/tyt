@@ -4,10 +4,11 @@ use qbcl::qb::QbFile;
 /// Writes a [`QbVoxMain`] back to a decoded Qubicle Binary [`QbFile`], the
 /// inverse of [`from_qb_file_with_ext`](crate::ext::from_qb_file_with_ext)
 /// and the typed form of [`to_qb_file`](crate::to_qb_file). A loaded file
-/// writes back exactly through its ext.
+/// writes back exactly through its ext. A state carrying none writes a
+/// synthesized file.
 ///
-/// Errors if the state carries no ext, its matrix entries do not line up with
-/// the objects, or a visibility list does not match its object.
+/// Errors if the ext's matrix entries do not line up with the objects or a
+/// visibility list does not match its object.
 pub fn to_qb_file_with_ext(state: &QbVoxMain) -> Result<QbFile> {
     write_qb(state, state.ext().as_ref())
 }
@@ -65,9 +66,10 @@ mod tests {
         assert_eq!(to_qb_file_with_ext(&state).unwrap(), file);
     }
 
+    /// A state carrying no ext writes a synthesized file.
     #[test]
-    fn errors_without_qb_ext() {
-        let state = QbVoxMain::default();
-        assert!(to_qb_file_with_ext(&state).is_err());
+    fn synthesizes_without_an_ext() {
+        let file = to_qb_file_with_ext(&QbVoxMain::default()).unwrap();
+        assert!(file.matrices.is_empty());
     }
 }
