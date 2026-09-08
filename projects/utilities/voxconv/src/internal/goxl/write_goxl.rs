@@ -1,13 +1,13 @@
-use crate::{Result, VoxDocumentFile, retype_ext};
-use goxl_voxcore::codec::{dependencies::EncodePng, to_goxl_bytes_with_ext};
-use voxcore::{VoxMain, ext::VoxExt};
+use crate::{Result, VoxDocumentFile};
+use goxl_voxcore::codec::{dependencies::EncodePng, to_goxl_bytes};
+use voxcore::VoxMain;
 
-/// Encodes a state as a `.gox` file.
-pub fn write_goxl<D: EncodePng, T: VoxExt>(
+/// Encodes a bare state as a `.gox` file.
+pub fn write_goxl<D: EncodePng>(
     dependencies: &D,
-    state: VoxMain<T>,
+    state: &VoxMain<()>,
 ) -> Result<Vec<VoxDocumentFile>> {
-    let bytes = to_goxl_bytes_with_ext(dependencies, &retype_ext(state)?)?;
+    let bytes = to_goxl_bytes(dependencies, state)?;
 
     Ok(vec![VoxDocumentFile::single(bytes)])
 }

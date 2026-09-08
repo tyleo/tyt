@@ -9,7 +9,8 @@ use voxj_voxcore::codec::{
     to_voxj_bytes, to_voxj_pretty_bytes, to_voxjz_bytes,
 };
 
-/// Encodes a state as a Voxel Json document.
+/// Encodes a state as a Voxel Json document, its ext as the `ext` block.
+/// Both pairs write through it because the bridge takes any ext.
 pub fn write_voxj<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate, T: VoxExt>(
     dependencies: &D,
     state: &VoxMain<T>,

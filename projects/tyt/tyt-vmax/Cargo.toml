@@ -25,11 +25,11 @@ tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
 vmax-codec = { version = "0.2.0", optional = true }
 voxconv = { version = "0.1.0", default-features = false, features = [
+    "ext",
     "impl",
     "vmax",
     "voxj",
 ], optional = true }
-voxcore = { version = "0.2.1", default-features = false, optional = true }
 
 [features]
 default = ["impl"]
@@ -38,6 +38,5 @@ impl = [
     "dep:tyt-injection",
     "dep:vmax-codec",
     "dep:voxconv",
-    "dep:voxcore",
 ]
 bin = ["impl", "dep:clap_complete"]

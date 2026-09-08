@@ -16,13 +16,11 @@ pub enum WriteFormat {
     #[cfg(feature = "mvox")]
     MVox,
 
-    /// Qubicle Binary, the `.qb` file. Its writer needs the ext a `.qb` read
-    /// leaves in the state, so only a `.qb` source can be written back.
+    /// Qubicle Binary, the `.qb` file.
     #[cfg(feature = "qbcl")]
     Qb,
 
-    /// Qubicle Binary Tree, the `.qbt` file. Its writer needs the ext a `.qbt`
-    /// read leaves in the state, so only a `.qbt` source can be written back.
+    /// Qubicle Binary Tree, the `.qbt` file.
     #[cfg(feature = "qbcl")]
     Qbt,
 

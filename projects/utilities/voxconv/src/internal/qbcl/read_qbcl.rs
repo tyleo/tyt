@@ -1,14 +1,11 @@
-use crate::{Result, VoxDocumentFile, retype_ext, single_file_bytes};
-use qbcl_voxcore::codec::{dependencies::DecompressZlib, from_qbcl_bytes_with_ext};
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use crate::{Result, VoxDocumentFile, single_file_bytes};
+use qbcl_voxcore::codec::{dependencies::DecompressZlib, from_qbcl_bytes};
+use voxcore::VoxMain;
 
-/// Decodes a `.qbcl` file into a state.
-pub fn read_qbcl<D: DecompressZlib, T: VoxExtBlockCodec>(
+/// Decodes a `.qbcl` file into a bare state.
+pub fn read_qbcl<D: DecompressZlib>(
     dependencies: &D,
     files: &[VoxDocumentFile],
-) -> Result<VoxMain<T>> {
-    retype_ext(from_qbcl_bytes_with_ext(
-        dependencies,
-        single_file_bytes(files)?,
-    )?)
+) -> Result<VoxMain<()>> {
+    Ok(from_qbcl_bytes(dependencies, single_file_bytes(files)?)?)
 }

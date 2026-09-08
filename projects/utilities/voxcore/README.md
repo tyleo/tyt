@@ -170,7 +170,11 @@ decodes from that value. `decode_entry` finds the entry in a block or reports
 the block as another format's. `VoxExt::to_vox_ext` is the whole block a
 state persists. An empty map means no block. `VoxExtBlockCodec` builds a
 state's ext from a loaded block: `()` drops it, an `Option` of a format ext
-decodes its entry, and `VoxMap` keeps the block verbatim.
+decodes its entry, and `VoxMap` keeps the block verbatim. `CompositeVoxExt`
+carries a block entry by entry. It starts from a `VoxMap` with every entry
+verbatim. `decode::<E>` turns the entry a format owns into that format's
+ext. Each hook reaches every decoded ext. `to_vox_ext` merges the entries
+back in their order.
 
 ```rust
 let block = state.ext().to_vox_ext()?;

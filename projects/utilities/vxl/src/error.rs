@@ -5,6 +5,7 @@ use std::{
     io::Error as IOError,
 };
 use voxconv::Error as VoxconvError;
+use voxcore::ext::Error as VoxExtError;
 use voxsmith::Error as VoxsmithError;
 
 /// An error from this crate.
@@ -53,6 +54,12 @@ impl From<IOError> for Error {
 
 impl From<VoxconvError> for Error {
     fn from(e: VoxconvError) -> Self {
+        Error::IO(IOError::other(e))
+    }
+}
+
+impl From<VoxExtError> for Error {
+    fn from(e: VoxExtError) -> Self {
         Error::IO(IOError::other(e))
     }
 }

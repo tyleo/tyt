@@ -1,13 +1,13 @@
-use crate::{Result, VoxDocumentFile, retype_ext};
-use qbcl_voxcore::codec::{dependencies::CompressZlib, to_qbcl_bytes_with_ext};
-use voxcore::{VoxMain, ext::VoxExt};
+use crate::{Result, VoxDocumentFile};
+use qbcl_voxcore::codec::{dependencies::CompressZlib, to_qbcl_bytes};
+use voxcore::VoxMain;
 
-/// Encodes a state as a `.qbcl` file.
-pub fn write_qbcl<D: CompressZlib, T: VoxExt>(
+/// Encodes a bare state as a `.qbcl` file.
+pub fn write_qbcl<D: CompressZlib>(
     dependencies: &D,
-    state: VoxMain<T>,
+    state: &VoxMain<()>,
 ) -> Result<Vec<VoxDocumentFile>> {
-    let bytes = to_qbcl_bytes_with_ext(dependencies, &retype_ext(state)?)?;
+    let bytes = to_qbcl_bytes(dependencies, state)?;
 
     Ok(vec![VoxDocumentFile::single(bytes)])
 }

@@ -136,7 +136,7 @@ impl Voxelize {
                 serialization,
                 options: write_options,
             },
-            state,
+            &state,
             &output,
         )
     }

@@ -1,28 +1,20 @@
-use crate::{Result, VoxDocumentFile, retype_ext};
+use crate::{Result, VoxDocumentFile, package_file};
 use vmax_voxcore::codec::{
     dependencies::{DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse},
-    from_vmax_package_with_ext,
+    from_vmax_package,
 };
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
+use voxcore::VoxMain;
 
-/// Decodes a `.vmax` package's files into a state.
-pub fn read_vmax<D, T>(dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<T>>
+/// Decodes a `.vmax` package's files into a bare state.
+pub fn read_vmax<D>(dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<()>>
 where
     D: DecompressLzfse + DecodeVMaxPlist + DecodePng + DecodeVMaxSceneJson,
-    T: VoxExtBlockCodec,
 {
     let paths = files.iter().map(|file| file.path.clone()).collect();
 
-    let state = from_vmax_package_with_ext(
+    Ok(from_vmax_package(
         dependencies,
         || Ok(paths),
-        |path| {
-            Ok(files
-                .iter()
-                .find(|file| file.path == path)
-                .map(|file| file.bytes.clone()))
-        },
-    )?;
-
-    retype_ext(state)
+        |path| Ok(package_file(files, path)),
+    )?)
 }

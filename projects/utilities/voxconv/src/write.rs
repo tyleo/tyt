@@ -1,14 +1,13 @@
 use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, internal};
-use voxcore::{VoxMain, ext::VoxExt};
+use voxcore::VoxMain;
 
-/// Encodes a state as a document's files. The ext `T` moves into the
-/// format's ext through its block form. A state carrying another format's
-/// ext, or none, writes the format's default ext. The state is consumed
-/// because the format's writer needs it in the format's ext type.
-pub fn write<D: Dependencies, T: VoxExt>(
+/// Encodes a bare [`VoxMain`] as a document's files synthesized from its
+/// scene. The `ext` feature's `ext::write_with_ext` writes from the format's
+/// ext instead when the state carries it.
+pub fn write<D: Dependencies>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxMain<T>,
+    state: &VoxMain<()>,
 ) -> Result<Vec<VoxDocumentFile>> {
     match format {
         #[cfg(feature = "goxl")]
@@ -27,7 +26,7 @@ pub fn write<D: Dependencies, T: VoxExt>(
         WriteFormat::Voxj {
             serialization,
             options,
-        } => internal::write_voxj(dependencies.voxj(), &state, *serialization, options),
+        } => internal::write_voxj(dependencies.voxj(), state, *serialization, options),
     }
 }
 
@@ -39,24 +38,24 @@ mod tests {
         voxj::{VoxjSerialization, VoxjWriteOptions},
         write,
     };
-    use voxcore::{VoxMain, VoxMap};
 
-    /// Every format a bare state writes, read back through the raw slot.
+    /// Every format a bare state writes reads back bare.
     #[test]
     fn each_format_round_trips_a_bare_state() {
         let formats = [
             WriteFormat::Goxl,
             WriteFormat::MVox,
+            WriteFormat::Qb,
+            WriteFormat::Qbt,
             WriteFormat::Qbcl,
             WriteFormat::VMax(VMaxWriteOptions::default()),
             WriteFormat::from(ReadFormat::Voxj),
         ];
 
         for format in formats {
-            let files = write(&DependenciesImpl, &format, test_state(())).unwrap();
+            let files = write(&DependenciesImpl, &format, &test_state(())).unwrap();
 
-            let loaded: VoxMain<Option<VoxMap>> =
-                read(&DependenciesImpl, format.read_format(), &files).unwrap();
+            let loaded = read(&DependenciesImpl, format.read_format(), &files).unwrap();
 
             assert_eq!(loaded.object_count(), 1, "{format:?}");
         }
@@ -66,7 +65,7 @@ mod tests {
     /// its scene file among others.
     #[test]
     fn documents_take_their_file_shape() {
-        let single = write(&DependenciesImpl, &WriteFormat::MVox, test_state(())).unwrap();
+        let single = write(&DependenciesImpl, &WriteFormat::MVox, &test_state(())).unwrap();
 
         assert_eq!(single.len(), 1);
 
@@ -75,51 +74,11 @@ mod tests {
         let package = write(
             &DependenciesImpl,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            test_state(()),
+            &test_state(()),
         )
         .unwrap();
 
         assert!(package.iter().any(|file| file.path == "scene.json"));
-    }
-
-    /// A format's ext survives its own round trip as a keyed block, and a
-    /// foreign block writes another format's default ext.
-    #[test]
-    fn exts_ride_the_raw_ext_between_formats() {
-        let vmax = WriteFormat::VMax(VMaxWriteOptions::default());
-
-        let files = write(&DependenciesImpl, &vmax, test_state(())).unwrap();
-
-        let loaded: VoxMain<Option<VoxMap>> =
-            read(&DependenciesImpl, ReadFormat::VMax, &files).unwrap();
-
-        let block = loaded.ext().clone().expect("a vmax read stashes its ext");
-
-        assert!(block.0.iter().any(|(key, _)| key == "vmax"));
-
-        let again = write(&DependenciesImpl, &vmax, loaded).unwrap();
-
-        assert_eq!(again.len(), files.len());
-
-        let reloaded: VoxMain<Option<VoxMap>> =
-            read(&DependenciesImpl, ReadFormat::VMax, &files).unwrap();
-
-        let mvox = write(&DependenciesImpl, &WriteFormat::MVox, reloaded).unwrap();
-
-        let loaded: VoxMain<Option<VoxMap>> =
-            read(&DependenciesImpl, ReadFormat::MVox, &mvox).unwrap();
-
-        assert_eq!(loaded.object_count(), 1);
-    }
-
-    /// The `()` ext drops every block on the way in.
-    #[test]
-    fn the_unit_ext_drops_the_block() {
-        let files = write(&DependenciesImpl, &WriteFormat::Goxl, test_state(())).unwrap();
-
-        let loaded: VoxMain<()> = read(&DependenciesImpl, ReadFormat::Goxl, &files).unwrap();
-
-        assert_eq!(loaded.object_count(), 1);
     }
 
     /// Each Voxel Json serialization writes its container form.
@@ -131,7 +90,7 @@ mod tests {
                 options: VoxjWriteOptions::default(),
             };
 
-            write(&DependenciesImpl, &format, test_state(()))
+            write(&DependenciesImpl, &format, &test_state(()))
                 .unwrap()
                 .remove(0)
                 .bytes
@@ -147,10 +106,10 @@ mod tests {
     /// A single-file format given two files is an error.
     #[test]
     fn two_files_for_one_format_error() {
-        let mut files = write(&DependenciesImpl, &WriteFormat::MVox, test_state(())).unwrap();
+        let mut files = write(&DependenciesImpl, &WriteFormat::MVox, &test_state(())).unwrap();
 
         files.push(files[0].clone());
 
-        assert!(read::<_, ()>(&DependenciesImpl, ReadFormat::MVox, &files).is_err());
+        assert!(read(&DependenciesImpl, ReadFormat::MVox, &files).is_err());
     }
 }

@@ -4,18 +4,18 @@
 //!
 //! Each format's `-voxcore` bridge crate owns its conversion. This crate
 //! fronts them. [`ReadFormat`] and [`WriteFormat`] pick a bridge. A document
-//! travels as a list of [`VoxDocumentFile`]. A state's ext moves between the
-//! bridge's typed ext and whatever ext type the caller's
-//! [`VoxMain`](voxcore::VoxMain) carries: through voxcore's
-//! [`VoxExtBlockCodec`](voxcore::ext::VoxExtBlockCodec) on a read and
-//! [`VoxExt`](voxcore::ext::VoxExt) on a write. [`read()`] and
-//! [`write()`] move a document through a bridge over the caller's
-//! [`Dependencies`]. [`load()`] and [`save()`] start and end at a path
-//! instead of the files. [`check_document_files()`] returns each check as
-//! voxcore's [`VoxCheck`](voxcore::check::VoxCheck), so a renderer elsewhere
-//! lays every format's checks out the same way. Each format feature enables
-//! its bridge's `codec` and `ext` features. The `vmax` and `voxj` modules
-//! hold those formats' writer options.
+//! travels as a list of [`VoxDocumentFile`]. [`read()`] and [`write()`] move
+//! a document through a bridge over the caller's [`Dependencies`] as a bare
+//! [`VoxMain`](voxcore::VoxMain): a read drops the format's ext, and a write
+//! synthesizes the file from the scene. [`load()`] and [`save()`] start and
+//! end at a path instead of the files. The `ext` feature, on by default,
+//! opens the `ext` module, where the `_with_ext` pairs carry the format's
+//! ext as a boxed [`VoxExt`](voxcore::ext::VoxExt).
+//! [`check_document_files()`] returns each check as voxcore's
+//! [`VoxCheck`](voxcore::check::VoxCheck), so a renderer elsewhere lays every
+//! format's checks out the same way. Each format feature enables its
+//! bridge's `codec` feature. The `ext` feature enables every enabled bridge's
+//! `ext`. The `vmax` and `voxj` modules hold those formats' writer options.
 
 #[cfg(not(any(
     feature = "goxl",
@@ -67,6 +67,9 @@ pub use write_file::*;
 pub use write_format::*;
 
 // Optional API
+
+#[cfg(feature = "ext")]
+pub mod ext;
 
 #[cfg(feature = "impl")]
 mod dependencies_impl;

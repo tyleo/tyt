@@ -6,12 +6,30 @@ mod single_file_bytes;
 #[cfg(any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "voxj"))]
 pub(crate) use single_file_bytes::*;
 
-// Shared by the formats whose ext moves through the block form.
+// Shared by the ext pairs of the formats with a typed ext.
 
-#[cfg(any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax"))]
+#[cfg(all(
+    feature = "ext",
+    any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax")
+))]
+mod box_ext;
+
+#[cfg(all(
+    feature = "ext",
+    any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax")
+))]
 mod retype_ext;
 
-#[cfg(any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax"))]
+#[cfg(all(
+    feature = "ext",
+    any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax")
+))]
+pub(crate) use box_ext::*;
+
+#[cfg(all(
+    feature = "ext",
+    any(feature = "goxl", feature = "mvox", feature = "qbcl", feature = "vmax")
+))]
 pub(crate) use retype_ext::*;
 
 // One folder per format.
@@ -53,3 +71,9 @@ mod test_state;
 
 #[cfg(test)]
 pub(crate) use test_state::*;
+
+#[cfg(all(test, feature = "impl"))]
+mod memory_files;
+
+#[cfg(all(test, feature = "impl"))]
+pub(crate) use memory_files::*;

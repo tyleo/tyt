@@ -12,7 +12,7 @@ pub fn check_document_files<D: Dependencies>(
     format: ReadFormat,
     files: &[VoxDocumentFile],
 ) -> Result<Vec<VoxCheck>> {
-    if let Err(error) = read::<D, ()>(dependencies, format, files) {
+    if let Err(error) = read(dependencies, format, files) {
         return Ok(vec![VoxCheck::failed("decode", vec![error.to_string()])]);
     }
 
@@ -51,7 +51,7 @@ mod tests {
         let files = write(
             &DependenciesImpl,
             &WriteFormat::from(ReadFormat::Voxj),
-            test_state(()),
+            &test_state(()),
         )
         .unwrap();
 

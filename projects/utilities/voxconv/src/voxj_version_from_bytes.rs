@@ -19,7 +19,7 @@ mod tests {
         let files = write(
             &DependenciesImpl,
             &WriteFormat::from(ReadFormat::Voxj),
-            test_state(()),
+            &test_state(()),
         )
         .unwrap();
 

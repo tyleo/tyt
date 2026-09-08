@@ -1,16 +1,23 @@
 use crate::Result;
 use voxcore::{
     VoxMain,
-    ext::{VoxExt, VoxExtBlockCodec},
+    ext::{VoxExt, VoxExtEntryCodec, decode_entry},
 };
 
-/// Moves a state's ext into another ext type through its block form. The
-/// target decodes the block when it owns the block's key, and takes its
-/// default when the block belongs to another format or is absent.
-pub fn retype_ext<S: VoxExt, T: VoxExtBlockCodec>(state: VoxMain<S>) -> Result<VoxMain<T>> {
-    let block = state.ext().to_vox_ext()?;
+/// Moves a boxed ext into the format's ext type for its writer. A box holding
+/// the format's ext is taken as it is. Any other encodes to its block. The
+/// format's entry in it decodes to `Some`. A block with no entry for the
+/// format, such as another format's, gives `None`.
+pub fn retype_ext<E: VoxExt + VoxExtEntryCodec + Clone>(
+    state: VoxMain<Box<dyn VoxExt>>,
+) -> Result<VoxMain<Option<E>>> {
+    if let Some(ext) = state.ext().as_any().downcast_ref::<E>() {
+        let ext = ext.clone();
 
-    let ext = T::from_vox_ext_block((!block.0.is_empty()).then_some(&block))?;
+        return Ok(state.map_ext(|_| Some(ext)));
+    }
+
+    let ext = decode_entry(&state.ext().to_vox_ext()?)?;
 
     Ok(state.map_ext(|_| ext))
 }

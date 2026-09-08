@@ -1,25 +1,22 @@
-use crate::{Result, VoxDocumentFile, retype_ext, vmax::VMaxWriteOptions};
+use crate::{Result, VoxDocumentFile, vmax::VMaxWriteOptions};
 use vmax_voxcore::codec::{
     dependencies::{CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson},
-    to_vmax_package_with_ext,
+    to_vmax_package,
 };
-use voxcore::{VoxMain, ext::VoxExt};
+use voxcore::VoxMain;
 
-/// Encodes a state as a `.vmax` package's files.
-pub fn write_vmax<D, T>(
+/// Encodes a bare state as a `.vmax` package's files.
+pub fn write_vmax<D>(
     dependencies: &D,
-    state: VoxMain<T>,
+    state: &VoxMain<()>,
     options: &VMaxWriteOptions,
 ) -> Result<Vec<VoxDocumentFile>>
 where
     D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
-    T: VoxExt,
 {
-    let state = retype_ext(state)?;
-
     let mut files = Vec::new();
 
-    to_vmax_package_with_ext(dependencies, &state, options, |path, bytes| {
+    to_vmax_package(dependencies, state, options, |path, bytes| {
         files.push(VoxDocumentFile::new(path, bytes.to_vec()));
 
         Ok(())

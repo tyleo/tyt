@@ -1975,7 +1975,6 @@ dependencies = [
  "tyt-injection",
  "vmax-codec",
  "voxconv",
- "voxcore",
 ]
 
 [[package]]
