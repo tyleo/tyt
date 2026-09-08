@@ -3,44 +3,22 @@
 //! Converts between MagicaVoxel files and the voxcore state.
 //!
 //! [`from_mvox_file`] loads a decoded [`MVoxFile`](mvox::MVoxFile) into a
-//! [`MVoxVoxMain`], and [`to_mvox_file`] writes one back. The
-//! MagicaVoxel state with no native voxcore home rides in the
-//! [`MVoxExt`] the state carries as its ext, so a loaded file writes back
-//! exactly. A state without one, such as one loaded from another format, has
-//! its file synthesized from the bare scene. The `codec` module, behind the
-//! default `codec` feature, goes straight to and from `.vox` bytes over
-//! mvox-codec. The `ext` feature keys the ext into a document's `ext` block
-//! through voxcore's [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
+//! bare [`VoxMain`](voxcore::VoxMain). [`to_mvox_file`] writes one back as a
+//! file synthesized from the scene. The `codec` module, behind the default
+//! `codec` feature, goes straight to and from `.vox` bytes over mvox-codec.
+//! The `ext` feature, on by default, opens the `ext` module. There the
+//! MagicaVoxel state with no native voxcore home rides as the state's ext.
+//! The `_with_ext` converters write a loaded file back exactly.
 
 // Public API
 
 mod error;
 mod from_mvox_file;
-mod mvox_ext;
-mod mvox_ext_camera;
-mod mvox_ext_frame;
-mod mvox_ext_layer;
-mod mvox_ext_material;
-mod mvox_ext_node;
-mod mvox_ext_node_body;
-mod mvox_ext_shape_model;
-mod mvox_ext_unknown_chunk;
-mod mvox_vox_main;
 mod result;
 mod to_mvox_file;
 
 pub use error::*;
 pub use from_mvox_file::*;
-pub use mvox_ext::*;
-pub use mvox_ext_camera::*;
-pub use mvox_ext_frame::*;
-pub use mvox_ext_layer::*;
-pub use mvox_ext_material::*;
-pub use mvox_ext_node::*;
-pub use mvox_ext_node_body::*;
-pub use mvox_ext_shape_model::*;
-pub use mvox_ext_unknown_chunk::*;
-pub use mvox_vox_main::*;
 pub use result::*;
 pub use to_mvox_file::*;
 
@@ -50,4 +28,12 @@ pub use to_mvox_file::*;
 pub mod codec;
 
 #[cfg(feature = "ext")]
-mod vox_ext_entry_codec;
+pub mod ext;
+
+#[cfg(not(feature = "ext"))]
+mod ext;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;

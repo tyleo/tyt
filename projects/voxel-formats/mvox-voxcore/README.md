@@ -6,25 +6,34 @@ voxcore's in-memory `VoxMain` and back.
 
 ## File conversion
 
-- `from_mvox_file` / `to_mvox_file`: between a decoded `MVoxFile` and a
-  `MVoxVoxMain`. Models become objects, the 256-color palette and the
-  materials become one shared palette of value pools, and the scene graph
-  becomes the hierarchy nodes.
+- `from_mvox_file` / `to_mvox_file`: between a decoded `MVoxFile` and a bare
+  `VoxMain<()>`. Models become objects. The 256-color palette and the
+  materials become one shared palette of value pools. The scene graph
+  becomes the hierarchy nodes. The writer synthesizes the file from the
+  scene. Each object becomes one model, one global palette gathers every
+  used color, and the scene graph mirrors the hierarchy. Rotation and scale
+  drop.
 
 ## Bytes conversion
 
 The `codec` module, behind the default `codec` feature, goes straight to and
 from `.vox` bytes over `mvox-codec`:
 
-- `codec::from_mvox_bytes`: `.vox` bytes into a `MVoxVoxMain`.
+- `codec::from_mvox_bytes`: `.vox` bytes into a bare `VoxMain<()>`.
 - `codec::to_mvox_bytes`: a state to `.vox` bytes.
 
 ## The ext
 
-The MagicaVoxel state with no native voxcore home rides in the `MVoxExt`.
-The loader stores it as the state's ext, so a file loaded from MagicaVoxel
-writes back exactly. A state without an ext, such as a state loaded from
-another format, has its file synthesized from the bare scene. The `ext`
-feature, on by default, keys the ext into a document's `ext` block under the
-`mvox` key through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries
-the ext in that block.
+`MVoxExt` holds the MagicaVoxel state with no native voxcore home. The bare
+converters drop it on load and synthesize the file on write. The `ext`
+feature, on by default, opens the `ext` module, where the typed path keeps
+the ext:
+
+- `ext::from_mvox_file_with_ext` loads a file into a `MVoxVoxMain`, a
+  `VoxMain<Option<MVoxExt>>` carrying the ext. `ext::to_mvox_file_with_ext`
+  writes the state back exactly.
+- `codec::from_mvox_bytes_with_ext` and `codec::to_mvox_bytes_with_ext` do
+  the same for `.vox` bytes.
+
+The ext enters a document's `ext` block as the `mvox` entry through voxcore's
+`VoxExtEntryCodec`. A Voxel Json document carries the ext in that block.
