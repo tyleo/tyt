@@ -1,4 +1,4 @@
-use crate::QbclExtNodeBody;
+use crate::ext::QbclExtNodeBody;
 #[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 

@@ -1,408 +1,214 @@
-use crate::{Error, QbclExtNode, QbclExtNodeBody, QbclVoxMain, Result};
-use branded_id::U32Id;
-use qbcl::qbcl::{
-    QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode, QbclNodeBody,
-    QbclThumbnail, QbclVoxel,
-};
-use std::collections::HashSet;
-use ty_math::TyVector3I32;
-use voxcore::{
-    BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxObject,
-    color::resolve_cell_color_or_transparent,
-};
+use crate::{Result, write_qbcl};
+use qbcl::qbcl::QbclFile;
+use voxcore::VoxMain;
 
-/// Writes a [`QbclVoxMain`] to a decoded Qubicle Construction Library
-/// [`QbclFile`].
+/// Writes a bare [`VoxMain`] to a decoded Qubicle Construction Library
+/// [`QbclFile`] synthesized from its scene, the inverse of
+/// [`from_qbcl_file`](crate::from_qbcl_file). The hierarchy mirrors into
+/// Qubicle's scene tree under one synthetic root model. A group's translation
+/// folds into the world position of its descendant matrices, rounded to whole
+/// voxels. Rotation, scale, and alpha drop. The `ext` feature's
+/// `ext::to_qbcl_file_with_ext` writes a loaded file back exactly.
 ///
-/// When the state carries the `qbcl` ext the forward path writes, the
-/// file is rebuilt from it exactly, the inverse of
-/// [`from_qbcl_file`](crate::from_qbcl_file): the scene tree is walked from the
-/// single root, each matrix or compound emitting its grid with the visibility
-/// masks and color from the ext and the palette. When the ext is absent or
-/// names another format, the file is synthesized from the bare scene by
-/// `synthesize_qbcl`, so any source can be written to Qubicle.
-///
-/// Errors when a `qbcl` ext is present but its node entries do not line
-/// up with the hierarchy, the state does not have exactly one root, or a mask
-/// list does not match its object, and when an object's `baseColor` draws
-/// from a non-color value pool.
-pub fn to_qbcl_file(state: &QbclVoxMain) -> Result<QbclFile> {
-    let Some(ext) = state.ext().clone() else {
-        return synthesize_qbcl(state);
+/// Errors when an object's `baseColor` draws from a non-color value pool.
+pub fn to_qbcl_file(state: &VoxMain<()>) -> Result<QbclFile> {
+    write_qbcl(state, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{from_qbcl_file, to_qbcl_file};
+    use branded_id::U32Id;
+    use qbcl::qbcl::{QbclFile, QbclMatrix, QbclNode, QbclNodeBody};
+    use std::collections::BTreeSet;
+    use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+    use voxcore::{
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
-    let node_count = state.hierarchy_node_count();
-    if node_count != ext.nodes.len() {
-        return Err(Error::invalid(format!(
-            "qbcl ext has {} nodes but the state has {node_count} hierarchy nodes",
-            ext.nodes.len()
-        )));
+    /// The linear-light components of a `#RRGGBB` hex string.
+    fn linear_rgb(hex: &str) -> [f64; 3] {
+        let linear =
+            lin_srgba_f64_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color"));
+        [linear.red, linear.green, linear.blue]
     }
 
-    let root_ids = state.root_hierarchy_node_ids();
-    let [root_id] = root_ids else {
-        return Err(Error::invalid(format!(
-            "a Qubicle .qbcl file needs exactly one root, but the state has {}",
-            root_ids.len()
-        )));
-    };
+    /// A bare state built straight from voxcore: a red-green object and a
+    /// blue object sharing one `baseColor` palette, placed by a hierarchy of
+    /// a nested group and two roots. This is the cross-format synthesis input.
+    fn source_state() -> VoxMain<()> {
+        let mut state = VoxMain::default();
 
-    let root = rebuild_node(*root_id, state, &ext.nodes)?;
-
-    Ok(QbclFile {
-        program_version: ext.program_version,
-        file_version: ext.file_version,
-        thumbnail: QbclThumbnail {
-            width: ext.thumbnail.width,
-            height: ext.thumbnail.height,
-            pixels: ext
-                .thumbnail
-                .pixels
-                .iter()
-                .map(|pixel| QbclColor::new(pixel[0], pixel[1], pixel[2], pixel[3]))
-                .collect(),
-        },
-        metadata: QbclMetadata {
-            title: ext.metadata.title,
-            description: ext.metadata.description,
-            tags: ext.metadata.tags,
-            author: ext.metadata.author,
-            company: ext.metadata.company,
-            website: ext.metadata.website,
-            copyright: ext.metadata.copyright,
-        },
-        guid: ext.guid,
-        root,
-    })
-}
-
-/// Rebuilds one scene node and its subtree from the hierarchy node `node_id`
-/// and its aligned ext provenance.
-fn rebuild_node(
-    node_id: U32Id<BVoxHierarchyNode>,
-    state: &QbclVoxMain,
-    nodes: &[QbclExtNode],
-) -> Result<QbclNode> {
-    let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
-        Error::invalid(format!(
-            "hierarchy node {} does not exist",
-            node_id.to_u32()
-        ))
-    })?;
-    let provenance = nodes.get(node_id.to_u32() as usize).ok_or_else(|| {
-        Error::invalid(format!(
-            "qbcl ext has no entry for hierarchy node {}",
-            node_id.to_u32()
-        ))
-    })?;
-
-    let body = match &provenance.body {
-        QbclExtNodeBody::Model { transform } => QbclNodeBody::Model(QbclModel {
-            transform: model_transform(transform)?,
-            children: rebuild_children(hierarchy, state, nodes)?,
-        }),
-        QbclExtNodeBody::Matrix {
-            position,
-            pivot,
-            masks,
-        } => QbclNodeBody::Matrix(matrix_from_object(
-            state,
-            matrix_object(hierarchy, state)?,
-            *position,
-            *pivot,
-            masks,
-        )?),
-        QbclExtNodeBody::Compound {
-            position,
-            pivot,
-            masks,
-        } => {
-            let matrix = matrix_from_object(
-                state,
-                matrix_object(hierarchy, state)?,
-                *position,
-                *pivot,
-                masks,
-            )?;
-            QbclNodeBody::Compound(QbclCompound {
-                matrix,
-                children: rebuild_children(hierarchy, state, nodes)?,
-            })
-        }
-    };
-
-    Ok(QbclNode {
-        name: provenance.name.clone(),
-        visible: provenance.visible,
-        locked: provenance.locked,
-        body,
-    })
-}
-
-/// Rebuilds the child nodes of a hierarchy node, in stored order.
-fn rebuild_children(
-    hierarchy: &VoxHierarchyNode,
-    state: &QbclVoxMain,
-    nodes: &[QbclExtNode],
-) -> Result<Vec<QbclNode>> {
-    hierarchy
-        .child_node_ids
-        .iter()
-        .map(|&child_id| rebuild_node(child_id, state, nodes))
-        .collect()
-}
-
-/// The build-volume object a matrix or compound node places, or an error if it
-/// has none. The object is the author's build volume, so the written matrix
-/// keeps the original dimensions and voxel positions directly.
-fn matrix_object<'a>(
-    hierarchy: &VoxHierarchyNode,
-    state: &'a QbclVoxMain,
-) -> Result<&'a VoxObject> {
-    let object_id = *hierarchy
-        .child_object_ids
-        .first()
-        .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
-    state
-        .object(object_id)
-        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
-}
-
-/// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the object's `baseColor` layer and its mask from the aligned ext mask
-/// list, placed in `.qbcl` storage order. Errors if the mask count does not
-/// match the object's solid voxels.
-fn matrix_from_object(
-    state: &QbclVoxMain,
-    object: &VoxObject,
-    position: [i32; 3],
-    pivot: [f32; 3],
-    masks: &[u8],
-) -> Result<QbclMatrix> {
-    let bounds = object.bounds();
-    let [size_x, size_y, size_z] = bounds.to_array();
-    let volume = size_x as usize * size_y as usize * size_z as usize;
-    let mut voxels = vec![QbclVoxel::default(); volume];
-
-    let cell_color = resolve_cell_color_or_transparent(state, object)?;
-    let live_count = object.live_count();
-    if live_count != masks.len() {
-        return Err(Error::invalid(format!(
-            "qbcl ext has {} masks but the object has {live_count} solid voxels",
-            masks.len()
-        )));
-    }
-
-    for (voxel_id, &mask) in object.iter_live().zip(masks) {
-        let position = object
-            .voxel_position(voxel_id)
-            .expect("a live voxel is within the grid");
-        // A Qubicle voxel stores no alpha, so the sampled color's alpha is
-        // dropped.
-        let [r, g, b, _] = cell_color.color(voxel_id);
-        // Storage order: index = y + size_y * (z + size_z * x).
-        let index = position.y as usize
-            + size_y as usize * (position.z as usize + size_z as usize * position.x as usize);
-        voxels[index] = QbclVoxel::new(r, g, b, mask);
-    }
-
-    Ok(QbclMatrix {
-        size: [size_x, size_y, size_z],
-        position,
-        pivot,
-        voxels,
-    })
-}
-
-/// Converts a stored model-transform chunk into its fixed 36-byte array.
-fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
-    <[u8; 36]>::try_from(bytes).map_err(|_| {
-        Error::invalid(format!(
-            "qbcl model transform is {} bytes, expected 36",
-            bytes.len()
-        ))
-    })
-}
-
-/// The visibility mask written for every synthesized solid voxel. Qubicle reads
-/// a zero mask as an empty cell and any non-zero mask as a solid voxel whose
-/// bits are a per-face visibility set; the exact bits are cosmetic, so this
-/// mirrors the codec's solid fixture.
-const SOLID_MASK: u8 = 0x7e;
-
-/// Synthesizes a Qubicle file from a state that carries no `qbcl` ext,
-/// such as one cross-loaded from another format.
-///
-/// The voxcore hierarchy is mirrored into Qubicle's scene tree: a node with
-/// only child nodes becomes a model, a node placing one object becomes a
-/// matrix, and a node placing an object alongside child nodes or several
-/// objects becomes a compound whose grid is the node's first object and whose
-/// children hold the rest. Qubicle requires a single root, so every voxcore
-/// root hangs under one synthetic model; an object no node places is swept
-/// under it at the origin so no geometry is dropped, and an object placed by
-/// several nodes is duplicated at each placement.
-///
-/// Lossy only where Qubicle cannot represent the source: a model's transform
-/// chunk cannot carry translation, so a group node's placement is folded into
-/// the world position of its descendant matrices, summed down the hierarchy and
-/// rounded to whole voxels, and node rotation and scale are dropped. Colors
-/// stay per voxel with no palette merge, but a Qubicle voxel stores no alpha,
-/// so a color's alpha is dropped. Each matrix is pivoted at its grid origin, so
-/// its position is the world coordinate of the object's min corner.
-fn synthesize_qbcl(state: &QbclVoxMain) -> Result<QbclFile> {
-    let mut builder = QbclBuilder::default();
-    let mut children: Vec<QbclNode> = state
-        .root_hierarchy_node_ids()
-        .iter()
-        .map(|&root_id| builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0)))
-        .collect::<Result<_>>()?;
-    for (object_id, object) in state.iter_objects() {
-        if !builder.placed.contains(&object_id.to_u32()) {
-            children.push(builder.emit_object_node(state, object_id, object, [0, 0, 0])?);
-        }
-    }
-
-    Ok(QbclFile {
-        root: QbclNode {
-            name: "root".to_owned(),
-            body: QbclNodeBody::Model(QbclModel {
-                transform: QbclModel::DEFAULT_TRANSFORM,
-                children,
-            }),
-            ..QbclNode::default()
-        },
-        ..QbclFile::default()
-    })
-}
-
-/// Tracks the objects a hierarchy node has already placed while synthesizing a
-/// Qubicle scene tree, so an object no node places can be swept in once.
-#[derive(Default)]
-struct QbclBuilder {
-    placed: HashSet<u32>,
-}
-
-impl QbclBuilder {
-    /// Maps one hierarchy node and its subtree to a Qubicle node, summing the
-    /// node's translation into the world position so descendant matrices land
-    /// correctly even though a model node cannot carry translation. The node's
-    /// first object rides on the node itself as a matrix or compound grid; any
-    /// further objects and the mapped child nodes become its children.
-    fn emit_node(
-        &mut self,
-        state: &QbclVoxMain,
-        node_id: U32Id<BVoxHierarchyNode>,
-        parent: TyVector3I32,
-    ) -> Result<QbclNode> {
-        let (name, child_object_ids, child_node_ids, world) = {
-            let node = state
-                .hierarchy_node(node_id)
-                .expect("a hierarchy id from the state resolves");
-            let position = node.transform.position;
-            let world = parent + position.round().as_ivec3();
-            (
-                node.name.clone(),
-                node.child_object_ids.clone(),
-                node.child_node_ids.clone(),
-                world,
+        // One baseColor palette: red, green, blue.
+        let value_pool_id = state.retain_value_pool(
+            VoxValuePool::vec_3_float(
+                ["#FF0000", "#00FF00", "#0000FF"]
+                    .iter()
+                    .map(|hex| linear_rgb(hex))
+                    .collect(),
             )
-        };
-
-        let objects: Vec<(U32Id<BVoxObject>, &VoxObject)> = child_object_ids
-            .iter()
-            .filter_map(|&object_id| state.object(object_id).map(|object| (object_id, object)))
-            .collect();
-        let mut objects = objects.into_iter();
-        let first = objects.next();
-
-        let mut children: Vec<QbclNode> = objects
-            .map(|(object_id, object)| {
-                self.emit_object_node(state, object_id, object, world.to_array())
-            })
-            .collect::<Result<_>>()?;
-        for child_id in child_node_ids {
-            children.push(self.emit_node(state, child_id, world)?);
+            .unwrap(),
+        );
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        for index in 0..3 {
+            palette
+                .retain_material(vec![U32Id::from_u32(index)])
+                .expect("one value id for the one property");
         }
+        let palette_id = state.retain_palette(palette).unwrap();
+        let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
-        let body = match first {
-            None => QbclNodeBody::Model(QbclModel {
-                transform: QbclModel::DEFAULT_TRANSFORM,
-                children,
-            }),
-            // The object is the author's build volume, so the matrix keeps its
-            // dimensions and voxel positions directly.
-            Some((object_id, object)) if children.is_empty() => QbclNodeBody::Matrix(
-                self.synthesize_matrix(object_id, object, world.to_array(), state)?,
-            ),
-            Some((object_id, object)) => QbclNodeBody::Compound(QbclCompound {
-                matrix: self.synthesize_matrix(object_id, object, world.to_array(), state)?,
-                children,
-            }),
-        };
+        // Object 0: a red then a green voxel along x.
+        let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
+            .expect("a 2x1x1 grid is within the dense limit");
+        wide.retain_layer(palette_id, material_id(0));
+        for (x, material_index) in [(0u32, 0u32), (1, 1)] {
+            let voxel_id = wide
+                .voxel_id(TyVector3U32::new(x, 0, 0))
+                .expect("a position within the grid");
+            wide.retain_voxel(voxel_id, &[material_id(material_index)])
+                .expect("one sample for the one layer");
+        }
+        state.retain_object(wide).unwrap();
 
-        Ok(QbclNode {
-            name,
-            body,
-            ..QbclNode::default()
-        })
+        // Object 1: a single blue voxel.
+        let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
+            .expect("a 1x1x1 grid is within the dense limit");
+        unit.retain_layer(palette_id, material_id(0));
+        let voxel_id = unit
+            .voxel_id(TyVector3U32::new(0, 0, 0))
+            .expect("a position within the grid");
+        unit.retain_voxel(voxel_id, &[material_id(2)])
+            .expect("one sample for the one layer");
+        state.retain_object(unit).unwrap();
+
+        let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
+        let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+        let placed_at =
+            |x: f64, y: f64, z: f64| TyTransformF64::from_translation(TyVector3F64::new(x, y, z));
+
+        // node 0 groups node 1, which places object 0 at +5x; node 2 places
+        // object 1 at +3y. Nodes 0 and 2 are the roots.
+        state
+            .retain_hierarchy_nodes(vec![
+                VoxHierarchyNode {
+                    name: "group".to_owned(),
+                    child_node_ids: vec![node_id(1)],
+                    child_object_ids: Vec::new(),
+                    transform: TyTransformF64::default(),
+                },
+                VoxHierarchyNode {
+                    name: "wide".to_owned(),
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object_id(0)],
+                    transform: placed_at(5.0, 0.0, 0.0),
+                },
+                VoxHierarchyNode {
+                    name: "unit".to_owned(),
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object_id(1)],
+                    transform: placed_at(0.0, 3.0, 0.0),
+                },
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
+            .unwrap();
+
+        state.validate().expect("a well-formed source state");
+        state
     }
 
-    /// Wraps one object in a matrix node placed at `world`, naming the node for
-    /// the object. Used for a node's extra objects and for the unplaced-object
-    /// sweep.
-    fn emit_object_node(
-        &mut self,
-        state: &QbclVoxMain,
-        object_id: U32Id<BVoxObject>,
-        object: &VoxObject,
-        world: [i32; 3],
-    ) -> Result<QbclNode> {
-        // The object is the author's build volume, so the matrix keeps its
-        // dimensions and voxel positions directly.
-        Ok(QbclNode {
-            name: object.name().to_owned(),
-            body: QbclNodeBody::Matrix(self.synthesize_matrix(object_id, object, world, state)?),
-            ..QbclNode::default()
-        })
+    /// A solid voxel in world space: `x`, `y`, `z`, and an `rgb` color.
+    type WorldVoxel = (i32, i32, i32, (u8, u8, u8));
+
+    /// The world voxels a file places: each matrix or compound grid's solid
+    /// cells decoded to world coordinates and color, order-independent.
+    /// Synthesis bakes the world position onto each matrix and leaves models at
+    /// identity, so a cell's world coordinate is its grid coordinate plus the
+    /// matrix position.
+    fn world_voxels(file: &QbclFile) -> BTreeSet<WorldVoxel> {
+        let mut set = BTreeSet::new();
+        collect_world_voxels(&file.root, &mut set);
+        set
     }
 
-    /// Builds a matrix grid from an object, placed at the world `position`: one
-    /// solid voxel per live cell in `.qbcl` storage order, each carrying the
-    /// object's color with its alpha dropped and a solid visibility mask. Marks
-    /// the object placed so the sweep does not re-emit it.
-    fn synthesize_matrix(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        object: &VoxObject,
-        position: [i32; 3],
-        state: &QbclVoxMain,
-    ) -> Result<QbclMatrix> {
-        self.placed.insert(object_id.to_u32());
-
-        let bounds = object.bounds();
-        let [size_x, size_y, size_z] = bounds.to_array();
-        let volume = size_x as usize * size_y as usize * size_z as usize;
-        let mut voxels = vec![QbclVoxel::default(); volume];
-
-        let cell_color = resolve_cell_color_or_transparent(state, object)?;
-        for voxel_id in object.iter_live() {
-            let cell = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            // A Qubicle voxel stores no alpha, so the sampled color's alpha is
-            // dropped.
-            let [r, g, b, _] = cell_color.color(voxel_id);
-            // Storage order: index = y + size_y * (z + size_z * x).
-            let index = cell.y as usize
-                + size_y as usize * (cell.z as usize + size_z as usize * cell.x as usize);
-            voxels[index] = QbclVoxel::new(r, g, b, SOLID_MASK);
+    /// Adds a node's solid world voxels to `set`, recursing into child nodes.
+    fn collect_world_voxels(node: &QbclNode, set: &mut BTreeSet<WorldVoxel>) {
+        match &node.body {
+            QbclNodeBody::Matrix(matrix) => collect_matrix_voxels(matrix, set),
+            QbclNodeBody::Model(model) => {
+                for child in &model.children {
+                    collect_world_voxels(child, set);
+                }
+            }
+            QbclNodeBody::Compound(compound) => {
+                collect_matrix_voxels(&compound.matrix, set);
+                for child in &compound.children {
+                    collect_world_voxels(child, set);
+                }
+            }
         }
+    }
 
-        Ok(QbclMatrix {
-            size: [size_x, size_y, size_z],
-            position,
-            pivot: [0.0, 0.0, 0.0],
-            voxels,
-        })
+    /// Adds one matrix's solid world voxels to `set`, decoding the storage
+    /// index `y + size_y * (z + size_z * x)` back to a grid coordinate.
+    fn collect_matrix_voxels(matrix: &QbclMatrix, set: &mut BTreeSet<WorldVoxel>) {
+        let [_, size_y, size_z] = matrix.size;
+        for (index, voxel) in matrix.voxels.iter().enumerate() {
+            if voxel.is_empty() {
+                continue;
+            }
+            let index = index as u32;
+            let y = index % size_y;
+            let zx_index = index / size_y;
+            let z = zx_index % size_z;
+            let x = zx_index / size_z;
+            set.insert((
+                matrix.position[0] + x as i32,
+                matrix.position[1] + y as i32,
+                matrix.position[2] + z as i32,
+                (voxel.r, voxel.g, voxel.b),
+            ));
+        }
+    }
+
+    /// A default state has no objects, so the writer synthesizes an empty
+    /// file rooted at a childless model.
+    #[test]
+    fn synthesizes_an_empty_state_without_an_ext() {
+        let state = VoxMain::default();
+        let file = to_qbcl_file(&state).unwrap();
+        let QbclNodeBody::Model(model) = &file.root.body else {
+            panic!("synthesis roots under a model");
+        };
+        assert!(model.children.is_empty());
+    }
+
+    /// A bare state, such as one cross-loaded from another format, synthesizes
+    /// a file: the hierarchy maps to a Qubicle scene tree whose world voxels
+    /// and colors match the source, and the file reads back into a valid state
+    /// with both objects.
+    #[test]
+    fn synthesizes_a_file_without_an_ext() {
+        let state = source_state();
+        let file = to_qbcl_file(&state).unwrap();
+
+        let red = (0xFF, 0, 0);
+        let green = (0, 0xFF, 0);
+        let blue = (0, 0, 0xFF);
+
+        // Object 0 is placed at +5x under a group, object 1 at +3y.
+        assert_eq!(
+            world_voxels(&file),
+            BTreeSet::from([(5, 0, 0, red), (6, 0, 0, green), (0, 3, 0, blue)])
+        );
+
+        let reloaded = from_qbcl_file(&file).unwrap();
+        assert_eq!(reloaded.object_count(), 2);
     }
 }

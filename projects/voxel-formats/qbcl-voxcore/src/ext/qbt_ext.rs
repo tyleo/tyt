@@ -1,15 +1,6 @@
-use crate::QbtExtNode;
+use crate::ext::QbtExtNode;
 #[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
-use std::any::Any;
-#[cfg(not(feature = "ext"))]
-use voxcore::ext::Error;
-#[cfg(feature = "ext")]
-use voxcore::ext::encode_entry;
-use voxcore::{
-    VoxMap,
-    ext::{Result, VoxExt},
-};
 
 /// The `qbt` ext payload stashed on a [`VoxMain`](voxcore::VoxMain):
 /// the Qubicle Binary Tree `.qbt` state with no native voxcore home, kept so a
@@ -39,28 +30,4 @@ pub struct QbtExt {
     /// Per scene-node provenance, aligned by index with the hierarchy nodes.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub nodes: Vec<QbtExtNode>,
-}
-
-/// The Qubicle Binary Tree ext as a state's ext. Its block is the `qbt` entry.
-/// Encoding it needs the `ext` feature.
-impl VoxExt for QbtExt {
-    #[cfg(feature = "ext")]
-    fn to_vox_ext(&self) -> Result<VoxMap> {
-        encode_entry(self)
-    }
-
-    #[cfg(not(feature = "ext"))]
-    fn to_vox_ext(&self) -> Result<VoxMap> {
-        Err(Error::Invalid(
-            "the Qubicle Binary Tree ext encodes its block only with the `ext` feature".to_owned(),
-        ))
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn VoxExt> {
-        Box::new(self.clone())
-    }
 }

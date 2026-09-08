@@ -2,38 +2,52 @@
 
 Converts between Qubicle files and the voxcore state. The `qbcl` crate
 defines the file models for the three Qubicle formats: Qubicle Binary
-(`.qb`), Qubicle Binary Tree (`.qbt`), and Qubicle Construction Library
-(`.qbcl`). This crate carries a decoded file into voxcore's in-memory
+`.qb`, Qubicle Binary Tree `.qbt`, and Qubicle Construction Library
+`.qbcl`. This crate carries a decoded file into voxcore's in-memory
 `VoxMain` and back.
 
 ## File conversion
 
-- `from_qb_file` / `to_qb_file`: between a decoded `QbFile` and a
-  `QbVoxMain`. Each matrix becomes an object placed by a hierarchy
-  node, all sharing one `baseColor` palette.
-- `from_qbt_file` / `to_qbt_file`: between a decoded `QbtFile` and a
-  `QbtVoxMain`. Matrix and compound grids become objects sharing one
-  palette, and the scene tree becomes the hierarchy.
-- `from_qbcl_file` / `to_qbcl_file`: between a decoded `QbclFile` and a
-  `QbclVoxMain`, the same way.
+- `from_qb_file` / `to_qb_file`: between a decoded `QbFile` and a bare
+  `VoxMain<()>`. Each matrix becomes an object placed by a hierarchy node.
+  The objects share one `baseColor` palette. The writer errors on a bare
+  state because a `.qb` file rebuilds only from its `qb` ext.
+- `from_qbt_file` / `to_qbt_file`: between a decoded `QbtFile` and a bare
+  `VoxMain<()>`. Matrix and compound grids become objects sharing one
+  palette. The scene tree becomes the hierarchy. The writer errors on a bare
+  state because a `.qbt` file rebuilds only from its `qbt` ext.
+- `from_qbcl_file` / `to_qbcl_file`: between a decoded `QbclFile` and a bare
+  `VoxMain<()>`. The loader works as the `.qbt` loader does. The writer
+  synthesizes the file from the scene under one root model. A group's
+  translation folds into its descendant matrices. Rotation, scale, and alpha
+  drop.
 
 ## Bytes conversion
 
-The `codec` module, behind the default `codec` feature, goes straight to and
-from file bytes over `qbcl-codec`: `codec::from_qb_bytes` /
-`codec::to_qb_bytes`, `codec::from_qbt_bytes` / `codec::to_qbt_bytes`, and
-`codec::from_qbcl_bytes` / `codec::to_qbcl_bytes`. The `.qbt` and `.qbcl`
-conversions take the codec's dependencies, `DecompressZlib` to load and
-`CompressZlib` to write. `qbcl_codec::DependenciesImpl` supplies both. This
-crate's `impl` feature turns on the codec's.
+The `codec` module, behind the default `codec` feature, goes straight
+between a bare `VoxMain<()>` and file bytes over `qbcl-codec`:
+
+- `codec::from_qb_bytes` / `codec::to_qb_bytes` for `.qb` bytes.
+- `codec::from_qbt_bytes` / `codec::to_qbt_bytes` for `.qbt` bytes.
+- `codec::from_qbcl_bytes` / `codec::to_qbcl_bytes` for `.qbcl` bytes.
+
+The `.qbt` and `.qbcl` pairs take the codec's dependencies: `DecompressZlib`
+to load and `CompressZlib` to write. `qbcl_codec::DependenciesImpl` supplies
+both. This crate's `impl` feature turns on the codec's.
 
 ## The ext
 
-The Qubicle state with no native voxcore home rides in the format's ext:
-`QbExt`, `QbtExt`, or `QbclExt`. The loader stores it as the state's ext, so
-a loaded file writes back exactly. The `.qb` and `.qbt` writers require it.
-The `.qbcl` writer synthesizes a file from the bare scene when the ext is
-absent, such as for a state loaded from another format. The `ext` feature,
-on by default, keys each ext into a document's `ext` block under its `qb`,
-`qbt`, or `qbcl` key through voxcore's `VoxExtEntryCodec`. A Voxel Json document
-carries the ext in that block.
+`QbExt`, `QbtExt`, and `QbclExt` hold the Qubicle state with no native
+voxcore home. The bare loaders drop it. The `ext` feature, on by default,
+opens the `ext` module, where the typed path keeps the ext:
+
+- `ext::from_qb_file_with_ext` loads a file into a `QbVoxMain`, a
+  `VoxMain<Option<QbExt>>` carrying the ext. `ext::to_qb_file_with_ext`
+  writes the state back exactly. `QbtVoxMain` and `QbclVoxMain` pair the
+  same way with their `_with_ext` loaders and writers.
+- `codec::from_qb_bytes_with_ext` and `codec::to_qb_bytes_with_ext` do the
+  same for `.qb` bytes. The `qbt` and `qbcl` pairs sit beside them.
+
+Each ext enters a document's `ext` block as its `qb`, `qbt`, or `qbcl` entry
+through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the ext
+in that block.
