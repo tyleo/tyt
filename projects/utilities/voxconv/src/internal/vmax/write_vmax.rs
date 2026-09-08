@@ -1,10 +1,7 @@
 use crate::{Result, VoxDocumentFile, retype_ext, vmax::VMaxWriteOptions};
-use vmax_voxcore::{
-    VmaxFileBuilder,
-    codec::{
-        VmaxFileBuilderCodec,
-        dependencies::{CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson},
-    },
+use vmax_voxcore::codec::{
+    dependencies::{CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson},
+    to_vmax_package_with_ext,
 };
 use voxcore::{VoxMain, ext::VoxExt};
 
@@ -20,15 +17,9 @@ where
 {
     let state = retype_ext(state)?;
 
-    let mut builder = VmaxFileBuilder::new_with_ext(&state).color_format(options.color_format);
-
-    if let Some(scene_camera) = options.scene_camera {
-        builder = builder.scene_camera(scene_camera);
-    }
-
     let mut files = Vec::new();
 
-    builder.to_vmax_package(dependencies, |path, bytes| {
+    to_vmax_package_with_ext(dependencies, &state, options, |path, bytes| {
         files.push(VoxDocumentFile::new(path, bytes.to_vec()));
 
         Ok(())

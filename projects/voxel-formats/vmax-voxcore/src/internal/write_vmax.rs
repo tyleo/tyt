@@ -1,5 +1,5 @@
 use crate::{
-    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VMaxColorFormat,
+    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VMaxColorFormat, VMaxWriteOptions,
     ext::{VMaxExt, VMaxExtMaterial, VMaxExtNode, VMaxExtPalette},
     pbr_factor_to_vm_coefficient, tighten,
 };
@@ -78,21 +78,18 @@ const SYNTH_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     z: 512.0,
 };
 
-/// Writes a [`VoxMain`] back to a Voxel Max document, the workhorse behind
-/// [`to_vmax_file`](crate::to_vmax_file) and
-/// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
+/// Writes a [`VoxMain`] back to a Voxel Max document, the body of
+/// [`to_vmax_file`](crate::to_vmax_file) and its typed and package forms.
 ///
 /// A state whose [`VMaxExt`] the forward path wrote is rebuilt from it, minus
 /// the editor session artifacts voxcore does not model. A state without one,
 /// such as a bare state or one loaded from another format, gets an ext
 /// synthesized from the voxcore scene by [`synthesize_vmax_ext`]. The rest of
-/// the path runs unchanged. `scene_camera` overrides the scene camera the
-/// document opens with, or keeps the path's own when `None`.
+/// the path runs unchanged.
 pub fn write_vmax<T>(
     state: &VoxMain<T>,
     vmax_ext: Option<&VMaxExt>,
-    vmax_color_format: VMaxColorFormat,
-    scene_camera: Option<SceneCameraSource>,
+    options: &VMaxWriteOptions,
 ) -> Result<VMaxFile> {
     let had_ext = vmax_ext.is_some();
     let (vmax_ext, placements) = match vmax_ext {
@@ -254,7 +251,7 @@ pub fn write_vmax<T>(
                 &mut palette_files,
                 &mut palette_settings_files,
                 &mut palette_png_files,
-                vmax_color_format,
+                options.color_format,
             )?;
 
             let ind = node_ind(&object_ext, false, &mut ind_counter);
@@ -273,7 +270,7 @@ pub fn write_vmax<T>(
     let mut scene = vmax_ext.scene;
     scene.groups = groups;
     scene.objects = objects;
-    apply_scene_camera(&mut scene, scene_camera, had_ext)?;
+    apply_scene_camera(&mut scene, options.scene_camera, had_ext)?;
 
     Ok(VMaxFile {
         scene_json_file: scene,

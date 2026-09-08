@@ -4,7 +4,7 @@
 //!
 //! [`from_vmax_file`] loads a [`VMaxFile`](vmax::VMaxFile) into a bare
 //! [`VoxMain`](voxcore::VoxMain). [`to_vmax_file`] writes one back as a
-//! document synthesized from the scene. [`VmaxFileBuilder`] adds control over
+//! document synthesized from the scene, with [`VMaxWriteOptions`] picking
 //! the color format and the scene camera. The [`codec`] module, behind the
 //! default `codec` feature, goes straight to and from a package's files. It
 //! takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
@@ -20,7 +20,7 @@ mod result;
 mod scene_camera_source;
 mod to_vmax_file;
 mod vmax_color_format;
-mod vmax_file_builder;
+mod vmax_write_options;
 
 pub use error::*;
 pub use from_vmax_file::*;
@@ -28,7 +28,7 @@ pub use result::*;
 pub use scene_camera_source::*;
 pub use to_vmax_file::*;
 pub use vmax_color_format::*;
-pub use vmax_file_builder::*;
+pub use vmax_write_options::*;
 
 // Optional API
 

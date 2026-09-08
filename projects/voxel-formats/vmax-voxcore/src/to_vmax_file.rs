@@ -1,21 +1,19 @@
-use crate::{Result, VMaxColorFormat, write_vmax};
+use crate::{Result, VMaxWriteOptions, write_vmax};
 use vmax::VMaxFile;
 use voxcore::VoxMain;
 
 /// Writes a bare [`VoxMain`] to a Voxel Max document synthesized from its
-/// scene, the inverse of [`from_vmax_file`](crate::from_vmax_file).
-/// `vmax_color_format` selects where each palette's colors are stored, as
-/// described on [`VMaxColorFormat`]. For control over the scene camera, use
-/// [`VmaxFileBuilder`](crate::VmaxFileBuilder). The `ext` feature's
-/// `ext::to_vmax_file_with_ext` writes a loaded document back exactly.
-pub fn to_vmax_file(state: &VoxMain<()>, vmax_color_format: VMaxColorFormat) -> Result<VMaxFile> {
-    write_vmax(state, None, vmax_color_format, None)
+/// scene, the inverse of [`from_vmax_file`](crate::from_vmax_file). The `ext`
+/// feature's `ext::to_vmax_file_with_ext` writes a loaded document back
+/// exactly.
+pub fn to_vmax_file(state: &VoxMain<()>, options: &VMaxWriteOptions) -> Result<VMaxFile> {
+    write_vmax(state, None, options)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VMaxColorFormat, VmaxFileBuilder, from_vmax_file, to_vmax_file,
+        SceneCameraSource, VMaxColorFormat, VMaxWriteOptions, from_vmax_file, to_vmax_file,
     };
     use branded_id::U32Id;
     use std::collections::BTreeSet;
@@ -32,6 +30,13 @@ mod tests {
         color::{lin_srgba_f64_from_srgba_u8, value_pool_color},
         material::BASE_COLOR,
     };
+
+    fn options(color_format: VMaxColorFormat) -> VMaxWriteOptions {
+        VMaxWriteOptions {
+            color_format,
+            ..Default::default()
+        }
+    }
 
     #[test]
     fn a_non_color_base_color_errors_rather_than_writing_a_blank_palette() {
@@ -60,7 +65,7 @@ mod tests {
             .unwrap();
         state.push_root_hierarchy_node_id(node_id).unwrap();
 
-        let error = to_vmax_file(&state, VMaxColorFormat::All).unwrap_err();
+        let error = to_vmax_file(&state, &options(VMaxColorFormat::All)).unwrap_err();
         assert!(error.to_string().contains(BASE_COLOR), "{error}");
     }
 
@@ -114,7 +119,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        assert!(to_vmax_file(&state, VMaxColorFormat::Png).is_err());
+        assert!(to_vmax_file(&state, &VMaxWriteOptions::default()).is_err());
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green
@@ -275,7 +280,7 @@ mod tests {
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
         let state = VoxMain::default();
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         assert!(file.scene_json_file.objects.is_empty());
         assert!(file.scene_json_file.groups.is_empty());
     }
@@ -286,7 +291,7 @@ mod tests {
     #[test]
     fn synthesizes_a_file_without_an_ext() {
         let source = source_state();
-        let file = to_vmax_file(&source, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&source, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(world_voxels(&reloaded), world_voxels(&source));
     }
@@ -325,7 +330,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let scene = &file.scene_json_file;
         let inds: Vec<[i64; 3]> = scene
             .groups
@@ -383,7 +388,7 @@ mod tests {
         state.set_root_hierarchy_node_ids(vec![node_id(0)]).unwrap();
         state.validate().expect("a well-formed source state");
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 2);
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
@@ -498,7 +503,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let png = &file.palette_png_files["palette1.png"].0;
         assert_eq!(png.len(), 256);
         assert_eq!(png[0], [0xFF, 0, 0, 0xFF]);
@@ -541,7 +546,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Plist).unwrap();
+        let file = to_vmax_file(&state, &options(VMaxColorFormat::Plist)).unwrap();
         // The plist colors are 0-based: red first, blue last.
         let colors: Vec<[u8; 4]> = file.palette_settings_files["palette1.settings.vmaxpsb"]
             .colors
@@ -596,7 +601,7 @@ mod tests {
                 .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
                 .unwrap();
             state.validate().unwrap();
-            to_vmax_file(&state, VMaxColorFormat::Png)
+            to_vmax_file(&state, &VMaxWriteOptions::default())
         };
 
         let file = synthesize(255).expect("255 colors fit the palette");
@@ -641,7 +646,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         // Both objects name the one real palette; no extra or placeholder file.
         let names: BTreeSet<&str> = file
             .scene_json_file
@@ -693,7 +698,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         // No live voxel, colored or colorless, lands on the empty index 0.
         let indices: Vec<u8> = file
             .contents_files
@@ -752,7 +757,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         // Four scene objects: three from the multi-object node, one from the
         // child.
         assert_eq!(file.scene_json_file.objects.len(), 4);
@@ -817,7 +822,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(file.contents_files.len(), 1);
         assert_eq!(file.scene_json_file.objects.len(), 2);
         let reloaded = from_vmax_file(&file).unwrap();
@@ -860,7 +865,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(
@@ -899,7 +904,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(
@@ -941,7 +946,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 1);
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
@@ -977,7 +982,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         let node = reloaded.hierarchy_node(U32Id::from_u32(0)).unwrap();
 
@@ -1062,7 +1067,7 @@ mod tests {
                 .unwrap();
             state.validate().unwrap();
 
-            let file = to_vmax_file(&state, format).unwrap();
+            let file = to_vmax_file(&state, &options(format)).unwrap();
             // The material byte is 0-based and independent of the color offset:
             // the one material is index 0.
             assert!(
@@ -1156,7 +1161,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::All).unwrap();
+        let file = to_vmax_file(&state, &options(VMaxColorFormat::All)).unwrap();
         // from-vmax carries Voxel Max's `sic` back as `emissiveStrength`.
         let reloaded = from_vmax_file(&file).unwrap();
         let (palette_id, material_palette) = reloaded
@@ -1214,7 +1219,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(
             file.palette_png_files["palette1.png"].0[0],
             [0x33, 0x66, 0xCC, 0xFF]
@@ -1248,9 +1253,9 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file1 = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file1 = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file1).unwrap();
-        let file2 = to_vmax_file(&reloaded, VMaxColorFormat::Png).unwrap();
+        let file2 = to_vmax_file(&reloaded, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(file2, file1);
     }
 
@@ -1290,7 +1295,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
@@ -1332,7 +1337,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let group = file
             .scene_json_file
             .groups
@@ -1367,7 +1372,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 1);
         assert!(contents_voxels(&file, "contents.vmaxb").is_empty());
         // The content box frames the [3, 4, 5] build volume, centered in the
@@ -1409,7 +1414,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         // The color sits at index 0 (cell 0); the terminator is at the end.
         assert_eq!(
             file.palette_png_files["palette1.png"].0[0],
@@ -1454,7 +1459,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(
             world_voxels(&reloaded),
@@ -1484,7 +1489,7 @@ mod tests {
             .unwrap();
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VMaxColorFormat::Plist).unwrap();
+        let file = to_vmax_file(&state, &options(VMaxColorFormat::Plist)).unwrap();
         // No image in plist mode; the colors must still survive via the
         // sidecar.
         assert!(file.palette_png_files.is_empty());
@@ -1528,10 +1533,11 @@ mod tests {
             z: 123.0,
             ..Default::default()
         };
-        let file = VmaxFileBuilder::new(&state)
-            .scene_camera(SceneCameraSource::Camera(camera))
-            .build()
-            .unwrap();
+        let options = VMaxWriteOptions {
+            scene_camera: Some(SceneCameraSource::Camera(camera)),
+            ..Default::default()
+        };
+        let file = to_vmax_file(&state, &options).unwrap();
         assert_eq!(file.scene_json_file.cam, Some(camera));
     }
 
@@ -1540,11 +1546,10 @@ mod tests {
     #[test]
     fn scene_camera_ext_needs_an_ext() {
         let state = one_object_state();
-        assert!(
-            VmaxFileBuilder::new(&state)
-                .scene_camera(SceneCameraSource::Ext)
-                .build()
-                .is_err()
-        );
+        let options = VMaxWriteOptions {
+            scene_camera: Some(SceneCameraSource::Ext),
+            ..Default::default()
+        };
+        assert!(to_vmax_file(&state, &options).is_err());
     }
 }

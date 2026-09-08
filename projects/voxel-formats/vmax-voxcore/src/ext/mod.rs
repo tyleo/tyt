@@ -33,9 +33,6 @@ mod from_vmax_file_with_ext;
 mod to_vmax_file_with_ext;
 
 #[cfg(feature = "ext")]
-mod vmax_file_builder;
-
-#[cfg(feature = "ext")]
 mod vmax_vox_main;
 
 #[cfg(feature = "ext")]

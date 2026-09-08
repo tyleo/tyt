@@ -10,9 +10,10 @@ in-memory `VoxMain` and back.
   `VoxMain<()>`. Geometry, palettes, and hierarchy become native voxcore
   entities. Each object's snapshots are decoded on the fly and re-encoded on
   write. The writer synthesizes the document from the scene.
-- `VmaxFileBuilder`: the configurable writer. `VMaxColorFormat` picks
-  where each palette's colors are stored. `SceneCameraSource` picks the scene
-  camera the document opens with.
+- `VMaxWriteOptions`: the writer's options. `Default` stores palette colors
+  as PNG and keeps the path's camera. `VMaxColorFormat` picks where each
+  palette's colors are stored. `SceneCameraSource` picks the scene camera the
+  document opens with.
 
 ## Package conversion
 
@@ -37,8 +38,7 @@ by default, opens the `ext` module, where the typed path keeps it:
 
 - `ext::from_vmax_file_with_ext` loads a document into a `VMaxVoxMain`, a
   `VoxMain<Option<VMaxExt>>` carrying the ext. `ext::to_vmax_file_with_ext`
-  writes it back exactly. `VmaxFileBuilder::new_with_ext` is the
-  configurable form.
+  writes it back exactly.
 - `codec::from_vmax_package_with_ext` and `codec::to_vmax_package_with_ext`
   do the same for a package's files.
 

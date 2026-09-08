@@ -1,9 +1,5 @@
-//! The Voxel Max writer options, gated behind the `vmax` feature.
+//! The Voxel Max writer options and their values, re-exported from
+//! `vmax-voxcore` behind the `vmax` feature so a caller can name them.
 
-mod vmax_write_options;
-
-pub use vmax_write_options::*;
-
-// Re-exported so a caller can name the options' values.
 pub use ::vmax::VMaxSceneCamera;
-pub use ::vmax_voxcore::{SceneCameraSource, VMaxColorFormat};
+pub use ::vmax_voxcore::{SceneCameraSource, VMaxColorFormat, VMaxWriteOptions};

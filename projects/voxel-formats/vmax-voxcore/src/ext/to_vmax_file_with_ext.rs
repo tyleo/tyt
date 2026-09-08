@@ -1,24 +1,19 @@
-use crate::{Result, VMaxColorFormat, ext::VMaxVoxMain, write_vmax};
+use crate::{Result, VMaxWriteOptions, ext::VMaxVoxMain, write_vmax};
 use vmax::VMaxFile;
 
 /// Writes a [`VMaxVoxMain`] back to a Voxel Max document, the inverse of
 /// [`from_vmax_file_with_ext`](crate::ext::from_vmax_file_with_ext) and the
 /// typed form of [`to_vmax_file`](crate::to_vmax_file). A loaded document
 /// writes back exactly through its ext. A state carrying none writes a
-/// synthesized document. For control over the scene camera, use
-/// [`VmaxFileBuilder`](crate::VmaxFileBuilder) through
-/// [`new_with_ext`](crate::VmaxFileBuilder::new_with_ext).
-pub fn to_vmax_file_with_ext(
-    state: &VMaxVoxMain,
-    vmax_color_format: VMaxColorFormat,
-) -> Result<VMaxFile> {
-    write_vmax(state, state.ext().as_ref(), vmax_color_format, None)
+/// synthesized document.
+pub fn to_vmax_file_with_ext(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
+    write_vmax(state, state.ext().as_ref(), options)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VMaxColorFormat, VmaxFileBuilder,
+        SceneCameraSource, VMaxWriteOptions,
         ext::{VMaxExtNode, VMaxVoxMain, from_vmax_file_with_ext, to_vmax_file_with_ext},
     };
     use branded_id::U32Id;
@@ -304,7 +299,7 @@ mod tests {
         expected.palettes.remove(1);
         assert_eq!(state.ext(), &Some(expected.clone()));
 
-        let rebuilt = to_vmax_file_with_ext(&state, VMaxColorFormat::Png).unwrap();
+        let rebuilt = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         let ids: Vec<&str> = rebuilt
             .scene_json_file
             .objects
@@ -352,7 +347,7 @@ mod tests {
         assert_eq!(ext.object_states.len(), 2);
         assert_eq!(ext.object_states[1], None);
 
-        let file = to_vmax_file_with_ext(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         let added = file
             .scene_json_file
             .objects
@@ -395,7 +390,7 @@ mod tests {
             [1]
         );
 
-        let file = to_vmax_file_with_ext(&state, VMaxColorFormat::Png).unwrap();
+        let file = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         let voxels =
             decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
         assert!(voxels.iter().all(|voxel| voxel.material_idx == 1));
@@ -418,20 +413,20 @@ mod tests {
         let mut ext = state.ext().clone().unwrap();
         ext.hierarchy_nodes.pop();
         state.set_ext(Some(ext));
-        assert!(to_vmax_file_with_ext(&state, VMaxColorFormat::Png).is_err());
+        assert!(to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).is_err());
 
         let mut state = from_vmax_file_with_ext(&sample()).unwrap();
         let mut ext = state.ext().clone().unwrap();
         ext.object_states.pop();
         state.set_ext(Some(ext));
-        assert!(to_vmax_file_with_ext(&state, VMaxColorFormat::Png).is_err());
+        assert!(to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).is_err());
     }
 
     #[test]
     fn round_trips_through_vox_state() {
         let original = sample();
         let state = from_vmax_file_with_ext(&original).unwrap();
-        let rebuilt = to_vmax_file_with_ext(&state, VMaxColorFormat::Png).unwrap();
+        let rebuilt = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
@@ -470,7 +465,7 @@ mod tests {
             .unwrap()
             .materials = materials;
         let state = from_vmax_file_with_ext(&original).unwrap();
-        let rebuilt = to_vmax_file_with_ext(&state, VMaxColorFormat::Png).unwrap();
+        let rebuilt = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
@@ -493,10 +488,11 @@ mod tests {
             ..Default::default()
         };
         with_ext_scene_camera(&mut state, cam);
-        let file = VmaxFileBuilder::new_with_ext(&state)
-            .scene_camera(SceneCameraSource::Ext)
-            .build()
-            .unwrap();
+        let options = VMaxWriteOptions {
+            scene_camera: Some(SceneCameraSource::Ext),
+            ..Default::default()
+        };
+        let file = to_vmax_file_with_ext(&state, &options).unwrap();
         assert_eq!(file.scene_json_file.cam, Some(cam));
     }
 
@@ -511,13 +507,14 @@ mod tests {
         };
         with_ext_scene_camera(&mut state, cam);
 
-        let kept = VmaxFileBuilder::new_with_ext(&state).build().unwrap();
+        let kept = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(kept.scene_json_file.cam, Some(cam));
 
-        let empty = VmaxFileBuilder::new_with_ext(&state)
-            .scene_camera(SceneCameraSource::Empty)
-            .build()
-            .unwrap();
+        let options = VMaxWriteOptions {
+            scene_camera: Some(SceneCameraSource::Empty),
+            ..Default::default()
+        };
+        let empty = to_vmax_file_with_ext(&state, &options).unwrap();
         assert_ne!(empty.scene_json_file.cam, Some(cam));
     }
 }

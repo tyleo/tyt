@@ -1,4 +1,4 @@
-use crate::{Result, VMaxColorFormat, to_vmax_file};
+use crate::{Result, VMaxWriteOptions, to_vmax_file};
 use vmax_codec::{
     CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result as CodecResult,
     to_vmax_package as write_vmax_package,
@@ -7,34 +7,30 @@ use voxcore::VoxMain;
 
 /// Writes a bare [`VoxMain`] to a `.vmax` package through `dependencies`,
 /// the package form of [`to_vmax_file`] and the inverse of
-/// [`from_vmax_package`](crate::codec::from_vmax_package). For control over
-/// the scene camera, build the file with
-/// [`VmaxFileBuilder`](crate::VmaxFileBuilder) and write it through
-/// [`vmax_codec::to_vmax_package`].
+/// [`from_vmax_package`](crate::codec::from_vmax_package).
 ///
 /// # Arguments
-/// * `vmax_color_format` - where each palette's colors are stored.
 /// * `write` - receives each file's package-relative name and bytes and
 ///   performs the actual write, creating any subdirectory a `QuickLook/` name
 ///   implies.
 pub fn to_vmax_package<D, W>(
     dependencies: &D,
     state: &VoxMain<()>,
-    vmax_color_format: VMaxColorFormat,
+    options: &VMaxWriteOptions,
     write: W,
 ) -> Result<()>
 where
     D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
     W: FnMut(&str, &[u8]) -> CodecResult<()>,
 {
-    let file = to_vmax_file(state, vmax_color_format)?;
+    let file = to_vmax_file(state, options)?;
     Ok(write_vmax_package(dependencies, &file, write)?)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        VMaxColorFormat,
+        VMaxWriteOptions,
         codec::{from_vmax_package, to_vmax_package},
     };
     use branded_id::U32Id;
@@ -89,7 +85,7 @@ mod tests {
         to_vmax_package(
             &DependenciesImpl,
             &red_voxel_state(),
-            VMaxColorFormat::Png,
+            &VMaxWriteOptions::default(),
             |name, bytes| {
                 package.insert(name.to_owned(), bytes.to_vec());
                 Ok(())

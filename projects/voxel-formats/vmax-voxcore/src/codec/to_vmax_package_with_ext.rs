@@ -1,5 +1,5 @@
 use crate::{
-    Result, VMaxColorFormat,
+    Result, VMaxWriteOptions,
     ext::{VMaxVoxMain, to_vmax_file_with_ext},
 };
 use vmax_codec::{
@@ -11,19 +11,19 @@ use vmax_codec::{
 /// `dependencies`, the package form of [`to_vmax_file_with_ext`] and the
 /// inverse of
 /// [`from_vmax_package_with_ext`](crate::codec::from_vmax_package_with_ext).
-/// `vmax_color_format` and `write` work as on
+/// `options` and `write` work as on
 /// [`to_vmax_package`](crate::codec::to_vmax_package).
 pub fn to_vmax_package_with_ext<D, W>(
     dependencies: &D,
     state: &VMaxVoxMain,
-    vmax_color_format: VMaxColorFormat,
+    options: &VMaxWriteOptions,
     write: W,
 ) -> Result<()>
 where
     D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
     W: FnMut(&str, &[u8]) -> CodecResult<()>,
 {
-    let file = to_vmax_file_with_ext(state, vmax_color_format)?;
+    let file = to_vmax_file_with_ext(state, options)?;
 
     Ok(write_vmax_package(dependencies, &file, write)?)
 }
@@ -31,7 +31,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        VMaxColorFormat,
+        VMaxWriteOptions,
         codec::{from_vmax_package_with_ext, to_vmax_package_with_ext},
         ext::VMaxVoxMain,
     };
@@ -46,7 +46,7 @@ mod tests {
         to_vmax_package_with_ext(
             &DependenciesImpl,
             &VMaxVoxMain::default(),
-            VMaxColorFormat::Png,
+            &VMaxWriteOptions::default(),
             |name, bytes| {
                 package.insert(name.to_owned(), bytes.to_vec());
                 Ok(())

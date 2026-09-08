@@ -3,10 +3,11 @@
 /// Voxel Max can read an object's colors from a `palette*.png` image or from
 /// the `colors` table of its material `palette*.settings.vmaxpsb` sidecar. The
 /// `pal` reference always names the image; this selects where the bytes live.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VMaxColorFormat {
     /// A 256x1 RGBA `palette*.png` image, with no `colors` table in the
-    /// sidecar.
+    /// sidecar. The default.
+    #[default]
     Png,
 
     /// The material sidecar's `colors` table, with no image bytes.
