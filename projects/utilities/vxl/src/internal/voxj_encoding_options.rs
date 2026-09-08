@@ -30,13 +30,14 @@ pub struct VoxjEncodingOptions {
 }
 
 impl VoxjEncodingOptions {
-    /// Resolves the writer options and the destination path together. The
-    /// ext block and edit state keep their defaults for the command to set.
+    /// Resolves the write target and its path together because the
+    /// serialization decides the extension. The ext block and edit state keep
+    /// their defaults for the command to set.
     pub fn resolve_output(
         &self,
         input: &Path,
         output: Option<PathBuf>,
-    ) -> (VoxjWriteOptions, PathBuf) {
+    ) -> (VoxjSerialization, VoxjWriteOptions, PathBuf) {
         let serialization = self.resolve_serialization(output.as_deref());
 
         let path = output.unwrap_or_else(|| input.with_extension(serialization.extension()));
@@ -50,13 +51,12 @@ impl VoxjEncodingOptions {
             .unwrap_or_else(|| default_sample(self.encoding_preset));
 
         let options = VoxjWriteOptions {
-            serialization,
             position_encoding: position_encoding(position),
             sample_encoding: sample_encoding(sample),
             ..VoxjWriteOptions::default()
         };
 
-        (options, path)
+        (serialization, options, path)
     }
 
     /// Resolves the serialization from `--format`, else `output`'s extension,

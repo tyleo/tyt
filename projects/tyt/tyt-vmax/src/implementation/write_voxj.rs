@@ -15,14 +15,16 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
 
     let (position_encoding, sample_encoding) = block_encoding(encoding);
 
-    let options = VoxjWriteOptions {
+    let format = WriteFormat::Voxj {
         serialization: serialization(format),
-        position_encoding,
-        sample_encoding,
-        ..VoxjWriteOptions::default()
+        options: VoxjWriteOptions {
+            position_encoding,
+            sample_encoding,
+            ..VoxjWriteOptions::default()
+        },
     };
 
-    let files = write(&DependenciesImpl, &WriteFormat::Voxj(options), state)?;
+    let files = write(&DependenciesImpl, &format, state)?;
 
     let file = files.first().expect("the Voxel Json writer emits one file");
 

@@ -50,7 +50,7 @@ impl ToVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let from = self.input.resolve_format()?;
 
-        let (mut options, output) = self
+        let (serialization, mut options, output) = self
             .encoding_options
             .resolve_output(&self.input.path, self.output);
 
@@ -63,7 +63,10 @@ impl ToVoxj {
             &self.input.path,
             from,
             &output,
-            &WriteFormat::Voxj(options),
+            &WriteFormat::Voxj {
+                serialization,
+                options,
+            },
             &self.selection,
         )
     }

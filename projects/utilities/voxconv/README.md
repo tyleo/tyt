@@ -12,8 +12,9 @@ enabled format feature: Goxel (`.gox`), MagicaVoxel (`.vox`), the three
 Qubicle formats (`.qb`, `.qbt`, `.qbcl`), Voxel Max (`.vmax`), and Voxel Json
 (`.voxj`, `.voxjz`). `WriteFormat` lists the write targets. Voxel Max carries
 `vmax::VMaxWriteOptions` for the color format and scene camera. Voxel Json
-carries `voxj::VoxjWriteOptions` for the serialization, block encodings, ext
-block, and edit state.
+carries `voxj::VoxjWriteOptions` for the block encodings, ext block, and edit
+state. A `voxj::VoxjSerialization` beside the options picks the container.
+This crate re-exports both options structs from the bridges.
 
 ## Files
 

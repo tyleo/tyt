@@ -96,7 +96,7 @@ impl Voxelize {
 
         self.validate_fill_color()?;
 
-        let (write_options, output) = self
+        let (serialization, write_options, output) = self
             .encoding_options
             .resolve_output(&self.input, self.output);
 
@@ -132,7 +132,10 @@ impl Voxelize {
 
         save(
             &dependencies,
-            &WriteFormat::Voxj(write_options),
+            &WriteFormat::Voxj {
+                serialization,
+                options: write_options,
+            },
             state,
             &output,
         )

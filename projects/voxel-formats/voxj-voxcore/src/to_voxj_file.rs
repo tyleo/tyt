@@ -27,7 +27,7 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 ///
 /// # Arguments
 /// 1. `dependencies` - encodes the base64 blocks and costs a searched block's
-///   candidates. A pinned pair is never costed.
+///    candidates. A pinned pair is never costed.
 pub fn to_voxj_file<T: VoxExt, D: EncodeBase64 + CostVoxjObject>(
     dependencies: &D,
     state: &VoxMain<T>,

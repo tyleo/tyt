@@ -41,7 +41,7 @@ pub fn check_document_files<D: Dependencies>(
 mod tests {
     use crate::{
         DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat, check_document_files,
-        test_state, voxj::VoxjWriteOptions, write,
+        test_state, write,
     };
     use voxcore::check::VoxCheckStatus;
 
@@ -50,7 +50,7 @@ mod tests {
     fn a_written_voxj_document_checks_clean() {
         let files = write(
             &DependenciesImpl,
-            &WriteFormat::Voxj(VoxjWriteOptions::default()),
+            &WriteFormat::from(ReadFormat::Voxj),
             test_state(()),
         )
         .unwrap();

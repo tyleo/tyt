@@ -2,7 +2,7 @@ use crate::ReadFormat;
 #[cfg(feature = "vmax")]
 use crate::vmax::VMaxWriteOptions;
 #[cfg(feature = "voxj")]
-use crate::voxj::VoxjWriteOptions;
+use crate::voxj::{VoxjSerialization, VoxjWriteOptions};
 
 /// A write target: the format and its writer options, one variant per
 /// enabled format feature.
@@ -36,7 +36,10 @@ pub enum WriteFormat {
 
     /// Voxel Json, a `.voxj` or `.voxjz` document.
     #[cfg(feature = "voxj")]
-    Voxj(VoxjWriteOptions),
+    Voxj {
+        serialization: VoxjSerialization,
+        options: VoxjWriteOptions,
+    },
 }
 
 impl WriteFormat {
@@ -56,7 +59,7 @@ impl WriteFormat {
             #[cfg(feature = "vmax")]
             WriteFormat::VMax(_) => "vmax",
             #[cfg(feature = "voxj")]
-            WriteFormat::Voxj(options) => options.serialization.extension(),
+            WriteFormat::Voxj { serialization, .. } => serialization.extension(),
         }
     }
 
@@ -76,7 +79,7 @@ impl WriteFormat {
             #[cfg(feature = "vmax")]
             WriteFormat::VMax(_) => ReadFormat::VMax,
             #[cfg(feature = "voxj")]
-            WriteFormat::Voxj(_) => ReadFormat::Voxj,
+            WriteFormat::Voxj { .. } => ReadFormat::Voxj,
         }
     }
 }
@@ -98,7 +101,10 @@ impl From<ReadFormat> for WriteFormat {
             #[cfg(feature = "vmax")]
             ReadFormat::VMax => WriteFormat::VMax(VMaxWriteOptions::default()),
             #[cfg(feature = "voxj")]
-            ReadFormat::Voxj => WriteFormat::Voxj(VoxjWriteOptions::default()),
+            ReadFormat::Voxj => WriteFormat::Voxj {
+                serialization: VoxjSerialization::default(),
+                options: VoxjWriteOptions::default(),
+            },
         }
     }
 }
@@ -114,7 +120,13 @@ mod tests {
     fn a_read_format_defaults_its_writer() {
         let format = WriteFormat::from(ReadFormat::Voxj);
 
-        assert_eq!(format, WriteFormat::Voxj(VoxjWriteOptions::default()));
+        assert_eq!(
+            format,
+            WriteFormat::Voxj {
+                serialization: VoxjSerialization::Compact,
+                options: VoxjWriteOptions::default(),
+            }
+        );
 
         assert_eq!(format.extension(), "voxj");
 
@@ -123,10 +135,10 @@ mod tests {
 
     #[test]
     fn the_zip_serialization_takes_its_extension() {
-        let format = WriteFormat::Voxj(VoxjWriteOptions {
+        let format = WriteFormat::Voxj {
             serialization: VoxjSerialization::Zip,
-            ..Default::default()
-        });
+            options: VoxjWriteOptions::default(),
+        };
 
         assert_eq!(format.extension(), "voxjz");
     }

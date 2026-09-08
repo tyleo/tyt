@@ -24,7 +24,10 @@ pub fn write<D: Dependencies, T: VoxExt>(
         #[cfg(feature = "vmax")]
         WriteFormat::VMax(options) => internal::write_vmax(dependencies.vmax(), state, options),
         #[cfg(feature = "voxj")]
-        WriteFormat::Voxj(options) => internal::write_voxj(dependencies.voxj(), &state, *options),
+        WriteFormat::Voxj {
+            serialization,
+            options,
+        } => internal::write_voxj(dependencies.voxj(), &state, *serialization, options),
     }
 }
 
@@ -46,7 +49,7 @@ mod tests {
             WriteFormat::MVox,
             WriteFormat::Qbcl,
             WriteFormat::VMax(VMaxWriteOptions::default()),
-            WriteFormat::Voxj(VoxjWriteOptions::default()),
+            WriteFormat::from(ReadFormat::Voxj),
         ];
 
         for format in formats {
@@ -123,19 +126,15 @@ mod tests {
     #[test]
     fn voxj_serializations_take_their_form() {
         let bytes = |serialization| {
-            let options = VoxjWriteOptions {
+            let format = WriteFormat::Voxj {
                 serialization,
-                ..Default::default()
+                options: VoxjWriteOptions::default(),
             };
 
-            write(
-                &DependenciesImpl,
-                &WriteFormat::Voxj(options),
-                test_state(()),
-            )
-            .unwrap()
-            .remove(0)
-            .bytes
+            write(&DependenciesImpl, &format, test_state(()))
+                .unwrap()
+                .remove(0)
+                .bytes
         };
 
         assert!(bytes(VoxjSerialization::Compact).starts_with(b"{\""));

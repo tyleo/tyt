@@ -1,11 +1,10 @@
-//! The Voxel Json writer options, gated behind the `voxj` feature.
+//! The Voxel Json writer options and their values, re-exported from
+//! `voxj-voxcore` behind the `voxj` feature. `VoxjSerialization`, defined
+//! here, picks the container.
 
 mod voxj_serialization;
-mod voxj_write_options;
 
 pub use voxj_serialization::*;
-pub use voxj_write_options::*;
 
-// Re-exported so a caller can name the options' values.
 pub use ::voxj::objects::{PositionEncoding, SampleEncoding};
-pub use ::voxj_voxcore::EditStateMode;
+pub use ::voxj_voxcore::{EditStateMode, VoxjWriteOptions};
