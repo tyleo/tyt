@@ -5,7 +5,7 @@
 //! [`from_vmax_file`] loads a [`VMaxFile`](vmax::VMaxFile) into a bare
 //! [`VoxMain`](voxcore::VoxMain). [`to_vmax_file`] writes one back as a
 //! document synthesized from the scene, with [`VMaxWriteOptions`] picking
-//! the color format and the scene camera. The [`codec`] module, behind the
+//! the color format and the scene camera. The `codec` module, behind the
 //! default `codec` feature, goes straight to and from a package's files. It
 //! takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
 //! supplies. The `ext` feature, on by default, opens the `ext` module. There

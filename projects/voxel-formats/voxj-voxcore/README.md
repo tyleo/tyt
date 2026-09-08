@@ -8,11 +8,12 @@ voxcore's in-memory `VoxMain` and back.
 
 - `from_voxj_file` / `to_voxj_file`: between a parsed `VoxjFile` and a
   `VoxMain`, decoding and re-encoding each object's position and sample
-  blocks. The writer searches each object's block encodings for the pairing
-  with the lowest cost.
-- `VoxjFileBuilder`: the configurable writer, with control over the block
-  encodings, the ext block, and when the edit state records each object's
-  editor build volume (`EditStateMode`).
+  blocks.
+- `VoxjWriteOptions`: the writer's options. `Default` searches each object's
+  block encodings for the lowest cost, keeps the ext block, and records the
+  edit state only when an object carries margin around its live voxels.
+  `EditStateMode` picks when the edit state records each object's editor
+  build volume.
 
 Each takes the caller's voxj dependencies: `DecodeBase64` to load,
 `EncodeBase64` and `CostVoxjObject` to write. `voxj::DependenciesImpl`
@@ -25,9 +26,9 @@ from file bytes over `voxj-codec`:
 
 - `codec::from_voxj_bytes`: `.voxj` or `.voxjz` bytes into a `VoxMain`, with
   the container form detected from the leading bytes.
-- `codec::to_voxj_bytes` / `codec::to_voxjz_bytes`: a state to compact `.voxj`
-  JSON or a `.voxjz` zip archive, choosing each object's block encodings by
-  the lowest cost. The `*_with` variants fix the encodings.
+- `codec::to_voxj_bytes` / `codec::to_voxj_pretty_bytes` /
+  `codec::to_voxjz_bytes`: a state to compact `.voxj` JSON, pretty-printed
+  `.voxj` JSON, or a `.voxjz` zip archive. Each takes `VoxjWriteOptions`.
 
 Each also takes the codec's dependencies: `DecodeVoxjJson` and `Inflate` to
 load, `EncodeVoxjJson` and `Deflate` to write. `voxj_codec::DependenciesImpl`
@@ -38,6 +39,6 @@ supplies those and voxj's.
 The loaders are generic over the state's ext through voxcore's
 `VoxExtBlockCodec` and the writers through `VoxExt`. Loading decodes the
 document's `ext` block into the ext. Writing persists the block the ext
-encodes unless the builder drops it or the block is empty. A `()` ext carries
+encodes unless the options drop it or the block is empty. A `()` ext carries
 nothing. A `VoxjVoxMain` carries the block verbatim as a voxcore value tree,
 whichever format owns it.

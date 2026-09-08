@@ -7,7 +7,7 @@
 //! MagicaVoxel state with no native voxcore home rides in the
 //! [`MVoxExt`] the state carries as its ext, so a loaded file writes back
 //! exactly. A state without one, such as one loaded from another format, has
-//! its file synthesized from the bare scene. The [`codec`] module, behind the
+//! its file synthesized from the bare scene. The `codec` module, behind the
 //! default `codec` feature, goes straight to and from `.vox` bytes over
 //! mvox-codec. The `ext` feature keys the ext into a document's `ext` block
 //! through voxcore's [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).

@@ -10,7 +10,6 @@ mod voxj_map_from_vox_map;
 mod voxj_palette_from_vox_palette;
 mod voxj_value_from_vox_value;
 mod voxj_value_pool_from_vox_value_pool;
-mod write_voxj;
 
 pub(crate) use vox_hierarchy_node_from_voxj_hierarchy_node::*;
 pub(crate) use vox_map_from_voxj_map::*;
@@ -24,4 +23,3 @@ pub(crate) use voxj_map_from_vox_map::*;
 pub(crate) use voxj_palette_from_vox_palette::*;
 pub(crate) use voxj_value_from_vox_value::*;
 pub(crate) use voxj_value_pool_from_vox_value_pool::*;
-pub(crate) use write_voxj::*;
