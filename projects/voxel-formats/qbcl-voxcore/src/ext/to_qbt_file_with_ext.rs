@@ -13,6 +13,7 @@ use qbcl::qbt::QbtFile;
 /// 1. the ext's node entries do not line up with the hierarchy
 /// 2. the state does not have exactly one root
 /// 3. a mask list does not match its object
+/// 4. an unknown entry's node places an object or lists a child node
 pub fn to_qbt_file_with_ext(state: &QbtVoxMain) -> Result<QbtFile> {
     write_qbt(state, state.ext().as_ref())
 }
@@ -304,6 +305,57 @@ mod tests {
         };
         compound.children[0] = added_matrix("", [0, 0, 0]);
         assert_eq!(to_qbt_file_with_ext(&state).unwrap(), want);
+    }
+
+    /// A matrix entry's node that gains children or further objects writes a
+    /// compound around its grid.
+    #[test]
+    fn a_matrix_entry_whose_node_gains_children_writes_a_compound() {
+        let file = sample_file();
+        let mut state = from_qbt_file_with_ext(&file).unwrap();
+
+        let object_id = retain_added_object(&mut state);
+        set_children(&mut state, node(3), vec![node(2)], vec![object(2)]);
+        set_children(
+            &mut state,
+            node(0),
+            vec![node(1)],
+            vec![object(0), object_id],
+        );
+
+        let mut want = file;
+        let QbtNode::Compound(compound) = &mut root_children(&mut want)[1] else {
+            panic!("the sample's compound is a compound");
+        };
+        compound.children.remove(0);
+        let QbtNode::Matrix(grid) = matrix_node() else {
+            panic!("the sample's matrix is a matrix");
+        };
+        root_children(&mut want)[0] = QbtNode::Compound(QbtCompound {
+            matrix: grid,
+            children: vec![
+                added_matrix("added", [1, 2, 3]),
+                QbtNode::Model(QbtModel::default()),
+            ],
+        });
+        assert_eq!(to_qbt_file_with_ext(&state).unwrap(), want);
+    }
+
+    /// An unknown node's bytes are opaque. The writer refuses to reshape an
+    /// unknown entry whose node gains an object or a child.
+    #[test]
+    fn an_unknown_entry_refuses_a_grid_or_a_child() {
+        let file = sample_file();
+
+        let mut state = from_qbt_file_with_ext(&file).unwrap();
+        let object_id = retain_added_object(&mut state);
+        set_children(&mut state, node(4), Vec::new(), vec![object_id]);
+        assert!(to_qbt_file_with_ext(&state).is_err());
+
+        let mut state = from_qbt_file_with_ext(&file).unwrap();
+        set_children(&mut state, node(3), vec![node(2)], vec![object(2)]);
+        set_children(&mut state, node(4), vec![node(1)], Vec::new());
+        assert!(to_qbt_file_with_ext(&state).is_err());
     }
 
     /// An ext out of step with the hierarchy errors instead of writing a

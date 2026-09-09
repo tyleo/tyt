@@ -28,7 +28,8 @@ type Entries<'a> = HashMap<U32Id<BVoxHierarchyNode>, &'a Option<QbtExtNode>>;
 /// 1. the ext's node entries do not line up with the hierarchy
 /// 2. the state does not have exactly one root
 /// 3. a mask list does not match its object
-/// 4. an object's `baseColor` draws from a non-color value pool
+/// 4. an unknown entry's node places an object or lists a child node
+/// 5. an object's `baseColor` draws from a non-color value pool
 pub fn write_qbt<T>(state: &VoxMain<T>, qbt_ext: Option<&QbtExt>) -> Result<QbtFile> {
     let Some(ext) = qbt_ext else {
         return synthesize_qbt(state);
@@ -73,10 +74,12 @@ pub fn write_qbt<T>(state: &VoxMain<T>, qbt_ext: Option<&QbtExt>) -> Result<QbtF
 }
 
 /// Rebuilds one scene node and its subtree from the hierarchy node `node_id`
-/// and its entry. A node with no entry takes the shape of a synthesized node
-/// at its translation rounded to whole voxels. A model entry holds nothing,
-/// so its node takes the same shape. A matrix or compound entry whose node
-/// places no object keeps its placement around an empty grid.
+/// and its entry. The node takes the shape a synthesized node would from its
+/// objects and children. The entry supplies the provenance that fits the
+/// shape. A node with no entry takes a synthesized node's provenance at its
+/// translation rounded to whole voxels. A model entry holds nothing, so its
+/// node takes the same provenance. An unknown entry fits only an unknown
+/// node.
 fn rebuild_node<T>(
     node_id: U32Id<BVoxHierarchyNode>,
     state: &VoxMain<T>,
@@ -89,21 +92,17 @@ fn rebuild_node<T>(
         .get(&node_id)
         .expect("the count check paired every node with an entry");
 
+    // The reader made each position its node's translation, so the
+    // translation goes back as the position. The synthesizer's summing has
+    // no place here because the ancestors carry their positions in their
+    // entries.
+    let position = rounded_translation(hierarchy).to_array();
+    let objects = placed_objects(hierarchy, state);
+    let children = rebuild_children(hierarchy, state, entries)?;
+
     let node = match entry {
         None | Some(QbtExtNode::Model) => {
-            // The reader made each position its node's translation, so the
-            // translation goes back as the position. The synthesizer's
-            // summing has no place here because the ancestors carry their
-            // positions in their entries.
-            let position = rounded_translation(hierarchy).to_array();
-            let children = rebuild_children(hierarchy, state, entries)?;
-            synthesized_node(
-                state,
-                hierarchy.name.clone(),
-                position,
-                &placed_objects(hierarchy, state),
-                children,
-            )?
+            synthesized_node(state, hierarchy.name.clone(), position, &objects, children)?
         }
         Some(QbtExtNode::Matrix {
             name,
@@ -111,31 +110,40 @@ fn rebuild_node<T>(
             local_scale,
             pivot,
             masks,
-        }) => QbtNode::Matrix(entry_matrix(
+        }) => entry_node(
             state,
-            hierarchy,
             placed_matrix(name, *position, *local_scale, *pivot),
             masks,
-        )?),
+            &objects,
+            children,
+            false,
+        )?,
         Some(QbtExtNode::Compound {
             name,
             position,
             local_scale,
             pivot,
             masks,
-        }) => QbtNode::Compound(QbtCompound {
-            matrix: entry_matrix(
-                state,
-                hierarchy,
-                placed_matrix(name, *position, *local_scale, *pivot),
-                masks,
-            )?,
-            children: rebuild_children(hierarchy, state, entries)?,
-        }),
-        Some(QbtExtNode::Unknown { type_id, data }) => QbtNode::Unknown(QbtUnknownNode {
-            type_id: *type_id,
-            data: data.clone(),
-        }),
+        }) => entry_node(
+            state,
+            placed_matrix(name, *position, *local_scale, *pivot),
+            masks,
+            &objects,
+            children,
+            true,
+        )?,
+        Some(QbtExtNode::Unknown { type_id, data }) => {
+            // Opaque bytes have no place for a grid or a child.
+            if !objects.is_empty() || !children.is_empty() {
+                return Err(Error::invalid(
+                    "an unknown entry's node places an object or lists a child node",
+                ));
+            }
+            QbtNode::Unknown(QbtUnknownNode {
+                type_id: *type_id,
+                data: data.clone(),
+            })
+        }
     };
 
     Ok(node)
@@ -170,26 +178,52 @@ fn placed_matrix(
     }
 }
 
-/// The grid a matrix or compound entry writes: the node's first object
-/// filled into `matrix` under the entry's masks. The object is the author's
-/// build volume, so the written matrix keeps its dimensions and voxel
-/// positions directly.
-fn entry_matrix<T>(
+/// The node a matrix or compound entry writes. The node's first object fills
+/// `placement` under the entry's masks. A node placing no object keeps the
+/// placement around an empty grid.
+fn entry_node<T>(
     state: &VoxMain<T>,
-    hierarchy: &VoxHierarchyNode,
-    matrix: QbtMatrix,
+    placement: QbtMatrix,
     masks: &[u8],
-) -> Result<QbtMatrix> {
-    let Some(&object_id) = hierarchy.child_object_ids.first() else {
+    objects: &[&VoxObject],
+    children: Vec<QbtNode>,
+    compound: bool,
+) -> Result<QbtNode> {
+    let [first, extras @ ..] = objects else {
         // A selection dropped the grid and kept the node for its children.
-        // The placement survives around an empty grid.
-        return Ok(matrix);
+        return grid_node(state, placement, &[], children, compound);
     };
-    let object = state
-        .object(object_id)
-        .expect("a placed object is one of the state's");
+    let grid = fill_grid(state, first, placement, Some(masks))?;
 
-    fill_grid(state, object, matrix, Some(masks))
+    grid_node(state, grid, extras, children, compound)
+}
+
+/// The node written around `grid`. Qubicle has no node placing several grids,
+/// so further objects become child matrices named for the object. `compound`
+/// keeps a compound entry's shape when nothing else calls for one.
+fn grid_node<T>(
+    state: &VoxMain<T>,
+    grid: QbtMatrix,
+    extras: &[&VoxObject],
+    children: Vec<QbtNode>,
+    compound: bool,
+) -> Result<QbtNode> {
+    let mut all_children: Vec<QbtNode> = extras
+        .iter()
+        .map(|object| synthesized_matrix_node(state, object, grid.position))
+        .collect::<Result<_>>()?;
+    all_children.extend(children);
+
+    let node = if all_children.is_empty() && !compound {
+        QbtNode::Matrix(grid)
+    } else {
+        QbtNode::Compound(QbtCompound {
+            matrix: grid,
+            children: all_children,
+        })
+    };
+
+    Ok(node)
 }
 
 /// Fills `matrix` with `object`'s grid in `.qbt` storage order. Each solid
@@ -264,8 +298,7 @@ fn synthesize_qbt<T>(state: &VoxMain<T>) -> Result<QbtFile> {
         .collect::<Result<_>>()?;
     for (object_id, object) in state.iter_objects() {
         if !placed.contains(&object_id) {
-            let matrix = synthesized_matrix(state, object, object.name().to_owned(), [0, 0, 0])?;
-            children.push(QbtNode::Matrix(matrix));
+            children.push(synthesized_matrix_node(state, object, [0, 0, 0])?);
         }
     }
 
@@ -305,9 +338,7 @@ fn emit_node<T>(
     )
 }
 
-/// The Qubicle node a hierarchy node synthesizes to. Qubicle has no node
-/// placing several grids, so further objects become child matrices named for
-/// the object.
+/// The Qubicle node a hierarchy node synthesizes to.
 fn synthesized_node<T>(
     state: &VoxMain<T>,
     name: String,
@@ -318,27 +349,18 @@ fn synthesized_node<T>(
     let [first, extras @ ..] = objects else {
         return Ok(QbtNode::Model(QbtModel { children }));
     };
+    let grid = synthesized_matrix(state, first, name, position)?;
 
-    let mut all_children: Vec<QbtNode> = extras
-        .iter()
-        .map(|object| {
-            synthesized_matrix(state, object, object.name().to_owned(), position)
-                .map(QbtNode::Matrix)
-        })
-        .collect::<Result<_>>()?;
-    all_children.extend(children);
+    grid_node(state, grid, extras, children, false)
+}
 
-    let matrix = synthesized_matrix(state, first, name, position)?;
-    let node = if all_children.is_empty() {
-        QbtNode::Matrix(matrix)
-    } else {
-        QbtNode::Compound(QbtCompound {
-            matrix,
-            children: all_children,
-        })
-    };
-
-    Ok(node)
+/// A matrix node named for `object` around its synthesized grid.
+fn synthesized_matrix_node<T>(
+    state: &VoxMain<T>,
+    object: &VoxObject,
+    position: [i32; 3],
+) -> Result<QbtNode> {
+    synthesized_matrix(state, object, object.name().to_owned(), position).map(QbtNode::Matrix)
 }
 
 /// `object`'s grid as a matrix with no provenance.
