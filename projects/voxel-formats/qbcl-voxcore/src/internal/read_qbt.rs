@@ -60,7 +60,7 @@ fn build_node(
     state: &mut VoxMain<()>,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<QbtExtNode>,
+    nodes: &mut Vec<Option<QbtExtNode>>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let node_id = match node {
         QbtNode::Matrix(matrix) => {
@@ -76,13 +76,13 @@ fn build_node(
                 transform: translation(matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QbtExtNode::Matrix {
+            nodes.push(Some(QbtExtNode::Matrix {
                 name: matrix.name.clone(),
                 position: matrix.position,
                 local_scale: matrix.local_scale,
                 pivot: matrix.pivot,
                 masks,
-            });
+            }));
             node_id
         }
         QbtNode::Model(model) => {
@@ -97,7 +97,7 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QbtExtNode::Model);
+            nodes.push(Some(QbtExtNode::Model));
             node_id
         }
         QbtNode::Compound(compound) => {
@@ -117,13 +117,13 @@ fn build_node(
                 transform: translation(compound.matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QbtExtNode::Compound {
+            nodes.push(Some(QbtExtNode::Compound {
                 name: compound.matrix.name.clone(),
                 position: compound.matrix.position,
                 local_scale: compound.matrix.local_scale,
                 pivot: compound.matrix.pivot,
                 masks,
-            });
+            }));
             node_id
         }
         QbtNode::Unknown(unknown) => {
@@ -134,10 +134,10 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(QbtExtNode::Unknown {
+            nodes.push(Some(QbtExtNode::Unknown {
                 type_id: unknown.type_id,
                 data: unknown.data.clone(),
-            });
+            }));
             node_id
         }
     };
