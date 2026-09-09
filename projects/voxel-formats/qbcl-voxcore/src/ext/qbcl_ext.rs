@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Matrix and compound grids become native objects sharing one palette, and the
 /// scene tree becomes the hierarchy nodes; this holds the rest, with the
-/// per-node entries aligned by index with the hierarchy nodes.
+/// per-node entries aligned by index with the hierarchy nodes. The nodes
+/// follow the state through the [`VoxExt`](voxcore::ext::VoxExt) hooks.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct QbclExt {
@@ -32,6 +33,8 @@ pub struct QbclExt {
     pub guid: [u8; 16],
 
     /// Per scene-node provenance, aligned by index with the hierarchy nodes.
+    /// A node retained after the load has `None`. The writer fills it in like
+    /// a synthesized node.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
-    pub nodes: Vec<QbclExtNode>,
+    pub nodes: Vec<Option<QbclExtNode>>,
 }

@@ -7,23 +7,32 @@ use qbcl::qbcl::{
     QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode, QbclNodeBody,
     QbclThumbnail, QbclVoxel,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use ty_math::TyVector3I32;
 use voxcore::{
     BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
     color::resolve_cell_color_or_transparent,
 };
 
+/// Each hierarchy node's entry, paired through the listing.
+type Entries<'a> = HashMap<U32Id<BVoxHierarchyNode>, &'a Option<QbclExtNode>>;
+
 /// Writes a state to a decoded Qubicle Construction Library [`QbclFile`].
 /// With `qbcl_ext`, a loaded file rebuilds exactly: the scene tree is walked
-/// from the single root, each matrix or compound emitting its grid with the
-/// visibility masks from the ext and the color from the palette. Without it,
-/// `synthesize_qbcl` builds the file from the bare scene.
+/// from the single root, each matrix or compound object emitting its grid
+/// with the visibility masks from the ext and the color from the palette. A
+/// node retained after the load has no entry. It emits a node like a
+/// synthesized one. Without an ext, `synthesize_qbcl` builds the file from
+/// the bare scene.
 ///
-/// Errors when the ext's node entries do not line up with the hierarchy, the
-/// state does not have exactly one root, or a mask list does not match its
-/// object, and when an object's `baseColor` draws from a non-color value
-/// pool.
+/// Errors if:
+///
+/// 1. the ext's node entries do not line up with the hierarchy
+/// 2. the state does not have exactly one root
+/// 3. a mask list does not match its object
+/// 4. a model entry's node places an object under a transform chunk other
+///    than the default
+/// 5. an object's `baseColor` draws from a non-color value pool
 pub fn write_qbcl<T>(state: &VoxMain<T>, qbcl_ext: Option<&QbclExt>) -> Result<QbclFile> {
     let Some(ext) = qbcl_ext else {
         return synthesize_qbcl(state);
@@ -45,7 +54,15 @@ pub fn write_qbcl<T>(state: &VoxMain<T>, qbcl_ext: Option<&QbclExt>) -> Result<Q
         )));
     };
 
-    let root = rebuild_node(*root_id, state, &ext.nodes)?;
+    // The entries follow the listing. An id matches its index only once
+    // `gc` has renumbered.
+    let entries: Entries = state
+        .iter_hierarchy_nodes()
+        .zip(&ext.nodes)
+        .map(|((node_id, _), entry)| (node_id, entry))
+        .collect();
+
+    let root = rebuild_node(*root_id, state, &entries)?;
 
     Ok(QbclFile {
         program_version: ext.program_version,
@@ -75,64 +92,83 @@ pub fn write_qbcl<T>(state: &VoxMain<T>, qbcl_ext: Option<&QbclExt>) -> Result<Q
 }
 
 /// Rebuilds one scene node and its subtree from the hierarchy node `node_id`
-/// and its aligned ext provenance.
+/// and its entry. The node takes the shape a synthesized node would from its
+/// objects and children. The entry supplies the provenance that fits the
+/// shape. A node with no entry takes a synthesized node's provenance at its
+/// translation rounded to whole voxels.
 fn rebuild_node<T>(
     node_id: U32Id<BVoxHierarchyNode>,
     state: &VoxMain<T>,
-    nodes: &[QbclExtNode],
+    entries: &Entries,
 ) -> Result<QbclNode> {
-    let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
-        Error::invalid(format!(
-            "hierarchy node {} does not exist",
-            node_id.to_u32()
-        ))
-    })?;
-    let provenance = nodes.get(node_id.to_u32() as usize).ok_or_else(|| {
-        Error::invalid(format!(
-            "qbcl ext has no entry for hierarchy node {}",
-            node_id.to_u32()
-        ))
-    })?;
+    let hierarchy = state
+        .hierarchy_node(node_id)
+        .expect("a hierarchy id from the state resolves");
+    let entry = entries
+        .get(&node_id)
+        .expect("the count check paired every node with an entry");
 
-    let body = match &provenance.body {
-        QbclExtNodeBody::Model { transform } => QbclNodeBody::Model(QbclModel {
-            transform: model_transform(transform)?,
-            children: rebuild_children(hierarchy, state, nodes)?,
-        }),
+    // The reader made each position its node's translation, so the
+    // translation goes back as the position. The synthesizer's summing has
+    // no place here because the ancestors carry their positions in their
+    // entries.
+    let position = rounded_translation(hierarchy).to_array();
+    let objects = placed_objects(hierarchy, state);
+    let children = rebuild_children(hierarchy, state, entries)?;
+
+    let Some(entry) = entry else {
+        return synthesized_node(state, hierarchy.name.clone(), position, &objects, children);
+    };
+
+    let body = match &entry.body {
+        QbclExtNodeBody::Model { transform } => {
+            if objects.is_empty() {
+                QbclNodeBody::Model(QbclModel {
+                    transform: model_transform(transform)?,
+                    children,
+                })
+            } else {
+                // The node now carries a grid. A matrix or compound has no
+                // place for the transform chunk. Dropping the default chunk
+                // loses nothing.
+                if *transform != QbclModel::DEFAULT_TRANSFORM {
+                    return Err(Error::invalid(
+                        "a model entry's node places an object under a transform chunk other than the default",
+                    ));
+                }
+                synthesized_body(state, position, &objects, children)?
+            }
+        }
         QbclExtNodeBody::Matrix {
             position,
             pivot,
             masks,
-        } => QbclNodeBody::Matrix(matrix_from_object(
+        } => entry_body(
             state,
-            matrix_object(hierarchy, state)?,
-            *position,
-            *pivot,
+            placed_matrix(*position, *pivot),
             masks,
-        )?),
+            &objects,
+            children,
+            false,
+        )?,
         QbclExtNodeBody::Compound {
             position,
             pivot,
             masks,
-        } => {
-            let matrix = matrix_from_object(
-                state,
-                matrix_object(hierarchy, state)?,
-                *position,
-                *pivot,
-                masks,
-            )?;
-            QbclNodeBody::Compound(QbclCompound {
-                matrix,
-                children: rebuild_children(hierarchy, state, nodes)?,
-            })
-        }
+        } => entry_body(
+            state,
+            placed_matrix(*position, *pivot),
+            masks,
+            &objects,
+            children,
+            true,
+        )?,
     };
 
     Ok(QbclNode {
-        name: provenance.name.clone(),
-        visible: provenance.visible,
-        locked: provenance.locked,
+        name: entry.name.clone(),
+        visible: entry.visible,
+        locked: entry.locked,
         body,
     })
 }
@@ -141,75 +177,116 @@ fn rebuild_node<T>(
 fn rebuild_children<T>(
     hierarchy: &VoxHierarchyNode,
     state: &VoxMain<T>,
-    nodes: &[QbclExtNode],
+    entries: &Entries,
 ) -> Result<Vec<QbclNode>> {
     hierarchy
         .child_node_ids
         .iter()
-        .map(|&child_id| rebuild_node(child_id, state, nodes))
+        .map(|&child_id| rebuild_node(child_id, state, entries))
         .collect()
 }
 
-/// The build-volume object a matrix or compound node places, or an error if it
-/// has none. The object is the author's build volume, so the written matrix
-/// keeps the original dimensions and voxel positions directly.
-fn matrix_object<'a, T>(
-    hierarchy: &VoxHierarchyNode,
-    state: &'a VoxMain<T>,
-) -> Result<&'a VoxObject> {
-    let object_id = *hierarchy
-        .child_object_ids
-        .first()
-        .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
-    state
-        .object(object_id)
-        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
+/// A matrix carrying an entry's placement and an empty grid.
+fn placed_matrix(position: [i32; 3], pivot: [f32; 3]) -> QbclMatrix {
+    QbclMatrix {
+        position,
+        pivot,
+        ..QbclMatrix::default()
+    }
 }
 
-/// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the object's `baseColor` layer and its mask from the aligned ext mask
-/// list, placed in `.qbcl` storage order. Errors if the mask count does not
-/// match the object's solid voxels.
-fn matrix_from_object<T>(
+/// The body a matrix or compound entry writes. The node's first object fills
+/// `placement` under the entry's masks. A node placing no object keeps the
+/// placement around an empty grid.
+fn entry_body<T>(
+    state: &VoxMain<T>,
+    placement: QbclMatrix,
+    masks: &[u8],
+    objects: &[&VoxObject],
+    children: Vec<QbclNode>,
+    compound: bool,
+) -> Result<QbclNodeBody> {
+    let [first, extras @ ..] = objects else {
+        // A selection dropped the grid and kept the node for its children.
+        return grid_body(state, placement, &[], children, compound);
+    };
+    let grid = fill_grid(state, first, placement, Some(masks))?;
+
+    grid_body(state, grid, extras, children, compound)
+}
+
+/// The body a node writes around `grid`. Qubicle has no node placing several
+/// grids, so further objects become child matrices named for the object.
+/// `compound` keeps a compound entry's shape when nothing else calls for one.
+fn grid_body<T>(
+    state: &VoxMain<T>,
+    grid: QbclMatrix,
+    extras: &[&VoxObject],
+    children: Vec<QbclNode>,
+    compound: bool,
+) -> Result<QbclNodeBody> {
+    let mut all_children: Vec<QbclNode> = extras
+        .iter()
+        .map(|object| synthesized_matrix_node(state, object, grid.position))
+        .collect::<Result<_>>()?;
+    all_children.extend(children);
+
+    let body = if all_children.is_empty() && !compound {
+        QbclNodeBody::Matrix(grid)
+    } else {
+        QbclNodeBody::Compound(QbclCompound {
+            matrix: grid,
+            children: all_children,
+        })
+    };
+
+    Ok(body)
+}
+
+/// Fills `matrix` with `object`'s grid in `.qbcl` storage order. Each solid
+/// voxel's color comes from the object's `baseColor` layer. `masks` supplies
+/// each live voxel's mask in raster order. Without it every solid voxel takes
+/// the solid mask. Errors if the mask count does not match the object's solid
+/// voxels.
+fn fill_grid<T>(
     state: &VoxMain<T>,
     object: &VoxObject,
-    position: [i32; 3],
-    pivot: [f32; 3],
-    masks: &[u8],
+    mut matrix: QbclMatrix,
+    masks: Option<&[u8]>,
 ) -> Result<QbclMatrix> {
-    let bounds = object.bounds();
-    let [size_x, size_y, size_z] = bounds.to_array();
-    let volume = size_x as usize * size_y as usize * size_z as usize;
-    let mut voxels = vec![QbclVoxel::default(); volume];
-
-    let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let live_count = object.live_count();
-    if live_count != masks.len() {
+    if let Some(masks) = masks
+        && masks.len() != live_count
+    {
         return Err(Error::invalid(format!(
             "qbcl ext has {} masks but the object has {live_count} solid voxels",
             masks.len()
         )));
     }
 
-    for (voxel_id, &mask) in object.iter_live().zip(masks) {
+    let [size_x, size_y, size_z] = object.bounds().to_array();
+    let volume = size_x as usize * size_y as usize * size_z as usize;
+    let mut voxels = vec![QbclVoxel::default(); volume];
+
+    let cell_color = resolve_cell_color_or_transparent(state, object)?;
+    for (live_index, voxel_id) in object.iter_live().enumerate() {
         let position = object
             .voxel_position(voxel_id)
             .expect("a live voxel is within the grid");
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
         let [r, g, b, _] = cell_color.color(voxel_id);
+        let mask = masks.map_or(SOLID_MASK, |masks| masks[live_index]);
         // Storage order: index = y + size_y * (z + size_z * x).
         let index = position.y as usize
             + size_y as usize * (position.z as usize + size_z as usize * position.x as usize);
         voxels[index] = QbclVoxel::new(r, g, b, mask);
     }
 
-    Ok(QbclMatrix {
-        size: [size_x, size_y, size_z],
-        position,
-        pivot,
-        voxels,
-    })
+    matrix.size = [size_x, size_y, size_z];
+    matrix.voxels = voxels;
+
+    Ok(matrix)
 }
 
 /// Converts a stored model-transform chunk into its fixed 36-byte array.
@@ -225,32 +302,29 @@ fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
 /// Synthesizes a Qubicle file from the bare scene of a state written without
 /// a `qbcl` ext, such as one cross-loaded from another format.
 ///
-/// The voxcore hierarchy is mirrored into Qubicle's scene tree: a node with
-/// only child nodes becomes a model, a node placing one object becomes a
-/// matrix, and a node placing an object alongside child nodes or several
-/// objects becomes a compound whose grid is the node's first object and whose
-/// children hold the rest. Qubicle requires a single root, so every voxcore
-/// root hangs under one synthetic model; an object no node places is swept
-/// under it at the origin so no geometry is dropped, and an object placed by
-/// several nodes is duplicated at each placement.
+/// `synthesized_node` mirrors each voxcore node into Qubicle's scene tree.
+/// Every voxcore root hangs under one synthetic model because Qubicle
+/// requires a single root. An object placed by no node is swept under that
+/// model at the origin so no geometry is dropped. An object placed by several
+/// nodes is duplicated at each placement.
 ///
-/// Lossy only where Qubicle cannot represent the source: a model's transform
+/// Lossy only where Qubicle cannot represent the source. A model's transform
 /// chunk cannot carry translation, so a group node's placement is folded into
-/// the world position of its descendant matrices, summed down the hierarchy and
-/// rounded to whole voxels, and node rotation and scale are dropped. Colors
-/// stay per voxel with no palette merge, but a Qubicle voxel stores no alpha,
-/// so a color's alpha is dropped. Each matrix is pivoted at its grid origin, so
-/// its position is the world coordinate of the object's min corner.
+/// the world position of its descendant matrices, summed down the hierarchy
+/// and rounded to whole voxels. Node rotation and scale are dropped. Colors
+/// stay per voxel with no palette merge. A Qubicle voxel stores no alpha, so
+/// a color's alpha is dropped. Each matrix is pivoted at its grid origin. Its
+/// position is then the world coordinate of the object's min corner.
 fn synthesize_qbcl<T>(state: &VoxMain<T>) -> Result<QbclFile> {
-    let mut builder = QbclBuilder::default();
+    let mut placed = HashSet::new();
     let mut children: Vec<QbclNode> = state
         .root_hierarchy_node_ids()
         .iter()
-        .map(|&root_id| builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0)))
+        .map(|&root_id| emit_node(state, root_id, TyVector3I32::new(0, 0, 0), &mut placed))
         .collect::<Result<_>>()?;
     for (object_id, object) in state.iter_objects() {
-        if !builder.placed.contains(&object_id.to_u32()) {
-            children.push(builder.emit_object_node(state, object_id, object, [0, 0, 0])?);
+        if !placed.contains(&object_id) {
+            children.push(synthesized_matrix_node(state, object, [0, 0, 0])?);
         }
     }
 
@@ -267,134 +341,113 @@ fn synthesize_qbcl<T>(state: &VoxMain<T>) -> Result<QbclFile> {
     })
 }
 
-/// Tracks the objects a hierarchy node has already placed while synthesizing a
-/// Qubicle scene tree, so an object no node places can be swept in once.
-#[derive(Default)]
-struct QbclBuilder {
-    placed: HashSet<u32>,
+/// Maps one hierarchy node and its subtree to a Qubicle node. The
+/// translations sum into the world position because a model node cannot
+/// carry one. The node's objects go into `placed`.
+fn emit_node<T>(
+    state: &VoxMain<T>,
+    node_id: U32Id<BVoxHierarchyNode>,
+    parent: TyVector3I32,
+    placed: &mut HashSet<U32Id<BVoxObject>>,
+) -> Result<QbclNode> {
+    let node = state
+        .hierarchy_node(node_id)
+        .expect("a hierarchy id from the state resolves");
+    let world = parent + rounded_translation(node);
+    placed.extend(node.child_object_ids.iter().copied());
+
+    let children = node
+        .child_node_ids
+        .iter()
+        .map(|&child_id| emit_node(state, child_id, world, placed))
+        .collect::<Result<_>>()?;
+
+    synthesized_node(
+        state,
+        node.name.clone(),
+        world.to_array(),
+        &placed_objects(node, state),
+        children,
+    )
 }
 
-impl QbclBuilder {
-    /// Maps one hierarchy node and its subtree to a Qubicle node, summing the
-    /// node's translation into the world position so descendant matrices land
-    /// correctly even though a model node cannot carry translation. The node's
-    /// first object rides on the node itself as a matrix or compound grid; any
-    /// further objects and the mapped child nodes become its children.
-    fn emit_node<T>(
-        &mut self,
-        state: &VoxMain<T>,
-        node_id: U32Id<BVoxHierarchyNode>,
-        parent: TyVector3I32,
-    ) -> Result<QbclNode> {
-        let (name, child_object_ids, child_node_ids, world) = {
-            let node = state
-                .hierarchy_node(node_id)
-                .expect("a hierarchy id from the state resolves");
-            let position = node.transform.position;
-            let world = parent + position.round().as_ivec3();
-            (
-                node.name.clone(),
-                node.child_object_ids.clone(),
-                node.child_node_ids.clone(),
-                world,
-            )
-        };
+/// The Qubicle node a hierarchy node synthesizes to.
+fn synthesized_node<T>(
+    state: &VoxMain<T>,
+    name: String,
+    position: [i32; 3],
+    objects: &[&VoxObject],
+    children: Vec<QbclNode>,
+) -> Result<QbclNode> {
+    Ok(QbclNode {
+        name,
+        body: synthesized_body(state, position, objects, children)?,
+        ..QbclNode::default()
+    })
+}
 
-        let objects: Vec<(U32Id<BVoxObject>, &VoxObject)> = child_object_ids
-            .iter()
-            .filter_map(|&object_id| state.object(object_id).map(|object| (object_id, object)))
-            .collect();
-        let mut objects = objects.into_iter();
-        let first = objects.next();
+/// The body a synthesized node takes from its objects and children.
+fn synthesized_body<T>(
+    state: &VoxMain<T>,
+    position: [i32; 3],
+    objects: &[&VoxObject],
+    children: Vec<QbclNode>,
+) -> Result<QbclNodeBody> {
+    let [first, extras @ ..] = objects else {
+        return Ok(QbclNodeBody::Model(QbclModel {
+            transform: QbclModel::DEFAULT_TRANSFORM,
+            children,
+        }));
+    };
+    let grid = synthesized_matrix(state, first, position)?;
 
-        let mut children: Vec<QbclNode> = objects
-            .map(|(object_id, object)| {
-                self.emit_object_node(state, object_id, object, world.to_array())
-            })
-            .collect::<Result<_>>()?;
-        for child_id in child_node_ids {
-            children.push(self.emit_node(state, child_id, world)?);
-        }
+    grid_body(state, grid, extras, children, false)
+}
 
-        let body = match first {
-            None => QbclNodeBody::Model(QbclModel {
-                transform: QbclModel::DEFAULT_TRANSFORM,
-                children,
-            }),
-            // The object is the author's build volume, so the matrix keeps its
-            // dimensions and voxel positions directly.
-            Some((object_id, object)) if children.is_empty() => QbclNodeBody::Matrix(
-                self.synthesize_matrix(object_id, object, world.to_array(), state)?,
-            ),
-            Some((object_id, object)) => QbclNodeBody::Compound(QbclCompound {
-                matrix: self.synthesize_matrix(object_id, object, world.to_array(), state)?,
-                children,
-            }),
-        };
+/// A matrix node named for `object` around its synthesized grid.
+fn synthesized_matrix_node<T>(
+    state: &VoxMain<T>,
+    object: &VoxObject,
+    position: [i32; 3],
+) -> Result<QbclNode> {
+    Ok(QbclNode {
+        name: object.name().to_owned(),
+        body: QbclNodeBody::Matrix(synthesized_matrix(state, object, position)?),
+        ..QbclNode::default()
+    })
+}
 
-        Ok(QbclNode {
-            name,
-            body,
-            ..QbclNode::default()
+/// `object`'s grid as a matrix with no provenance.
+fn synthesized_matrix<T>(
+    state: &VoxMain<T>,
+    object: &VoxObject,
+    position: [i32; 3],
+) -> Result<QbclMatrix> {
+    let matrix = QbclMatrix {
+        position,
+        ..QbclMatrix::default()
+    };
+
+    fill_grid(state, object, matrix, None)
+}
+
+/// The objects a hierarchy node places, in order.
+fn placed_objects<'a, T>(
+    hierarchy: &VoxHierarchyNode,
+    state: &'a VoxMain<T>,
+) -> Vec<&'a VoxObject> {
+    hierarchy
+        .child_object_ids
+        .iter()
+        .map(|&object_id| {
+            state
+                .object(object_id)
+                .expect("a placed object is one of the state's")
         })
-    }
+        .collect()
+}
 
-    /// Wraps one object in a matrix node placed at `world`, naming the node for
-    /// the object. Used for a node's extra objects and for the unplaced-object
-    /// sweep.
-    fn emit_object_node<T>(
-        &mut self,
-        state: &VoxMain<T>,
-        object_id: U32Id<BVoxObject>,
-        object: &VoxObject,
-        world: [i32; 3],
-    ) -> Result<QbclNode> {
-        // The object is the author's build volume, so the matrix keeps its
-        // dimensions and voxel positions directly.
-        Ok(QbclNode {
-            name: object.name().to_owned(),
-            body: QbclNodeBody::Matrix(self.synthesize_matrix(object_id, object, world, state)?),
-            ..QbclNode::default()
-        })
-    }
-
-    /// Builds a matrix grid from an object, placed at the world `position`: one
-    /// solid voxel per live cell in `.qbcl` storage order, each carrying the
-    /// object's color with its alpha dropped and a solid visibility mask. Marks
-    /// the object placed so the sweep does not re-emit it.
-    fn synthesize_matrix<T>(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        object: &VoxObject,
-        position: [i32; 3],
-        state: &VoxMain<T>,
-    ) -> Result<QbclMatrix> {
-        self.placed.insert(object_id.to_u32());
-
-        let bounds = object.bounds();
-        let [size_x, size_y, size_z] = bounds.to_array();
-        let volume = size_x as usize * size_y as usize * size_z as usize;
-        let mut voxels = vec![QbclVoxel::default(); volume];
-
-        let cell_color = resolve_cell_color_or_transparent(state, object)?;
-        for voxel_id in object.iter_live() {
-            let cell = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            // A Qubicle voxel stores no alpha, so the sampled color's alpha is
-            // dropped.
-            let [r, g, b, _] = cell_color.color(voxel_id);
-            // Storage order: index = y + size_y * (z + size_z * x).
-            let index = cell.y as usize
-                + size_y as usize * (cell.z as usize + size_z as usize * cell.x as usize);
-            voxels[index] = QbclVoxel::new(r, g, b, SOLID_MASK);
-        }
-
-        Ok(QbclMatrix {
-            size: [size_x, size_y, size_z],
-            position,
-            pivot: [0.0, 0.0, 0.0],
-            voxels,
-        })
-    }
+/// A node's translation rounded to a Qubicle position's whole voxels.
+fn rounded_translation(node: &VoxHierarchyNode) -> TyVector3I32 {
+    node.transform.position.round().as_ivec3()
 }

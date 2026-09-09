@@ -66,7 +66,13 @@ impl VoxExt for QbtExt {
     }
 }
 
-/// The Qubicle Project ext as a state's ext. Its block is the `qbcl` entry.
+/// The Qubicle Construction Library ext as a state's ext. Its block is the
+/// `qbcl` entry. The nodes follow the hierarchy listing. A retained node
+/// takes no entry. The writer fills it in like a synthesized node. The ext
+/// lists nothing per object. The writer reaches a node's object through the
+/// hierarchy. The masks do not follow the voxel hooks. A repaint retains a
+/// live voxel again and fires the same hook as a new voxel, so the list
+/// cannot tell them apart.
 impl VoxExt for QbclExt {
     fn to_vox_ext(&self) -> Result<VoxMap> {
         encode_entry(self)
@@ -78,5 +84,13 @@ impl VoxExt for QbclExt {
 
     fn clone_box(&self) -> Box<dyn VoxExt> {
         Box::new(self.clone())
+    }
+
+    fn hierarchy_node_did_retain(&mut self, index: usize) {
+        self.nodes.follow_retain(index);
+    }
+
+    fn hierarchy_node_will_release(&mut self, index: usize) {
+        self.nodes.follow_release(index);
     }
 }

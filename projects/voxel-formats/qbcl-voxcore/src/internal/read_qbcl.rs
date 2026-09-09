@@ -67,7 +67,7 @@ fn build_node(
     state: &mut VoxMain<()>,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<QbclExtNode>,
+    nodes: &mut Vec<Option<QbclExtNode>>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let node_id = match &node.body {
         QbclNodeBody::Matrix(matrix) => {
@@ -83,14 +83,14 @@ fn build_node(
                 transform: translation(matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(node_provenance(
+            nodes.push(Some(node_provenance(
                 node,
                 QbclExtNodeBody::Matrix {
                     position: matrix.position,
                     pivot: matrix.pivot,
                     masks,
                 },
-            ));
+            )));
             node_id
         }
         QbclNodeBody::Model(model) => {
@@ -105,12 +105,12 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(node_provenance(
+            nodes.push(Some(node_provenance(
                 node,
                 QbclExtNodeBody::Model {
                     transform: model.transform.to_vec(),
                 },
-            ));
+            )));
             node_id
         }
         QbclNodeBody::Compound(compound) => {
@@ -130,14 +130,14 @@ fn build_node(
                 transform: translation(compound.matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(node_provenance(
+            nodes.push(Some(node_provenance(
                 node,
                 QbclExtNodeBody::Compound {
                     position: compound.matrix.position,
                     pivot: compound.matrix.pivot,
                     masks,
                 },
-            ));
+            )));
             node_id
         }
     };
