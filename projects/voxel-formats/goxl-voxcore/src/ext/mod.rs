@@ -3,8 +3,9 @@
 //! file from the scene instead. The `ext` feature makes this module public
 //! and adds the typed path: [`GoxlVoxMain`] carries a [`GoxlExt`] as its ext,
 //! [`from_goxl_file_with_ext`] keeps a loaded file's, and
-//! [`to_goxl_file_with_ext`] writes it back. Its entry in a document's `ext`
-//! block is `goxl`, through voxcore's
+//! [`to_goxl_file_with_ext`] writes it back. The ext follows the state's
+//! listings through voxcore's [`VoxExt`](voxcore::ext::VoxExt) hooks. Its
+//! entry in a document's `ext` block is `goxl`, through voxcore's
 //! [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Types

@@ -75,8 +75,8 @@ pub struct GoxlExtLayer {
     pub color: Option<[u8; 4]>,
 
     /// The placed blocks, in stored order, as `(block index, [x, y, z])`. The
-    /// block index names a native object; the same block may be stamped at
-    /// several positions. Empty for clone and shape layers.
+    /// block index is an object's listing index. The same block may be stamped
+    /// at several positions. Empty for clone and shape layers.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub placements: Vec<(i32, [i32; 3])>,
 

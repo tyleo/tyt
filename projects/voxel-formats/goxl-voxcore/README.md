@@ -38,5 +38,9 @@ the ext:
 - `codec::from_goxl_bytes_with_ext` and `codec::to_goxl_bytes_with_ext` do
   the same for `.gox` bytes.
 
-The ext enters a document's `ext` block as the `goxl` entry through voxcore's
-`VoxExtEntryCodec`. A Voxel Json document carries the ext in that block.
+The ext follows the state's listings through voxcore's `VoxExt` hooks. After
+a node or object is released or reordered, the file still writes back with
+the surviving provenance. A node retained after the load is written as a
+synthesized layer. The ext enters a document's `ext` block as the `goxl`
+entry through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the
+ext in that block.

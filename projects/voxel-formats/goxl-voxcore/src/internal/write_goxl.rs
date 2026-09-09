@@ -1,5 +1,5 @@
 use crate::{
-    Result,
+    Error, Result,
     ext::{GoxlExt, GoxlExtLayer},
 };
 use branded_id::U32Id;
@@ -7,10 +7,11 @@ use goxl::{
     GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
     GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
 };
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::{TyVector3I32, TyVector3U32};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject, color::resolve_cell_color_or_transparent,
+    BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
+    color::resolve_cell_color_or_transparent,
 };
 
 /// Writes a state to a Goxel [`GoxlFile`]. With `goxl_ext`, a loaded file
@@ -18,11 +19,14 @@ use voxcore::{
 /// comes from the ext. Without it, `synthesize_goxl` builds the file from the
 /// bare scene. An empty voxel is written back as the transparent zero voxel.
 ///
-/// Errors when an object's `baseColor` draws from a non-color value pool.
+/// Errors when an object's `baseColor` draws from a non-color value pool, or
+/// when the ext's layers are out of step with the hierarchy.
 pub fn write_goxl<T>(state: &VoxMain<T>, goxl_ext: Option<&GoxlExt>) -> Result<GoxlFile> {
     let Some(ext) = goxl_ext.cloned() else {
         return synthesize_goxl(state);
     };
+
+    let layers = build_layers(state, ext.layers)?;
 
     // Each object is the author's build volume (a fixed Goxel 16-cube), so a
     // block is written from it directly at the original positions, its voxel
@@ -56,7 +60,7 @@ pub fn write_goxl<T>(state: &VoxMain<T>, goxl_ext: Option<&GoxlExt>) -> Result<G
                 extra: GoxlDict(material.extra),
             })
             .collect(),
-        layers: ext.layers.into_iter().map(layer_from_provenance).collect(),
+        layers,
         cameras: ext
             .cameras
             .into_iter()
@@ -281,6 +285,91 @@ fn block_from_object<T>(state: &VoxMain<T>, object: &VoxObject) -> Result<GoxlBl
     }
 
     Ok(GoxlBlock { voxels })
+}
+
+/// Rebuilds the layers from the ext, one per hierarchy node in listing order.
+/// A `None` entry stands for a node retained after the load. It becomes a
+/// layer like a synthesized one. Errors when the ext is out of step with the
+/// hierarchy.
+fn build_layers<T>(
+    state: &VoxMain<T>,
+    layers: Vec<Option<GoxlExtLayer>>,
+) -> Result<Vec<GoxlLayer>> {
+    let node_count = state.hierarchy_node_count();
+    if layers.len() != node_count {
+        return Err(Error::invalid(format!(
+            "goxl ext has {} layers but the state has {node_count} hierarchy nodes",
+            layers.len()
+        )));
+    }
+
+    let index_by_object: HashMap<U32Id<BVoxObject>, i32> = state
+        .iter_objects()
+        .enumerate()
+        .map(|(index, (object_id, _))| (object_id, index as i32))
+        .collect();
+    let ids: HashSet<i32> = layers.iter().flatten().map(|layer| layer.id).collect();
+    // A fresh id lands above every stored id and above the no-clone id 0.
+    let mut next_id = ids.iter().copied().max().unwrap_or(0).max(0);
+
+    let mut built = Vec::with_capacity(layers.len());
+    for (index, ((_, node), layer)) in state.iter_hierarchy_nodes().zip(layers).enumerate() {
+        let placed: Vec<i32> = node
+            .child_object_ids
+            .iter()
+            .map(|object_id| {
+                *index_by_object
+                    .get(object_id)
+                    .expect("a placed object is one of the state's")
+            })
+            .collect();
+        let Some(layer) = layer else {
+            next_id += 1;
+            built.push(synthesized_layer(next_id, node, &placed));
+            continue;
+        };
+
+        let referenced = distinct(layer.placements.iter().map(|(block, _)| *block));
+        if referenced != placed {
+            return Err(Error::invalid(format!(
+                "goxl ext layer {index} places blocks {referenced:?} but hierarchy node {index} \
+                 places objects {placed:?}"
+            )));
+        }
+        if layer.base_id != 0 && !ids.contains(&layer.base_id) {
+            return Err(Error::invalid(format!(
+                "goxl ext layer {index} clones layer id {} but no layer has it",
+                layer.base_id
+            )));
+        }
+        built.push(layer_from_provenance(layer));
+    }
+
+    Ok(built)
+}
+
+/// A layer for a node retained after the load, shaped like a synthesized one.
+/// The node's objects are stamped at its translation rounded to whole voxels.
+fn synthesized_layer(id: i32, node: &VoxHierarchyNode, placed: &[i32]) -> GoxlLayer {
+    let position = node.transform.position.round().as_ivec3().to_array();
+    GoxlLayer {
+        name: node.name.clone(),
+        id,
+        blocks: placed
+            .iter()
+            .map(|&block_index| GoxlLayerBlock {
+                block_index,
+                position,
+            })
+            .collect(),
+        ..GoxlLayer::default()
+    }
+}
+
+/// `values` without repeats, in first-seen order.
+fn distinct(values: impl Iterator<Item = i32>) -> Vec<i32> {
+    let mut seen = HashSet::new();
+    values.filter(|value| seen.insert(*value)).collect()
 }
 
 /// Rebuilds one layer from its ext provenance, restoring its placements and the

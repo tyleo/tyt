@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 /// The shared `BL16` voxel blocks become native objects and the per-layer block
 /// placements that stamp them become the hierarchy nodes; this holds the rest,
 /// with the per-layer entries aligned by index with the hierarchy nodes so the
-/// file rebuilds exactly.
+/// file rebuilds exactly. The layers follow the state through the
+/// [`VoxExt`](voxcore::ext::VoxExt) hooks.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct GoxlExt {
@@ -34,9 +35,11 @@ pub struct GoxlExt {
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub materials: Vec<GoxlExtMaterial>,
 
-    /// Per-layer provenance, aligned by index with the hierarchy nodes.
+    /// Per-layer provenance, aligned by index with the hierarchy nodes. A node
+    /// retained after the load has `None`. The writer fills it in like a
+    /// synthesized layer.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
-    pub layers: Vec<GoxlExtLayer>,
+    pub layers: Vec<Option<GoxlExtLayer>>,
 
     /// The `CAMR` cameras, in stored order.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]

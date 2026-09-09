@@ -5,18 +5,21 @@ use goxl::GoxlFile;
 /// [`from_goxl_file_with_ext`](crate::ext::from_goxl_file_with_ext) and the
 /// typed form of [`to_goxl_file`](crate::to_goxl_file). A loaded file writes
 /// back exactly through its ext. A state carrying none writes a synthesized
-/// file.
+/// file. Errors if the ext is out of step with the hierarchy.
 pub fn to_goxl_file_with_ext(state: &GoxlVoxMain) -> Result<GoxlFile> {
     write_goxl(state, state.ext().as_ref())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ext::{from_goxl_file_with_ext, to_goxl_file_with_ext};
+    use crate::ext::{GoxlVoxMain, from_goxl_file_with_ext, to_goxl_file_with_ext};
+    use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
     };
+    use ty_math::{TyTransformF64, TyVector3F64};
+    use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode};
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box
     /// fields.
@@ -210,6 +213,187 @@ mod tests {
         };
         let state = from_goxl_file_with_ext(&file).unwrap();
         assert_eq!(to_goxl_file_with_ext(&state).unwrap(), file);
+    }
+
+    /// A block of one color.
+    fn solid_block(r: u8, g: u8, b: u8) -> GoxlBlock {
+        GoxlBlock {
+            voxels: vec![GoxlVoxel::new(r, g, b); GoxlBlock::SIZE.pow(3) as usize],
+        }
+    }
+
+    /// A layer stamping `blocks` at their positions.
+    fn stamping_layer(name: &str, id: i32, blocks: &[(i32, [i32; 3])]) -> GoxlLayer {
+        GoxlLayer {
+            name: name.to_owned(),
+            id,
+            blocks: blocks
+                .iter()
+                .map(|&(block_index, position)| GoxlLayerBlock {
+                    block_index,
+                    position,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// Three blocks under three layers. Blocks 0 and 2 are each stamped twice.
+    /// A surviving layer then keeps a repeated stamp.
+    fn placed_blocks_file() -> GoxlFile {
+        GoxlFile {
+            blocks: vec![
+                solid_block(10, 0, 0),
+                solid_block(0, 20, 0),
+                solid_block(0, 0, 30),
+            ],
+            layers: vec![
+                stamping_layer(
+                    "keep",
+                    1,
+                    &[(0, [0, 0, 0]), (1, [16, 0, 0]), (0, [32, 0, 0])],
+                ),
+                stamping_layer("drop", 2, &[(1, [0, 16, 0])]),
+                stamping_layer("tail", 3, &[(2, [0, 0, 16]), (2, [0, 0, 32])]),
+            ],
+            ..Default::default()
+        }
+    }
+
+    fn set_child_objects(state: &mut GoxlVoxMain, index: u32, child_object_ids: Vec<u32>) {
+        let node_id = U32Id::<BVoxHierarchyNode>::from_u32(index);
+        let node = VoxHierarchyNode {
+            child_object_ids: child_object_ids
+                .into_iter()
+                .map(U32Id::<BVoxObject>::from_u32)
+                .collect(),
+            ..state.hierarchy_node(node_id).unwrap().clone()
+        };
+        state.set_hierarchy_node(node_id, node).unwrap();
+    }
+
+    /// Dropping the middle layer and its block, then compacting, leaves the
+    /// survivors' provenance aligned. The first layer keeps its two stamps of
+    /// block 0. The last layer stamps its block at the new index. The rebuilt
+    /// file reloads to the loaded ext minus the released entries.
+    #[test]
+    fn released_entities_leave_the_survivors_provenance_aligned() {
+        let file = placed_blocks_file();
+        let mut state = from_goxl_file_with_ext(&file).unwrap();
+        let original = state.ext().clone().expect("a loaded file carries its ext");
+
+        let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+        state
+            .set_root_hierarchy_node_ids(vec![node(0), node(2)])
+            .unwrap();
+        set_child_objects(&mut state, 0, vec![0]);
+        set_child_objects(&mut state, 1, Vec::new());
+        state.release_hierarchy_node(node(1)).unwrap();
+        state
+            .release_object(U32Id::<BVoxObject>::from_u32(1))
+            .unwrap();
+        state.gc();
+
+        let mut expected = original;
+        expected.layers.remove(1);
+        let [Some(keep), Some(tail)] = expected.layers.as_mut_slice() else {
+            panic!("two loaded layers survive");
+        };
+        keep.placements = vec![(0, [0, 0, 0]), (0, [32, 0, 0])];
+        tail.placements = vec![(1, [0, 0, 16]), (1, [0, 0, 32])];
+        assert_eq!(state.ext(), &Some(expected.clone()));
+
+        let rebuilt = to_goxl_file_with_ext(&state).unwrap();
+        let mut want = file;
+        want.blocks.remove(1);
+        want.layers.remove(1);
+        want.layers[0] = stamping_layer("keep", 1, &[(0, [0, 0, 0]), (0, [32, 0, 0])]);
+        want.layers[1] = stamping_layer("tail", 3, &[(1, [0, 0, 16]), (1, [0, 0, 32])]);
+        assert_eq!(rebuilt, want);
+
+        let reloaded = from_goxl_file_with_ext(&rebuilt).unwrap();
+        assert_eq!(reloaded.ext(), &Some(expected));
+    }
+
+    /// A node retained after the load takes no entry. The writer fills it in
+    /// like a synthesized layer.
+    #[test]
+    fn a_node_retained_after_the_load_writes_a_synthesized_layer() {
+        let file = placed_blocks_file();
+        let mut state = from_goxl_file_with_ext(&file).unwrap();
+        let node_id = state
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "added".to_owned(),
+                child_object_ids: vec![U32Id::<BVoxObject>::from_u32(2)],
+                transform: TyTransformF64 {
+                    position: TyVector3F64::new(3.4, -2.6, 16.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .unwrap();
+        state.push_root_hierarchy_node_id(node_id).unwrap();
+        assert_eq!(state.ext().as_ref().unwrap().layers[3], None);
+
+        let rebuilt = to_goxl_file_with_ext(&state).unwrap();
+        let mut want = file;
+        want.layers
+            .push(stamping_layer("added", 4, &[(2, [3, -3, 16])]));
+        assert_eq!(rebuilt, want);
+    }
+
+    /// Moving the last block to the front renumbers every layer's stamps, so
+    /// each layer still stamps the block it did.
+    #[test]
+    fn a_moved_object_keeps_each_layers_block() {
+        let file = placed_blocks_file();
+        let mut state = from_goxl_file_with_ext(&file).unwrap();
+        state
+            .move_object(U32Id::<BVoxObject>::from_u32(2), 0)
+            .unwrap();
+
+        let rebuilt = to_goxl_file_with_ext(&state).unwrap();
+        let mut want = file;
+        want.blocks.rotate_right(1);
+        want.layers[0] = stamping_layer(
+            "keep",
+            1,
+            &[(1, [0, 0, 0]), (2, [16, 0, 0]), (1, [32, 0, 0])],
+        );
+        want.layers[1] = stamping_layer("drop", 2, &[(2, [0, 16, 0])]);
+        want.layers[2] = stamping_layer("tail", 3, &[(0, [0, 0, 16]), (0, [0, 0, 32])]);
+        assert_eq!(rebuilt, want);
+    }
+
+    /// An ext out of step with the hierarchy is malformed. The writer errors
+    /// instead of pairing entries by a shifted index, stamping what the state
+    /// does not place, or cloning a layer the file lacks.
+    #[test]
+    fn an_ext_out_of_step_with_its_listings_errors() {
+        let file = placed_blocks_file();
+        let mut state = from_goxl_file_with_ext(&file).unwrap();
+        let mut ext = state.ext().clone().unwrap();
+        ext.layers.pop();
+        state.set_ext(Some(ext));
+        assert!(to_goxl_file_with_ext(&state).is_err());
+
+        let mut state = from_goxl_file_with_ext(&file).unwrap();
+        let mut ext = state.ext().clone().unwrap();
+        let Some(drop) = &mut ext.layers[1] else {
+            panic!("layer 1 is loaded");
+        };
+        drop.placements.push((2, [0, 0, 0]));
+        state.set_ext(Some(ext));
+        assert!(to_goxl_file_with_ext(&state).is_err());
+
+        let mut state = from_goxl_file_with_ext(&file).unwrap();
+        let mut ext = state.ext().clone().unwrap();
+        let Some(drop) = &mut ext.layers[1] else {
+            panic!("layer 1 is loaded");
+        };
+        drop.base_id = 9;
+        state.set_ext(Some(ext));
+        assert!(to_goxl_file_with_ext(&state).is_err());
     }
 
     #[cfg(feature = "codec")]

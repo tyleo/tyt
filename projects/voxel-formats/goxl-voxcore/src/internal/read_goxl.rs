@@ -180,7 +180,11 @@ fn goxl_ext(file: &GoxlFile) -> GoxlExt {
             pixels: preview.pixels.clone(),
         }),
         materials: file.materials.iter().map(material_provenance).collect(),
-        layers: file.layers.iter().map(layer_provenance).collect(),
+        layers: file
+            .layers
+            .iter()
+            .map(|layer| Some(layer_provenance(layer)))
+            .collect(),
         cameras: file.cameras.iter().map(camera_provenance).collect(),
         light: file.light.as_ref().map(light_provenance),
         unknown_chunks: file
