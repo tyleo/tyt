@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    ext::{MVoxExt, MVoxExtFrame, MVoxExtNodeBody},
+    ext::{MVoxExt, MVoxExtFrame, MVoxExtNode, MVoxExtNodeBody},
 };
 use branded_id::U32Id;
 use mvox::{
@@ -9,7 +9,10 @@ use mvox::{
     MVoxSceneNode, MVoxSceneNodeBody, MVoxShapeModel, MVoxShapeNode, MVoxTransformNode,
     MVoxUnknownChunk, MVoxVoxel,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    hash::Hash,
+};
 use ty_math::TyVector3F64;
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject,
@@ -23,8 +26,8 @@ use voxcore::{
 /// bare scene. Either way a model lists its voxels in ascending raster order,
 /// which need not match their original stored order.
 ///
-/// Errors if the ext's per-node entries do not line up with the hierarchy, or
-/// if synthesis exceeds a MagicaVoxel limit such as the per-axis voxel cap.
+/// Errors if the ext's scene nodes are out of step with the hierarchy, or if
+/// synthesis exceeds a MagicaVoxel limit such as the per-axis voxel cap.
 pub fn write_mvox<T>(state: &VoxMain<T>, mvox_ext: Option<&MVoxExt>) -> Result<MVoxFile> {
     let Some(ext) = mvox_ext else {
         return synthesize_mvox(state);
@@ -231,7 +234,7 @@ fn model_byte(value: u32, label: &str) -> Result<u8> {
 /// Rebuilds the scene nodes from the ext, one per entry in stored order. The
 /// references come from the ext, which holds the exact lists, so a shape that
 /// draws one model on several frames or any other repeated reference
-/// round-trips. Errors if the ext node count does not match the hierarchy.
+/// round-trips. Errors if the ext is out of step with the hierarchy.
 fn build_scene_nodes<T>(state: &VoxMain<T>, ext: &MVoxExt) -> Result<Vec<MVoxSceneNode>> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.scene_nodes.len() {
@@ -241,8 +244,22 @@ fn build_scene_nodes<T>(state: &VoxMain<T>, ext: &MVoxExt) -> Result<Vec<MVoxSce
         )));
     }
 
-    Ok(ext
+    let entries = ext
         .scene_nodes
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            entry.as_ref().ok_or_else(|| {
+                Error::Invalid(format!(
+                    "hierarchy node {index} was retained after the load and has no mvox scene node"
+                ))
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    check_references(state, &entries)?;
+
+    Ok(entries
         .iter()
         .map(|provenance| MVoxSceneNode {
             id: provenance.id,
@@ -277,6 +294,65 @@ fn build_scene_nodes<T>(state: &VoxMain<T>, ext: &MVoxExt) -> Result<Vec<MVoxSce
             },
         })
         .collect())
+}
+
+/// Errors when an entry's distinct references differ from its node's children,
+/// paired through the listings: a transform's child and a group's children by
+/// scene-node id, a shape's models by object listing index.
+fn check_references<T>(state: &VoxMain<T>, entries: &[&MVoxExtNode]) -> Result<()> {
+    let id_by_node: HashMap<U32Id<BVoxHierarchyNode>, i32> = state
+        .iter_hierarchy_nodes()
+        .zip(entries)
+        .map(|((node_id, _), entry)| (node_id, entry.id))
+        .collect();
+    let index_by_object: HashMap<U32Id<BVoxObject>, u32> = state
+        .iter_objects()
+        .enumerate()
+        .map(|(index, (object_id, _))| (object_id, index as u32))
+        .collect();
+
+    for (index, ((_, node), entry)) in state.iter_hierarchy_nodes().zip(entries).enumerate() {
+        let placed_ids: Vec<i32> = node
+            .child_node_ids
+            .iter()
+            .map(|child_id| {
+                *id_by_node
+                    .get(child_id)
+                    .expect("a child node is one of the state's")
+            })
+            .collect();
+        let placed_indices: Vec<u32> = node
+            .child_object_ids
+            .iter()
+            .map(|object_id| {
+                *index_by_object
+                    .get(object_id)
+                    .expect("a placed object is one of the state's")
+            })
+            .collect();
+        let (referenced_ids, referenced_indices) = match &entry.body {
+            MVoxExtNodeBody::Transform { child, .. } => (vec![*child], Vec::new()),
+            MVoxExtNodeBody::Group { children } => (distinct(children.iter().copied()), Vec::new()),
+            MVoxExtNodeBody::Shape { models } => {
+                (Vec::new(), distinct(models.iter().map(|model| model.model)))
+            }
+        };
+        if referenced_ids != placed_ids || referenced_indices != placed_indices {
+            return Err(Error::Invalid(format!(
+                "mvox ext scene node {index} references nodes {referenced_ids:?} and models \
+                 {referenced_indices:?} but hierarchy node {index} places nodes {placed_ids:?} \
+                 and objects {placed_indices:?}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// `values` without repeats, in first-seen order.
+fn distinct<T: Copy + Eq + Hash>(values: impl Iterator<Item = T>) -> Vec<T> {
+    let mut seen = HashSet::new();
+    values.filter(|value| seen.insert(*value)).collect()
 }
 
 /// Rebuilds one transform-node frame from its ext provenance.

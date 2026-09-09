@@ -416,7 +416,11 @@ fn mvox_ext(file: &MVoxFile) -> MVoxExt {
                 extra: material.extra.0.clone(),
             })
             .collect(),
-        scene_nodes: file.scene_nodes.iter().map(node_provenance).collect(),
+        scene_nodes: file
+            .scene_nodes
+            .iter()
+            .map(|node| Some(node_provenance(node)))
+            .collect(),
         layers: file.layers.iter().map(layer_provenance).collect(),
         render_objects: file
             .render_objects

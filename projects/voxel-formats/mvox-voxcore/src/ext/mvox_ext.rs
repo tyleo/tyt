@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 /// the MagicaVoxel `.vox` state with no native voxcore home, kept so a file
 /// loaded from a MagicaVoxel package can be written back exactly.
 ///
-/// Geometry, colors, and the scene graph become native voxcore entities; this
-/// holds the rest, with the per-node and per-material entries aligned by index
-/// with the hierarchy nodes and recorded materials so the file rebuilds
-/// exactly.
+/// Geometry, colors, and the scene graph become native voxcore entities. This
+/// holds the rest. The scene nodes align by index with the hierarchy nodes.
+/// The materials align by id with the first palette's materials. Both follow
+/// the state through the [`VoxExt`](voxcore::ext::VoxExt) hooks.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct MVoxExt {
@@ -27,11 +27,14 @@ pub struct MVoxExt {
     pub materials: Vec<MVoxExtMaterial>,
 
     /// Per scene-node provenance, aligned by index with the hierarchy nodes.
+    /// A node retained after the load has `None`. The writer errors on it
+    /// because a hierarchy node synthesizes to several scene nodes, more than
+    /// one entry holds.
     #[cfg_attr(
         feature = "ext",
         serde(rename = "scene-nodes", default, skip_serializing_if = "Vec::is_empty")
     )]
-    pub scene_nodes: Vec<MVoxExtNode>,
+    pub scene_nodes: Vec<Option<MVoxExtNode>>,
 
     /// The layer definitions (`LAYR`), preserved verbatim.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]

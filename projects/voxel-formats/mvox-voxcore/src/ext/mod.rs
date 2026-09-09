@@ -3,8 +3,9 @@
 //! synthesize the file from the scene instead. The `ext` feature makes this
 //! module public and adds the typed path: [`MVoxVoxMain`] carries a
 //! [`MVoxExt`] as its ext, [`from_mvox_file_with_ext`] keeps a loaded file's,
-//! and [`to_mvox_file_with_ext`] writes it back. The ext enters a document's
-//! `ext` block as the `mvox` entry through voxcore's
+//! and [`to_mvox_file_with_ext`] writes it back. The ext follows the state's
+//! listings through voxcore's [`VoxExt`](voxcore::ext::VoxExt) hooks. Its
+//! entry in a document's `ext` block is `mvox`, through
 //! [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Types

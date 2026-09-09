@@ -35,5 +35,10 @@ the ext:
 - `codec::from_mvox_bytes_with_ext` and `codec::to_mvox_bytes_with_ext` do
   the same for `.vox` bytes.
 
-The ext enters a document's `ext` block as the `mvox` entry through voxcore's
-`VoxExtEntryCodec`. A Voxel Json document carries the ext in that block.
+The ext follows the state's listings through voxcore's `VoxExt` hooks. After
+a node or object is released or reordered, the file still writes back with
+the surviving provenance. A released material shifts the recorded ids above
+it. The writer errors on a node retained after the load because it has no
+scene node. The ext enters a document's `ext` block as the `mvox` entry
+through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the ext
+in that block.

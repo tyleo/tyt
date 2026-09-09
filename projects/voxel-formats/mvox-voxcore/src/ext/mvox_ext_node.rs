@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// The voxcore node keeps a deduplicated structural view and a transform
 /// projection; this holds the exact ids, attributes, references, and the frame
 /// data the voxcore node cannot represent.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct MVoxExtNode {
     /// The scene-node id other nodes reference (`id`).

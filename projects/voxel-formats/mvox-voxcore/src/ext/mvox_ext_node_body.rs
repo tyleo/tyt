@@ -34,11 +34,3 @@ pub enum MVoxExtNodeBody {
         models: Vec<MVoxExtShapeModel>,
     },
 }
-
-impl Default for MVoxExtNodeBody {
-    fn default() -> Self {
-        MVoxExtNodeBody::Group {
-            children: Vec::new(),
-        }
-    }
-}

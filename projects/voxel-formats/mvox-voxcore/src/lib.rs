@@ -8,7 +8,10 @@
 //! `codec` feature, goes straight to and from `.vox` bytes over mvox-codec.
 //! The `ext` feature, on by default, opens the `ext` module. There the
 //! MagicaVoxel state with no native voxcore home rides as the state's ext.
-//! The `_with_ext` converters write a loaded file back exactly.
+//! The `_with_ext` converters write a loaded file back exactly. The ext
+//! follows the listings through the [`VoxExt`](voxcore::ext::VoxExt) hooks,
+//! so a state mutated after the load still writes back with the surviving
+//! provenance.
 
 // Public API
 
