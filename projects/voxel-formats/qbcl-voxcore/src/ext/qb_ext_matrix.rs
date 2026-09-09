@@ -1,8 +1,8 @@
 #[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
-/// Per-matrix provenance preserved in the `qb` ext, aligned by index
-/// with the objects and hierarchy nodes, in stored order.
+/// Per-matrix provenance preserved in the `qb` ext, aligned by index with
+/// the objects.
 ///
 /// A matrix's geometry and colors become a native object; this keeps the name,
 /// scene position, and the per-voxel visibility bytes the voxcore object cannot

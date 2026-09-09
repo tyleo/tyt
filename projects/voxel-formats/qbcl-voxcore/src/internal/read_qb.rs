@@ -42,11 +42,11 @@ pub fn read_qb(file: &QbFile) -> Result<(VoxMain<()>, QbExt)> {
             transform: translation(matrix.position),
         };
         root_ids.push(state.retain_hierarchy_node(node)?);
-        matrices.push(QbExtMatrix {
+        matrices.push(Some(QbExtMatrix {
             name: matrix.name.clone(),
             position: matrix.position,
             visibility,
-        });
+        }));
     }
     state.set_root_hierarchy_node_ids(root_ids)?;
 

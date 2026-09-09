@@ -4,9 +4,11 @@
 //! and adds the typed path for
 //! each format: [`QbVoxMain`], [`QbtVoxMain`], and [`QbclVoxMain`] carry
 //! their ext, the `from_x_file_with_ext` loaders keep a loaded file's, and
-//! the `to_x_file_with_ext` writers write it back. Each ext enters a
-//! document's `ext` block as its `qb`, `qbt`, or `qbcl` entry through
-//! voxcore's [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
+//! the `to_x_file_with_ext` writers write it back. [`QbExt`] follows the
+//! state's listings through voxcore's [`VoxExt`](voxcore::ext::VoxExt)
+//! hooks. Each ext enters a document's `ext` block as its `qb`, `qbt`, or
+//! `qbcl` entry through voxcore's
+//! [`VoxExtEntryCodec`](voxcore::ext::VoxExtEntryCodec).
 
 // Types
 

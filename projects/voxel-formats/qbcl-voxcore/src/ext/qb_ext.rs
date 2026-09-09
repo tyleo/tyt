@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Each matrix's geometry and colors become a native object sharing one
 /// palette, placed by a hierarchy node; this holds the header flags and the
-/// per-matrix entries, aligned by index with the objects.
+/// per-matrix entries, aligned by index with the objects. The matrices follow
+/// the state through the [`VoxExt`](voxcore::ext::VoxExt) hooks.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct QbExt {
@@ -30,7 +31,9 @@ pub struct QbExt {
     #[cfg_attr(feature = "ext", serde(rename = "visibility-mask-encoded"))]
     pub visibility_mask_encoded: bool,
 
-    /// Per-matrix provenance, aligned by index with the objects.
+    /// Per-matrix provenance, aligned by index with the objects. An object
+    /// retained after the load has `None`. The writer fills it in like a
+    /// synthesized matrix.
     #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
-    pub matrices: Vec<QbExtMatrix>,
+    pub matrices: Vec<Option<QbExtMatrix>>,
 }

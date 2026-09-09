@@ -1,7 +1,4 @@
-use crate::{
-    Error, Result,
-    ext::{QbExt, QbExtMatrix},
-};
+use crate::{Error, Result, ext::QbExt};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
 use std::collections::HashSet;
@@ -13,12 +10,16 @@ use voxcore::{
 /// Writes a state to a decoded Qubicle Binary [`QbFile`]. With `qb_ext`, a
 /// loaded file rebuilds exactly: each object emits one matrix, taking its
 /// name, position, and per-voxel visibility from the ext and its colors from
-/// the palette. Without it, `synthesize_qb` builds the file from the bare
-/// scene.
+/// the palette. An object retained after the load has no entry. It emits a
+/// matrix like a synthesized one at its first placement. Without an ext,
+/// `synthesize_qb` builds the file from the bare scene.
 ///
-/// Errors when the ext's matrix entries do not line up with the objects or a
-/// visibility list does not match its object, and when an object's
-/// `baseColor` draws from a non-color value pool.
+/// Errors if:
+///
+/// 1. the ext's matrix entries do not line up with the objects
+/// 2. a visibility list does not match its object
+/// 3. the header encodes visibility masks and an object has no entry
+/// 4. an object's `baseColor` draws from a non-color value pool
 pub fn write_qb<T>(state: &VoxMain<T>, qb_ext: Option<&QbExt>) -> Result<QbFile> {
     let Some(ext) = qb_ext else {
         return synthesize_qb(state);
@@ -34,10 +35,36 @@ pub fn write_qb<T>(state: &VoxMain<T>, qb_ext: Option<&QbExt>) -> Result<QbFile>
 
     // The object is the author's build volume, so the written matrix keeps its
     // dimensions and voxel positions directly.
+    let mut flattened = None;
     let matrices = state
         .iter_objects()
         .zip(&ext.matrices)
-        .map(|((_, object), provenance)| matrix_from_object(state, object, provenance))
+        .enumerate()
+        .map(|(index, ((object_id, object), entry))| match entry {
+            Some(provenance) => matrix_from_object(
+                state,
+                object,
+                &provenance.name,
+                provenance.position,
+                Some(&provenance.visibility),
+            ),
+            None => {
+                // A mask says which faces of a voxel show. Only the plain
+                // visibility byte has one solid value.
+                if ext.visibility_mask_encoded {
+                    return Err(Error::invalid(format!(
+                        "qb ext has no entry for object {index} and the header encodes visibility masks"
+                    )));
+                }
+
+                let placement = flattened
+                    .get_or_insert_with(|| placements(state))
+                    .iter()
+                    .find(|placement| placement.object_id == object_id)
+                    .expect("every object has a placement");
+                matrix_from_object(state, object, &placement.name, placement.position, None)
+            }
+        })
         .collect::<Result<_>>()?;
 
     Ok(QbFile {
@@ -58,51 +85,54 @@ pub fn write_qb<T>(state: &VoxMain<T>, qb_ext: Option<&QbExt>) -> Result<QbFile>
     })
 }
 
-/// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the object's `baseColor` layer and its visibility from the aligned ext
-/// list, placed in `.qb` storage order. Errors if the visibility count does not
+/// Rebuilds a matrix grid from an object in `.qb` storage order. Each solid
+/// voxel's color comes from the object's `baseColor` layer. `visibility`
+/// supplies each live voxel's byte in raster order. Without it every solid
+/// voxel takes the plain solid byte. Errors if the visibility count does not
 /// match the object's solid voxels.
 fn matrix_from_object<T>(
     state: &VoxMain<T>,
     object: &VoxObject,
-    provenance: &QbExtMatrix,
+    name: &str,
+    position: [i32; 3],
+    visibility: Option<&[u8]>,
 ) -> Result<QbMatrix> {
-    let bounds = object.bounds();
-    let [size_x, size_y, size_z] = bounds.to_array();
+    let live_count = object.live_count();
+    if let Some(visibility) = visibility
+        && visibility.len() != live_count
+    {
+        return Err(Error::invalid(format!(
+            "qb ext has {} visibility bytes but the object has {live_count} solid voxels",
+            visibility.len()
+        )));
+    }
+
+    let [size_x, size_y, size_z] = object.bounds().to_array();
     let volume = size_x as usize * size_y as usize * size_z as usize;
     let mut voxels = vec![QbVoxel::default(); volume];
 
     let cell_color = resolve_cell_color_or_transparent(state, object)?;
-    let live_count = object.live_count();
-    if live_count != provenance.visibility.len() {
-        return Err(Error::invalid(format!(
-            "qb ext has {} visibility bytes but the object has {live_count} solid voxels",
-            provenance.visibility.len()
-        )));
-    }
-
-    for (voxel_id, &visibility) in object.iter_live().zip(&provenance.visibility) {
-        let position = object
+    for (live_index, voxel_id) in object.iter_live().enumerate() {
+        let cell = object
             .voxel_position(voxel_id)
             .expect("a live voxel is within the grid");
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
         let [r, g, b, _] = cell_color.color(voxel_id);
+        let mut voxel = QbVoxel::new(r, g, b);
+        if let Some(visibility) = visibility {
+            voxel.visibility = visibility[live_index];
+        }
         // Storage order: index = x + size_x * (y + size_y * z).
-        let index = position.x as usize
-            + size_x as usize * (position.y as usize + size_y as usize * position.z as usize);
-        voxels[index] = QbVoxel {
-            r,
-            g,
-            b,
-            visibility,
-        };
+        let index = cell.x as usize
+            + size_x as usize * (cell.y as usize + size_y as usize * cell.z as usize);
+        voxels[index] = voxel;
     }
 
     Ok(QbMatrix {
-        name: provenance.name.clone(),
+        name: name.to_owned(),
         size: [size_x, size_y, size_z],
-        position: provenance.position,
+        position,
         voxels,
     })
 }
@@ -110,122 +140,96 @@ fn matrix_from_object<T>(
 /// Synthesizes a Qubicle Binary file from the bare scene of a state written
 /// without a `qb` ext, such as one cross-loaded from another format.
 ///
-/// Qubicle Binary has a flat matrix list and no hierarchy. Every object
-/// placement becomes one matrix at the placement's world translation, summed
-/// down the hierarchy from the roots and rounded to whole voxels. A node's
-/// first object takes the node's name and any further object its own name.
-/// An object placed by no node is emitted once at the origin so no geometry
-/// is dropped. An object placed by several nodes is duplicated at each
-/// placement.
+/// Qubicle Binary has a flat matrix list and no hierarchy. `placements`
+/// flattens the scene. Each placement becomes one matrix. An object placed by
+/// several nodes is duplicated at each placement.
 ///
 /// Lossy only where Qubicle Binary cannot represent the source: grouping
 /// collapses, node rotation and scale are dropped, and a color's alpha is
 /// dropped because a Qubicle voxel stores none. The header is the default:
 /// `RGBA`, left-handed, uncompressed, with a plain solid visibility byte.
 fn synthesize_qb<T>(state: &VoxMain<T>) -> Result<QbFile> {
-    let mut builder = QbBuilder::default();
-    for &root_id in state.root_hierarchy_node_ids() {
-        builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0))?;
-    }
-    for (object_id, object) in state.iter_objects() {
-        if !builder.placed.contains(&object_id.to_u32()) {
-            builder.emit_matrix(state, object_id, object, [0, 0, 0], object.name())?;
-        }
-    }
+    let matrices = placements(state)
+        .iter()
+        .map(|placement| {
+            let object = state
+                .object(placement.object_id)
+                .expect("a placement's object is one of the state's");
+            matrix_from_object(state, object, &placement.name, placement.position, None)
+        })
+        .collect::<Result<_>>()?;
 
     Ok(QbFile {
-        matrices: builder.matrices,
+        matrices,
         ..QbFile::default()
     })
 }
 
-/// Accumulates the flattened Qubicle Binary scene. `placed` lets the sweep
-/// emit an object no node places once.
-#[derive(Default)]
-struct QbBuilder {
-    matrices: Vec<QbMatrix>,
-    placed: HashSet<u32>,
+/// One matrix of the flattened scene.
+struct QbPlacement {
+    object_id: U32Id<BVoxObject>,
+    name: String,
+    position: [i32; 3],
 }
 
-impl QbBuilder {
-    /// Walks one hierarchy node and its subtree, summing translations into
-    /// the world position each matrix carries.
-    fn emit_node<T>(
-        &mut self,
-        state: &VoxMain<T>,
-        node_id: U32Id<BVoxHierarchyNode>,
-        parent: TyVector3I32,
-    ) -> Result<()> {
-        let (name, child_object_ids, child_node_ids, world) = {
-            let node = state
-                .hierarchy_node(node_id)
-                .expect("a hierarchy id from the state resolves");
-            let position = node.transform.position;
-            let world = parent + position.round().as_ivec3();
-            (
-                node.name.clone(),
-                node.child_object_ids.clone(),
-                node.child_node_ids.clone(),
-                world,
-            )
-        };
-
-        for (index, object_id) in child_object_ids.into_iter().enumerate() {
-            let Some(object) = state.object(object_id) else {
-                continue;
-            };
-            let matrix_name = if index == 0 {
-                name.as_str()
-            } else {
-                object.name()
-            };
-            self.emit_matrix(state, object_id, object, world.to_array(), matrix_name)?;
-        }
-        for child_id in child_node_ids {
-            self.emit_node(state, child_id, world)?;
-        }
-
-        Ok(())
+/// The matrices the scene flattens to, one per object placement in hierarchy
+/// order. A placement lands at the world translation summed down from the
+/// roots and rounded to whole voxels. An object no node places lands once at
+/// the origin. A node's first object takes the node's name. The rest take
+/// the object's name.
+fn placements<T>(state: &VoxMain<T>) -> Vec<QbPlacement> {
+    let mut placements = Vec::new();
+    for &root_id in state.root_hierarchy_node_ids() {
+        push_node_placements(state, root_id, TyVector3I32::new(0, 0, 0), &mut placements);
     }
 
-    /// Emits one matrix placing `object` at the world `position` and marks
-    /// the object placed so the sweep skips it.
-    fn emit_matrix<T>(
-        &mut self,
-        state: &VoxMain<T>,
-        object_id: U32Id<BVoxObject>,
-        object: &VoxObject,
-        position: [i32; 3],
-        name: &str,
-    ) -> Result<()> {
-        self.placed.insert(object_id.to_u32());
-
-        let bounds = object.bounds();
-        let [size_x, size_y, size_z] = bounds.to_array();
-        let volume = size_x as usize * size_y as usize * size_z as usize;
-        let mut voxels = vec![QbVoxel::default(); volume];
-
-        let cell_color = resolve_cell_color_or_transparent(state, object)?;
-        for voxel_id in object.iter_live() {
-            let cell = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            // A Qubicle voxel stores no alpha, so the sampled color's alpha is
-            // dropped.
-            let [r, g, b, _] = cell_color.color(voxel_id);
-            // Storage order: index = x + size_x * (y + size_y * z).
-            let index = cell.x as usize
-                + size_x as usize * (cell.y as usize + size_y as usize * cell.z as usize);
-            voxels[index] = QbVoxel::new(r, g, b);
+    let placed: HashSet<U32Id<BVoxObject>> = placements
+        .iter()
+        .map(|placement| placement.object_id)
+        .collect();
+    for (object_id, object) in state.iter_objects() {
+        if !placed.contains(&object_id) {
+            placements.push(QbPlacement {
+                object_id,
+                name: object.name().to_owned(),
+                position: [0, 0, 0],
+            });
         }
+    }
 
-        self.matrices.push(QbMatrix {
-            name: name.to_owned(),
-            size: [size_x, size_y, size_z],
-            position,
-            voxels,
+    placements
+}
+
+/// Walks `node_id` and its subtree. The translations sum into the world
+/// position each placement carries.
+fn push_node_placements<T>(
+    state: &VoxMain<T>,
+    node_id: U32Id<BVoxHierarchyNode>,
+    parent: TyVector3I32,
+    placements: &mut Vec<QbPlacement>,
+) {
+    let node = state
+        .hierarchy_node(node_id)
+        .expect("a hierarchy id from the state resolves");
+    let world = parent + node.transform.position.round().as_ivec3();
+
+    for (index, &object_id) in node.child_object_ids.iter().enumerate() {
+        let object = state
+            .object(object_id)
+            .expect("a placed object is one of the state's");
+        let name = if index == 0 {
+            node.name.clone()
+        } else {
+            object.name().to_owned()
+        };
+        placements.push(QbPlacement {
+            object_id,
+            name,
+            position: world.to_array(),
         });
+    }
 
-        Ok(())
+    for &child_id in &node.child_node_ids {
+        push_node_placements(state, child_id, world, placements);
     }
 }

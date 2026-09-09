@@ -49,6 +49,9 @@ typed path keeps the ext:
 - `codec::from_qb_bytes_with_ext` and `codec::to_qb_bytes_with_ext` do the
   same for `.qb` bytes. The `qbt` and `qbcl` pairs sit beside them.
 
-Each ext enters a document's `ext` block as its `qb`, `qbt`, or `qbcl` entry
-through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the ext
-in that block.
+`QbExt` follows the state's listings through voxcore's `VoxExt` hooks. After
+an object is released or reordered, the file still writes back with the
+surviving provenance. An object retained after the load is written as a
+synthesized matrix. Each ext enters a document's `ext` block as its `qb`,
+`qbt`, or `qbcl` entry through voxcore's `VoxExtEntryCodec`. A Voxel Json
+document carries the ext in that block.
