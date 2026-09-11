@@ -1,9 +1,12 @@
-use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, ext::VoxconvVoxMain, internal};
+use crate::{
+    Dependencies, InstalledFormat, Result, VoxDocumentFile, WriteFormat, WriteFormatVisitor,
+    ext::VoxconvVoxMain,
+};
 
 /// Encodes a state as a document's files. A box holding the format's ext
 /// writes the loaded file back exactly. Any other box encodes to its `ext`
-/// block, and the format takes its entry from that block. A block with no
-/// entry for the format writes a file synthesized from the scene. The state
+/// block, and the format takes its slot from that block. A block with no
+/// slot for the format writes a file synthesized from the scene. The state
 /// is consumed because the format's writer needs it in the format's ext
 /// type.
 pub fn write_with_ext<D: Dependencies>(
@@ -11,26 +14,23 @@ pub fn write_with_ext<D: Dependencies>(
     format: &WriteFormat,
     state: VoxconvVoxMain,
 ) -> Result<Vec<VoxDocumentFile>> {
-    match format {
-        #[cfg(feature = "goxl")]
-        WriteFormat::Goxl => internal::write_goxl_with_ext(dependencies.goxl(), state),
-        #[cfg(feature = "mvox")]
-        WriteFormat::MVox => internal::write_mvox_with_ext(dependencies, state),
-        #[cfg(feature = "qbcl")]
-        WriteFormat::Qb => internal::write_qb_with_ext(state),
-        #[cfg(feature = "qbcl")]
-        WriteFormat::Qbt => internal::write_qbt_with_ext(dependencies.qbcl(), state),
-        #[cfg(feature = "qbcl")]
-        WriteFormat::Qbcl => internal::write_qbcl_with_ext(dependencies.qbcl(), state),
-        #[cfg(feature = "vmax")]
-        WriteFormat::VMax(options) => {
-            internal::write_vmax_with_ext(dependencies.vmax(), state, options)
-        }
-        #[cfg(feature = "voxj")]
-        WriteFormat::Voxj {
-            serialization,
-            options,
-        } => internal::write_voxj_with_ext(dependencies.voxj(), state, *serialization, options),
+    format.with(WriteWithExt {
+        dependencies,
+        state,
+    })
+}
+
+/// The typed write of one format.
+struct WriteWithExt<'a, D> {
+    dependencies: &'a D,
+    state: VoxconvVoxMain,
+}
+
+impl<D: Dependencies> WriteFormatVisitor for WriteWithExt<'_, D> {
+    type Output = Result<Vec<VoxDocumentFile>>;
+
+    fn visit<F: InstalledFormat>(self, options: &F::WriteOptions) -> Self::Output {
+        F::write_with_ext(self.dependencies, options, self.state)
     }
 }
 
@@ -38,12 +38,10 @@ pub fn write_with_ext<D: Dependencies>(
 mod tests {
     use crate::{
         DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat,
-        ext::{
-            CompositeVoxExt, InertVoxExt, VoxconvExt, read_with_ext, voxj_vox_ext_from_ext,
-            write_with_ext,
-        },
+        ext::{VoxconvExt, read_with_ext, write_with_ext},
         test_state,
         vmax::VMaxWriteOptions,
+        voxj::ext::{CompositeVoxExt, InertVoxExt, voxj_vox_ext_from_ext},
         write,
     };
     use vmax_voxcore::ext::VMaxExt;

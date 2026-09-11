@@ -4,13 +4,14 @@ use crate::{
         Atlas, PropertyBinding, Texture, TextureArg, TextureMap, TextureName,
         computed_occlusion_unsupported, parse_atlas_shape,
     },
-    load, require_file_name,
+    require_file_name,
 };
 use clap::Parser;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
+use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
@@ -180,7 +181,7 @@ impl Mesh {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, &self.input.path, from)?;
+        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
 
         let object_ids = self.selection.resolve(&state)?;
 

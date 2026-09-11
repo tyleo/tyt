@@ -1,6 +1,7 @@
-use crate::{Dependencies, Error, Result, VoxelInput, cli_value_parser, load};
+use crate::{Dependencies, Error, Result, VoxelInput, cli_value_parser};
 use clap::Parser;
 use std::io::{Error as IOError, ErrorKind};
+use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::operations::hierarchy_show::{
     HierarchyShowLayout, HierarchyShowOptions, HierarchyViews, OriginView, PatternView,
@@ -140,7 +141,7 @@ impl HierarchyShow {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, &self.input.path, from)?;
+        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
 
         let options = HierarchyShowOptions {
             pattern,

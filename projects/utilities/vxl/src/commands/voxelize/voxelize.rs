@@ -1,13 +1,12 @@
 use crate::{
     Dependencies, Error, NoneOr, Result, Rgba, VoxjEncodingOptions, cli_value_parser,
     commands::{GridResolutionOptions, QuantizeOptions},
-    save,
 };
 use clap::Parser;
 use std::path::PathBuf;
 use voxconv::{
-    WriteFormat,
-    voxj::{EditStateMode, VoxjWriteOptions},
+    WriteFormat, save,
+    voxj::{EditStateMode, VoxjWriteFormat, VoxjWriteOptions},
 };
 use voxsmith::operations::voxelize::{
     FillMode, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelizeOptions, from_gltf_bytes,
@@ -130,15 +129,15 @@ impl Voxelize {
 
         let state = voxelize(&mesh, stem, &options)?;
 
-        save(
+        Ok(save(
             &dependencies,
-            &WriteFormat::Voxj {
+            &WriteFormat::Voxj(VoxjWriteFormat {
                 serialization,
                 options: write_options,
-            },
+            }),
             &state,
             &output,
-        )
+        )?)
     }
 
     /// Rejects a `--fill-color` that a sampling-mode surface shell would drop.

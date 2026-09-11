@@ -1,3 +1,5 @@
+use crate::{Error, Result};
+
 /// One file of a voxel document: its path relative to the document and its
 /// bytes. A single-file format's document has one entry with an empty path.
 /// A package's entries carry their package-relative paths, such as
@@ -25,6 +27,18 @@ impl VoxDocumentFile {
         Self {
             path: String::new(),
             bytes,
+        }
+    }
+
+    /// The bytes of a single-file document. More or fewer than one file is
+    /// an error.
+    pub fn single_bytes(files: &[VoxDocumentFile]) -> Result<&[u8]> {
+        match files {
+            [file] => Ok(&file.bytes),
+            _ => Err(Error::Files(format!(
+                "a single-file document holds one file, not {}",
+                files.len()
+            ))),
         }
     }
 }

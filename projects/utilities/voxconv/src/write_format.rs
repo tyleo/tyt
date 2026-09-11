@@ -1,11 +1,19 @@
-use crate::ReadFormat;
+#[cfg(feature = "goxl")]
+use crate::goxl::Goxl;
+#[cfg(feature = "mvox")]
+use crate::mvox::MVox;
+#[cfg(feature = "qbcl")]
+use crate::qbcl::{Qb, Qbcl, Qbt};
 #[cfg(feature = "vmax")]
-use crate::vmax::VMaxWriteOptions;
+use crate::vmax::{VMax, VMaxWriteOptions};
 #[cfg(feature = "voxj")]
-use crate::voxj::{VoxjSerialization, VoxjWriteOptions};
+use crate::voxj::{Voxj, VoxjWriteFormat};
+use crate::{InstalledFormat, ReadFormat, ReadFormatVisitor, WriteFormatVisitor};
 
 /// A write target: the format and its writer options, one variant per
-/// enabled format feature.
+/// enabled format feature. Each variant stands for a
+/// [`Format`](crate::Format) marker, and [`with`](WriteFormat::with) hands
+/// that marker and the options to a visitor.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WriteFormat {
     /// Goxel, the `.gox` file.
@@ -34,76 +42,79 @@ pub enum WriteFormat {
 
     /// Voxel Json, a `.voxj` or `.voxjz` document.
     #[cfg(feature = "voxj")]
-    Voxj {
-        serialization: VoxjSerialization,
-        options: VoxjWriteOptions,
-    },
+    Voxj(VoxjWriteFormat),
 }
 
 impl WriteFormat {
-    /// The extension a document written in this format takes.
-    pub fn extension(&self) -> &'static str {
+    /// Runs `visitor` with this target's marker as its `F` and its writer
+    /// options.
+    pub fn with<V: WriteFormatVisitor>(&self, visitor: V) -> V::Output {
         match self {
             #[cfg(feature = "goxl")]
-            WriteFormat::Goxl => "gox",
+            WriteFormat::Goxl => visitor.visit::<Goxl>(&()),
             #[cfg(feature = "mvox")]
-            WriteFormat::MVox => "vox",
+            WriteFormat::MVox => visitor.visit::<MVox>(&()),
             #[cfg(feature = "qbcl")]
-            WriteFormat::Qb => "qb",
+            WriteFormat::Qb => visitor.visit::<Qb>(&()),
             #[cfg(feature = "qbcl")]
-            WriteFormat::Qbt => "qbt",
+            WriteFormat::Qbt => visitor.visit::<Qbt>(&()),
             #[cfg(feature = "qbcl")]
-            WriteFormat::Qbcl => "qbcl",
+            WriteFormat::Qbcl => visitor.visit::<Qbcl>(&()),
             #[cfg(feature = "vmax")]
-            WriteFormat::VMax(_) => "vmax",
+            WriteFormat::VMax(options) => visitor.visit::<VMax>(options),
             #[cfg(feature = "voxj")]
-            WriteFormat::Voxj { serialization, .. } => serialization.extension(),
+            WriteFormat::Voxj(options) => visitor.visit::<Voxj>(options),
         }
+    }
+
+    /// The extension a document written in this format takes.
+    pub fn extension(&self) -> &'static str {
+        self.with(Extension)
     }
 
     /// The format a document written in this format reads back as.
     pub fn read_format(&self) -> ReadFormat {
-        match self {
-            #[cfg(feature = "goxl")]
-            WriteFormat::Goxl => ReadFormat::Goxl,
-            #[cfg(feature = "mvox")]
-            WriteFormat::MVox => ReadFormat::MVox,
-            #[cfg(feature = "qbcl")]
-            WriteFormat::Qb => ReadFormat::Qb,
-            #[cfg(feature = "qbcl")]
-            WriteFormat::Qbt => ReadFormat::Qbt,
-            #[cfg(feature = "qbcl")]
-            WriteFormat::Qbcl => ReadFormat::Qbcl,
-            #[cfg(feature = "vmax")]
-            WriteFormat::VMax(_) => ReadFormat::VMax,
-            #[cfg(feature = "voxj")]
-            WriteFormat::Voxj { .. } => ReadFormat::Voxj,
-        }
+        self.with(AsReadFormat)
     }
 }
 
 /// The write target for a format with default writer options.
 impl From<ReadFormat> for WriteFormat {
     fn from(format: ReadFormat) -> Self {
-        match format {
-            #[cfg(feature = "goxl")]
-            ReadFormat::Goxl => WriteFormat::Goxl,
-            #[cfg(feature = "mvox")]
-            ReadFormat::MVox => WriteFormat::MVox,
-            #[cfg(feature = "qbcl")]
-            ReadFormat::Qb => WriteFormat::Qb,
-            #[cfg(feature = "qbcl")]
-            ReadFormat::Qbt => WriteFormat::Qbt,
-            #[cfg(feature = "qbcl")]
-            ReadFormat::Qbcl => WriteFormat::Qbcl,
-            #[cfg(feature = "vmax")]
-            ReadFormat::VMax => WriteFormat::VMax(VMaxWriteOptions::default()),
-            #[cfg(feature = "voxj")]
-            ReadFormat::Voxj => WriteFormat::Voxj {
-                serialization: VoxjSerialization::default(),
-                options: VoxjWriteOptions::default(),
-            },
-        }
+        format.with(DefaultWriteFormat)
+    }
+}
+
+/// The extension a write takes.
+struct Extension;
+
+impl WriteFormatVisitor for Extension {
+    type Output = &'static str;
+
+    fn visit<F: InstalledFormat>(self, options: &F::WriteOptions) -> Self::Output {
+        F::extension(options)
+    }
+}
+
+/// The read format of a write.
+struct AsReadFormat;
+
+impl WriteFormatVisitor for AsReadFormat {
+    type Output = ReadFormat;
+
+    fn visit<F: InstalledFormat>(self, _options: &F::WriteOptions) -> Self::Output {
+        F::read_format()
+    }
+}
+
+/// A format's write target with default options.
+struct DefaultWriteFormat;
+
+impl ReadFormatVisitor for DefaultWriteFormat {
+    type Output = WriteFormat;
+
+    fn visit<F: InstalledFormat>(self) -> Self::Output {
+        F::write_format(F::WriteOptions::default())
     }
 }
 
@@ -111,7 +122,7 @@ impl From<ReadFormat> for WriteFormat {
 mod tests {
     use crate::{
         ReadFormat, WriteFormat,
-        voxj::{VoxjSerialization, VoxjWriteOptions},
+        voxj::{VoxjSerialization, VoxjWriteFormat, VoxjWriteOptions},
     };
 
     #[test]
@@ -120,10 +131,10 @@ mod tests {
 
         assert_eq!(
             format,
-            WriteFormat::Voxj {
+            WriteFormat::Voxj(VoxjWriteFormat {
                 serialization: VoxjSerialization::Compact,
                 options: VoxjWriteOptions::default(),
-            }
+            })
         );
 
         assert_eq!(format.extension(), "voxj");
@@ -133,10 +144,10 @@ mod tests {
 
     #[test]
     fn the_zip_serialization_takes_its_extension() {
-        let format = WriteFormat::Voxj {
+        let format = WriteFormat::Voxj(VoxjWriteFormat {
             serialization: VoxjSerialization::Zip,
             options: VoxjWriteOptions::default(),
-        };
+        });
 
         assert_eq!(format.extension(), "voxjz");
     }

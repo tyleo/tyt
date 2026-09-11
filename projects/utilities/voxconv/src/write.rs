@@ -1,4 +1,6 @@
-use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, internal};
+use crate::{
+    Dependencies, InstalledFormat, Result, VoxDocumentFile, WriteFormat, WriteFormatVisitor,
+};
 use voxcore::VoxMain;
 
 /// Encodes a bare [`VoxMain`] as a document's files synthesized from its
@@ -9,24 +11,23 @@ pub fn write<D: Dependencies>(
     format: &WriteFormat,
     state: &VoxMain<()>,
 ) -> Result<Vec<VoxDocumentFile>> {
-    match format {
-        #[cfg(feature = "goxl")]
-        WriteFormat::Goxl => internal::write_goxl(dependencies.goxl(), state),
-        #[cfg(feature = "mvox")]
-        WriteFormat::MVox => internal::write_mvox(dependencies, state),
-        #[cfg(feature = "qbcl")]
-        WriteFormat::Qb => internal::write_qb(state),
-        #[cfg(feature = "qbcl")]
-        WriteFormat::Qbt => internal::write_qbt(dependencies.qbcl(), state),
-        #[cfg(feature = "qbcl")]
-        WriteFormat::Qbcl => internal::write_qbcl(dependencies.qbcl(), state),
-        #[cfg(feature = "vmax")]
-        WriteFormat::VMax(options) => internal::write_vmax(dependencies.vmax(), state, options),
-        #[cfg(feature = "voxj")]
-        WriteFormat::Voxj {
-            serialization,
-            options,
-        } => internal::write_voxj(dependencies.voxj(), state, *serialization, options),
+    format.with(Write {
+        dependencies,
+        state,
+    })
+}
+
+/// The bare write of one format.
+struct Write<'a, D> {
+    dependencies: &'a D,
+    state: &'a VoxMain<()>,
+}
+
+impl<D: Dependencies> WriteFormatVisitor for Write<'_, D> {
+    type Output = Result<Vec<VoxDocumentFile>>;
+
+    fn visit<F: InstalledFormat>(self, options: &F::WriteOptions) -> Self::Output {
+        F::write(self.dependencies, options, self.state)
     }
 }
 
@@ -35,7 +36,7 @@ mod tests {
     use crate::{
         DependenciesImpl, ReadFormat, WriteFormat, read, test_state,
         vmax::VMaxWriteOptions,
-        voxj::{VoxjSerialization, VoxjWriteOptions},
+        voxj::{VoxjSerialization, VoxjWriteFormat, VoxjWriteOptions},
         write,
     };
 
@@ -85,10 +86,10 @@ mod tests {
     #[test]
     fn voxj_serializations_take_their_form() {
         let bytes = |serialization| {
-            let format = WriteFormat::Voxj {
+            let format = WriteFormat::Voxj(VoxjWriteFormat {
                 serialization,
                 options: VoxjWriteOptions::default(),
-            };
+            });
 
             write(&DependenciesImpl, &format, &test_state(()))
                 .unwrap()

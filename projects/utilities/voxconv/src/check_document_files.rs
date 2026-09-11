@@ -1,6 +1,6 @@
-use crate::{Dependencies, ReadFormat, Result, VoxDocumentFile, read};
-#[cfg(feature = "voxj")]
-use crate::{check_voxj, single_file_bytes};
+use crate::{
+    Dependencies, InstalledFormat, ReadFormat, ReadFormatVisitor, Result, VoxDocumentFile, read,
+};
 use voxcore::check::VoxCheck;
 
 /// Checks a document's files: first whether they decode as `format` into a
@@ -16,25 +16,28 @@ pub fn check_document_files<D: Dependencies>(
         return Ok(vec![VoxCheck::failed("decode", vec![error.to_string()])]);
     }
 
-    // The format's spec checks. Only Voxel Json defines any today.
-    let format_checks = match format {
-        #[cfg(feature = "goxl")]
-        ReadFormat::Goxl => Vec::new(),
-        #[cfg(feature = "mvox")]
-        ReadFormat::MVox => Vec::new(),
-        #[cfg(feature = "qbcl")]
-        ReadFormat::Qb | ReadFormat::Qbt | ReadFormat::Qbcl => Vec::new(),
-        #[cfg(feature = "vmax")]
-        ReadFormat::VMax => Vec::new(),
-        #[cfg(feature = "voxj")]
-        ReadFormat::Voxj => check_voxj(dependencies.voxj(), single_file_bytes(files)?)?,
-    };
-
     let mut checks = vec![VoxCheck::passed("decode")];
 
-    checks.extend(format_checks);
+    checks.extend(format.with(Check {
+        dependencies,
+        files,
+    })?);
 
     Ok(checks)
+}
+
+/// The spec checks of one format.
+struct Check<'a, D> {
+    dependencies: &'a D,
+    files: &'a [VoxDocumentFile],
+}
+
+impl<D: Dependencies> ReadFormatVisitor for Check<'_, D> {
+    type Output = Result<Vec<VoxCheck>>;
+
+    fn visit<F: InstalledFormat>(self) -> Self::Output {
+        F::check(self.dependencies, self.files)
+    }
 }
 
 #[cfg(all(test, feature = "impl"))]

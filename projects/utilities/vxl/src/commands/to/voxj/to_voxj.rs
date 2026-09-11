@@ -4,7 +4,10 @@ use crate::{
 };
 use clap::{ArgAction, Parser};
 use std::path::PathBuf;
-use voxconv::{WriteFormat, voxj::EditStateMode};
+use voxconv::{
+    WriteFormat,
+    voxj::{EditStateMode, VoxjWriteFormat},
+};
 
 /// Converts a voxel file to the Voxel JSON format.
 #[derive(Clone, Debug, Parser)]
@@ -63,10 +66,10 @@ impl ToVoxj {
             &self.input.path,
             from,
             &output,
-            &WriteFormat::Voxj {
+            &WriteFormat::Voxj(VoxjWriteFormat {
                 serialization,
                 options,
-            },
+            }),
             &self.selection,
         )
     }

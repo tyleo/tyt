@@ -8,10 +8,20 @@ use std::{
     io::{self, Result as IOResult, Write},
     path::Path,
 };
+use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ForwardDependencies};
 
-/// The dependencies over std's filesystem and standard output.
+/// The dependencies over std's filesystem and standard output, with the
+/// format codecs forwarded to voxconv's impl.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
+
+impl ForwardDependencies for DependenciesImpl {
+    type Target = VoxconvDependenciesImpl;
+
+    fn target(&self) -> &VoxconvDependenciesImpl {
+        &VoxconvDependenciesImpl
+    }
+}
 
 impl ReadFile for DependenciesImpl {
     fn read_file(&self, path: &Path) -> IOResult<Vec<u8>> {

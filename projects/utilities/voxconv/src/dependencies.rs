@@ -1,65 +1,58 @@
 #[cfg(feature = "goxl")]
-use goxl_voxcore::codec::dependencies::{DecodePng as GoxlDecodePng, EncodePng as GoxlEncodePng};
+use crate::goxl::GoxlDependencies;
 #[cfg(feature = "qbcl")]
-use qbcl_voxcore::codec::dependencies::{CompressZlib, DecompressZlib};
+use crate::qbcl::QbclDependencies;
 #[cfg(feature = "vmax")]
-use vmax_voxcore::codec::dependencies::{
-    CompressLzfse, DecodePng as VMaxDecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson,
-    DecompressLzfse, EncodePng as VMaxEncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson,
-};
+use crate::vmax::VMaxDependencies;
 #[cfg(feature = "voxj")]
-use voxj::dependencies::{CostVoxjObject, DecodeBase64, EncodeBase64};
-#[cfg(feature = "voxj")]
-use voxj_voxcore::codec::dependencies::{DecodeVoxjJson, Deflate, EncodeVoxjJson, Inflate};
+use crate::voxj::VoxjDependencies;
 
-/// The codec dependencies the read and write functions take: one value per
-/// enabled format, bound on that format's codec traits. The formats' codec
-/// crates share trait names such as `DecodePng` with differing signatures,
-/// so each format gets its own associated type instead of one bound over
-/// all of them. MagicaVoxel's codec needs none.
-pub trait Dependencies {
-    /// The Goxel codec's dependencies.
-    #[cfg(feature = "goxl")]
-    type Goxl: GoxlDecodePng + GoxlEncodePng;
-
-    /// The Goxel codec's dependencies.
-    #[cfg(feature = "goxl")]
-    fn goxl(&self) -> &Self::Goxl;
-
-    /// The Qubicle codec's dependencies.
-    #[cfg(feature = "qbcl")]
-    type Qbcl: CompressZlib + DecompressZlib;
-
-    /// The Qubicle codec's dependencies.
-    #[cfg(feature = "qbcl")]
-    fn qbcl(&self) -> &Self::Qbcl;
-
-    /// The Voxel Max codec's dependencies.
-    #[cfg(feature = "vmax")]
-    type VMax: CompressLzfse
-        + DecompressLzfse
-        + DecodeVMaxPlist
-        + EncodeVMaxPlist
-        + VMaxDecodePng
-        + VMaxEncodePng
-        + DecodeVMaxSceneJson
-        + EncodeVMaxSceneJson;
-
-    /// The Voxel Max codec's dependencies.
-    #[cfg(feature = "vmax")]
-    fn vmax(&self) -> &Self::VMax;
-
-    /// The Voxel Json codec's dependencies, covering voxj's too.
-    #[cfg(feature = "voxj")]
-    type Voxj: DecodeBase64
-        + EncodeBase64
-        + CostVoxjObject
-        + DecodeVoxjJson
-        + EncodeVoxjJson
-        + Inflate
-        + Deflate;
-
-    /// The Voxel Json codec's dependencies.
-    #[cfg(feature = "voxj")]
-    fn voxj(&self) -> &Self::Voxj;
+/// The codec dependencies the read and write functions take: each enabled
+/// format's, through that format's dependencies trait. A type implementing
+/// every enabled format's trait implements this one. The formats' codec crates
+/// share trait names such as `DecodePng` with differing signatures, so each
+/// format keeps its own associated type instead of one bound over all of them.
+/// MagicaVoxel's codec needs none. A type holding the dependencies in another
+/// value implements [`ForwardDependencies`](crate::ForwardDependencies)
+/// instead.
+pub trait Dependencies:
+    GoxlDependencies + QbclDependencies + VMaxDependencies + VoxjDependencies
+{
 }
+
+impl<D: GoxlDependencies + QbclDependencies + VMaxDependencies + VoxjDependencies> Dependencies
+    for D
+{
+}
+
+/// Stands in for the Goxel dependencies without the `goxl` feature. Every
+/// type implements it.
+#[cfg(not(feature = "goxl"))]
+pub trait GoxlDependencies {}
+
+#[cfg(not(feature = "goxl"))]
+impl<D> GoxlDependencies for D {}
+
+/// Stands in for the Qubicle dependencies without the `qbcl` feature. Every
+/// type implements it.
+#[cfg(not(feature = "qbcl"))]
+pub trait QbclDependencies {}
+
+#[cfg(not(feature = "qbcl"))]
+impl<D> QbclDependencies for D {}
+
+/// Stands in for the Voxel Max dependencies without the `vmax` feature.
+/// Every type implements it.
+#[cfg(not(feature = "vmax"))]
+pub trait VMaxDependencies {}
+
+#[cfg(not(feature = "vmax"))]
+impl<D> VMaxDependencies for D {}
+
+/// Stands in for the Voxel Json dependencies without the `voxj` feature.
+/// Every type implements it.
+#[cfg(not(feature = "voxj"))]
+pub trait VoxjDependencies {}
+
+#[cfg(not(feature = "voxj"))]
+impl<D> VoxjDependencies for D {}

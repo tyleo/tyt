@@ -1,9 +1,10 @@
 use crate::{Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser, file_name};
 use clap::Parser;
 use voxconv::{
-    DependenciesImpl as VoxconvDependenciesImpl, ReadFormat,
-    ext::{read_with_ext, voxj_vox_ext_from_ext},
-    read_document_files, voxj_version_from_bytes,
+    ReadFormat,
+    ext::read_with_ext,
+    read_document_files,
+    voxj::{ext::voxj_vox_ext_from_ext, voxj_version_from_bytes},
 };
 use voxsmith::operations::info::{InfoDocument, InfoLayout, info};
 
@@ -37,7 +38,7 @@ impl Info {
 
         // The boxed ext keeps any source's ext, so the report can say whether
         // the document carries entries.
-        let state = read_with_ext(&VoxconvDependenciesImpl, from, &files)?;
+        let state = read_with_ext(&dependencies, from, &files)?;
 
         let format_version = match from {
             ReadFormat::Voxj => {
@@ -45,10 +46,7 @@ impl Info {
                     .first()
                     .expect("the read accepted a single-file document");
 
-                Some(voxj_version_from_bytes(
-                    &VoxconvDependenciesImpl,
-                    &file.bytes,
-                )?)
+                Some(voxj_version_from_bytes(&dependencies, &file.bytes)?)
             }
             _ => None,
         };

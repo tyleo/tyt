@@ -3,7 +3,9 @@ use std::path::Path;
 use voxconv::{
     DependenciesImpl, ReadFormat, WriteFormat,
     ext::{load_with_ext, write_with_ext},
-    voxj::{PositionEncoding, SampleEncoding, VoxjSerialization, VoxjWriteOptions},
+    voxj::{
+        PositionEncoding, SampleEncoding, VoxjSerialization, VoxjWriteFormat, VoxjWriteOptions,
+    },
 };
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
@@ -14,14 +16,14 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
 
     let (position_encoding, sample_encoding) = block_encoding(encoding);
 
-    let format = WriteFormat::Voxj {
+    let format = WriteFormat::Voxj(VoxjWriteFormat {
         serialization: serialization(format),
         options: VoxjWriteOptions {
             position_encoding,
             sample_encoding,
             ..VoxjWriteOptions::default()
         },
-    };
+    });
 
     let files = write_with_ext(&DependenciesImpl, &format, state)?;
 

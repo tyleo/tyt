@@ -1,6 +1,9 @@
-use crate::{Dependencies, ObjectSelection, Result, load_with_ext, save_with_ext};
+use crate::{Dependencies, ObjectSelection, Result};
 use std::path::Path;
-use voxconv::{ReadFormat, WriteFormat};
+use voxconv::{
+    ReadFormat, WriteFormat,
+    ext::{load_with_ext, save_with_ext},
+};
 use voxsmith::operations::to::keep_objects;
 
 /// Converts the document at `input`, read as `from`, into the document at
@@ -16,7 +19,7 @@ pub(crate) fn convert<D: Dependencies>(
     to: &WriteFormat,
     selection: &ObjectSelection,
 ) -> Result<()> {
-    let mut state = load_with_ext(dependencies, input, from)?;
+    let mut state = load_with_ext(dependencies, from, input)?;
 
     // Without a selector the state rides through untouched. With one, the
     // pruned state is compacted because the writers index by id.
@@ -28,5 +31,5 @@ pub(crate) fn convert<D: Dependencies>(
         state.gc();
     }
 
-    save_with_ext(dependencies, to, state, output)
+    Ok(save_with_ext(dependencies, to, state, output)?)
 }

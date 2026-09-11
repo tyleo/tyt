@@ -1,12 +1,13 @@
 use crate::{
     Dependencies, Error, Result, VoxelInput, Width, cli_value_parser,
-    commands::parse_property_selector, load,
+    commands::parse_property_selector,
 };
 use clap::Parser;
 use std::{
     io::{Error as IOError, ErrorKind},
     num::NonZeroU8,
 };
+use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::operations::palette_show::{
     PaletteShowLabel, PaletteShowLayout, PaletteShowOptions, PaletteShowTableShape,
@@ -89,7 +90,7 @@ impl PaletteShow {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, &self.input.path, from)?;
+        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
 
         let options = PaletteShowOptions {
             layout: self.layout,
