@@ -1,3 +1,5 @@
+use crate::VoxjMapEntry;
+#[cfg(feature = "serde")]
 use crate::VoxjValue;
 #[cfg(feature = "serde")]
 use serde::{
@@ -14,7 +16,24 @@ use std::fmt::{Formatter, Result as FmtResult};
 /// round-trips with its key order intact. Keys are unique: reading or writing
 /// a repeated key is an error, never a last-wins resolution.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct VoxjMap(pub Vec<(String, VoxjValue)>);
+pub struct VoxjMap(Vec<VoxjMapEntry>);
+
+impl VoxjMap {
+    /// A map of `entries`, in their order.
+    pub fn new(entries: Vec<VoxjMapEntry>) -> Self {
+        Self(entries)
+    }
+
+    /// The entries, in insertion order.
+    pub fn entries(&self) -> &[VoxjMapEntry] {
+        &self.0
+    }
+
+    /// The entries, taken out of the map.
+    pub fn into_entries(self) -> Vec<VoxjMapEntry> {
+        self.0
+    }
+}
 
 #[cfg(feature = "serde")]
 impl Serialize for VoxjMap {
@@ -23,8 +42,8 @@ impl Serialize for VoxjMap {
         S: Serializer,
     {
         let mut map = serializer.serialize_map(Some(self.0.len()))?;
-        for (index, (key, value)) in self.0.iter().enumerate() {
-            if self.0[..index].iter().any(|(existing, _)| existing == key) {
+        for (index, VoxjMapEntry { key, value }) in self.0.iter().enumerate() {
+            if self.0[..index].iter().any(|existing| existing.key == *key) {
                 return Err(SerError::custom(format!(
                     "json object key `{key}` must be unique"
                 )));
@@ -54,15 +73,15 @@ impl<'de> Deserialize<'de> for VoxjMap {
             where
                 A: MapAccess<'de>,
             {
-                let mut entries: Vec<(String, VoxjValue)> =
+                let mut entries: Vec<VoxjMapEntry> =
                     Vec::with_capacity(access.size_hint().unwrap_or(0));
                 while let Some((key, value)) = access.next_entry::<String, VoxjValue>()? {
-                    if entries.iter().any(|(existing, _)| existing == &key) {
+                    if entries.iter().any(|existing| existing.key == key) {
                         return Err(DeError::custom(format!(
                             "json object key `{key}` must be unique"
                         )));
                     }
-                    entries.push((key, value));
+                    entries.push(VoxjMapEntry { key, value });
                 }
                 Ok(VoxjMap(entries))
             }
@@ -74,13 +93,19 @@ impl<'de> Deserialize<'de> for VoxjMap {
 
 #[cfg(all(test, feature = "serde"))]
 mod tests {
-    use crate::{VoxjMap, VoxjValue};
+    use crate::{VoxjMap, VoxjMapEntry, VoxjValue};
 
     /// A map holding the same key twice, buildable only in memory.
     fn repeated() -> VoxjMap {
-        VoxjMap(vec![
-            ("k".to_owned(), VoxjValue::Number(1.0)),
-            ("k".to_owned(), VoxjValue::Number(2.0)),
+        VoxjMap::new(vec![
+            VoxjMapEntry {
+                key: "k".to_owned(),
+                value: VoxjValue::Number(1.0),
+            },
+            VoxjMapEntry {
+                key: "k".to_owned(),
+                value: VoxjValue::Number(2.0),
+            },
         ])
     }
 
@@ -97,9 +122,15 @@ mod tests {
 
     #[test]
     fn unique_keys_round_trip_in_order() {
-        let map = VoxjMap(vec![
-            ("b".to_owned(), VoxjValue::Number(1.0)),
-            ("a".to_owned(), VoxjValue::Number(2.0)),
+        let map = VoxjMap::new(vec![
+            VoxjMapEntry {
+                key: "b".to_owned(),
+                value: VoxjValue::Number(1.0),
+            },
+            VoxjMapEntry {
+                key: "a".to_owned(),
+                value: VoxjValue::Number(2.0),
+            },
         ]);
         let text = serde_json::to_string(&map).unwrap();
         assert_eq!(text, r#"{"b":1,"a":2}"#);

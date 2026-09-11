@@ -13,8 +13,8 @@ use ty_math::{
     TyVector3Ext, TyVector3F64, TyVector3U32,
 };
 use voxcore::{
-    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain,
-    color::value_pool_color, ext::VoxExt, material::BASE_COLOR,
+    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxExt, VoxMain,
+    color::value_pool_color, material::BASE_COLOR,
 };
 
 /// Reduces `palette_id` in `state` to at most `reduction.max_materials`

@@ -1,36 +1,32 @@
-use crate::{
-    VoxValue,
-    ext::{Result, VoxExt, VoxExtBlockCodec},
-};
-use std::any::Any;
+use crate::{VoxMapEntry, VoxValue};
 
 /// An ordered set of key/value pairs: the object form of a [`VoxValue`].
 ///
 /// Insertion order is preserved.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct VoxMap(pub Vec<(String, VoxValue)>);
+pub struct VoxMap(Vec<VoxMapEntry>);
 
-/// A block kept verbatim, whichever format owns it. It cannot follow a hook,
-/// so a block loaded this way goes stale under a mutation that moves a
-/// listing.
-impl VoxExt for VoxMap {
-    fn to_vox_ext(&self) -> Result<VoxMap> {
-        Ok(self.clone())
+impl VoxMap {
+    /// A map of `entries`, in their order.
+    pub fn new(entries: Vec<VoxMapEntry>) -> Self {
+        Self(entries)
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
+    /// The value under `key`, or `None` when no entry has it.
+    pub fn get(&self, key: &str) -> Option<&VoxValue> {
+        self.0
+            .iter()
+            .find(|entry| entry.key == key)
+            .map(|entry| &entry.value)
     }
 
-    fn clone_box(&self) -> Box<dyn VoxExt> {
-        Box::new(self.clone())
+    /// The entries, in insertion order.
+    pub fn entries(&self) -> &[VoxMapEntry] {
+        &self.0
     }
-}
 
-/// A block kept verbatim, whichever format owns it. An absent block loads as
-/// an empty map.
-impl VoxExtBlockCodec for VoxMap {
-    fn from_vox_ext_block(ext: Option<&VoxMap>) -> Result<Self> {
-        Ok(ext.cloned().unwrap_or_default())
+    /// The entries, taken out of the map.
+    pub fn into_entries(self) -> Vec<VoxMapEntry> {
+        self.0
     }
 }

@@ -1,9 +1,9 @@
 use crate::{
-    Error, Result,
-    ext::{QbclExt, QbclExtMetadata, QbclExtNode, QbclExtNodeBody, QbclExtThumbnail},
+    Error, QbclExtSink, Result,
+    ext::{QbclExtNode, QbclExtNodeBody},
 };
 use branded_id::U32Id;
-use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
+use qbcl::qbcl::{QbclFile, QbclMatrix, QbclNode, QbclNodeBody};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
@@ -11,23 +11,23 @@ use voxcore::{
     VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
-/// Loads a decoded Qubicle Construction Library [`QbclFile`] into a bare
-/// [`VoxMain`] and the [`QbclExt`] that writes it back exactly. Matrix and
-/// compound grids become objects sharing one `baseColor` palette, and the
-/// scene tree becomes the hierarchy nodes. The rest of the Qubicle state, such
-/// as the per-voxel visibility masks, node names and editor flags, the model
-/// transform chunks, matrix placements and pivots, the thumbnail, the metadata
-/// strings, the guid, and the versions, goes to the ext.
+/// Loads a decoded Qubicle Construction Library [`QbclFile`] into a [`VoxMain`]
+/// whose ext records what `T` keeps. Matrix and compound grids become objects
+/// sharing one `baseColor` palette, and the scene tree becomes the hierarchy
+/// nodes. The rest of the Qubicle state, such as the per-voxel visibility
+/// masks, node names and editor flags, the model transform chunks, matrix
+/// placements and pivots, the thumbnail, the metadata strings, the guid, and
+/// the versions, goes to the ext.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn read_qbcl(file: &QbclFile) -> Result<(VoxMain<()>, QbclExt)> {
+pub fn read_qbcl<T: QbclExtSink>(file: &QbclFile) -> Result<VoxMain<T>> {
     let mut state = VoxMain::default();
+    let mut nodes = Vec::new();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
     let palette_id = state.retain_palette(palette)?;
 
-    let mut nodes = Vec::new();
     let root_id = build_node(
         &file.root,
         &mut state,
@@ -37,25 +37,7 @@ pub fn read_qbcl(file: &QbclFile) -> Result<(VoxMain<()>, QbclExt)> {
     )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    let qbcl_ext = QbclExt {
-        program_version: file.program_version,
-        file_version: file.file_version,
-        thumbnail: QbclExtThumbnail {
-            width: file.thumbnail.width,
-            height: file.thumbnail.height,
-            pixels: file
-                .thumbnail
-                .pixels
-                .iter()
-                .map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
-                .collect(),
-        },
-        metadata: metadata_provenance(&file.metadata),
-        guid: file.guid,
-        nodes,
-    };
-
-    Ok((state, qbcl_ext))
+    Ok(T::record_file(state, file, nodes))
 }
 
 /// Builds the hierarchy node for one scene node and its subtree, adding it and
@@ -67,7 +49,7 @@ fn build_node(
     state: &mut VoxMain<()>,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<Option<QbclExtNode>>,
+    nodes: &mut Vec<QbclExtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let node_id = match &node.body {
         QbclNodeBody::Matrix(matrix) => {
@@ -83,14 +65,14 @@ fn build_node(
                 transform: translation(matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(node_provenance(
+            nodes.push(node_provenance(
                 node,
                 QbclExtNodeBody::Matrix {
                     position: matrix.position,
                     pivot: matrix.pivot,
                     masks,
                 },
-            )));
+            ));
             node_id
         }
         QbclNodeBody::Model(model) => {
@@ -105,12 +87,12 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(node_provenance(
+            nodes.push(node_provenance(
                 node,
                 QbclExtNodeBody::Model {
                     transform: model.transform.to_vec(),
                 },
-            )));
+            ));
             node_id
         }
         QbclNodeBody::Compound(compound) => {
@@ -130,14 +112,14 @@ fn build_node(
                 transform: translation(compound.matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(node_provenance(
+            nodes.push(node_provenance(
                 node,
                 QbclExtNodeBody::Compound {
                     position: compound.matrix.position,
                     pivot: compound.matrix.pivot,
                     masks,
                 },
-            )));
+            ));
             node_id
         }
     };
@@ -283,19 +265,6 @@ fn node_provenance(node: &QbclNode, body: QbclExtNodeBody) -> QbclExtNode {
         visible: node.visible,
         locked: node.locked,
         body,
-    }
-}
-
-/// The ext provenance for the metadata strings.
-fn metadata_provenance(metadata: &QbclMetadata) -> QbclExtMetadata {
-    QbclExtMetadata {
-        title: metadata.title.clone(),
-        description: metadata.description.clone(),
-        tags: metadata.tags.clone(),
-        author: metadata.author.clone(),
-        company: metadata.company.clone(),
-        website: metadata.website.clone(),
-        copyright: metadata.copyright.clone(),
     }
 }
 

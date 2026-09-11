@@ -7,11 +7,12 @@
 //! synthesized from the scene. The `codec` module, behind the default `codec`
 //! feature, goes straight to and from `.gox` bytes. It takes the codec's
 //! dependencies, which `goxl_codec::DependenciesImpl` supplies. The `ext`
-//! feature, on by default, opens the `ext` module. There the Goxel state with
-//! no native voxcore home rides as the state's ext. The `_with_ext`
-//! converters write a loaded file back exactly. The ext follows the listings
-//! through the [`VoxExt`](voxcore::ext::VoxExt) hooks, so a state mutated
-//! after the load still writes back with the surviving provenance.
+//! module carries the Goxel state with no native voxcore home as the state's
+//! ext. The `_with_ext` converters write a loaded file back exactly. The ext
+//! follows the listings through the [`VoxExt`](voxcore::VoxExt) hooks, so a
+//! state mutated after the load still writes back with the surviving
+//! provenance. The `serde` feature, on by default, derives serde for the ext
+//! types.
 
 // Public API
 
@@ -30,11 +31,7 @@ pub use to_goxl_file::*;
 #[cfg(feature = "codec")]
 pub mod codec;
 
-#[cfg(feature = "ext")]
 pub mod ext;
-
-#[cfg(not(feature = "ext"))]
-mod ext;
 
 // Internal API
 

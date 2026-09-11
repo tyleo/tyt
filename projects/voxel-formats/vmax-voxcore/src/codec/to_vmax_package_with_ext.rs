@@ -38,8 +38,7 @@ mod tests {
     use std::collections::HashMap;
     use vmax_codec::DependenciesImpl;
 
-    /// A state with no ext writes a synthesized package that loads back
-    /// carrying the ext the typed path keeps.
+    /// A default state writes through its ext and loads back.
     #[test]
     fn round_trips_the_ext_through_an_in_memory_package() {
         let mut package: HashMap<String, Vec<u8>> = HashMap::new();
@@ -61,6 +60,6 @@ mod tests {
             |name| Ok(package.get(name).cloned()),
         )
         .unwrap();
-        assert!(reloaded.ext().is_some(), "a loaded package carries its ext");
+        assert_eq!(reloaded.object_count(), 0);
     }
 }

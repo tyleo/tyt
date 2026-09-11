@@ -1,4 +1,4 @@
-use crate::{Result, ext::QbtVoxMain, write_qbt};
+use crate::{QbtExtSource, Result, ext::QbtVoxMain};
 use qbcl::qbt::QbtFile;
 
 /// Writes a [`QbtVoxMain`] back to a decoded Qubicle Binary Tree
@@ -6,7 +6,7 @@ use qbcl::qbt::QbtFile;
 /// [`from_qbt_file_with_ext`](crate::ext::from_qbt_file_with_ext) and the
 /// typed form of [`to_qbt_file`](crate::to_qbt_file). A loaded file writes
 /// back exactly through its ext. A node retained after the load is written as
-/// a synthesized node. A state carrying no ext writes a synthesized file.
+/// a synthesized node.
 ///
 /// Errors if:
 ///
@@ -15,7 +15,7 @@ use qbcl::qbt::QbtFile;
 /// 3. a mask list does not match its object
 /// 4. an unknown entry's node places an object or lists a child node
 pub fn to_qbt_file_with_ext(state: &QbtVoxMain) -> Result<QbtFile> {
-    write_qbt(state, state.ext().as_ref())
+    QbtExtSource::write_qbt(state)
 }
 
 #[cfg(test)]
@@ -187,16 +187,6 @@ mod tests {
         assert_eq!(to_qbt_file_with_ext(&state).unwrap(), file);
     }
 
-    /// A state carrying no ext writes a synthesized file.
-    #[test]
-    fn synthesizes_without_an_ext() {
-        let file = to_qbt_file_with_ext(&QbtVoxMain::default()).unwrap();
-        let QbtNode::Model(model) = &file.root else {
-            panic!("synthesis roots under a model");
-        };
-        assert!(model.children.is_empty());
-    }
-
     /// The mutations `vxl to` makes to keep `matrix`. The survivors' entries
     /// stay aligned through the holes the releases leave and after `gc`.
     #[test]
@@ -219,7 +209,7 @@ mod tests {
 
         state.gc();
 
-        let ext = state.ext().as_ref().unwrap();
+        let ext = state.ext();
         assert_eq!(ext.nodes.len(), 2);
         assert!(
             matches!(ext.nodes[0], Some(QbtExtNode::Matrix { ref name, .. }) if name == "matrix")
@@ -282,7 +272,7 @@ mod tests {
             Vec::new(),
         );
 
-        assert_eq!(state.ext().as_ref().unwrap().nodes[6], None);
+        assert_eq!(state.ext().nodes[6], None);
 
         let mut want = file;
         root_children(&mut want).push(added_matrix("placed", [3, -3, 16]));
@@ -365,18 +355,16 @@ mod tests {
         let file = sample_file();
 
         let mut state = from_qbt_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.nodes.pop();
-        state.set_ext(Some(ext));
         assert!(to_qbt_file_with_ext(&state).is_err());
 
         let mut state = from_qbt_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         let Some(QbtExtNode::Matrix { masks, .. }) = &mut ext.nodes[0] else {
             panic!("node 0 is the matrix");
         };
         masks.pop();
-        state.set_ext(Some(ext));
         assert!(to_qbt_file_with_ext(&state).is_err());
     }
 }

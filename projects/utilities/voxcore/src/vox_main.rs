@@ -1,8 +1,8 @@
 use crate::{
     BVoxEffectiveProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
     BVoxProperty, BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxEffectivePalette,
-    VoxEffectiveProperty, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState,
-    VoxValuePool, ext::VoxExt,
+    VoxEffectiveProperty, VoxExt, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette,
+    VoxRuntimeState, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -38,14 +38,17 @@ impl<T> VoxMain<T> {
         }
     }
 
-    /// Maps the ext through `f`, moving the scene over unchanged. This is the
-    /// one way to change a state's ext type, so a conversion that drops or
-    /// replaces a foreign ext spells the drop out at the call site.
-    pub fn map_ext<U>(self, f: impl FnOnce(T) -> U) -> VoxMain<U> {
-        VoxMain {
-            runtime_state: self.runtime_state,
-            ext: f(self.ext),
-        }
+    /// Takes the ext off the state, leaving the scene as a bare state. A
+    /// conversion that drops or replaces a foreign ext makes the drop explicit
+    /// here.
+    pub fn take_ext(self) -> (VoxMain<()>, T) {
+        (
+            VoxMain {
+                runtime_state: self.runtime_state,
+                ext: (),
+            },
+            self.ext,
+        )
     }
 
     /// Audits the full rule set. Every rule here is also enforced at a mutation
@@ -240,9 +243,9 @@ impl<T> VoxMain<T> {
         &self.ext
     }
 
-    /// Sets the user extension.
-    pub fn set_ext(&mut self, ext: T) {
-        self.ext = ext;
+    /// The user extension, mutably.
+    pub fn ext_mut(&mut self) -> &mut T {
+        &mut self.ext
     }
 
     /// Checks a node about to be inserted at listing position `node_index` of
@@ -543,6 +546,20 @@ impl<T> VoxMain<T> {
             .palette_ids
             .index_of(id)
             .expect("a retained id has a listing index")
+    }
+}
+
+impl VoxMain<()> {
+    /// Puts `ext` on a bare state, moving the scene over unchanged. This is
+    /// the one way to change a state's ext type, paired with [`take_ext`]
+    /// for a state that carries one.
+    ///
+    /// [`take_ext`]: VoxMain::take_ext
+    pub fn put_ext<U>(self, ext: U) -> VoxMain<U> {
+        VoxMain {
+            runtime_state: self.runtime_state,
+            ext,
+        }
     }
 }
 

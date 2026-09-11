@@ -1,4 +1,4 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Per-matrix provenance preserved in the `qb` ext, aligned by index with
@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 /// scene position, and the per-voxel visibility bytes the voxcore object cannot
 /// represent. The grid size is the object's bounds.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct QbExtMatrix {
     /// Matrix name.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "String::is_empty")
     )]
     pub name: String,
@@ -22,6 +22,9 @@ pub struct QbExtMatrix {
 
     /// Per solid voxel, its visibility byte, in the object's live-voxel raster
     /// order.
-    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub visibility: Vec<u8>,
 }

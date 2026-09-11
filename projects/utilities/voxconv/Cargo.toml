@@ -9,9 +9,12 @@ keywords = ["voxel", "conversion", "3d", "vox", "voxj"]
 categories = ["encoding", "game-development", "graphics"]
 
 [dependencies]
+branded-id = { version = "0.1.7", optional = true }
 goxl-voxcore = { version = "0.1.0", default-features = false, optional = true }
 mvox-voxcore = { version = "0.1.0", default-features = false, optional = true }
 qbcl-voxcore = { version = "0.1.0", default-features = false, optional = true }
+serde = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
 vmax = { version = "0.1.8", default-features = false, optional = true }
 vmax-voxcore = { version = "0.1.0", default-features = false, optional = true }
 voxcore = { version = "0.2.1", default-features = false }
@@ -20,16 +23,20 @@ voxj-voxcore = { version = "0.2.0", default-features = false, optional = true }
 
 [dev-dependencies]
 branded-id = "0.1.7"
+serde = { version = "1", features = ["derive"] }
 ty-math = { version = "0.2.0", default-features = false }
 
 [features]
 default = ["ext", "goxl", "impl", "mvox", "qbcl", "vmax", "voxj"]
 
 ext = [
-    "goxl-voxcore?/ext",
-    "mvox-voxcore?/ext",
-    "qbcl-voxcore?/ext",
-    "vmax-voxcore?/ext",
+    "dep:branded-id",
+    "dep:serde",
+    "dep:serde_json",
+    "goxl-voxcore?/serde",
+    "mvox-voxcore?/serde",
+    "qbcl-voxcore?/serde",
+    "vmax-voxcore?/serde",
 ]
 
 goxl = ["dep:goxl-voxcore", "goxl-voxcore/codec"]

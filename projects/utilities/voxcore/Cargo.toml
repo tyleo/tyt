@@ -8,14 +8,8 @@ description = "Core types for working with voxels."
 
 [dependencies]
 branded-id = "0.1.9"
-serde = { version = "1", optional = true }
-serde_json = { version = "1", optional = true }
 ty-math = { version = "0.2.0", default-features = false }
 
-[dev-dependencies]
-serde = { version = "1", features = ["derive"] }
-
 [features]
-default = ["color", "json"]
+default = ["color"]
 color = ["ty-math/color"]
-json = ["dep:serde", "dep:serde_json"]

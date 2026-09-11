@@ -6,7 +6,5 @@ use mvox::MVoxFile;
 /// [`from_mvox_file`](crate::from_mvox_file). The state writes back exactly
 /// through [`to_mvox_file_with_ext`](crate::ext::to_mvox_file_with_ext).
 pub fn from_mvox_file_with_ext(file: &MVoxFile) -> Result<MVoxVoxMain> {
-    let (state, mvox_ext) = read_mvox(file)?;
-
-    Ok(state.map_ext(|()| Some(mvox_ext)))
+    read_mvox(file)
 }

@@ -537,9 +537,9 @@ fn vox_value_to_json(value: &VoxValue) -> Value {
         VoxValue::Null => Value::Null,
         VoxValue::Array(items) => Value::Array(items.iter().map(vox_value_to_json).collect()),
         VoxValue::Object(map) => Value::Object(
-            map.0
+            map.entries()
                 .iter()
-                .map(|(key, value)| (key.clone(), vox_value_to_json(value)))
+                .map(|entry| (entry.key.clone(), vox_value_to_json(&entry.value)))
                 .collect(),
         ),
     }

@@ -4,10 +4,9 @@ use vmax::VMaxFile;
 /// Writes a [`VMaxVoxMain`] back to a Voxel Max document, the inverse of
 /// [`from_vmax_file_with_ext`](crate::ext::from_vmax_file_with_ext) and the
 /// typed form of [`to_vmax_file`](crate::to_vmax_file). A loaded document
-/// writes back exactly through its ext. A state carrying none writes a
-/// synthesized document.
+/// writes back exactly through its ext.
 pub fn to_vmax_file_with_ext(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
-    write_vmax(state, state.ext().as_ref(), options)
+    write_vmax(state, options)
 }
 
 #[cfg(test)]
@@ -274,10 +273,7 @@ mod tests {
     fn released_entities_leave_the_survivors_provenance_aligned() {
         let file = three_object_sample();
         let mut state = from_vmax_file_with_ext(&file).unwrap();
-        let original = state
-            .ext()
-            .clone()
-            .expect("a loaded document carries its ext");
+        let original = state.ext().clone();
 
         // The group, node 0, places nodes 1..=3. Node 2 places object 1, which
         // folds palette 1.
@@ -297,7 +293,7 @@ mod tests {
         expected.hierarchy_nodes.remove(2);
         expected.object_states.remove(1);
         expected.palettes.remove(1);
-        assert_eq!(state.ext(), &Some(expected.clone()));
+        assert_eq!(state.ext(), &expected.clone());
 
         let rebuilt = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         let ids: Vec<&str> = rebuilt
@@ -315,7 +311,7 @@ mod tests {
         assert_eq!(uuids, BTreeSet::from(["u", "u3"]));
 
         let reloaded = from_vmax_file_with_ext(&rebuilt).unwrap();
-        assert_eq!(reloaded.ext(), &Some(expected));
+        assert_eq!(reloaded.ext(), &expected);
     }
 
     /// A node retained after the load takes a default entry, which the writer
@@ -341,7 +337,7 @@ mod tests {
             .unwrap();
         state.push_root_hierarchy_node_id(node_id).unwrap();
 
-        let ext = state.ext().as_ref().unwrap();
+        let ext = state.ext();
         assert_eq!(ext.hierarchy_nodes.len(), 3);
         assert_eq!(ext.hierarchy_nodes[2], VMaxExtNode::default());
         assert_eq!(ext.object_states.len(), 2);
@@ -359,7 +355,7 @@ mod tests {
         assert_eq!(added.t_al, "f");
 
         let reloaded = from_vmax_file_with_ext(&file).unwrap();
-        assert_eq!(reloaded.ext().as_ref().unwrap().hierarchy_nodes.len(), 3);
+        assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
     }
 
     /// A reduction repaints onto a survivor, releases the rest, prunes the
@@ -382,13 +378,7 @@ mod tests {
         state.release_material(palette_id, doomed_id).unwrap();
         state.prune_value_pools();
         state.gc();
-        assert_eq!(
-            state.ext().as_ref().unwrap().palettes[0]
-                .as_ref()
-                .unwrap()
-                .slots,
-            [1]
-        );
+        assert_eq!(state.ext().palettes[0].as_ref().unwrap().slots, [1]);
 
         let file = to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).unwrap();
         let voxels =
@@ -398,9 +388,7 @@ mod tests {
         assert_eq!(settings.materials[1], material("2", 0.5, 0.25, 2.0, false));
 
         let reloaded = from_vmax_file_with_ext(&file).unwrap();
-        let palette = reloaded.ext().as_ref().unwrap().palettes[0]
-            .as_ref()
-            .unwrap();
+        let palette = reloaded.ext().palettes[0].as_ref().unwrap();
         assert_eq!(palette.slots, [1]);
         assert_eq!(palette.materials.len(), 8);
     }
@@ -410,15 +398,13 @@ mod tests {
     #[test]
     fn an_ext_out_of_step_with_its_listings_errors() {
         let mut state = from_vmax_file_with_ext(&sample()).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.hierarchy_nodes.pop();
-        state.set_ext(Some(ext));
         assert!(to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).is_err());
 
         let mut state = from_vmax_file_with_ext(&sample()).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.object_states.pop();
-        state.set_ext(Some(ext));
         assert!(to_vmax_file_with_ext(&state, &VMaxWriteOptions::default()).is_err());
     }
 
@@ -472,12 +458,8 @@ mod tests {
     /// Puts a scene camera in the state's ext for the typed path to keep or
     /// replace.
     fn with_ext_scene_camera(state: &mut VMaxVoxMain, cam: VMaxSceneCamera) {
-        let mut vmax_ext = state
-            .ext()
-            .clone()
-            .expect("a loaded document carries its ext");
+        let vmax_ext = state.ext_mut();
         vmax_ext.scene.cam = Some(cam);
-        state.set_ext(Some(vmax_ext));
     }
 
     #[test]

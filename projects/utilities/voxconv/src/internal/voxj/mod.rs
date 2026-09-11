@@ -10,6 +10,10 @@ pub(crate) use write_voxj::*;
 
 #[cfg(feature = "ext")]
 mod read_voxj_with_ext;
+#[cfg(feature = "ext")]
+mod write_voxj_with_ext;
 
 #[cfg(feature = "ext")]
 pub(crate) use read_voxj_with_ext::*;
+#[cfg(feature = "ext")]
+pub(crate) use write_voxj_with_ext::*;

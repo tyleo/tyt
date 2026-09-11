@@ -4,13 +4,14 @@
 //!
 //! [`from_vmax_file`] loads a [`VMaxFile`](vmax::VMaxFile) into a bare
 //! [`VoxMain`](voxcore::VoxMain). [`to_vmax_file`] writes one back as a
-//! document synthesized from the scene, with [`VMaxWriteOptions`] picking
-//! the color format and the scene camera. The `codec` module, behind the
-//! default `codec` feature, goes straight to and from a package's files. It
-//! takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
-//! supplies. The `ext` feature, on by default, opens the `ext` module. There
-//! the Voxel Max state with no native voxcore home rides as the state's ext.
-//! The `_with_ext` converters write a loaded document back exactly.
+//! document synthesized from the scene, with [`VMaxWriteOptions`] picking the
+//! color format and the scene camera. The `codec` module, behind the default
+//! `codec` feature, goes straight to and from a package's files. It takes the
+//! codec's dependencies, which `vmax_codec::DependenciesImpl` supplies. The
+//! `ext` module carries the Voxel Max state with no native voxcore home as the
+//! state's ext. The `_with_ext` converters write a loaded document back
+//! exactly. The `serde` feature, on by default, derives serde for the ext
+//! types.
 
 // Public API
 
@@ -35,11 +36,7 @@ pub use vmax_write_options::*;
 #[cfg(feature = "codec")]
 pub mod codec;
 
-#[cfg(feature = "ext")]
 pub mod ext;
-
-#[cfg(not(feature = "ext"))]
-mod ext;
 
 // Internal API
 

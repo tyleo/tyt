@@ -2,18 +2,17 @@ use crate::{
     Result, VoxDocumentFile,
     voxj::{VoxjSerialization, VoxjWriteOptions},
 };
-use voxcore::{VoxMain, ext::VoxExt};
+use voxcore::VoxMain;
 use voxj::dependencies::{CostVoxjObject, EncodeBase64};
 use voxj_voxcore::codec::{
     dependencies::{Deflate, EncodeVoxjJson},
     to_voxj_bytes, to_voxj_pretty_bytes, to_voxjz_bytes,
 };
 
-/// Encodes a state as a Voxel Json document, its ext as the `ext` block.
-/// Both pairs write through it because the bridge takes any ext.
-pub fn write_voxj<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate, T: VoxExt>(
+/// Encodes a bare state as a Voxel Json document with no `ext` block.
+pub fn write_voxj<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate>(
     dependencies: &D,
-    state: &VoxMain<T>,
+    state: &VoxMain<()>,
     serialization: VoxjSerialization,
     options: &VoxjWriteOptions,
 ) -> Result<Vec<VoxDocumentFile>> {
@@ -22,6 +21,5 @@ pub fn write_voxj<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate, T
         VoxjSerialization::Pretty => to_voxj_pretty_bytes(dependencies, state, options)?,
         VoxjSerialization::Zip => to_voxjz_bytes(dependencies, state, options)?,
     };
-
     Ok(vec![VoxDocumentFile::single(bytes)])
 }

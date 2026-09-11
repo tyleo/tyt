@@ -1,16 +1,16 @@
 use crate::ext::QbclExtNodeBody;
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Per scene-node provenance preserved in the `qbcl` ext: the node
 /// name, the editor flags, and the per-kind body. Aligned by index with the
 /// hierarchy nodes, so the scene tree rebuilds exactly.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct QbclExtNode {
     /// Node name.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "String::is_empty")
     )]
     pub name: String,

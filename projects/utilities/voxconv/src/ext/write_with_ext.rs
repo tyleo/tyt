@@ -1,16 +1,15 @@
-use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, internal};
-use voxcore::{VoxMain, ext::VoxExt};
+use crate::{Dependencies, Result, VoxDocumentFile, WriteFormat, ext::VoxconvVoxMain, internal};
 
 /// Encodes a state as a document's files. A box holding the format's ext
-/// writes the loaded file back exactly. Any other box encodes to its block.
-/// The format takes its entry from that block. A block with no entry for the
-/// format writes a file synthesized from the scene. The
-/// state is consumed because the format's writer needs it in the format's
-/// ext type.
+/// writes the loaded file back exactly. Any other box encodes to its `ext`
+/// block, and the format takes its entry from that block. A block with no
+/// entry for the format writes a file synthesized from the scene. The state
+/// is consumed because the format's writer needs it in the format's ext
+/// type.
 pub fn write_with_ext<D: Dependencies>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxMain<Box<dyn VoxExt>>,
+    state: VoxconvVoxMain,
 ) -> Result<Vec<VoxDocumentFile>> {
     match format {
         #[cfg(feature = "goxl")]
@@ -31,7 +30,7 @@ pub fn write_with_ext<D: Dependencies>(
         WriteFormat::Voxj {
             serialization,
             options,
-        } => internal::write_voxj(dependencies.voxj(), &state, *serialization, options),
+        } => internal::write_voxj_with_ext(dependencies.voxj(), state, *serialization, options),
     }
 }
 
@@ -39,16 +38,16 @@ pub fn write_with_ext<D: Dependencies>(
 mod tests {
     use crate::{
         DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat,
-        ext::{read_with_ext, write_with_ext},
+        ext::{
+            CompositeVoxExt, InertVoxExt, VoxconvExt, read_with_ext, voxj_vox_ext_from_ext,
+            write_with_ext,
+        },
         test_state,
         vmax::VMaxWriteOptions,
         write,
     };
     use vmax_voxcore::ext::VMaxExt;
-    use voxcore::{
-        VoxMap, VoxValue,
-        ext::{CompositeVoxExt, VoxExt},
-    };
+    use voxcore::{VoxMapEntry, VoxValue};
 
     /// A Voxel Max package written from a bare state.
     fn vmax_package() -> Vec<VoxDocumentFile> {
@@ -68,7 +67,7 @@ mod tests {
 
         let loaded = read_with_ext(&DependenciesImpl, ReadFormat::VMax, &files).unwrap();
 
-        assert!(loaded.ext().as_any().is::<VMaxExt>());
+        assert!(loaded.ext().is::<VMaxExt>());
 
         let again = write_with_ext(
             &DependenciesImpl,
@@ -97,11 +96,11 @@ mod tests {
 
         let loaded = read_with_ext(&DependenciesImpl, ReadFormat::Voxj, &voxj).unwrap();
 
-        assert!(loaded.ext().as_any().is::<CompositeVoxExt>());
+        assert!(loaded.ext().is::<CompositeVoxExt>());
 
-        let block = loaded.ext().to_vox_ext().unwrap();
+        let block = voxj_vox_ext_from_ext(loaded.ext().as_ref()).unwrap();
 
-        assert!(block.0.iter().any(|(key, _)| key == "vmax"));
+        assert!(block.slot("vmax").is_some());
 
         let again = write_with_ext(
             &DependenciesImpl,
@@ -127,13 +126,16 @@ mod tests {
         assert_eq!(loaded.object_count(), 1);
     }
 
-    /// A block no enabled format owns rides through a Voxel Json document as
-    /// it was.
+    /// An entry no enabled format owns rides through a Voxel Json document
+    /// as it was, inert in the composite.
     #[test]
-    fn a_verbatim_block_rides_through_voxel_json() {
-        let block = VoxMap(vec![("other".to_owned(), VoxValue::Bool(true))]);
+    fn an_inert_entry_rides_through_voxel_json() {
+        let inert = InertVoxExt {
+            key: "other".to_owned(),
+            value: VoxValue::Bool(true),
+        };
 
-        let state = test_state(Box::new(block.clone()) as Box<dyn VoxExt>);
+        let state = test_state(Box::new(inert.clone()) as Box<dyn VoxconvExt>);
 
         let files = write_with_ext(
             &DependenciesImpl,
@@ -144,6 +146,24 @@ mod tests {
 
         let loaded = read_with_ext(&DependenciesImpl, ReadFormat::Voxj, &files).unwrap();
 
-        assert_eq!(loaded.ext().to_vox_ext().unwrap(), block);
+        let composite = loaded
+            .ext()
+            .downcast_ref::<CompositeVoxExt>()
+            .expect("a Voxel Json read carries the composite");
+
+        assert_eq!(
+            composite.exts[0].downcast_ref::<InertVoxExt>(),
+            Some(&inert)
+        );
+
+        assert_eq!(
+            voxj_vox_ext_from_ext(loaded.ext().as_ref())
+                .unwrap()
+                .into_slots(),
+            vec![VoxMapEntry {
+                key: "other".to_owned(),
+                value: VoxValue::Bool(true),
+            }]
+        );
     }
 }

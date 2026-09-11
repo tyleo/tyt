@@ -6,7 +6,5 @@ use qbcl::qbt::QbtFile;
 /// [`from_qbt_file`](crate::from_qbt_file). The state writes back exactly
 /// through [`to_qbt_file_with_ext`](crate::ext::to_qbt_file_with_ext).
 pub fn from_qbt_file_with_ext(file: &QbtFile) -> Result<QbtVoxMain> {
-    let (state, qbt_ext) = read_qbt(file)?;
-
-    Ok(state.map_ext(|()| Some(qbt_ext)))
+    read_qbt(file)
 }

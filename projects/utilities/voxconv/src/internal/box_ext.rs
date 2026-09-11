@@ -1,7 +1,9 @@
-use voxcore::{VoxMain, ext::VoxExt};
+use crate::ext::{VoxconvExt, VoxconvVoxMain};
+use voxcore::VoxMain;
 
-/// Boxes the ext a format's typed loader returns. A loaded file always
-/// carries one.
-pub fn box_ext<E: VoxExt>(state: VoxMain<Option<E>>) -> VoxMain<Box<dyn VoxExt>> {
-    state.map_ext(|ext| Box::new(ext.expect("a loaded file carries its ext")) as Box<dyn VoxExt>)
+/// Boxes the ext a format's typed loader returns.
+pub fn box_ext<E: VoxconvExt>(state: VoxMain<E>) -> VoxconvVoxMain {
+    let (state, ext) = state.take_ext();
+
+    state.put_ext(Box::new(ext) as Box<dyn VoxconvExt>)
 }

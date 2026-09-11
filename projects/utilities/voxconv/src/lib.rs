@@ -2,20 +2,20 @@
 
 //! Reads and writes voxel file formats through the voxcore state.
 //!
-//! Each format's `-voxcore` bridge crate owns its conversion. This crate
-//! fronts them. [`ReadFormat`] and [`WriteFormat`] pick a bridge. A document
-//! travels as a list of [`VoxDocumentFile`]. [`read()`] and [`write()`] move
-//! a document through a bridge over the caller's [`Dependencies`] as a bare
+//! Each format's `-voxcore` bridge crate owns its conversion. This crate fronts
+//! them. [`ReadFormat`] and [`WriteFormat`] pick a bridge. A document travels
+//! as a list of [`VoxDocumentFile`]. [`read()`] and [`write()`] move a document
+//! through a bridge over the caller's [`Dependencies`] as a bare
 //! [`VoxMain`](voxcore::VoxMain): a read drops the format's ext, and a write
-//! synthesizes the file from the scene. [`load()`] and [`save()`] start and
-//! end at a path instead of the files. The `ext` feature, on by default,
-//! opens the `ext` module, where the `_with_ext` pairs carry the format's
-//! ext as a boxed [`VoxExt`](voxcore::ext::VoxExt).
-//! [`check_document_files()`] returns each check as voxcore's
+//! synthesizes the file from the scene. [`load()`] and [`save()`] start and end
+//! at a path instead of the files. The `ext` feature, on by default, opens the
+//! `ext` module, where the `_with_ext` pairs carry the format's ext boxed in a
+//! `VoxconvVoxMain`. [`check_document_files()`] returns each check as voxcore's
 //! [`VoxCheck`](voxcore::check::VoxCheck), so a renderer elsewhere lays every
-//! format's checks out the same way. Each format feature enables its
-//! bridge's `codec` feature. The `ext` feature enables every enabled bridge's
-//! `ext`. The `vmax` and `voxj` modules hold those formats' writer options.
+//! format's checks out the same way. Each format feature enables its bridge's
+//! `codec` feature. The `ext` feature enables every enabled bridge's `serde`
+//! feature for the Voxel Json transcode. The `vmax` and `voxj` modules hold
+//! those formats' writer options.
 
 #[cfg(not(any(
     feature = "goxl",

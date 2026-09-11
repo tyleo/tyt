@@ -1,5 +1,5 @@
 use crate::ext::MVoxExtNodeBody;
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Per scene-node provenance preserved in the `mvox` ext: the original
@@ -10,28 +10,28 @@ use serde::{Deserialize, Serialize};
 /// projection; this holds the exact ids, attributes, references, and the frame
 /// data the voxcore node cannot represent.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct MVoxExtNode {
     /// The scene-node id other nodes reference (`id`).
     pub id: i32,
 
     /// `_name`: the node's display name.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub name: Option<String>,
 
     /// `_hidden`: whether the node is hidden.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub hidden: Option<bool>,
 
     /// Any further node-attribute keys, preserved verbatim.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(rename = "attr-extra", default, skip_serializing_if = "Vec::is_empty")
     )]
     pub attr_extra: Vec<(String, String)>,

@@ -17,6 +17,6 @@ ty-math = "0.2.0"
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 
 [features]
-default = ["codec", "ext"]
+default = ["codec", "serde"]
 codec = ["dep:mvox-codec"]
-ext = ["dep:serde", "voxcore/json"]
+serde = ["dep:serde"]

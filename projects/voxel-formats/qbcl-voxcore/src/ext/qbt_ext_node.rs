@@ -1,4 +1,4 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Per scene-node provenance in the `qbt` ext, one variant per node
@@ -7,14 +7,14 @@ use serde::{Deserialize, Serialize};
 /// visibility masks the voxcore object cannot represent. Aligned by index with
 /// the hierarchy nodes.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum QbtExtNode {
     /// A matrix node: a single voxel grid. Its size is the object's grid
     /// bounds.
     Matrix {
         /// Matrix name.
         #[cfg_attr(
-            feature = "ext",
+            feature = "serde",
             serde(default, skip_serializing_if = "String::is_empty")
         )]
         name: String,
@@ -23,7 +23,7 @@ pub enum QbtExtNode {
         position: [i32; 3],
 
         /// `[x, y, z]` local scale.
-        #[cfg_attr(feature = "ext", serde(rename = "local-scale"))]
+        #[cfg_attr(feature = "serde", serde(rename = "local-scale"))]
         local_scale: [u32; 3],
 
         /// `[x, y, z]` pivot, in voxel coordinates.
@@ -31,7 +31,10 @@ pub enum QbtExtNode {
 
         /// Per solid voxel, its visibility mask, in the object's live-voxel
         /// raster order.
-        #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Vec::is_empty")
+        )]
         masks: Vec<u8>,
     },
 
@@ -42,7 +45,7 @@ pub enum QbtExtNode {
     Compound {
         /// Matrix name.
         #[cfg_attr(
-            feature = "ext",
+            feature = "serde",
             serde(default, skip_serializing_if = "String::is_empty")
         )]
         name: String,
@@ -51,7 +54,7 @@ pub enum QbtExtNode {
         position: [i32; 3],
 
         /// `[x, y, z]` local scale.
-        #[cfg_attr(feature = "ext", serde(rename = "local-scale"))]
+        #[cfg_attr(feature = "serde", serde(rename = "local-scale"))]
         local_scale: [u32; 3],
 
         /// `[x, y, z]` pivot, in voxel coordinates.
@@ -59,18 +62,24 @@ pub enum QbtExtNode {
 
         /// Per solid voxel, its visibility mask, in the object's live-voxel
         /// raster order.
-        #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Vec::is_empty")
+        )]
         masks: Vec<u8>,
     },
 
     /// A node whose type id the qbcl crate does not model, preserved verbatim.
     Unknown {
         /// Node type id, as stored.
-        #[cfg_attr(feature = "ext", serde(rename = "type-id"))]
+        #[cfg_attr(feature = "serde", serde(rename = "type-id"))]
         type_id: u32,
 
         /// Node data bytes.
-        #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Vec::is_empty")
+        )]
         data: Vec<u8>,
     },
 }

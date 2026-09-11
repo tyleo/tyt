@@ -29,11 +29,10 @@ feature turns it on.
 
 `GoxlExt` holds the Goxel state with no native voxcore home. The bare
 converters drop it on load and synthesize the file on write. The `ext`
-feature, on by default, opens the `ext` module, where the typed path keeps
-the ext:
+module's typed path keeps the ext:
 
 - `ext::from_goxl_file_with_ext` loads a file into a `GoxlVoxMain`, a
-  `VoxMain<Option<GoxlExt>>` carrying the ext. `ext::to_goxl_file_with_ext`
+  `VoxMain<GoxlExt>` carrying the ext. `ext::to_goxl_file_with_ext`
   writes the state back exactly.
 - `codec::from_goxl_bytes_with_ext` and `codec::to_goxl_bytes_with_ext` do
   the same for `.gox` bytes.
@@ -41,6 +40,7 @@ the ext:
 The ext follows the state's listings through voxcore's `VoxExt` hooks. After
 a node or object is released or reordered, the file still writes back with
 the surviving provenance. A node retained after the load is written as a
-synthesized layer. The ext enters a document's `ext` block as the `goxl`
-entry through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the
-ext in that block.
+synthesized layer. voxconv carries the ext through a Voxel Json document's
+`ext` block.
+
+The `serde` feature, on by default, derives serde for the ext types.

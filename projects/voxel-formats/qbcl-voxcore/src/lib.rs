@@ -2,20 +2,20 @@
 
 //! Converts between Qubicle files and the voxcore state.
 //!
-//! Each of the three Qubicle formats has a loader and a writer over its
-//! decoded file: [`from_qb_file`] / [`to_qb_file`] for Qubicle Binary,
+//! Each of the three Qubicle formats has a loader and a writer over its decoded
+//! file: [`from_qb_file`] / [`to_qb_file`] for Qubicle Binary,
 //! [`from_qbt_file`] / [`to_qbt_file`] for Qubicle Binary Tree, and
-//! [`from_qbcl_file`] / [`to_qbcl_file`] for Qubicle Construction Library.
-//! A loader returns a bare [`VoxMain`](voxcore::VoxMain). A writer
-//! synthesizes the file from the scene. The `codec` module, behind the
-//! default `codec` feature, goes straight to and from file bytes. Its `.qbt`
-//! and `.qbcl` conversions take the codec's dependencies, which
-//! `qbcl_codec::DependenciesImpl` supplies. The `ext` feature, on by default,
-//! opens the `ext` module. There the Qubicle state with no native voxcore
-//! home rides as the state's ext. The `_with_ext` converters write a loaded
-//! file back exactly. The exts follow the listings through the
-//! [`VoxExt`](voxcore::ext::VoxExt) hooks, so a state mutated after the load
-//! still writes back with the surviving provenance.
+//! [`from_qbcl_file`] / [`to_qbcl_file`] for Qubicle Construction Library. A
+//! loader returns a bare [`VoxMain`](voxcore::VoxMain). A writer synthesizes
+//! the file from the scene. The `codec` module, behind the default `codec`
+//! feature, goes straight to and from file bytes. Its `.qbt` and `.qbcl`
+//! conversions take the codec's dependencies, which
+//! `qbcl_codec::DependenciesImpl` supplies. The `ext` module carries the
+//! Qubicle state with no native voxcore home as the state's ext. The
+//! `_with_ext` converters write a loaded file back exactly. The exts follow the
+//! listings through the [`VoxExt`](voxcore::VoxExt) hooks, so a state mutated
+//! after the load still writes back with the surviving provenance. The `serde`
+//! feature, on by default, derives serde for the ext types.
 
 // Public API
 
@@ -42,11 +42,7 @@ pub use to_qbt_file::*;
 #[cfg(feature = "codec")]
 pub mod codec;
 
-#[cfg(feature = "ext")]
 pub mod ext;
-
-#[cfg(not(feature = "ext"))]
-mod ext;
 
 // Internal API
 

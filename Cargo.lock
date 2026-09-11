@@ -2108,6 +2108,8 @@ dependencies = [
  "goxl-voxcore",
  "mvox-voxcore",
  "qbcl-voxcore",
+ "serde",
+ "serde_json",
  "ty-math",
  "vmax",
  "vmax-voxcore",
@@ -2121,8 +2123,6 @@ name = "voxcore"
 version = "0.2.1"
 dependencies = [
  "branded-id",
- "serde",
- "serde_json",
  "ty-math",
 ]
 

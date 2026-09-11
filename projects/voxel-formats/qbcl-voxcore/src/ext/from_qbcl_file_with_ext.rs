@@ -7,7 +7,5 @@ use qbcl::qbcl::QbclFile;
 /// exactly through
 /// [`to_qbcl_file_with_ext`](crate::ext::to_qbcl_file_with_ext).
 pub fn from_qbcl_file_with_ext(file: &QbclFile) -> Result<QbclVoxMain> {
-    let (state, qbcl_ext) = read_qbcl(file)?;
-
-    Ok(state.map_ext(|()| Some(qbcl_ext)))
+    read_qbcl(file)
 }

@@ -1,6 +1,6 @@
 use branded_id::U32Id;
 use std::collections::HashSet;
-use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, ext::VoxExt, material::BASE_COLOR};
+use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxExt, VoxMain, material::BASE_COLOR};
 
 /// Reorders `palette_id`'s `baseColor` colors to material order: each
 /// material's color in turn, then the colors no material uses. Rendering is

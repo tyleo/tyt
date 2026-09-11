@@ -1,12 +1,6 @@
-use crate::{
-    Error, Result,
-    ext::{
-        GoxlExt, GoxlExtCamera, GoxlExtImage, GoxlExtLayer, GoxlExtLight, GoxlExtMaterial,
-        GoxlExtPreview, GoxlExtUnknownChunk,
-    },
-};
+use crate::{Error, GoxlExtSink, Result};
 use branded_id::U32Id;
-use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
+use goxl::{GoxlBlock, GoxlFile};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3U32};
 use voxcore::{
@@ -14,15 +8,14 @@ use voxcore::{
     VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
-/// Loads a Goxel [`GoxlFile`] into a bare [`VoxMain`] and the [`GoxlExt`]
-/// that writes it back exactly. The shared `BL16` voxel blocks become objects
-/// sharing one `baseColor` palette, and the `LAYR` layers become the
-/// hierarchy nodes, each placing the blocks it stamps. The rest of the Goxel
-/// state goes to the ext.
+/// Loads a Goxel [`GoxlFile`] into a [`VoxMain`] whose ext records what `T`
+/// keeps. The shared `BL16` voxel blocks become objects sharing one `baseColor`
+/// palette, and the `LAYR` layers become the hierarchy nodes, each placing the
+/// blocks it stamps. The rest of the Goxel state goes to the ext.
 ///
-/// Errors on a layer placement that references a block outside the block
-/// list, or on a cross-reference the checked insertions reject.
-pub fn read_goxl(file: &GoxlFile) -> Result<(VoxMain<()>, GoxlExt)> {
+/// Errors on a layer placement that references a block outside the block list,
+/// or on a cross-reference the checked insertions reject.
+pub fn read_goxl<T: GoxlExtSink>(file: &GoxlFile) -> Result<VoxMain<T>> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
@@ -39,7 +32,7 @@ pub fn read_goxl(file: &GoxlFile) -> Result<(VoxMain<()>, GoxlExt)> {
     let root_ids = state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(root_ids)?;
 
-    Ok((state, goxl_ext(file)))
+    Ok(T::record_file(state, file))
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
@@ -164,106 +157,4 @@ fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHier
         });
     }
     Ok(nodes)
-}
-
-/// Builds the `goxl` ext payload from the state with no native home.
-fn goxl_ext(file: &GoxlFile) -> GoxlExt {
-    GoxlExt {
-        version: file.version,
-        image: GoxlExtImage {
-            bounding_box: file.image.bounding_box,
-            extra: file.image.extra.0.clone(),
-        },
-        preview: file.preview.as_ref().map(|preview| GoxlExtPreview {
-            width: preview.width,
-            height: preview.height,
-            pixels: preview.pixels.clone(),
-        }),
-        materials: file.materials.iter().map(material_provenance).collect(),
-        layers: file
-            .layers
-            .iter()
-            .map(|layer| Some(layer_provenance(layer)))
-            .collect(),
-        cameras: file.cameras.iter().map(camera_provenance).collect(),
-        light: file.light.as_ref().map(light_provenance),
-        unknown_chunks: file
-            .unknown_chunks
-            .iter()
-            .map(|chunk| GoxlExtUnknownChunk {
-                id: chunk.id,
-                data: chunk.data.clone(),
-            })
-            .collect(),
-    }
-}
-
-/// The ext provenance for one layer: its metadata, clone and shape definition,
-/// and the full placement list.
-fn layer_provenance(layer: &GoxlLayer) -> GoxlExtLayer {
-    GoxlExtLayer {
-        name: layer.name.clone(),
-        id: layer.id,
-        base_id: layer.base_id,
-        material: layer.material,
-        mode: layer.mode,
-        visible: layer.visible,
-        transform: layer.transform,
-        bounding_box: layer.bounding_box,
-        image_path: layer.image_path.clone(),
-        shape: layer.shape.map(shape_token),
-        color: layer.color,
-        placements: layer
-            .blocks
-            .iter()
-            .map(|block| (block.block_index, block.position))
-            .collect(),
-        extra: layer.extra.0.clone(),
-    }
-}
-
-/// The ext provenance for one material.
-fn material_provenance(material: &GoxlMaterial) -> GoxlExtMaterial {
-    GoxlExtMaterial {
-        name: material.name.clone(),
-        base_color: material.base_color,
-        metallic: material.metallic,
-        roughness: material.roughness,
-        emission: material.emission,
-        extra: material.extra.0.clone(),
-    }
-}
-
-/// The ext provenance for one camera.
-fn camera_provenance(camera: &GoxlCamera) -> GoxlExtCamera {
-    GoxlExtCamera {
-        name: camera.name.clone(),
-        distance: camera.distance,
-        orthographic: camera.orthographic,
-        transform: camera.transform,
-        active: camera.active,
-        extra: camera.extra.0.clone(),
-    }
-}
-
-/// The ext provenance for the light settings.
-fn light_provenance(light: &GoxlLight) -> GoxlExtLight {
-    GoxlExtLight {
-        pitch: light.pitch,
-        yaw: light.yaw,
-        intensity: light.intensity,
-        fixed: light.fixed,
-        ambient: light.ambient,
-        shadow: light.shadow,
-        extra: light.extra.0.clone(),
-    }
-}
-
-/// The on-disk shape name for a procedural shape.
-fn shape_token(shape: GoxlShape) -> String {
-    match shape {
-        GoxlShape::Sphere => "sphere".to_owned(),
-        GoxlShape::Cube => "cube".to_owned(),
-        GoxlShape::Cylinder => "cylinder".to_owned(),
-    }
 }

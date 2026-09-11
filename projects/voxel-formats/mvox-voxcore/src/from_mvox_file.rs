@@ -4,11 +4,12 @@ use voxcore::VoxMain;
 
 /// Loads a decoded MagicaVoxel [`MVoxFile`] into a bare [`VoxMain`]. Models
 /// become objects, the 256-color palette plus the `MATL` materials become one
-/// shared palette of value pools, and the `nTRN` / `nGRP` / `nSHP` scene
-/// graph becomes the hierarchy nodes. The rest of the MagicaVoxel state is
-/// dropped, so [`to_mvox_file`](crate::to_mvox_file) writes the state back as
-/// a synthesized file. The `ext` feature's `ext::from_mvox_file_with_ext`
-/// keeps that state instead.
+/// shared palette of value pools, and the `nTRN` / `nGRP` / `nSHP` scene graph
+/// becomes the hierarchy nodes. The rest of the MagicaVoxel state is dropped,
+/// so [`to_mvox_file`](crate::to_mvox_file) writes the state back as a
+/// synthesized file.
+/// [`ext::from_mvox_file_with_ext`](crate::ext::from_mvox_file_with_ext) keeps
+/// that state instead.
 ///
 /// Errors if:
 ///
@@ -17,9 +18,7 @@ use voxcore::VoxMain;
 /// 3. a scene-node reference dangles
 /// 4. a checked insertion rejects a cross-reference
 pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain<()>> {
-    let (state, _) = read_mvox(file)?;
-
-    Ok(state)
+    read_mvox(file)
 }
 
 #[cfg(test)]

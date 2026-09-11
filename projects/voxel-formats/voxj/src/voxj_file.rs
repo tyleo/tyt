@@ -17,8 +17,9 @@ pub struct VoxjFile {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use crate::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjMapEntry, VoxjObject, VoxjPalette,
+        VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjValue, VoxjValuePool,
     };
     use serde_json::{Value, json};
 
@@ -71,7 +72,10 @@ mod tests {
                     root_nodes: vec![0],
                 },
                 edit_state: None,
-                ext: Some(VoxjMap(vec![("vendor".to_owned(), VoxjValue::Null)])),
+                ext: Some(VoxjMap::new(vec![VoxjMapEntry {
+                    key: "vendor".to_owned(),
+                    value: VoxjValue::Null,
+                }])),
             },
         }
     }

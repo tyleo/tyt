@@ -20,14 +20,13 @@ mod tests {
         ext::MVoxVoxMain,
     };
 
-    /// A state with no ext writes a synthesized file that loads back carrying
-    /// the ext the typed path keeps.
+    /// A default state writes through its ext and loads back.
     #[test]
     fn round_trips_the_ext_through_bytes() {
         let bytes = to_mvox_bytes_with_ext(&MVoxVoxMain::default()).unwrap();
         assert!(bytes.starts_with(b"VOX "));
 
         let reloaded = from_mvox_bytes_with_ext(&bytes).unwrap();
-        assert!(reloaded.ext().is_some(), "a loaded file carries its ext");
+        assert_eq!(reloaded.object_count(), 0);
     }
 }

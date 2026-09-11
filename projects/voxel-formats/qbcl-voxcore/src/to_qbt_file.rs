@@ -1,4 +1,4 @@
-use crate::{Result, write_qbt};
+use crate::{QbtExtSource, Result};
 use qbcl::qbt::QbtFile;
 use voxcore::VoxMain;
 
@@ -7,12 +7,13 @@ use voxcore::VoxMain;
 /// [`from_qbt_file`](crate::from_qbt_file). The hierarchy mirrors into
 /// Qubicle's scene tree under one synthetic root model. A group's translation
 /// folds into the world position of its descendant matrices, rounded to whole
-/// voxels. Group names, rotation, scale, and alpha drop. The `ext` feature's
-/// `ext::to_qbt_file_with_ext` writes a loaded file back exactly.
+/// voxels. Group names, rotation, scale, and alpha drop.
+/// [`ext::to_qbt_file_with_ext`](crate::ext::to_qbt_file_with_ext) writes a
+/// loaded file back exactly.
 ///
 /// Errors when an object's `baseColor` draws from a non-color value pool.
 pub fn to_qbt_file(state: &VoxMain<()>) -> Result<QbtFile> {
-    write_qbt(state, None)
+    QbtExtSource::write_qbt(state)
 }
 
 #[cfg(test)]

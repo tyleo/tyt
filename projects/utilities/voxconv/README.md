@@ -45,18 +45,25 @@ each format's codec impl.
 ## The Ext
 
 A format's ext is the state its bridge keeps so a loaded file writes back
-exactly. The `ext` feature, on by default, enables every enabled bridge's
-`ext`. It opens the `ext` module, where the typed pairs carry that state as a
-boxed `VoxExt`:
+exactly. The `ext` feature, on by default, opens the `ext` module, where the
+typed pairs carry that state boxed in a `VoxconvVoxMain`, a
+`VoxMain<Box<dyn VoxconvExt>>`. `VoxconvExt` is any `VoxExt` that can
+downcast and clone:
 
 - `read_with_ext` / `write_with_ext`: a read boxes the ext the bridge loads.
   A write downcasts the box to the format's ext. Failing that, the write
-  takes the format's entry from the block the box encodes to, or synthesizes
-  the file when the block has none
+  encodes the box to its Voxel Json `ext` block and takes the format's entry
+  from it. A box with no entry for the format writes the synthesized file
+  the bare pair writes.
 - `load_with_ext` / `save_with_ext`: the same from and to a path
 
-A Voxel Json document's `ext` block decodes into voxcore's `CompositeVoxExt`.
-Each entry an enabled format owns becomes that format's ext, and the rest
-stay verbatim in the block's order. A mutation such as an object selection
-keeps a format's ext aligned because the hooks forward to every decoded ext.
-A write back to that format takes the entry from the merged block.
+The block's keys live here because voxconv is where the formats meet Voxel Json.
+A bridge knows nothing of its key. A Voxel Json document's `ext` block decodes
+into a `CompositeVoxExt`, one boxed ext per entry in the block's order. An entry
+under an enabled format's key becomes that format's ext, and any other entry
+stays an `InertVoxExt`. A mutation such as an object selection keeps a format's
+ext aligned because the hooks forward to every entry. A write back to that
+format takes its ext from the composite, and a write to Voxel Json encodes the
+composite back to the block. `composite_vox_ext_from_voxj_vox_ext` and
+`voxj_vox_ext_from_ext` do that mapping for a caller too. The `ext` feature
+enables each bridge's `serde` feature for that transcode.

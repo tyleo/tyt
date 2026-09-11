@@ -2,18 +2,17 @@ use crate::{Result, read_vmax};
 use vmax::VMaxFile;
 use voxcore::VoxMain;
 
-/// Loads a Voxel Max document into a bare [`VoxMain`]. Geometry, palettes,
-/// and hierarchy become native voxcore entities. The rest of the Voxel Max
-/// state is dropped, so [`to_vmax_file`](crate::to_vmax_file) writes the
-/// state back as a synthesized document. The `ext` feature's
-/// `ext::from_vmax_file_with_ext` keeps that state instead.
+/// Loads a Voxel Max document into a bare [`VoxMain`]. Geometry, palettes, and
+/// hierarchy become native voxcore entities. The rest of the Voxel Max state is
+/// dropped, so [`to_vmax_file`](crate::to_vmax_file) writes the state back as a
+/// synthesized document.
+/// [`ext::from_vmax_file_with_ext`](crate::ext::from_vmax_file_with_ext) keeps
+/// that state instead.
 ///
-/// Errors on malformed geometry or on a cross-reference the checked
-/// insertions reject.
+/// Errors on malformed geometry or on a cross-reference the checked insertions
+/// reject.
 pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain<()>> {
-    let (state, _) = read_vmax(serde)?;
-
-    Ok(state)
+    read_vmax(serde)
 }
 
 #[cfg(test)]

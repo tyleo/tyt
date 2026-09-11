@@ -1,4 +1,4 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// One transform-node keyframe preserved in the `mvox` ext. The voxcore
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// inverted back to the packed rotation byte exactly, so the exact frame data
 /// is kept here.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct MVoxExtFrame {
     /// `_r`: the packed signed-permutation rotation byte.
     pub rotation: u8,
@@ -16,7 +16,7 @@ pub struct MVoxExtFrame {
 
     /// `_f`: the frame index this keyframe applies to, counting from `0`.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(
             rename = "frame-index",
             default,
@@ -26,6 +26,9 @@ pub struct MVoxExtFrame {
     pub frame_index: Option<u32>,
 
     /// Any further frame-attribute keys, preserved verbatim.
-    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub extra: Vec<(String, String)>,
 }

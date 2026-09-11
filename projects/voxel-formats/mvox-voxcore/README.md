@@ -26,11 +26,10 @@ from `.vox` bytes over `mvox-codec`:
 
 `MVoxExt` holds the MagicaVoxel state with no native voxcore home. The bare
 converters drop it on load and synthesize the file on write. The `ext`
-feature, on by default, opens the `ext` module, where the typed path keeps
-the ext:
+module's typed path keeps the ext:
 
 - `ext::from_mvox_file_with_ext` loads a file into a `MVoxVoxMain`, a
-  `VoxMain<Option<MVoxExt>>` carrying the ext. `ext::to_mvox_file_with_ext`
+  `VoxMain<MVoxExt>` carrying the ext. `ext::to_mvox_file_with_ext`
   writes the state back exactly.
 - `codec::from_mvox_bytes_with_ext` and `codec::to_mvox_bytes_with_ext` do
   the same for `.vox` bytes.
@@ -39,6 +38,7 @@ The ext follows the state's listings through voxcore's `VoxExt` hooks. After
 a node or object is released or reordered, the file still writes back with
 the surviving provenance. A released material shifts the recorded ids above
 it. The writer errors on a node retained after the load because it has no
-scene node. The ext enters a document's `ext` block as the `mvox` entry
-through voxcore's `VoxExtEntryCodec`. A Voxel Json document carries the ext
-in that block.
+scene node. voxconv carries the ext through a Voxel Json document's `ext`
+block.
+
+The `serde` feature, on by default, derives serde for the ext types.

@@ -44,5 +44,5 @@ pub fn test_state<T>(ext: T) -> VoxMain<T> {
 
     state.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
 
-    state.map_ext(|()| ext)
+    state.put_ext(ext)
 }

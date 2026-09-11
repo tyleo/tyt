@@ -20,7 +20,7 @@ voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 vmax-codec = { version = "0.2.0", features = ["impl"] }
 
 [features]
-default = ["codec", "ext"]
+default = ["codec", "serde"]
 codec = ["dep:vmax-codec"]
-ext = ["dep:serde", "voxcore/json", "vmax/serde"]
+serde = ["dep:serde", "vmax/serde"]
 impl = ["vmax-codec?/impl"]

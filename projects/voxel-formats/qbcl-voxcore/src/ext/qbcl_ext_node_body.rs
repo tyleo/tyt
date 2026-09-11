@@ -1,4 +1,4 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// The per-kind body of a scene node in the `qbcl` ext, one variant per
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// object; this holds the placement, pivot, and the per-voxel visibility masks
 /// the voxcore object cannot represent, plus a model's opaque transform chunk.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum QbclExtNodeBody {
     /// A matrix node: a single voxel grid. Its size is the object's grid
     /// bounds.
@@ -19,7 +19,10 @@ pub enum QbclExtNodeBody {
 
         /// Per solid voxel, its visibility mask, in the object's live-voxel
         /// raster order.
-        #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Vec::is_empty")
+        )]
         masks: Vec<u8>,
     },
 
@@ -27,7 +30,10 @@ pub enum QbclExtNodeBody {
     Model {
         /// The 36-byte transform chunk Qubicle writes after a model header,
         /// preserved verbatim.
-        #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Vec::is_empty")
+        )]
         transform: Vec<u8>,
     },
 
@@ -41,7 +47,10 @@ pub enum QbclExtNodeBody {
 
         /// Per solid voxel, its visibility mask, in the object's live-voxel
         /// raster order.
-        #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Vec::is_empty")
+        )]
         masks: Vec<u8>,
     },
 }

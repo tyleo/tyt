@@ -11,7 +11,6 @@ use std::{
 };
 #[cfg(feature = "vmax")]
 use vmax_voxcore::Error as VMaxError;
-use voxcore::ext::Error as ExtError;
 #[cfg(feature = "voxj")]
 use voxj_voxcore::Error as VoxjError;
 
@@ -25,9 +24,8 @@ pub enum Error {
     /// Reading or writing a document's files failed.
     Io(IOError),
 
-    /// A state's ext failed to move between ext types through its block
-    /// form.
-    Ext(ExtError),
+    /// An ext failed to encode to or decode from its Voxel Json entries.
+    Ext(String),
 
     /// Converting a Goxel `.gox` file failed.
     #[cfg(feature = "goxl")]
@@ -55,7 +53,7 @@ impl Display for Error {
         match self {
             Error::Files(message) => write!(f, "{message}"),
             Error::Io(error) => error.fmt(f),
-            Error::Ext(error) => error.fmt(f),
+            Error::Ext(message) => write!(f, "{message}"),
             #[cfg(feature = "goxl")]
             Error::Goxl(error) => error.fmt(f),
             #[cfg(feature = "mvox")]
@@ -75,7 +73,7 @@ impl StdError for Error {
         match self {
             Error::Files(_) => None,
             Error::Io(error) => Some(error),
-            Error::Ext(error) => Some(error),
+            Error::Ext(_) => None,
             #[cfg(feature = "goxl")]
             Error::Goxl(error) => Some(error),
             #[cfg(feature = "mvox")]
@@ -93,12 +91,6 @@ impl StdError for Error {
 impl From<IOError> for Error {
     fn from(error: IOError) -> Self {
         Error::Io(error)
-    }
-}
-
-impl From<ExtError> for Error {
-    fn from(error: ExtError) -> Self {
-        Error::Ext(error)
     }
 }
 

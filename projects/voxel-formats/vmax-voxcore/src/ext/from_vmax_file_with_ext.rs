@@ -6,7 +6,5 @@ use vmax::VMaxFile;
 /// [`from_vmax_file`](crate::from_vmax_file). The state writes back exactly
 /// through [`to_vmax_file_with_ext`](crate::ext::to_vmax_file_with_ext).
 pub fn from_vmax_file_with_ext(serde: &VMaxFile) -> Result<VMaxVoxMain> {
-    let (state, vmax_ext) = read_vmax(serde)?;
-
-    Ok(state.map_ext(|()| Some(vmax_ext)))
+    read_vmax(serde)
 }

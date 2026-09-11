@@ -1,8 +1,9 @@
 use crate::{
-    Dependencies, Result, WriteFile, WriteFormat, ext::write_with_ext, write_document_files,
+    Dependencies, Result, WriteFile, WriteFormat,
+    ext::{VoxconvVoxMain, write_with_ext},
+    write_document_files,
 };
 use std::path::Path;
-use voxcore::{VoxMain, ext::VoxExt};
 
 /// Writes a state as the document at `output`:
 /// [`write_with_ext`](crate::ext::write_with_ext) then
@@ -10,7 +11,7 @@ use voxcore::{VoxMain, ext::VoxExt};
 pub fn save_with_ext<D: Dependencies + WriteFile>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxMain<Box<dyn VoxExt>>,
+    state: VoxconvVoxMain,
     output: &Path,
 ) -> Result<()> {
     let files = write_with_ext(dependencies, format, state)?;
@@ -43,7 +44,7 @@ mod tests {
 
         let loaded = load_with_ext(&memory, ReadFormat::VMax, Path::new("out/q.vmax")).unwrap();
 
-        assert!(loaded.ext().as_any().is::<VMaxExt>());
+        assert!(loaded.ext().is::<VMaxExt>());
 
         assert_eq!(loaded.object_count(), 1);
     }

@@ -39,11 +39,10 @@ both. This crate's `impl` feature turns on the codec's.
 
 `QbExt`, `QbtExt`, and `QbclExt` hold the Qubicle state with no native
 voxcore home. The bare converters drop it on load and synthesize the file on
-write. The `ext` feature, on by default, opens the `ext` module, where the
-typed path keeps the ext:
+write. The `ext` module's typed path keeps the ext:
 
 - `ext::from_qb_file_with_ext` loads a file into a `QbVoxMain`, a
-  `VoxMain<Option<QbExt>>` carrying the ext. `ext::to_qb_file_with_ext`
+  `VoxMain<QbExt>` carrying the ext. `ext::to_qb_file_with_ext`
   writes the state back exactly. `QbtVoxMain` and `QbclVoxMain` pair the
   same way with their `_with_ext` loaders and writers.
 - `codec::from_qb_bytes_with_ext` and `codec::to_qb_bytes_with_ext` do the
@@ -52,6 +51,7 @@ typed path keeps the ext:
 The exts follow the state's listings through voxcore's `VoxExt` hooks. After a
 release or a reorder, the file still writes back with the surviving provenance.
 An object retained after the load is written as a synthesized matrix. A node
-retained after the load is written as a synthesized node. Each ext enters a
-document's `ext` block as its `qb`, `qbt`, or `qbcl` entry through voxcore's
-`VoxExtEntryCodec`. A Voxel Json document carries the ext in that block.
+retained after the load is written as a synthesized node. voxconv carries
+each ext through a Voxel Json document's `ext` block.
+
+The `serde` feature, on by default, derives serde for the ext types.

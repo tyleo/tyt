@@ -1,16 +1,14 @@
-use crate::{Dependencies, ReadFormat, Result, VoxDocumentFile, internal};
-use voxcore::{VoxMain, ext::VoxExt};
+use crate::{Dependencies, ReadFormat, Result, VoxDocumentFile, ext::VoxconvVoxMain, internal};
 
 /// Decodes a document's files into a state carrying the format's ext, boxed.
-/// A Voxel Json document's `ext` block decodes into a
-/// [`CompositeVoxExt`](voxcore::ext::CompositeVoxExt). A single-file format
-/// takes exactly one file. A package takes every file
+/// A Voxel Json document's `ext` block decodes into a `CompositeVoxExt`. A
+/// single-file format takes exactly one file. A package takes every file
 /// [`read_document_files`](crate::read_document_files) lists.
 pub fn read_with_ext<D: Dependencies>(
     dependencies: &D,
     format: ReadFormat,
     files: &[VoxDocumentFile],
-) -> Result<VoxMain<Box<dyn VoxExt>>> {
+) -> Result<VoxconvVoxMain> {
     match format {
         #[cfg(feature = "goxl")]
         ReadFormat::Goxl => internal::read_goxl_with_ext(dependencies.goxl(), files),

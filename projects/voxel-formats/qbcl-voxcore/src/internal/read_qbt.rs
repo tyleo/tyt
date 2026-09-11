@@ -1,7 +1,4 @@
-use crate::{
-    Error, Result,
-    ext::{QbtExt, QbtExtNode},
-};
+use crate::{Error, QbtExtSink, Result, ext::QbtExtNode};
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
 use std::collections::{HashMap, HashSet};
@@ -11,23 +8,22 @@ use voxcore::{
     VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
-/// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a bare [`VoxMain`]
-/// and the [`QbtExt`] that writes it back exactly. Matrix and compound grids
-/// become objects sharing one `baseColor` palette, and the scene tree becomes
-/// the hierarchy nodes. The rest of the Qubicle state, such as the per-voxel
-/// visibility masks, matrix names, placements, scales, and pivots, the color
-/// map, the global scale, the version, and any unknown nodes, goes to the
-/// ext.
+/// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`VoxMain`] whose ext
+/// records what `T` keeps. Matrix and compound grids become objects sharing one
+/// `baseColor` palette, and the scene tree becomes the hierarchy nodes. The
+/// rest of the Qubicle state, such as the per-voxel visibility masks, matrix
+/// names, placements, scales, and pivots, the color map, the global scale, the
+/// version, and any unknown nodes, goes to the ext.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn read_qbt(file: &QbtFile) -> Result<(VoxMain<()>, QbtExt)> {
+pub fn read_qbt<T: QbtExtSink>(file: &QbtFile) -> Result<VoxMain<T>> {
     let mut state = VoxMain::default();
+    let mut nodes = Vec::new();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
     let palette_id = state.retain_palette(palette)?;
 
-    let mut nodes = Vec::new();
     let root_id = build_node(
         &file.root,
         &mut state,
@@ -37,18 +33,7 @@ pub fn read_qbt(file: &QbtFile) -> Result<(VoxMain<()>, QbtExt)> {
     )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    let qbt_ext = QbtExt {
-        version: file.version,
-        global_scale: file.global_scale,
-        color_map: file
-            .color_map
-            .iter()
-            .map(|color| [color.r, color.g, color.b, color.a])
-            .collect(),
-        nodes,
-    };
-
-    Ok((state, qbt_ext))
+    Ok(T::record_file(state, file, nodes))
 }
 
 /// Builds the hierarchy node for one scene node and its subtree, adding it and
@@ -60,7 +45,7 @@ fn build_node(
     state: &mut VoxMain<()>,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<Option<QbtExtNode>>,
+    nodes: &mut Vec<QbtExtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let node_id = match node {
         QbtNode::Matrix(matrix) => {
@@ -76,13 +61,13 @@ fn build_node(
                 transform: translation(matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(QbtExtNode::Matrix {
+            nodes.push(QbtExtNode::Matrix {
                 name: matrix.name.clone(),
                 position: matrix.position,
                 local_scale: matrix.local_scale,
                 pivot: matrix.pivot,
                 masks,
-            }));
+            });
             node_id
         }
         QbtNode::Model(model) => {
@@ -97,7 +82,7 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(QbtExtNode::Model));
+            nodes.push(QbtExtNode::Model);
             node_id
         }
         QbtNode::Compound(compound) => {
@@ -117,13 +102,13 @@ fn build_node(
                 transform: translation(compound.matrix.position),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(QbtExtNode::Compound {
+            nodes.push(QbtExtNode::Compound {
                 name: compound.matrix.name.clone(),
                 position: compound.matrix.position,
                 local_scale: compound.matrix.local_scale,
                 pivot: compound.matrix.pivot,
                 masks,
-            }));
+            });
             node_id
         }
         QbtNode::Unknown(unknown) => {
@@ -134,10 +119,10 @@ fn build_node(
                 transform: TyTransformF64::default(),
             };
             let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(Some(QbtExtNode::Unknown {
+            nodes.push(QbtExtNode::Unknown {
                 type_id: unknown.type_id,
                 data: unknown.data.clone(),
-            }));
+            });
             node_id
         }
     };

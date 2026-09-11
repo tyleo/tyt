@@ -1,102 +1,36 @@
-use crate::{
-    Error, Result, vox_hierarchy_node_from_voxj_hierarchy_node, vox_map_from_voxj_map,
-    vox_object_from_voxj_decoded_object, vox_palette_from_voxj_palette,
-    vox_value_pool_from_voxj_value_pool,
-};
-use branded_id::U32Id;
-use voxcore::{VoxMain, ext::VoxExtBlockCodec};
-use voxj::{
-    DecodeBase64, VoxjFile,
-    objects::{decode_voxj_object, voxj_palette_material_counts},
-};
+use crate::{Result, read_voxj};
+use voxcore::VoxMain;
+use voxj::{DecodeBase64, VoxjFile};
 
-/// Loads a [`VoxjFile`] into a [`VoxMain`], typing the document's `ext`
-/// block into the slot `T`. Each object's position and sample blocks are
-/// decoded through `dependencies`, then entities take ids in listing order,
-/// so each id equals its voxj array index and cross-references carry over.
-/// The nodes land as one batch because the wire permits a node to list a
-/// child that appears later. To carry the block verbatim instead of typing
-/// it, load a [`VoxjVoxMain`](crate::VoxjVoxMain).
+/// Loads a [`VoxjFile`] into a bare [`VoxMain`]. The `ext` block drops.
+/// [`ext::from_voxj_file_with_ext`](crate::ext::from_voxj_file_with_ext)
+/// keeps it. Each object's position and sample blocks decode through
+/// `dependencies`.
+/// Entities take ids in listing order, so each id equals its voxj array
+/// index and the cross-references carry over. The nodes land as one batch
+/// because the wire permits a node to list a child that appears later.
 ///
 /// Errors if:
 ///
 /// 1. a block is malformed
 /// 2. object geometry is malformed
 /// 3. a checked insertion rejects a cross-reference
-/// 4. the `ext` block holds a non-finite number or a repeated key
-/// 5. the state's ext type owns the `ext` block but cannot decode it
-pub fn from_voxj_file<T: VoxExtBlockCodec, D: DecodeBase64>(
-    dependencies: &D,
-    file: &VoxjFile,
-) -> Result<VoxMain<T>> {
-    let main = &file.main;
-    let mut state: VoxMain = VoxMain::default();
-
-    // Build each value before adding it so a failed conversion leaves the state
-    // untouched. Value pools land first, so palette properties resolve against
-    // them.
-    for value_pool in &main.runtime_state.value_pools {
-        state.retain_value_pool(vox_value_pool_from_voxj_value_pool(value_pool)?);
-    }
-
-    // An insertion identifies the entity it rejected by the ids it holds,
-    // which are internal to the palette or object; the listing index points
-    // back into the document.
-    for (index, palette) in main.runtime_state.palettes.iter().enumerate() {
-        state
-            .retain_palette(vox_palette_from_voxj_palette(palette)?)
-            .map_err(|error| Error::invalid(format!("palette {index}: {error}")))?;
-    }
-
-    for (index, object) in main.runtime_state.objects.iter().enumerate() {
-        let material_counts =
-            voxj_palette_material_counts(&object.layers, &main.runtime_state.palettes)?;
-        let decoded = decode_voxj_object(dependencies, object, &material_counts)?;
-        // The build volume, present only when the document recorded margin
-        // around the object's live voxels; otherwise the runtime grid is the
-        // build volume.
-        let edit = main
-            .edit_state
-            .as_ref()
-            .and_then(|e| e.objects.get(index))
-            .map(|edit| (edit.bounds, edit.origin));
-        let vox_object = vox_object_from_voxj_decoded_object(&decoded, edit)?;
-        state
-            .retain_object(vox_object)
-            .map_err(|error| Error::invalid(format!("object {index}: {error}")))?;
-    }
-
-    let nodes = main
-        .runtime_state
-        .nodes
-        .iter()
-        .map(vox_hierarchy_node_from_voxj_hierarchy_node)
-        .collect::<Result<Vec<_>>>()?;
-    state.retain_hierarchy_nodes(nodes)?;
-
-    state.set_root_hierarchy_node_ids(
-        main.runtime_state
-            .root_nodes
-            .iter()
-            .map(|&index| U32Id::from_u32(index as u32))
-            .collect(),
-    )?;
-
-    let ext = main.ext.as_ref().map(vox_map_from_voxj_map).transpose()?;
-    let ext = T::from_vox_ext_block(ext.as_ref())?;
-
-    Ok(state.map_ext(|()| ext))
+pub fn from_voxj_file<D: DecodeBase64>(dependencies: &D, file: &VoxjFile) -> Result<VoxMain<()>> {
+    read_voxj(dependencies, file)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{EditStateMode, VoxjVoxMain, VoxjWriteOptions, from_voxj_file, to_voxj_file};
+    use crate::{
+        EditStateMode, VoxjWriteOptions,
+        ext::{VoxjVoxExt, VoxjVoxMain, from_voxj_file_with_ext, to_voxj_file_with_ext},
+        from_voxj_file, vox_map_from_voxj_map,
+    };
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
-    use voxcore::VoxMap;
     use voxj::{
-        VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock,
-        VoxjTransform, VoxjValue, VoxjValuePool,
+        VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap,
+        VoxjMapEntry, VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState,
+        VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
         objects::{decode_voxj_object, voxj_palette_material_counts},
     };
     use voxj_codec::DependenciesImpl;
@@ -223,15 +157,15 @@ mod tests {
                     root_nodes: vec![0],
                 },
                 edit_state: None,
-                ext: Some(VoxjMap(vec![(
-                    "vendor".to_owned(),
-                    VoxjValue::Array(vec![
+                ext: Some(VoxjMap::new(vec![VoxjMapEntry {
+                    key: "vendor".to_owned(),
+                    value: VoxjValue::Array(vec![
                         VoxjValue::Number(1.0),
                         VoxjValue::Bool(true),
                         VoxjValue::Null,
                         VoxjValue::Text("x".to_owned()),
                     ]),
-                )])),
+                }])),
             },
         }
     }
@@ -273,9 +207,10 @@ mod tests {
     #[test]
     fn round_trips_through_vox_state() {
         let file = sample_file();
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         assert_file_eq(
-            &to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap(),
+            &to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap(),
             &file,
         );
     }
@@ -315,9 +250,10 @@ mod tests {
     #[test]
     fn round_trips_edit_state() {
         let file = margin_file();
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         assert_file_eq(
-            &to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap(),
+            &to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap(),
             &file,
         );
     }
@@ -326,10 +262,11 @@ mod tests {
     /// already tight, one entry per object holding its build volume.
     #[test]
     fn always_records_edit_state_when_tight() {
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &sample_file()).unwrap();
+        let state: VoxjVoxMain =
+            from_voxj_file_with_ext(&DependenciesImpl, &sample_file()).unwrap();
         // Auto omits it: every object in the fixture is already tight.
         assert_eq!(
-            to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+            to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
                 .unwrap()
                 .main
                 .edit_state,
@@ -340,7 +277,7 @@ mod tests {
             edit_state: EditStateMode::Always,
             ..Default::default()
         };
-        let file = to_voxj_file(&DependenciesImpl, &state, &options).unwrap();
+        let file = to_voxj_file_with_ext(&DependenciesImpl, &state, &options).unwrap();
         assert_eq!(
             file.main.edit_state,
             Some(VoxjEditState {
@@ -367,10 +304,10 @@ mod tests {
     #[test]
     fn never_discards_edit_state_with_margin() {
         let file = margin_file();
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         // Auto would emit it because the object carries margin.
         assert!(
-            to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+            to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
                 .unwrap()
                 .main
                 .edit_state
@@ -381,16 +318,17 @@ mod tests {
             edit_state: EditStateMode::Never,
             ..Default::default()
         };
-        let got = to_voxj_file(&DependenciesImpl, &state, &options).unwrap();
+        let got = to_voxj_file_with_ext(&DependenciesImpl, &state, &options).unwrap();
         assert_eq!(got.main.edit_state, None);
     }
 
     /// `ext: false` drops the user-defined ext block. The default keeps it.
     #[test]
     fn ext_false_drops_the_ext_block() {
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &sample_file()).unwrap();
+        let state: VoxjVoxMain =
+            from_voxj_file_with_ext(&DependenciesImpl, &sample_file()).unwrap();
         assert!(
-            to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+            to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
                 .unwrap()
                 .main
                 .ext
@@ -400,19 +338,71 @@ mod tests {
             ext: false,
             ..Default::default()
         };
-        let dropped = to_voxj_file(&DependenciesImpl, &state, &options).unwrap();
+        let dropped = to_voxj_file_with_ext(&DependenciesImpl, &state, &options).unwrap();
         assert_eq!(dropped.main.ext, None);
+    }
+
+    /// The typed loader keeps the parsed block. A document with no block
+    /// loads an empty ext.
+    #[test]
+    fn the_typed_loader_keeps_the_block_and_none_loads_empty() {
+        let file = sample_file();
+
+        let want = VoxjVoxExt::new(
+            vox_map_from_voxj_map(file.main.ext.as_ref().unwrap())
+                .unwrap()
+                .into_entries(),
+        );
+
+        let state = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
+
+        assert_eq!(state.ext(), &want);
+
+        let state = from_voxj_file_with_ext(&DependenciesImpl, &margin_file()).unwrap();
+
+        assert_eq!(state.ext(), &VoxjVoxExt::default());
+    }
+
+    /// `{}` and no block both load an empty ext and write no block.
+    #[test]
+    fn an_empty_block_and_none_both_write_no_block() {
+        let mut file = margin_file();
+
+        file.main.ext = Some(VoxjMap::default());
+
+        let state = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
+
+        assert_eq!(state.ext(), &VoxjVoxExt::default());
+
+        assert_eq!(
+            to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap()
+                .main
+                .ext,
+            None
+        );
+
+        let state = from_voxj_file_with_ext(&DependenciesImpl, &margin_file()).unwrap();
+
+        assert_eq!(
+            to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap()
+                .main
+                .ext,
+            None
+        );
     }
 
     #[test]
     fn gc_on_a_loaded_state_preserves_the_round_trip() {
         let file = sample_file();
-        let mut state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let mut state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         // A freshly loaded state is already contiguous, so gc leaves the saved
         // document unchanged.
         state.gc();
         assert_file_eq(
-            &to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap(),
+            &to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap(),
             &file,
         );
     }
@@ -422,7 +412,7 @@ mod tests {
         let mut file = sample_file();
         file.main.runtime_state.objects[1].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[9, 0, 0], [1, 0, 0]]);
-        assert!(from_voxj_file::<Option<VoxMap>, _>(&DependenciesImpl, &file).is_err());
+        assert!(from_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -432,7 +422,7 @@ mod tests {
         // material 99, out of range for palette 0's six materials.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![99, 0, 5, 2]]);
-        assert!(from_voxj_file::<Option<VoxMap>, _>(&DependenciesImpl, &file).is_err());
+        assert!(from_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     /// A voxelless object (tight bounds `[0, 0, 0]`) still carries one empty
@@ -460,9 +450,10 @@ mod tests {
                 ext: None,
             },
         };
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         assert_file_eq(
-            &to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap(),
+            &to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap(),
             &file,
         );
     }
@@ -496,9 +487,10 @@ mod tests {
                 ext: None,
             },
         };
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         assert_file_eq(
-            &to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap(),
+            &to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                .unwrap(),
             &file,
         );
     }
@@ -508,9 +500,9 @@ mod tests {
     #[test]
     fn round_trips_vector_value_pools() {
         let file = vector_kind_file();
-        let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+        let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
         let written =
-            to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
+            to_voxj_file_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
         assert_eq!(
             written.main.runtime_state.value_pools,
             file.main.runtime_state.value_pools
@@ -585,13 +577,15 @@ mod tests {
                 ext: None,
             },
         };
-        assert!(from_voxj_file::<Option<VoxMap>, _>(&DependenciesImpl, &file).is_err());
+        assert!(from_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[cfg(feature = "codec")]
     mod codec {
         use super::*;
-        use crate::codec::{from_voxj_bytes, to_voxj_bytes, to_voxjz_bytes};
+        use crate::codec::{
+            from_voxj_bytes_with_ext, to_voxj_bytes_with_ext, to_voxjz_bytes_with_ext,
+        };
         use branded_id::U32Id;
         use voxcore::{BVoxHierarchyNode, BVoxLayer, BVoxObject, BVoxPalette, VoxHierarchyNode};
 
@@ -631,12 +625,15 @@ mod tests {
         #[test]
         fn round_trips_through_voxj_bytes() {
             let file = sample_file();
-            let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+            let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
             let bytes =
-                to_voxj_bytes(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
-            let reloaded: VoxjVoxMain = from_voxj_bytes(&DependenciesImpl, &bytes).unwrap();
+                to_voxj_bytes_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                    .unwrap();
+            let reloaded: VoxjVoxMain =
+                from_voxj_bytes_with_ext(&DependenciesImpl, &bytes).unwrap();
             assert_file_eq(
-                &to_voxj_file(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default()).unwrap(),
+                &to_voxj_file_with_ext(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default())
+                    .unwrap(),
                 &file,
             );
         }
@@ -644,19 +641,23 @@ mod tests {
         #[test]
         fn round_trips_through_voxjz_bytes() {
             let file = sample_file();
-            let state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+            let state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
             let bytes =
-                to_voxjz_bytes(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
-            let reloaded: VoxjVoxMain = from_voxj_bytes(&DependenciesImpl, &bytes).unwrap();
+                to_voxjz_bytes_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                    .unwrap();
+            let reloaded: VoxjVoxMain =
+                from_voxj_bytes_with_ext(&DependenciesImpl, &bytes).unwrap();
             assert_file_eq(
-                &to_voxj_file(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default()).unwrap(),
+                &to_voxj_file_with_ext(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default())
+                    .unwrap(),
                 &file,
             );
         }
 
         #[test]
         fn remove_then_gc_round_trips_through_bytes() {
-            let mut state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &sample_file()).unwrap();
+            let mut state: VoxjVoxMain =
+                from_voxj_file_with_ext(&DependenciesImpl, &sample_file()).unwrap();
 
             // The "leaf" node places the "tight" object. Nodes are frozen, so
             // removing the object means rebuilding the hierarchy: clear the
@@ -699,10 +700,13 @@ mod tests {
                 .unwrap();
 
             let bytes =
-                to_voxj_bytes(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
-            let reloaded: VoxjVoxMain = from_voxj_bytes(&DependenciesImpl, &bytes).unwrap();
+                to_voxj_bytes_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                    .unwrap();
+            let reloaded: VoxjVoxMain =
+                from_voxj_bytes_with_ext(&DependenciesImpl, &bytes).unwrap();
             assert_file_eq(
-                &to_voxj_file(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default()).unwrap(),
+                &to_voxj_file_with_ext(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default())
+                    .unwrap(),
                 &sample_file_without_tight(),
             );
         }
@@ -739,7 +743,7 @@ mod tests {
                     ext: None,
                 },
             };
-            let mut state: VoxjVoxMain = from_voxj_file(&DependenciesImpl, &file).unwrap();
+            let mut state: VoxjVoxMain = from_voxj_file_with_ext(&DependenciesImpl, &file).unwrap();
 
             // Layer ids follow the listing on load, so the first layer is id 0.
             let object_id = U32Id::<BVoxObject>::from_u32(0);
@@ -751,8 +755,10 @@ mod tests {
             state.validate().unwrap();
 
             let bytes =
-                to_voxj_bytes(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
-            let reloaded: VoxjVoxMain = from_voxj_bytes(&DependenciesImpl, &bytes).unwrap();
+                to_voxj_bytes_with_ext(&DependenciesImpl, &state, &VoxjWriteOptions::default())
+                    .unwrap();
+            let reloaded: VoxjVoxMain =
+                from_voxj_bytes_with_ext(&DependenciesImpl, &bytes).unwrap();
             let expected = VoxjFile {
                 version: 1,
                 main: VoxjMain {
@@ -774,7 +780,8 @@ mod tests {
                 },
             };
             assert_file_eq(
-                &to_voxj_file(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default()).unwrap(),
+                &to_voxj_file_with_ext(&DependenciesImpl, &reloaded, &VoxjWriteOptions::default())
+                    .unwrap(),
                 &expected,
             );
         }

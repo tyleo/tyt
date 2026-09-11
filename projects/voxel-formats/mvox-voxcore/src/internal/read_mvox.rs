@@ -1,15 +1,6 @@
-use crate::{
-    Error, Result,
-    ext::{
-        MVoxExt, MVoxExtCamera, MVoxExtFrame, MVoxExtLayer, MVoxExtMaterial, MVoxExtNode,
-        MVoxExtNodeBody, MVoxExtShapeModel, MVoxExtUnknownChunk,
-    },
-};
+use crate::{Error, MVoxExtSink, Result, material_type_token};
 use branded_id::U32Id;
-use mvox::{
-    MVoxCamera, MVoxFile, MVoxFrame, MVoxLayer, MVoxMaterial, MVoxMaterialType, MVoxModel,
-    MVoxSceneNode, MVoxSceneNodeBody,
-};
+use mvox::{MVoxFile, MVoxFrame, MVoxMaterial, MVoxModel, MVoxSceneNodeBody};
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
@@ -32,13 +23,13 @@ const DEFAULT_MATERIAL_TYPE: &str = "_diffuse";
 /// Reads one scalar material field, for the per-attribute value-pool build.
 type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 
-/// Loads a decoded MagicaVoxel [`MVoxFile`] into a bare [`VoxMain`] and the
-/// [`MVoxExt`] that writes it back exactly. Models become objects, the
-/// 256-color palette plus the `MATL` materials become one shared palette of
-/// value pools, and the `nTRN` / `nGRP` / `nSHP` scene graph becomes the
-/// hierarchy nodes. The rest of the MagicaVoxel state, such as layers,
-/// cameras, render settings, the exact per-node frames, and each material's
-/// exact optional fields, goes to the ext.
+/// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`VoxMain`] whose ext
+/// records what `T` keeps. Models become objects, the 256-color palette plus
+/// the `MATL` materials become one shared palette of value pools, and the
+/// `nTRN` / `nGRP` / `nSHP` scene graph becomes the hierarchy nodes. The rest
+/// of the MagicaVoxel state, such as layers, cameras, render settings, the
+/// exact per-node frames, and each material's exact optional fields, goes to
+/// the ext.
 ///
 /// Errors if:
 ///
@@ -46,7 +37,7 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// 2. a material id is outside the palette range
 /// 3. a scene-node reference dangles
 /// 4. a checked insertion rejects a cross-reference
-pub fn read_mvox(file: &MVoxFile) -> Result<(VoxMain<()>, MVoxExt)> {
+pub fn read_mvox<T: MVoxExtSink>(file: &MVoxFile) -> Result<VoxMain<T>> {
     let mut state = VoxMain::default();
 
     let palette = build_palette(&mut state, file)?;
@@ -64,7 +55,7 @@ pub fn read_mvox(file: &MVoxFile) -> Result<(VoxMain<()>, MVoxExt)> {
     state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
-    Ok((state, mvox_ext(file)))
+    Ok(T::record_file(state, file))
 }
 
 /// Builds the shared palette: one material per color index `0..=255`, so a
@@ -202,18 +193,6 @@ fn intern<T: Clone, K: Eq + Hash>(values: &[T], key: impl Fn(&T) -> K) -> (Vec<T
         })
         .collect();
     (distinct, indices)
-}
-
-/// The `_type` token for a material shading model. Known variants map to their
-/// documented tokens; an unmodeled variant keeps its stored string.
-fn material_type_token(material_type: &MVoxMaterialType) -> String {
-    match material_type {
-        MVoxMaterialType::Diffuse => "_diffuse".to_owned(),
-        MVoxMaterialType::Metal => "_metal".to_owned(),
-        MVoxMaterialType::Glass => "_glass".to_owned(),
-        MVoxMaterialType::Emit => "_emit".to_owned(),
-        MVoxMaterialType::Other(token) => token.clone(),
-    }
 }
 
 /// Builds an object from a model: a dense grid sized by the model, referencing
@@ -394,116 +373,4 @@ fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
 fn determinant(matrix: &[[f64; 3]; 3]) -> f64 {
     let column = |c: usize| TyVector3F64::new(matrix[0][c], matrix[1][c], matrix[2][c]);
     column(0).dot(column(1).cross(column(2)))
-}
-
-/// Builds the `mvox` ext payload from the state with no native home.
-fn mvox_ext(file: &MVoxFile) -> MVoxExt {
-    MVoxExt {
-        version: file.version,
-        palette_present: file.palette.is_some(),
-        materials: file
-            .materials
-            .iter()
-            .map(|material| MVoxExtMaterial {
-                id: material.id,
-                material_type: material.material_type.as_ref().map(material_type_token),
-                weight: material.weight,
-                rough: material.rough,
-                spec: material.spec,
-                ior: material.ior,
-                att: material.att,
-                flux: material.flux,
-                extra: material.extra.0.clone(),
-            })
-            .collect(),
-        scene_nodes: file
-            .scene_nodes
-            .iter()
-            .map(|node| Some(node_provenance(node)))
-            .collect(),
-        layers: file.layers.iter().map(layer_provenance).collect(),
-        render_objects: file
-            .render_objects
-            .iter()
-            .map(|render_object| render_object.attributes.0.clone())
-            .collect(),
-        cameras: file.cameras.iter().map(camera_provenance).collect(),
-        palette_notes: file.palette_notes.clone(),
-        index_map: file.index_map.map(|map| map.to_vec()),
-        unknown_chunks: file
-            .unknown_chunks
-            .iter()
-            .map(|chunk| MVoxExtUnknownChunk {
-                id: chunk.id,
-                content: chunk.content.clone(),
-                children: chunk.children.clone(),
-            })
-            .collect(),
-    }
-}
-
-/// The ext provenance for one scene node: its id, attributes, and per-kind
-/// body.
-fn node_provenance(node: &MVoxSceneNode) -> MVoxExtNode {
-    MVoxExtNode {
-        id: node.id,
-        name: node.attributes.name.clone(),
-        hidden: node.attributes.hidden,
-        attr_extra: node.attributes.extra.0.clone(),
-        body: match &node.body {
-            MVoxSceneNodeBody::Transform(transform) => MVoxExtNodeBody::Transform {
-                child: transform.child,
-                layer: transform.layer,
-                frames: transform.frames.iter().map(frame_provenance).collect(),
-            },
-            MVoxSceneNodeBody::Group(group) => MVoxExtNodeBody::Group {
-                children: group.children.clone(),
-            },
-            MVoxSceneNodeBody::Shape(shape) => MVoxExtNodeBody::Shape {
-                models: shape
-                    .models
-                    .iter()
-                    .map(|model| MVoxExtShapeModel {
-                        model: model.model,
-                        frame_index: model.frame_index,
-                        extra: model.extra.0.clone(),
-                    })
-                    .collect(),
-            },
-        },
-    }
-}
-
-/// The ext provenance for one transform-node frame.
-fn frame_provenance(frame: &MVoxFrame) -> MVoxExtFrame {
-    MVoxExtFrame {
-        rotation: frame.rotation.0,
-        translation: frame.translation,
-        frame_index: frame.frame_index,
-        extra: frame.extra.0.clone(),
-    }
-}
-
-/// The ext provenance for one layer.
-fn layer_provenance(layer: &MVoxLayer) -> MVoxExtLayer {
-    MVoxExtLayer {
-        id: layer.id,
-        name: layer.name.clone(),
-        hidden: layer.hidden,
-        extra: layer.extra.0.clone(),
-    }
-}
-
-/// The ext provenance for one camera.
-fn camera_provenance(camera: &MVoxCamera) -> MVoxExtCamera {
-    MVoxExtCamera {
-        id: camera.id,
-        mode: camera.mode.clone(),
-        focus: camera.focus,
-        angle: camera.angle,
-        radius: camera.radius,
-        frustum: camera.frustum,
-        fov: camera.fov,
-        extra: camera.extra.0.clone(),
-    }
 }

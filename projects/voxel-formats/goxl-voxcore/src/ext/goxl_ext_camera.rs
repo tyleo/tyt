@@ -1,14 +1,14 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// A `CAMR` camera preserved in the `goxl` ext, in stored order. Cameras have
 /// no native voxcore home, so they ride here verbatim.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct GoxlExtCamera {
     /// Camera name.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "String::is_empty")
     )]
     pub name: String,
@@ -26,6 +26,9 @@ pub struct GoxlExtCamera {
     pub active: bool,
 
     /// Any further camera-dictionary keys, preserved verbatim as raw bytes.
-    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub extra: Vec<(String, Vec<u8>)>,
 }

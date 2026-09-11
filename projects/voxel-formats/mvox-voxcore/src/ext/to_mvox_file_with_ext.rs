@@ -1,16 +1,15 @@
-use crate::{Result, ext::MVoxVoxMain, write_mvox};
+use crate::{MVoxExtSource, Result, ext::MVoxVoxMain};
 use mvox::MVoxFile;
 
 /// Writes a [`MVoxVoxMain`] back to a decoded MagicaVoxel [`MVoxFile`], the
 /// inverse of [`from_mvox_file_with_ext`](crate::ext::from_mvox_file_with_ext)
 /// and the typed form of [`to_mvox_file`](crate::to_mvox_file). A loaded file
-/// writes back exactly through its ext. A state carrying none writes a
-/// synthesized file.
+/// writes back exactly through its ext.
 ///
 /// Errors if the ext is out of step with the hierarchy. A node retained after
 /// the load has no scene node and counts as out of step.
 pub fn to_mvox_file_with_ext(state: &MVoxVoxMain) -> Result<MVoxFile> {
-    write_mvox(state, state.ext().as_ref())
+    MVoxExtSource::write_mvox(state)
 }
 
 #[cfg(test)]
@@ -388,7 +387,7 @@ mod tests {
     fn released_entities_leave_the_survivors_provenance_aligned() {
         let file = placed_models_file();
         let mut state = from_mvox_file_with_ext(&file).unwrap();
-        let original = state.ext().clone().expect("a loaded file carries its ext");
+        let original = state.ext().clone();
 
         // The group, node 1, lists transforms 2, 4, and 6. Transform 4 places
         // shape 5, which draws model 1.
@@ -421,7 +420,7 @@ mod tests {
             panic!("node 7 is the last shape");
         };
         models[0].model = 1;
-        assert_eq!(state.ext(), &Some(expected.clone()));
+        assert_eq!(state.ext(), &expected.clone());
 
         let rebuilt = to_mvox_file_with_ext(&state).unwrap();
         let mut want = file;
@@ -434,7 +433,7 @@ mod tests {
         assert_files_eq(&rebuilt, &want);
 
         let reloaded = from_mvox_file_with_ext(&rebuilt).unwrap();
-        assert_eq!(reloaded.ext(), &Some(expected));
+        assert_eq!(reloaded.ext(), &expected);
     }
 
     /// A node retained after the load has no scene node, so the write errors.
@@ -449,7 +448,7 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(state.ext().as_ref().unwrap().scene_nodes[8], None);
+        assert_eq!(state.ext().scene_nodes[8], None);
         assert!(to_mvox_file_with_ext(&state).is_err());
 
         state.release_hierarchy_node(node_id).unwrap();
@@ -514,8 +513,6 @@ mod tests {
 
         let ids: Vec<i32> = state
             .ext()
-            .as_ref()
-            .unwrap()
             .materials
             .iter()
             .map(|material| material.id)
@@ -534,13 +531,12 @@ mod tests {
     fn an_ext_out_of_step_with_its_listings_errors() {
         let file = placed_models_file();
         let mut state = from_mvox_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.scene_nodes.pop();
-        state.set_ext(Some(ext));
         assert!(to_mvox_file_with_ext(&state).is_err());
 
         let mut state = from_mvox_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         let Some(MVoxExtNode {
             body: MVoxExtNodeBody::Group { children },
             ..
@@ -549,7 +545,6 @@ mod tests {
             panic!("node 1 is the group");
         };
         children.push(3);
-        state.set_ext(Some(ext));
         assert!(to_mvox_file_with_ext(&state).is_err());
     }
 

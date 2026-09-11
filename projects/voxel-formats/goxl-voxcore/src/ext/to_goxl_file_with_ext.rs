@@ -1,13 +1,13 @@
-use crate::{Result, ext::GoxlVoxMain, write_goxl};
+use crate::{GoxlExtSource, Result, ext::GoxlVoxMain};
 use goxl::GoxlFile;
 
 /// Writes a [`GoxlVoxMain`] back to a Goxel [`GoxlFile`], the inverse of
 /// [`from_goxl_file_with_ext`](crate::ext::from_goxl_file_with_ext) and the
 /// typed form of [`to_goxl_file`](crate::to_goxl_file). A loaded file writes
-/// back exactly through its ext. A state carrying none writes a synthesized
-/// file. Errors if the ext is out of step with the hierarchy.
+/// back exactly through its ext. Errors if the ext is out of step with the
+/// hierarchy.
 pub fn to_goxl_file_with_ext(state: &GoxlVoxMain) -> Result<GoxlFile> {
-    write_goxl(state, state.ext().as_ref())
+    GoxlExtSource::write_goxl(state)
 }
 
 #[cfg(test)]
@@ -280,7 +280,7 @@ mod tests {
     fn released_entities_leave_the_survivors_provenance_aligned() {
         let file = placed_blocks_file();
         let mut state = from_goxl_file_with_ext(&file).unwrap();
-        let original = state.ext().clone().expect("a loaded file carries its ext");
+        let original = state.ext().clone();
 
         let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
         state
@@ -301,7 +301,7 @@ mod tests {
         };
         keep.placements = vec![(0, [0, 0, 0]), (0, [32, 0, 0])];
         tail.placements = vec![(1, [0, 0, 16]), (1, [0, 0, 32])];
-        assert_eq!(state.ext(), &Some(expected.clone()));
+        assert_eq!(state.ext(), &expected.clone());
 
         let rebuilt = to_goxl_file_with_ext(&state).unwrap();
         let mut want = file;
@@ -312,7 +312,7 @@ mod tests {
         assert_eq!(rebuilt, want);
 
         let reloaded = from_goxl_file_with_ext(&rebuilt).unwrap();
-        assert_eq!(reloaded.ext(), &Some(expected));
+        assert_eq!(reloaded.ext(), &expected);
     }
 
     /// A node retained after the load takes no entry. The writer fills it in
@@ -333,7 +333,7 @@ mod tests {
             })
             .unwrap();
         state.push_root_hierarchy_node_id(node_id).unwrap();
-        assert_eq!(state.ext().as_ref().unwrap().layers[3], None);
+        assert_eq!(state.ext().layers[3], None);
 
         let rebuilt = to_goxl_file_with_ext(&state).unwrap();
         let mut want = file;
@@ -372,27 +372,24 @@ mod tests {
     fn an_ext_out_of_step_with_its_listings_errors() {
         let file = placed_blocks_file();
         let mut state = from_goxl_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.layers.pop();
-        state.set_ext(Some(ext));
         assert!(to_goxl_file_with_ext(&state).is_err());
 
         let mut state = from_goxl_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         let Some(drop) = &mut ext.layers[1] else {
             panic!("layer 1 is loaded");
         };
         drop.placements.push((2, [0, 0, 0]));
-        state.set_ext(Some(ext));
         assert!(to_goxl_file_with_ext(&state).is_err());
 
         let mut state = from_goxl_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         let Some(drop) = &mut ext.layers[1] else {
             panic!("layer 1 is loaded");
         };
         drop.base_id = 9;
-        state.set_ext(Some(ext));
         assert!(to_goxl_file_with_ext(&state).is_err());
     }
 

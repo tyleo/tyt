@@ -1,4 +1,4 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// A material's dispersion parameters, preserved in the `vmax` ext so a
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// absent case, so the presence of dispersion lives here rather than in the
 /// palette.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxExtMaterialDispersion {
     /// Absorption (Voxel Max `a`).
     pub absorption: f64,

@@ -1,19 +1,19 @@
-use crate::{Result, write_mvox};
+use crate::{MVoxExtSource, Result};
 use mvox::MVoxFile;
 use voxcore::VoxMain;
 
-/// Writes a bare [`VoxMain`] to a decoded MagicaVoxel [`MVoxFile`]
-/// synthesized from its scene, the inverse of
-/// [`from_mvox_file`](crate::from_mvox_file). Each object becomes one model
-/// whose voxels are listed in ascending raster order, one global 256-color
-/// palette gathers every distinct color, and the scene graph mirrors the
-/// hierarchy with translation only. Rotation and scale drop. The `ext`
-/// feature's `ext::to_mvox_file_with_ext` writes a loaded file back exactly.
+/// Writes a bare [`VoxMain`] to a decoded MagicaVoxel [`MVoxFile`] synthesized
+/// from its scene, the inverse of [`from_mvox_file`](crate::from_mvox_file).
+/// Each object becomes one model whose voxels are listed in ascending raster
+/// order, one global 256-color palette gathers every distinct color, and the
+/// scene graph mirrors the hierarchy with translation only. Rotation and scale
+/// drop. [`ext::to_mvox_file_with_ext`](crate::ext::to_mvox_file_with_ext)
+/// writes a loaded file back exactly.
 ///
-/// Errors when synthesis exceeds a MagicaVoxel limit such as the per-axis
-/// voxel cap.
+/// Errors when synthesis exceeds a MagicaVoxel limit such as the per-axis voxel
+/// cap.
 pub fn to_mvox_file(state: &VoxMain<()>) -> Result<MVoxFile> {
-    write_mvox(state, None)
+    MVoxExtSource::write_mvox(state)
 }
 
 #[cfg(test)]

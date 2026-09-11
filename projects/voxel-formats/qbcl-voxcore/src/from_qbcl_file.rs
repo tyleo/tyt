@@ -6,16 +6,14 @@ use voxcore::VoxMain;
 /// [`VoxMain`]. Matrix and compound grids become objects sharing one
 /// `baseColor` palette, and the scene tree becomes the hierarchy nodes. The
 /// rest of the Qubicle state is dropped, so
-/// [`to_qbcl_file`](crate::to_qbcl_file) writes the state back as a
-/// synthesized file. The `ext` feature's `ext::from_qbcl_file_with_ext` keeps
-/// that state instead.
+/// [`to_qbcl_file`](crate::to_qbcl_file) writes the state back as a synthesized
+/// file. [`ext::from_qbcl_file_with_ext`](crate::ext::from_qbcl_file_with_ext)
+/// keeps that state instead.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
 pub fn from_qbcl_file(file: &QbclFile) -> Result<VoxMain<()>> {
-    let (state, _) = read_qbcl(file)?;
-
-    Ok(state)
+    read_qbcl(file)
 }
 
 #[cfg(test)]

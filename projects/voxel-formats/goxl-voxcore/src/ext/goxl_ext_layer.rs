@@ -1,4 +1,4 @@
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Per-layer provenance preserved in the `goxl` ext, aligned by index with the
@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 /// [`placements`](Self::placements); this struct keeps the layer's metadata and
 /// the clone/shape definition so the layer rebuilds exactly.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct GoxlExtLayer {
     /// Layer name.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "String::is_empty")
     )]
     pub name: String,
@@ -23,7 +23,7 @@ pub struct GoxlExtLayer {
     pub id: i32,
 
     /// Id of the layer this one clones, or `0` when it is not a clone.
-    #[cfg_attr(feature = "ext", serde(rename = "base-id"))]
+    #[cfg_attr(feature = "serde", serde(rename = "base-id"))]
     pub base_id: i32,
 
     /// Index into the ext materials of the layer's material.
@@ -40,7 +40,7 @@ pub struct GoxlExtLayer {
 
     /// `box`: the optional `4 x 4` bounding box.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(
             rename = "bounding-box",
             default,
@@ -51,7 +51,7 @@ pub struct GoxlExtLayer {
 
     /// `img-path`: the source image path for a 2D image layer, if any.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(
             rename = "image-path",
             default,
@@ -62,14 +62,14 @@ pub struct GoxlExtLayer {
 
     /// `shape`: the procedural shape name for a shape layer, if any.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub shape: Option<String>,
 
     /// `color`: the `[r, g, b, a]` color for a shape layer, if any.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub color: Option<[u8; 4]>,
@@ -77,10 +77,16 @@ pub struct GoxlExtLayer {
     /// The placed blocks, in stored order, as `(block index, [x, y, z])`. The
     /// block index is an object's listing index. The same block may be stamped
     /// at several positions. Empty for clone and shape layers.
-    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub placements: Vec<(i32, [i32; 3])>,
 
     /// Any further layer-dictionary keys, preserved verbatim as raw bytes.
-    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub extra: Vec<(String, Vec<u8>)>,
 }

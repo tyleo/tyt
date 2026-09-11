@@ -1,12 +1,11 @@
-use crate::{Result, ext::QbVoxMain, write_qb};
+use crate::{QbExtSource, Result, ext::QbVoxMain};
 use qbcl::qb::QbFile;
 
 /// Writes a [`QbVoxMain`] back to a decoded Qubicle Binary [`QbFile`], the
 /// inverse of [`from_qb_file_with_ext`](crate::ext::from_qb_file_with_ext)
 /// and the typed form of [`to_qb_file`](crate::to_qb_file). A loaded file
 /// writes back exactly through its ext. An object retained after the load is
-/// written as a synthesized matrix. A state carrying no ext writes a
-/// synthesized file.
+/// written as a synthesized matrix.
 ///
 /// Errors if:
 ///
@@ -14,7 +13,7 @@ use qbcl::qb::QbFile;
 /// 2. a visibility list does not match its object
 /// 3. the header encodes visibility masks and an object has no entry
 pub fn to_qb_file_with_ext(state: &QbVoxMain) -> Result<QbFile> {
-    write_qb(state, state.ext().as_ref())
+    QbExtSource::write_qb(state)
 }
 
 #[cfg(test)]
@@ -75,13 +74,6 @@ mod tests {
         assert_eq!(to_qb_file_with_ext(&state).unwrap(), file);
     }
 
-    /// A state carrying no ext writes a synthesized file.
-    #[test]
-    fn synthesizes_without_an_ext() {
-        let file = to_qb_file_with_ext(&QbVoxMain::default()).unwrap();
-        assert!(file.matrices.is_empty());
-    }
-
     /// Retains a one-voxel object of the sample's second color under a root
     /// node named `placed` at a fractional translation.
     fn retain_placed_object(state: &mut QbVoxMain) {
@@ -127,7 +119,7 @@ mod tests {
             .unwrap();
         state.gc();
 
-        let ext = state.ext().as_ref().unwrap();
+        let ext = state.ext();
         assert_eq!(ext.matrices.len(), 1);
         assert_eq!(ext.matrices[0].as_ref().unwrap().name, "m1");
 
@@ -146,7 +138,7 @@ mod tests {
 
         retain_placed_object(&mut state);
 
-        assert_eq!(state.ext().as_ref().unwrap().matrices[2], None);
+        assert_eq!(state.ext().matrices[2], None);
 
         let mut want = file;
         want.matrices.push(QbMatrix {
@@ -179,15 +171,13 @@ mod tests {
         let file = sample_file();
 
         let mut state = from_qb_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.matrices.pop();
-        state.set_ext(Some(ext));
         assert!(to_qb_file_with_ext(&state).is_err());
 
         let mut state = from_qb_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.matrices[0].as_mut().unwrap().visibility.pop();
-        state.set_ext(Some(ext));
         assert!(to_qb_file_with_ext(&state).is_err());
 
         // The sample encodes visibility masks. A retained object has none.

@@ -1,9 +1,6 @@
-use crate::{
-    Error, Result,
-    ext::{QbExt, QbExtMatrix},
-};
+use crate::{Error, QbExtSink, Result};
 use branded_id::U32Id;
-use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
+use qbcl::qb::{QbFile, QbMatrix};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
@@ -11,29 +8,26 @@ use voxcore::{
     color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
-/// Loads a decoded Qubicle Binary [`QbFile`] into a bare [`VoxMain`] and the
-/// [`QbExt`] that writes it back exactly. Each matrix becomes an object
-/// sharing one `baseColor` palette, placed by a hierarchy node at the
-/// matrix's scene position. The rest of the Qubicle state, such as the header
-/// flags, matrix names, positions, and the per-voxel visibility bytes, goes
-/// to the ext.
+/// Loads a decoded Qubicle Binary [`QbFile`] into a [`VoxMain`] whose ext
+/// records what `T` keeps. Each matrix becomes an object sharing one
+/// `baseColor` palette, placed by a hierarchy node at the matrix's scene
+/// position. The rest of the Qubicle state, such as the header flags, matrix
+/// names, positions, and the per-voxel visibility bytes, goes to the ext.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn read_qb(file: &QbFile) -> Result<(VoxMain<()>, QbExt)> {
+pub fn read_qb<T: QbExtSink>(file: &QbFile) -> Result<VoxMain<T>> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
     let palette_id = state.retain_palette(palette)?;
 
-    let mut matrices = Vec::with_capacity(file.matrices.len());
     let mut root_ids = Vec::with_capacity(file.matrices.len());
     for matrix in &file.matrices {
         // The matrix grid becomes the object's build volume directly; it may
         // carry empty margin around the live voxels. The visibility bytes are
         // read from that same grid.
         let object = build_object(matrix, palette_id, &material_ids)?;
-        let visibility = visibility_of(&object, matrix);
         let object_id = state.retain_object(object)?;
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
@@ -42,24 +36,10 @@ pub fn read_qb(file: &QbFile) -> Result<(VoxMain<()>, QbExt)> {
             transform: translation(matrix.position),
         };
         root_ids.push(state.retain_hierarchy_node(node)?);
-        matrices.push(Some(QbExtMatrix {
-            name: matrix.name.clone(),
-            position: matrix.position,
-            visibility,
-        }));
     }
     state.set_root_hierarchy_node_ids(root_ids)?;
 
-    let qb_ext = QbExt {
-        version: file.version,
-        bgra: matches!(file.color_format, QbColorFormat::Bgra),
-        right_handed: matches!(file.z_axis_orientation, QbZAxisOrientation::RightHanded),
-        compressed: file.compressed,
-        visibility_mask_encoded: file.visibility_mask_encoded,
-        matrices,
-    };
-
-    Ok((state, qb_ext))
+    Ok(T::record_file(state, file))
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
@@ -154,22 +134,6 @@ fn build_object(
     }
 
     Ok(object)
-}
-
-/// The visibility bytes of an object's solid voxels, in live-voxel raster
-/// order, read back from the matrix the object was built from.
-fn visibility_of(object: &VoxObject, matrix: &QbMatrix) -> Vec<u8> {
-    object
-        .iter_live()
-        .map(|voxel_id| {
-            let position = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            matrix
-                .voxel(position.x, position.y, position.z)
-                .map_or(0, |voxel| voxel.visibility)
-        })
-        .collect()
 }
 
 /// A translation-only transform from a scene position.

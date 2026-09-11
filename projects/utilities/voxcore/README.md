@@ -120,36 +120,23 @@ coefficients and object state, MagicaVoxel's cameras and unknown chunks,
 Goxel's lights and previews, Qubicle's thumbnails and metadata. Dropping that
 state would make a round trip through voxcore lossy. A bridge's loader stores
 its format's ext as the state's `T`, and its writer reads the ext back. A
-document loaded from a format writes back to that format exactly. A state
-carrying another format's ext, or none, writes from the bare scene. The core
-never reads the ext.
+document loaded from a format writes back to that format exactly. A bare
+state writes from the scene. The core never reads the ext.
 
-A format ext aligns its entries with the scene by listing index. A mutation
-that moves a listing would leave it stale. The state tells the ext through
-`VoxExt`, and every mutation carries that bound. A retain or move fires its
-hook after the mutation, and a release fires its hook before it, once every
-check has passed. Each carries the index the entity had. The ext drops or
-inserts its entry in step. Every hook defaults to a no-op. `()` ignores them
-all. The trait is object-safe, so `VoxMain<Box<dyn VoxExt>>` carries
-whichever format's ext a file turned out to hold.
+A format ext aligns its entries with the scene by listing index. A mutation that
+moves a listing would leave it stale. The state tells the ext through `VoxExt`,
+and every mutation carries that bound. A retain or move fires its hook after the
+mutation, and a release fires its hook before it, once every check has passed.
+Each carries the index the entity had. The ext drops or inserts its entry in
+step. Every hook defaults to a no-op. `()` ignores them all. The hooks are the
+whole trait. How an ext persists, and how a boxed one downcasts or clones,
+belongs to the crate that converts between formats.
 
 ```rust
 #[derive(Clone, Debug, Default)]
 struct Released(Vec<usize>);
 
 impl VoxExt for Released {
-    fn to_vox_ext(&self) -> ext::Result<VoxMap> {
-        Ok(VoxMap::default())
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn VoxExt> {
-        Box::new(self.clone())
-    }
-
     fn object_will_release(&mut self, index: usize) {
         self.0.push(index);
     }
@@ -162,31 +149,16 @@ state.release_object(first_id)?;
 assert_eq!(state.ext().0, [0]);
 ```
 
-The `ext` module also moves an ext through a Voxel Json document's `ext`
-block. The format state survives a trip through `.voxj`. The block holds one
-entry per format under the format's vendor key. `VoxExtEntryCodec` is one
-format's entry: the ext type encodes itself as the value under its `KEY` and
-decodes from that value. `decode_entry` finds the entry in a block or reports
-the block as another format's. `VoxExt::to_vox_ext` is the whole block a
-state persists. An empty map means no block. `VoxExtBlockCodec` builds a
-state's ext from a loaded block: `()` drops it, an `Option` of a format ext
-decodes its entry, and `VoxMap` keeps the block verbatim. `CompositeVoxExt`
-carries a block entry by entry. It starts from a `VoxMap` with every entry
-verbatim. `decode::<E>` turns the entry a format owns into that format's
-ext. Each hook reaches every decoded ext. `to_vox_ext` merges the entries
-back in their order.
+`take_ext` takes the ext off a state, leaving a bare `VoxMain<()>`, and
+`put_ext` puts one on a bare state. Together they change a state's ext type
+and move the scene over unchanged.
 
 ```rust
-let block = state.ext().to_vox_ext()?;
-assert!(block.0.is_empty());
-
-let ext = VoxMap::from_vox_ext_block(Some(&block))?;
-let verbatim: VoxMain<VoxMap> = state.map_ext(|_| ext);
+let (bare, released) = state.take_ext();
+let state: VoxMain<Released> = bare.put_ext(released);
 ```
 
 ## Features
 
 The `color` feature adds the `color` module: the sRGB transfer at the 8-bit
-boundary and color reads over palettes. The `json` feature adds the
-`ext::json` module: the serde transcode behind a format's `VoxExtEntryCodec`
-impl. Both are on by default.
+boundary and color reads over palettes. It is on by default.

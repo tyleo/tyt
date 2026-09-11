@@ -1,4 +1,4 @@
-use crate::{Result, ext::QbclVoxMain, write_qbcl};
+use crate::{QbclExtSource, Result, ext::QbclVoxMain};
 use qbcl::qbcl::QbclFile;
 
 /// Writes a [`QbclVoxMain`] back to a decoded Qubicle Construction Library
@@ -6,7 +6,7 @@ use qbcl::qbcl::QbclFile;
 /// [`from_qbcl_file_with_ext`](crate::ext::from_qbcl_file_with_ext) and the
 /// typed form of [`to_qbcl_file`](crate::to_qbcl_file). A loaded file writes
 /// back exactly through its ext. A node retained after the load is written as
-/// a synthesized node. A state carrying no ext writes a synthesized file.
+/// a synthesized node.
 ///
 /// Errors if:
 ///
@@ -16,7 +16,7 @@ use qbcl::qbcl::QbclFile;
 /// 4. a model entry's node places an object under a transform chunk other
 ///    than the default
 pub fn to_qbcl_file_with_ext(state: &QbclVoxMain) -> Result<QbclFile> {
-    write_qbcl(state, state.ext().as_ref())
+    QbclExtSource::write_qbcl(state)
 }
 
 #[cfg(test)]
@@ -233,16 +233,6 @@ mod tests {
         assert_eq!(to_qbcl_file_with_ext(&state).unwrap(), file);
     }
 
-    /// A state carrying no ext writes a synthesized file.
-    #[test]
-    fn synthesizes_without_an_ext() {
-        let file = to_qbcl_file_with_ext(&QbclVoxMain::default()).unwrap();
-        let QbclNodeBody::Model(model) = &file.root.body else {
-            panic!("synthesis roots under a model");
-        };
-        assert!(model.children.is_empty());
-    }
-
     /// The mutations `vxl to` makes to keep `matrix`. The survivors' entries
     /// stay aligned through the holes the releases leave and after `gc`.
     #[test]
@@ -265,7 +255,7 @@ mod tests {
 
         state.gc();
 
-        let ext = state.ext().as_ref().unwrap();
+        let ext = state.ext();
         assert_eq!(ext.nodes.len(), 2);
         assert_eq!(ext.nodes[0].as_ref().unwrap().name, "matrix");
         assert_eq!(to_qbcl_file_with_ext(&state).unwrap(), want);
@@ -320,7 +310,7 @@ mod tests {
             Vec::new(),
         );
 
-        assert_eq!(state.ext().as_ref().unwrap().nodes[5], None);
+        assert_eq!(state.ext().nodes[5], None);
 
         let mut want = file;
         root_children(&mut want).push(added_node("placed", [3, -3, 16]));
@@ -394,13 +384,12 @@ mod tests {
         let file = sample_file();
 
         let mut state = from_qbcl_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         ext.nodes.pop();
-        state.set_ext(Some(ext));
         assert!(to_qbcl_file_with_ext(&state).is_err());
 
         let mut state = from_qbcl_file_with_ext(&file).unwrap();
-        let mut ext = state.ext().clone().unwrap();
+        let ext = state.ext_mut();
         let Some(QbclExtNode {
             body: QbclExtNodeBody::Matrix { masks, .. },
             ..
@@ -409,7 +398,6 @@ mod tests {
             panic!("node 0 is the matrix");
         };
         masks.pop();
-        state.set_ext(Some(ext));
         assert!(to_qbcl_file_with_ext(&state).is_err());
     }
 }

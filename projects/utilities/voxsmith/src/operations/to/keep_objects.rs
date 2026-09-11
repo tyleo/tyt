@@ -2,7 +2,7 @@ use crate::Result;
 use branded_id::U32Id;
 use std::collections::{HashMap, HashSet};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, Error as VoxError, VoxHierarchyNode, VoxMain, ext::VoxExt,
+    BVoxHierarchyNode, BVoxObject, Error as VoxError, VoxExt, VoxHierarchyNode, VoxMain,
 };
 
 /// A hierarchy-node id.

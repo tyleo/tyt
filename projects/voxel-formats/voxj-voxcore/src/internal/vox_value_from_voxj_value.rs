@@ -29,7 +29,7 @@ pub fn vox_value_from_voxj_value(value: &VoxjValue) -> Result<VoxValue> {
 #[cfg(test)]
 mod tests {
     use crate::vox_value_from_voxj_value;
-    use voxj::{VoxjMap, VoxjValue};
+    use voxj::{VoxjMap, VoxjMapEntry, VoxjValue};
 
     #[test]
     fn rejects_non_finite_numbers() {
@@ -42,10 +42,19 @@ mod tests {
     /// silently drop the first value.
     #[test]
     fn rejects_a_repeated_object_key() {
-        let value = VoxjValue::Object(VoxjMap(vec![
-            ("k".to_owned(), VoxjValue::Number(1.0)),
-            ("other".to_owned(), VoxjValue::Bool(true)),
-            ("k".to_owned(), VoxjValue::Number(2.0)),
+        let value = VoxjValue::Object(VoxjMap::new(vec![
+            VoxjMapEntry {
+                key: "k".to_owned(),
+                value: VoxjValue::Number(1.0),
+            },
+            VoxjMapEntry {
+                key: "other".to_owned(),
+                value: VoxjValue::Bool(true),
+            },
+            VoxjMapEntry {
+                key: "k".to_owned(),
+                value: VoxjValue::Number(2.0),
+            },
         ]));
         assert!(vox_value_from_voxj_value(&value).is_err());
     }

@@ -1,10 +1,10 @@
 use crate::{Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser, file_name};
 use clap::Parser;
 use voxconv::{
-    DependenciesImpl as VoxconvDependenciesImpl, ReadFormat, ext::read_with_ext,
+    DependenciesImpl as VoxconvDependenciesImpl, ReadFormat,
+    ext::{read_with_ext, voxj_vox_ext_from_ext},
     read_document_files, voxj_version_from_bytes,
 };
-use voxcore::ext::VoxExt;
 use voxsmith::operations::info::{InfoDocument, InfoLayout, info};
 
 /// Reports what a document contains, surfacing the format internals.
@@ -35,8 +35,8 @@ impl Info {
 
         let files = read_document_files(&dependencies, from, &self.input.path)?;
 
-        // The boxed ext keeps any source's block, so the report can say
-        // whether the document carries one.
+        // The boxed ext keeps any source's ext, so the report can say whether
+        // the document carries entries.
         let state = read_with_ext(&VoxconvDependenciesImpl, from, &files)?;
 
         let format_version = match from {
@@ -59,7 +59,7 @@ impl Info {
             name: &name,
             format: from.name(),
             format_version,
-            has_ext: !state.ext().to_vox_ext()?.0.is_empty(),
+            has_ext: !voxj_vox_ext_from_ext(state.ext().as_ref())?.is_empty(),
         };
 
         let object_ids = self.selection.resolve(&state)?;

@@ -28,7 +28,7 @@ voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 qbcl-codec = { version = "0.1.1", features = ["impl"] }
 
 [features]
-default = ["codec", "ext"]
+default = ["codec", "serde"]
 codec = ["dep:qbcl-codec"]
-ext = ["dep:serde", "voxcore/json"]
+serde = ["dep:serde"]
 impl = ["qbcl-codec?/impl"]

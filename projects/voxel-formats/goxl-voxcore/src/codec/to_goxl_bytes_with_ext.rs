@@ -25,14 +25,13 @@ mod tests {
     };
     use goxl_codec::DependenciesImpl;
 
-    /// A state with no ext writes a synthesized file that loads back carrying
-    /// the ext the typed path keeps.
+    /// A default state writes through its ext and loads back.
     #[test]
     fn round_trips_the_ext_through_bytes() {
         let bytes = to_goxl_bytes_with_ext(&DependenciesImpl, &GoxlVoxMain::default()).unwrap();
         assert!(bytes.starts_with(b"GOX "));
 
         let reloaded = from_goxl_bytes_with_ext(&DependenciesImpl, &bytes).unwrap();
-        assert!(reloaded.ext().is_some(), "a loaded file carries its ext");
+        assert_eq!(reloaded.object_count(), 0);
     }
 }

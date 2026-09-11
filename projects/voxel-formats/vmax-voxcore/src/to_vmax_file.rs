@@ -3,11 +3,11 @@ use vmax::VMaxFile;
 use voxcore::VoxMain;
 
 /// Writes a bare [`VoxMain`] to a Voxel Max document synthesized from its
-/// scene, the inverse of [`from_vmax_file`](crate::from_vmax_file). The `ext`
-/// feature's `ext::to_vmax_file_with_ext` writes a loaded document back
-/// exactly.
+/// scene, the inverse of [`from_vmax_file`](crate::from_vmax_file).
+/// [`ext::to_vmax_file_with_ext`](crate::ext::to_vmax_file_with_ext) writes a
+/// loaded document back exactly.
 pub fn to_vmax_file(state: &VoxMain<()>, options: &VMaxWriteOptions) -> Result<VMaxFile> {
-    write_vmax(state, None, options)
+    write_vmax(state, options)
 }
 
 #[cfg(test)]

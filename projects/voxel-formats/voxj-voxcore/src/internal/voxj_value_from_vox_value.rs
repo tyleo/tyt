@@ -1,4 +1,4 @@
-use crate::voxj_map_from_vox_map;
+use crate::voxj_map_from_vox_map_entries;
 use voxcore::VoxValue;
 use voxj::VoxjValue;
 
@@ -12,7 +12,9 @@ pub fn voxj_value_from_vox_value(value: &VoxValue) -> VoxjValue {
         VoxValue::Array(array) => {
             VoxjValue::Array(array.iter().map(voxj_value_from_vox_value).collect())
         }
-        VoxValue::Object(object) => VoxjValue::Object(voxj_map_from_vox_map(object)),
+        VoxValue::Object(object) => {
+            VoxjValue::Object(voxj_map_from_vox_map_entries(object.entries()))
+        }
         VoxValue::Null => VoxjValue::Null,
     }
 }

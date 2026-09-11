@@ -1,18 +1,18 @@
-use crate::{Result, write_qb};
+use crate::{QbExtSource, Result};
 use qbcl::qb::QbFile;
 use voxcore::VoxMain;
 
-/// Writes a bare [`VoxMain`] to a decoded Qubicle Binary [`QbFile`]
-/// synthesized from its scene, the inverse of
-/// [`from_qb_file`](crate::from_qb_file). Qubicle Binary has a flat matrix
-/// list and no hierarchy, so each object placement becomes one matrix at its
-/// world translation rounded to whole voxels. Grouping, rotation, scale, and
-/// alpha drop. The `ext` feature's `ext::to_qb_file_with_ext` writes a loaded
-/// file back exactly.
+/// Writes a bare [`VoxMain`] to a decoded Qubicle Binary [`QbFile`] synthesized
+/// from its scene, the inverse of [`from_qb_file`](crate::from_qb_file).
+/// Qubicle Binary has a flat matrix list and no hierarchy, so each object
+/// placement becomes one matrix at its world translation rounded to whole
+/// voxels. Grouping, rotation, scale, and alpha drop.
+/// [`ext::to_qb_file_with_ext`](crate::ext::to_qb_file_with_ext) writes a
+/// loaded file back exactly.
 ///
 /// Errors when an object's `baseColor` draws from a non-color value pool.
 pub fn to_qb_file(state: &VoxMain<()>) -> Result<QbFile> {
-    write_qb(state, None)
+    QbExtSource::write_qb(state)
 }
 
 #[cfg(test)]

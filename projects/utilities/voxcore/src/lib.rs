@@ -5,7 +5,6 @@
 pub mod check;
 #[cfg(feature = "color")]
 pub mod color;
-pub mod ext;
 pub mod material;
 
 mod b_vox_effective_property;
@@ -22,11 +21,13 @@ mod error;
 mod result;
 mod vox_effective_palette;
 mod vox_effective_property;
+mod vox_ext;
 mod vox_gc_remap;
 mod vox_hierarchy_node;
 mod vox_liveness;
 mod vox_main;
 mod vox_map;
+mod vox_map_entry;
 mod vox_object;
 mod vox_palette;
 mod vox_property;
@@ -50,11 +51,13 @@ pub use error::*;
 pub use result::*;
 pub use vox_effective_palette::*;
 pub use vox_effective_property::*;
+pub use vox_ext::*;
 pub use vox_gc_remap::*;
 pub use vox_hierarchy_node::*;
 pub use vox_liveness::*;
 pub use vox_main::*;
 pub use vox_map::*;
+pub use vox_map_entry::*;
 pub use vox_object::*;
 pub use vox_palette::*;
 pub use vox_property::*;

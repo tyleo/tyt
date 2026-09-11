@@ -1,17 +1,18 @@
-use crate::{Result, write_goxl};
+use crate::{GoxlExtSource, Result};
 use goxl::GoxlFile;
 use voxcore::VoxMain;
 
 /// Writes a bare [`VoxMain`] to a Goxel [`GoxlFile`] synthesized from its
 /// scene, the inverse of [`from_goxl_file`](crate::from_goxl_file). Goxel has
-/// flat layers of placed `16 x 16 x 16` blocks and no hierarchy, so each
-/// object placement becomes one layer at its world translation rounded to
-/// whole voxels. Grouping, rotation, and scale drop. The `ext` feature's
-/// `ext::to_goxl_file_with_ext` writes a loaded file back exactly.
+/// flat layers of placed `16 x 16 x 16` blocks and no hierarchy, so each object
+/// placement becomes one layer at its world translation rounded to whole
+/// voxels. Grouping, rotation, and scale drop.
+/// [`ext::to_goxl_file_with_ext`](crate::ext::to_goxl_file_with_ext) writes a
+/// loaded file back exactly.
 ///
 /// Errors when an object's `baseColor` draws from a non-color value pool.
 pub fn to_goxl_file(state: &VoxMain<()>) -> Result<GoxlFile> {
-    write_goxl(state, None)
+    GoxlExtSource::write_goxl(state)
 }
 
 #[cfg(test)]

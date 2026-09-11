@@ -1,5 +1,5 @@
 use crate::ext::{MVoxExtFrame, MVoxExtShapeModel};
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// The per-kind body of a scene node in the `mvox` ext, one variant per
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// the same references; this holds their exact, possibly repeated form so the
 /// scene graph rebuilds unchanged.
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum MVoxExtNodeBody {
     /// An `nTRN` transform node: the id of the child it places, its layer, and
     /// its animation frames.

@@ -1,5 +1,5 @@
 use crate::ext::VMaxExtMaterialDispersion;
-#[cfg(feature = "ext")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// One Voxel Max material's exact coefficients, preserved in the `vmax`
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// from the slot and the transparency color `tc` is dropped, matching the
 /// writer's behavior.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxExtMaterial {
     /// Metalness coefficient (Voxel Max `mc`).
     pub metallic: f64,
@@ -30,14 +30,14 @@ pub struct VMaxExtMaterial {
     /// materials such as MagicaVoxel exports. It has no palette representation,
     /// so it rides here to round-trip exactly.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub transmission_color: Option<f64>,
 
     /// Dispersion parameters, present on some materials.
     #[cfg_attr(
-        feature = "ext",
+        feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub dispersion: Option<VMaxExtMaterialDispersion>,
