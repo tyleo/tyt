@@ -7,7 +7,7 @@ use voxcore::VoxMain;
 pub fn save<D: Dependencies + WriteFile>(
     dependencies: &D,
     format: &WriteFormat,
-    state: &VoxMain<()>,
+    state: VoxMain<()>,
     output: &Path,
 ) -> Result<()> {
     let files = write(dependencies, format, state)?;
@@ -29,7 +29,7 @@ mod tests {
         save(
             &memory,
             &WriteFormat::MVox,
-            &test_state(()),
+            test_state(()),
             Path::new("out/m.vox"),
         )
         .unwrap();
@@ -48,7 +48,7 @@ mod tests {
         save(
             &memory,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            &test_state(()),
+            test_state(()),
             Path::new("out/p.vmax"),
         )
         .unwrap();

@@ -8,11 +8,13 @@
 //! their `with` methods hand the marker to a visitor as a type. A document
 //! travels as a list of [`VoxDocumentFile`]. [`read()`] and [`write()`] move a
 //! document through a format over the caller's [`Dependencies`] as a bare
-//! [`VoxMain`](voxcore::VoxMain): a read drops the format's ext, and a write
-//! synthesizes the file from the scene. [`load()`] and [`save()`] start and end
-//! at a path instead of the files. The `ext` feature, on by default, opens the
-//! `ext` module, where `FormatExt` extends each format with its typed path and
-//! the `_with_ext` pairs carry the format's ext boxed in a `VoxconvVoxMain`.
+//! [`VoxMain`](voxcore::VoxMain): a read takes the format's ext off, and a
+//! write gives the state a synthesized ext through the bridge's
+//! `to_x_vox_main` and writes it through the bridge's one typed path.
+//! [`load()`] and [`save()`] start and end at a path instead of the files.
+//! The `ext` feature, on by default, opens the `ext` module, where
+//! `FormatExt` extends each format with its typed path and the `_with_ext`
+//! pairs carry the format's ext boxed in a `VoxconvVoxMain`.
 //! [`check_document_files()`] returns each check as voxcore's
 //! [`VoxCheck`](voxcore::check::VoxCheck), so a renderer elsewhere lays every
 //! format's checks out the same way. Each format feature enables its bridge's

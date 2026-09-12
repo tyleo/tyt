@@ -18,12 +18,11 @@ const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
 };
 
 /// The scene camera the writer takes for a `--camera` choice. Omitted, the
-/// writer keeps the ext's camera when the state carries one, else the empty
-/// default.
-pub(crate) fn resolve_scene_camera(camera: Option<CameraView>) -> Option<SceneCameraSource> {
-    camera.map(|camera| match camera {
-        CameraView::Ext => SceneCameraSource::Ext,
-        CameraView::Empty => SceneCameraSource::Empty,
-        CameraView::Corner => SceneCameraSource::Camera(TOP_CORNER_CAMERA),
-    })
+/// writer keeps the ext's camera.
+pub(crate) fn resolve_scene_camera(camera: Option<CameraView>) -> SceneCameraSource {
+    match camera {
+        None | Some(CameraView::Ext) => SceneCameraSource::Ext,
+        Some(CameraView::Empty) => SceneCameraSource::Empty,
+        Some(CameraView::Corner) => SceneCameraSource::Camera(TOP_CORNER_CAMERA),
+    }
 }

@@ -44,7 +44,7 @@ mod tests {
         voxj::ext::{CompositeVoxExt, InertVoxExt, voxj_vox_ext_from_ext},
         write,
     };
-    use vmax_voxcore::ext::VMaxExt;
+    use vmax_voxcore::VMaxExt;
     use voxcore::{VoxMapEntry, VoxValue};
 
     /// A Voxel Max package written from a bare state.
@@ -52,7 +52,7 @@ mod tests {
         write(
             &DependenciesImpl,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            &test_state(()),
+            test_state(()),
         )
         .unwrap()
     }

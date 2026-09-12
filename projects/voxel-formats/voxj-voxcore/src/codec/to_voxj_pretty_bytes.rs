@@ -1,13 +1,12 @@
-use crate::{Result, VoxjWriteOptions, to_voxj_file};
-use voxcore::VoxMain;
+use crate::{Result, VoxjVoxMain, VoxjWriteOptions, to_voxj_file};
 use voxj::{CostVoxjObject, EncodeBase64};
 use voxj_codec::{EncodeVoxjJson, to_voxj_pretty_file_bytes};
 
-/// Writes a bare [`VoxMain`] to pretty-printed `.voxj` JSON bytes.
-/// [`to_voxj_file`] encodes the document under `options`.
+/// Writes a [`VoxjVoxMain`] to pretty-printed `.voxj` JSON bytes, the bytes
+/// form of [`to_voxj_file`].
 pub fn to_voxj_pretty_bytes<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson>(
     dependencies: &D,
-    state: &VoxMain<()>,
+    state: &VoxjVoxMain,
     options: &VoxjWriteOptions,
 ) -> Result<Vec<u8>> {
     let file = to_voxj_file(dependencies, state, options)?;

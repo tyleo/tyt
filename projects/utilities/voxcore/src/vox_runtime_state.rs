@@ -42,59 +42,6 @@ pub struct VoxRuntimeState {
     pub(crate) root_hierarchy_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
 }
 
-impl VoxRuntimeState {
-    /// Deep copy, hand-rolled because the SoA types can't derive `Clone`.
-    pub(crate) fn clone_runtime_state(&self) -> Self {
-        let mut value_pools = IdField::new();
-        for value_pool_id in self.value_pool_ids.iter() {
-            // Safety: retained ids have a value.
-            value_pools.retain(
-                value_pool_id,
-                unsafe { self.value_pools.get(value_pool_id) }.clone_value_pool(),
-            );
-        }
-
-        let mut palettes = IdField::new();
-        for palette_id in self.palette_ids.iter() {
-            // Safety: retained ids have a value.
-            palettes.retain(
-                palette_id,
-                unsafe { self.palettes.get(palette_id) }.clone_palette(),
-            );
-        }
-
-        let mut objects = IdField::new();
-        for object_id in self.object_ids.iter() {
-            // Safety: retained ids have a value.
-            objects.retain(
-                object_id,
-                unsafe { self.objects.get(object_id) }.clone_object(),
-            );
-        }
-
-        let mut hierarchy_nodes = IdField::new();
-        for node_id in self.hierarchy_node_ids.iter() {
-            // Safety: retained ids have a value.
-            hierarchy_nodes.retain(
-                node_id,
-                unsafe { self.hierarchy_nodes.get(node_id) }.clone(),
-            );
-        }
-
-        Self {
-            value_pool_ids: self.value_pool_ids.clone(),
-            value_pools,
-            palette_ids: self.palette_ids.clone(),
-            palettes,
-            hierarchy_node_ids: self.hierarchy_node_ids.clone(),
-            hierarchy_nodes,
-            object_ids: self.object_ids.clone(),
-            objects,
-            root_hierarchy_node_ids: self.root_hierarchy_node_ids.clone(),
-        }
-    }
-}
-
 impl Drop for VoxRuntimeState {
     fn drop(&mut self) {
         // Safety: each column holds a value for every id in its id pool; the

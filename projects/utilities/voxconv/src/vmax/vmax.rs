@@ -2,7 +2,10 @@ use crate::{
     Dependencies, Format, ReadFormat, Result, VoxDocumentFile, WriteFormat,
     vmax::{VMaxWriteOptions, package_file},
 };
-use vmax_voxcore::codec::{from_vmax_package, to_vmax_package};
+use vmax_voxcore::{
+    codec::{from_vmax_package, to_vmax_package},
+    to_vmax_vox_main,
+};
 use voxcore::VoxMain;
 
 /// Voxel Max, the `.vmax` package directory.
@@ -33,17 +36,21 @@ impl Format for VMax {
             dependencies.vmax(),
             || Ok(paths),
             |path| Ok(package_file(files, path)),
-        )?)
+        )?
+        .take_ext()
+        .state)
     }
 
     fn write<D: Dependencies>(
         dependencies: &D,
         options: &VMaxWriteOptions,
-        state: &VoxMain<()>,
+        state: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
         let mut files = Vec::new();
 
-        to_vmax_package(dependencies.vmax(), state, options, |path, bytes| {
+        let state = to_vmax_vox_main(state)?;
+
+        to_vmax_package(dependencies.vmax(), &state, options, |path, bytes| {
             files.push(VoxDocumentFile::new(path, bytes.to_vec()));
 
             Ok(())

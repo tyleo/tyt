@@ -1,5 +1,8 @@
 use crate::{Dependencies, Format, ReadFormat, Result, VoxDocumentFile, WriteFormat};
-use qbcl_voxcore::codec::{from_qbt_bytes, to_qbt_bytes};
+use qbcl_voxcore::{
+    codec::{from_qbt_bytes, to_qbt_bytes},
+    to_qbt_vox_main,
+};
 use voxcore::VoxMain;
 
 /// Qubicle Binary Tree, the `.qbt` file.
@@ -22,18 +25,19 @@ impl Format for Qbt {
     }
 
     fn read<D: Dependencies>(dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<()>> {
-        Ok(from_qbt_bytes(
-            dependencies.qbcl(),
-            VoxDocumentFile::single_bytes(files)?,
-        )?)
+        Ok(
+            from_qbt_bytes(dependencies.qbcl(), VoxDocumentFile::single_bytes(files)?)?
+                .take_ext()
+                .state,
+        )
     }
 
     fn write<D: Dependencies>(
         dependencies: &D,
         _options: &(),
-        state: &VoxMain<()>,
+        state: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let bytes = to_qbt_bytes(dependencies.qbcl(), state)?;
+        let bytes = to_qbt_bytes(dependencies.qbcl(), &to_qbt_vox_main(state)?)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

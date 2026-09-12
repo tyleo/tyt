@@ -1,11 +1,12 @@
 use crate::{
-    Dependencies, Format, Result, VoxDocumentFile,
+    Dependencies, Result, VoxDocumentFile,
     ext::{FormatExt, VoxconvExt, VoxconvVoxMain, box_ext, ext_from_slot, find_ext, push_ext_slot},
     goxl::Goxl,
 };
 use goxl_voxcore::{
-    codec::{from_goxl_bytes_with_ext, to_goxl_bytes_with_ext},
-    ext::GoxlExt,
+    GoxlExt,
+    codec::{from_goxl_bytes, to_goxl_bytes},
+    to_goxl_vox_main,
 };
 use voxcore::VoxMapEntry;
 
@@ -17,7 +18,7 @@ impl FormatExt for Goxl {
         dependencies: &D,
         files: &[VoxDocumentFile],
     ) -> Result<VoxconvVoxMain> {
-        Ok(box_ext(from_goxl_bytes_with_ext(
+        Ok(box_ext(from_goxl_bytes(
             dependencies.goxl(),
             VoxDocumentFile::single_bytes(files)?,
         )?))
@@ -25,14 +26,15 @@ impl FormatExt for Goxl {
 
     fn write_with_ext<D: Dependencies>(
         dependencies: &D,
-        options: &(),
+        _options: &(),
         state: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let Some(ext) = find_ext::<GoxlExt>(KEY, state.ext().as_ref())? else {
-            return Self::write(dependencies, options, &state.take_ext().0);
+        let state = match find_ext::<GoxlExt>(KEY, state.ext().as_ref())? {
+            Some(ext) => state.take_ext().state.put_ext(ext),
+            None => to_goxl_vox_main(state.take_ext().state)?,
         };
 
-        let bytes = to_goxl_bytes_with_ext(dependencies.goxl(), &state.take_ext().0.put_ext(ext))?;
+        let bytes = to_goxl_bytes(dependencies.goxl(), &state)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

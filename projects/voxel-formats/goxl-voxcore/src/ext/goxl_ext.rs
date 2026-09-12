@@ -1,4 +1,4 @@
-use crate::ext::{
+use crate::{
     GoxlExtCamera, GoxlExtImage, GoxlExtLayer, GoxlExtLight, GoxlExtMaterial, GoxlExtPreview,
     GoxlExtUnknownChunk,
 };

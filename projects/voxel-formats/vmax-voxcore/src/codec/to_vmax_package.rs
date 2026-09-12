@@ -1,12 +1,11 @@
-use crate::{Result, VMaxWriteOptions, to_vmax_file};
+use crate::{Result, VMaxVoxMain, VMaxWriteOptions, to_vmax_file};
 use vmax_codec::{
     CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result as CodecResult,
     to_vmax_package as write_vmax_package,
 };
-use voxcore::VoxMain;
 
-/// Writes a bare [`VoxMain`] to a `.vmax` package through `dependencies`,
-/// the package form of [`to_vmax_file`] and the inverse of
+/// Writes a [`VMaxVoxMain`] to a `.vmax` package through `dependencies`, the
+/// package form of [`to_vmax_file`] and the inverse of
 /// [`from_vmax_package`](crate::codec::from_vmax_package).
 ///
 /// # Arguments
@@ -15,7 +14,7 @@ use voxcore::VoxMain;
 ///   implies.
 pub fn to_vmax_package<D, W>(
     dependencies: &D,
-    state: &VoxMain<()>,
+    state: &VMaxVoxMain,
     options: &VMaxWriteOptions,
     write: W,
 ) -> Result<()>
@@ -24,14 +23,16 @@ where
     W: FnMut(&str, &[u8]) -> CodecResult<()>,
 {
     let file = to_vmax_file(state, options)?;
+
     Ok(write_vmax_package(dependencies, &file, write)?)
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        VMaxWriteOptions,
+        VMaxVoxMain, VMaxWriteOptions,
         codec::{from_vmax_package, to_vmax_package},
+        to_vmax_vox_main,
     };
     use branded_id::U32Id;
     use std::collections::HashMap;
@@ -84,7 +85,7 @@ mod tests {
         let mut package: HashMap<String, Vec<u8>> = HashMap::new();
         to_vmax_package(
             &DependenciesImpl,
-            &red_voxel_state(),
+            &to_vmax_vox_main(red_voxel_state()).unwrap(),
             &VMaxWriteOptions::default(),
             |name, bytes| {
                 package.insert(name.to_owned(), bytes.to_vec());
@@ -105,5 +106,30 @@ mod tests {
         assert_eq!(reloaded.object_count(), 1);
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         assert_eq!(object.live_count(), 1);
+    }
+
+    /// A default state writes through its ext and loads back.
+    #[test]
+    fn round_trips_the_ext_through_an_in_memory_package() {
+        let mut package: HashMap<String, Vec<u8>> = HashMap::new();
+        to_vmax_package(
+            &DependenciesImpl,
+            &VMaxVoxMain::default(),
+            &VMaxWriteOptions::default(),
+            |name, bytes| {
+                package.insert(name.to_owned(), bytes.to_vec());
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(package.contains_key("scene.json"));
+
+        let reloaded = from_vmax_package(
+            &DependenciesImpl,
+            || Ok(package.keys().cloned().collect()),
+            |name| Ok(package.get(name).cloned()),
+        )
+        .unwrap();
+        assert_eq!(reloaded.object_count(), 0);
     }
 }

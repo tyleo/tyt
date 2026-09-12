@@ -3,8 +3,11 @@ use crate::{
     voxj::{VoxjSerialization, VoxjWriteFormat, check_from_voxj},
 };
 use voxcore::{VoxMain, check::VoxCheck};
-use voxj_voxcore::codec::{
-    check_voxj_bytes, from_voxj_bytes, to_voxj_bytes, to_voxj_pretty_bytes, to_voxjz_bytes,
+use voxj_voxcore::{
+    codec::{
+        check_voxj_bytes, from_voxj_bytes, to_voxj_bytes, to_voxj_pretty_bytes, to_voxjz_bytes,
+    },
+    to_voxj_vox_main,
 };
 
 /// Voxel Json, the `.voxj` and `.voxjz` documents.
@@ -32,26 +35,29 @@ impl Format for Voxj {
 
     /// The `ext` block drops.
     fn read<D: Dependencies>(dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<()>> {
-        Ok(from_voxj_bytes(
-            dependencies.voxj(),
-            VoxDocumentFile::single_bytes(files)?,
-        )?)
+        Ok(
+            from_voxj_bytes(dependencies.voxj(), VoxDocumentFile::single_bytes(files)?)?
+                .take_ext()
+                .state,
+        )
     }
 
     /// The document gets no `ext` block.
     fn write<D: Dependencies>(
         dependencies: &D,
         options: &VoxjWriteFormat,
-        state: &VoxMain<()>,
+        state: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
         let dependencies = dependencies.voxj();
 
+        let state = to_voxj_vox_main(state);
+
         let bytes = match options.serialization {
-            VoxjSerialization::Compact => to_voxj_bytes(dependencies, state, &options.options)?,
+            VoxjSerialization::Compact => to_voxj_bytes(dependencies, &state, &options.options)?,
             VoxjSerialization::Pretty => {
-                to_voxj_pretty_bytes(dependencies, state, &options.options)?
+                to_voxj_pretty_bytes(dependencies, &state, &options.options)?
             }
-            VoxjSerialization::Zip => to_voxjz_bytes(dependencies, state, &options.options)?,
+            VoxjSerialization::Zip => to_voxjz_bytes(dependencies, &state, &options.options)?,
         };
 
         Ok(vec![VoxDocumentFile::single(bytes)])

@@ -1,11 +1,10 @@
-use crate::{Result, to_mvox_file};
+use crate::{MVoxVoxMain, Result, to_mvox_file};
 use mvox_codec::to_mvox_file_bytes;
-use voxcore::VoxMain;
 
-/// Writes a bare [`VoxMain`] to the bytes of a MagicaVoxel `.vox` file, the
+/// Writes a [`MVoxVoxMain`] to the bytes of a MagicaVoxel `.vox` file, the
 /// bytes form of [`to_mvox_file`] and the inverse of
 /// [`from_mvox_bytes`](crate::codec::from_mvox_bytes).
-pub fn to_mvox_bytes(state: &VoxMain<()>) -> Result<Vec<u8>> {
+pub fn to_mvox_bytes(state: &MVoxVoxMain) -> Result<Vec<u8>> {
     let file = to_mvox_file(state)?;
 
     Ok(to_mvox_file_bytes(&file))
@@ -13,7 +12,11 @@ pub fn to_mvox_bytes(state: &VoxMain<()>) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::{from_mvox_bytes, to_mvox_bytes};
+    use crate::{
+        MVoxVoxMain,
+        codec::{from_mvox_bytes, to_mvox_bytes},
+        to_mvox_vox_main,
+    };
     use branded_id::U32Id;
     use ty_math::{TySrgbaU8, TyVector3U32};
     use voxcore::{
@@ -56,12 +59,22 @@ mod tests {
     /// way round.
     #[test]
     fn round_trips_through_vox_bytes() {
-        let bytes = to_mvox_bytes(&red_voxel_state()).unwrap();
+        let bytes = to_mvox_bytes(&to_mvox_vox_main(red_voxel_state()).unwrap()).unwrap();
         assert!(bytes.starts_with(b"VOX "));
 
         let reloaded = from_mvox_bytes(&bytes).unwrap();
         assert_eq!(reloaded.object_count(), 1);
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         assert_eq!(object.live_count(), 1);
+    }
+
+    /// A default state writes through its ext and loads back.
+    #[test]
+    fn round_trips_the_ext_through_bytes() {
+        let bytes = to_mvox_bytes(&MVoxVoxMain::default()).unwrap();
+        assert!(bytes.starts_with(b"VOX "));
+
+        let reloaded = from_mvox_bytes(&bytes).unwrap();
+        assert_eq!(reloaded.object_count(), 0);
     }
 }

@@ -2,7 +2,7 @@ use crate::{
     Result,
     ext::{VoxconvExt, push_slots},
 };
-use voxj_voxcore::ext::VoxjVoxExt;
+use voxj_voxcore::VoxjVoxExt;
 
 /// Encodes an ext as a document's `ext` block. `()` encodes an empty ext. An
 /// installed format's ext encodes as its slots, which for Voxel Json's exts

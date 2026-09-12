@@ -1,4 +1,4 @@
-use crate::ext::{VMaxExtNode, VMaxExtObjectState, VMaxExtPalette};
+use crate::{VMaxExtNode, VMaxExtObjectState, VMaxExtPalette};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use vmax::VMaxSceneJsonFile;

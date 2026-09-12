@@ -1,11 +1,10 @@
-use crate::{Result, to_goxl_file};
+use crate::{GoxlVoxMain, Result, to_goxl_file};
 use goxl_codec::{EncodePng, to_gox_file_bytes};
-use voxcore::VoxMain;
 
-/// Writes a bare [`VoxMain`] to the bytes of a Goxel `.gox` file through
+/// Writes a [`GoxlVoxMain`] to the bytes of a Goxel `.gox` file through
 /// `dependencies`, the bytes form of [`to_goxl_file`] and the inverse of
 /// [`from_goxl_bytes`](crate::codec::from_goxl_bytes).
-pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &VoxMain<()>) -> Result<Vec<u8>> {
+pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &GoxlVoxMain) -> Result<Vec<u8>> {
     let file = to_goxl_file(state)?;
 
     Ok(to_gox_file_bytes(dependencies, &file))
@@ -13,7 +12,11 @@ pub fn to_goxl_bytes<D: EncodePng>(dependencies: &D, state: &VoxMain<()>) -> Res
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::{from_goxl_bytes, to_goxl_bytes};
+    use crate::{
+        GoxlVoxMain,
+        codec::{from_goxl_bytes, to_goxl_bytes},
+        to_goxl_vox_main,
+    };
     use branded_id::U32Id;
     use goxl_codec::DependenciesImpl;
     use ty_math::{TySrgbaU8, TyVector3U32};
@@ -57,12 +60,26 @@ mod tests {
     /// way round.
     #[test]
     fn round_trips_through_gox_bytes() {
-        let bytes = to_goxl_bytes(&DependenciesImpl, &red_voxel_state()).unwrap();
+        let state = to_goxl_vox_main(red_voxel_state()).unwrap();
+
+        let bytes = to_goxl_bytes(&DependenciesImpl, &state).unwrap();
         assert!(bytes.starts_with(b"GOX "));
 
         let reloaded = from_goxl_bytes(&DependenciesImpl, &bytes).unwrap();
         assert_eq!(reloaded.object_count(), 1);
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         assert_eq!(object.live_count(), 1);
+    }
+
+    /// A default state writes through its ext and loads back.
+    #[test]
+    fn round_trips_the_ext_through_bytes() {
+        let bytes = to_goxl_bytes(&DependenciesImpl, &GoxlVoxMain::default()).unwrap();
+
+        assert!(bytes.starts_with(b"GOX "));
+
+        let reloaded = from_goxl_bytes(&DependenciesImpl, &bytes).unwrap();
+
+        assert_eq!(reloaded.object_count(), 0);
     }
 }

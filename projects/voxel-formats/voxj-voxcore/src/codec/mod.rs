@@ -3,24 +3,16 @@
 
 mod check_voxj_bytes;
 mod from_voxj_bytes;
-mod from_voxj_bytes_with_ext;
 mod to_voxj_bytes;
-mod to_voxj_bytes_with_ext;
 mod to_voxj_pretty_bytes;
-mod to_voxj_pretty_bytes_with_ext;
 mod to_voxjz_bytes;
-mod to_voxjz_bytes_with_ext;
 mod voxj_version_from_bytes;
 
 pub use check_voxj_bytes::*;
 pub use from_voxj_bytes::*;
-pub use from_voxj_bytes_with_ext::*;
 pub use to_voxj_bytes::*;
-pub use to_voxj_bytes_with_ext::*;
 pub use to_voxj_pretty_bytes::*;
-pub use to_voxj_pretty_bytes_with_ext::*;
 pub use to_voxjz_bytes::*;
-pub use to_voxjz_bytes_with_ext::*;
 pub use voxj_version_from_bytes::*;
 
 // Re-exported so a caller can name the dependencies the functions here take

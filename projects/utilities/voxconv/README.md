@@ -40,7 +40,9 @@ These functions move a document through a bridge as a bare `VoxMain<()>`:
   a document's files, through the caller's `ReadFile`, `ListDir`, and
   `WriteFile`
 - `read` / `write`: between a document's files and a bare `VoxMain`. A read
-  drops the format's ext. A write synthesizes the file from the scene
+  takes the format's ext off. A write hands the state to the bridge's
+  `to_x_vox_main`, which reshapes the scene to what the format holds and
+  gives it a synthesized ext. The bridge's one typed writer then writes it
 - `load` / `save`: `read_document_files` then `read`, and `write` then
   `write_document_files`
 - `check_document_files`: a `VoxCheck` for whether the files decode, then one

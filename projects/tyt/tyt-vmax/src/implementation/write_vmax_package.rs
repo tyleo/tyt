@@ -3,7 +3,7 @@ use std::path::Path;
 use voxconv::{
     DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat,
     ext::{read_with_ext, save_with_ext},
-    vmax::{VMaxColorFormat, VMaxWriteOptions},
+    vmax::{SceneCameraSource, VMaxColorFormat, VMaxWriteOptions},
 };
 
 /// Converts Voxel Json bytes into a `.vmax` package directory at `output`,
@@ -22,7 +22,7 @@ pub(crate) fn write_vmax_package(
 
     let options = VMaxWriteOptions {
         color_format: vmax_color_format(color_format),
-        scene_camera: None,
+        scene_camera: SceneCameraSource::Ext,
     };
 
     save_with_ext(

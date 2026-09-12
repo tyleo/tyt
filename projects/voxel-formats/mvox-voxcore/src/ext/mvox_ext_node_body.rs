@@ -1,4 +1,4 @@
-use crate::ext::{MVoxExtFrame, MVoxExtShapeModel};
+use crate::{MVoxExtFrame, MVoxExtShapeModel};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 

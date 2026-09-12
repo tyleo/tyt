@@ -28,7 +28,7 @@ mod tests {
         vmax::VMaxWriteOptions,
     };
     use std::path::Path;
-    use vmax_voxcore::ext::VMaxExt;
+    use vmax_voxcore::VMaxExt;
 
     #[test]
     fn a_saved_package_loads_back_with_its_ext() {
@@ -36,7 +36,7 @@ mod tests {
 
         let vmax = WriteFormat::VMax(VMaxWriteOptions::default());
 
-        save(&memory, &vmax, &test_state(()), Path::new("out/p.vmax")).unwrap();
+        save(&memory, &vmax, test_state(()), Path::new("out/p.vmax")).unwrap();
 
         let loaded = load_with_ext(&memory, ReadFormat::VMax, Path::new("out/p.vmax")).unwrap();
 

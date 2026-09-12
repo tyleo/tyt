@@ -1,19 +1,281 @@
-use crate::{Result, read_qbt};
-use qbcl::qbt::QbtFile;
-use voxcore::VoxMain;
+use crate::{Error, QbtExtNode, QbtVoxMain, Result, qbt_ext_from_file};
+use branded_id::U32Id;
+use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
+use std::collections::{HashMap, HashSet};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
+use voxcore::{
+    BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
+    VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
+};
 
-/// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a bare [`VoxMain`].
-/// Matrix and compound grids become objects sharing one `baseColor` palette,
-/// and the scene tree becomes the hierarchy nodes. The rest of the Qubicle
-/// state is dropped, so [`to_qbt_file`](crate::to_qbt_file) writes the state
-/// back as a synthesized file.
-/// [`ext::from_qbt_file_with_ext`](crate::ext::from_qbt_file_with_ext) keeps
-/// that state instead.
+/// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`QbtVoxMain`],
+/// the inverse of [`to_qbt_file`](crate::to_qbt_file). Matrix and compound
+/// grids become objects sharing one `baseColor` palette, and the scene tree
+/// becomes the hierarchy nodes. The rest of the Qubicle state, such as the
+/// per-voxel visibility masks, matrix names, placements, scales, and pivots,
+/// the color map, the global scale, the version, and any unknown nodes, goes
+/// to the ext.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain<()>> {
-    read_qbt(file)
+pub fn from_qbt_file(file: &QbtFile) -> Result<QbtVoxMain> {
+    let mut state = VoxMain::default();
+    let mut nodes = Vec::new();
+
+    let (palette, material_ids) = build_palette(&mut state, &file.root);
+    let palette_id = state.retain_palette(palette)?;
+
+    let root_id = build_node(
+        &file.root,
+        &mut state,
+        palette_id,
+        &material_ids,
+        &mut nodes,
+    )?;
+    state.set_root_hierarchy_node_ids(vec![root_id])?;
+
+    Ok(state.put_ext(qbt_ext_from_file(
+        file,
+        nodes.into_iter().map(Some).collect(),
+    )))
+}
+
+/// Builds the hierarchy node for one scene node and its subtree, adding it and
+/// any objects to the state and appending its provenance to `nodes` so the ext
+/// entry at each index lines up with the hierarchy node id. Returns the new
+/// node's id.
+fn build_node(
+    node: &QbtNode,
+    state: &mut VoxMain<()>,
+    palette_id: U32Id<BVoxPalette>,
+    material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
+    nodes: &mut Vec<QbtExtNode>,
+) -> Result<U32Id<BVoxHierarchyNode>> {
+    let node_id = match node {
+        QbtNode::Matrix(matrix) => {
+            // The matrix grid becomes the object's build volume directly; it
+            // may carry empty margin. The masks are read from that same grid.
+            let object = build_object(matrix, palette_id, material_ids)?;
+            let masks = masks_of(&object, matrix);
+            let object_id = state.retain_object(object)?;
+            let hierarchy = VoxHierarchyNode {
+                name: matrix.name.clone(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id],
+                transform: translation(matrix.position),
+            };
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
+            nodes.push(QbtExtNode::Matrix {
+                name: matrix.name.clone(),
+                position: matrix.position,
+                local_scale: matrix.local_scale,
+                pivot: matrix.pivot,
+                masks,
+            });
+            node_id
+        }
+        QbtNode::Model(model) => {
+            let mut child_node_ids = Vec::with_capacity(model.children.len());
+            for child in &model.children {
+                child_node_ids.push(build_node(child, state, palette_id, material_ids, nodes)?);
+            }
+            let hierarchy = VoxHierarchyNode {
+                name: String::new(),
+                child_node_ids,
+                child_object_ids: Vec::new(),
+                transform: TyTransformF64::default(),
+            };
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
+            nodes.push(QbtExtNode::Model);
+            node_id
+        }
+        QbtNode::Compound(compound) => {
+            let mut child_node_ids = Vec::with_capacity(compound.children.len());
+            for child in &compound.children {
+                child_node_ids.push(build_node(child, state, palette_id, material_ids, nodes)?);
+            }
+            // The compound grid becomes the object's build volume directly; it
+            // may carry empty margin. The masks are read from that same grid.
+            let object = build_object(&compound.matrix, palette_id, material_ids)?;
+            let masks = masks_of(&object, &compound.matrix);
+            let object_id = state.retain_object(object)?;
+            let hierarchy = VoxHierarchyNode {
+                name: compound.matrix.name.clone(),
+                child_node_ids,
+                child_object_ids: vec![object_id],
+                transform: translation(compound.matrix.position),
+            };
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
+            nodes.push(QbtExtNode::Compound {
+                name: compound.matrix.name.clone(),
+                position: compound.matrix.position,
+                local_scale: compound.matrix.local_scale,
+                pivot: compound.matrix.pivot,
+                masks,
+            });
+            node_id
+        }
+        QbtNode::Unknown(unknown) => {
+            let hierarchy = VoxHierarchyNode {
+                name: String::new(),
+                child_node_ids: Vec::new(),
+                child_object_ids: Vec::new(),
+                transform: TyTransformF64::default(),
+            };
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
+            nodes.push(QbtExtNode::Unknown {
+                type_id: unknown.type_id,
+                data: unknown.data.clone(),
+            });
+            node_id
+        }
+    };
+    Ok(node_id)
+}
+
+/// Builds the one shared palette: a color value pool of one entry per distinct
+/// color across every matrix and compound voxel in the tree, bound to
+/// `baseColor`, with one material per color and a map from a color to its
+/// material. The value pool is added to `state`. A tree with no solid voxels
+/// gets a single placeholder color so objects have a default material to
+/// sample.
+fn build_palette(
+    state: &mut VoxMain<()>,
+    root: &QbtNode,
+) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
+    let mut order: Vec<[u8; 3]> = Vec::new();
+    let mut seen: HashSet<[u8; 3]> = HashSet::new();
+    collect_colors(root, &mut order, &mut seen);
+    if order.is_empty() {
+        order.push([0, 0, 0]);
+    }
+
+    // A Qubicle voxel carries no alpha, so colors decode to linear light and
+    // ride in a shared `vec-3-float` value pool. Each material draws one value
+    // id into it.
+    let value_pool_id = state.retain_value_pool(
+        VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
+            .expect("byte-derived components are finite and the list is non-empty"),
+    );
+
+    let mut palette = VoxPalette::default();
+    palette
+        .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+        .expect("the property names are distinct");
+    let mut material_ids = HashMap::with_capacity(order.len());
+    for (index, color) in order.iter().enumerate() {
+        let material_id = palette
+            .retain_material(vec![U32Id::from_u32(index as u32)])
+            .expect("one value id for the one property");
+        material_ids.insert(*color, material_id);
+    }
+
+    (palette, material_ids)
+}
+
+/// Collects the distinct colors of a node and its subtree, in first-seen order.
+fn collect_colors(node: &QbtNode, order: &mut Vec<[u8; 3]>, seen: &mut HashSet<[u8; 3]>) {
+    match node {
+        QbtNode::Matrix(matrix) => collect_matrix(matrix, order, seen),
+        QbtNode::Model(model) => {
+            for child in &model.children {
+                collect_colors(child, order, seen);
+            }
+        }
+        QbtNode::Compound(compound) => {
+            collect_matrix(&compound.matrix, order, seen);
+            for child in &compound.children {
+                collect_colors(child, order, seen);
+            }
+        }
+        QbtNode::Unknown(_) => {}
+    }
+}
+
+/// Collects the distinct colors of one matrix's solid voxels.
+fn collect_matrix(matrix: &QbtMatrix, order: &mut Vec<[u8; 3]>, seen: &mut HashSet<[u8; 3]>) {
+    for voxel in &matrix.voxels {
+        if voxel.is_empty() {
+            continue;
+        }
+        let color = [voxel.r, voxel.g, voxel.b];
+        if seen.insert(color) {
+            order.push(color);
+        }
+    }
+}
+
+/// Builds an object from a matrix: a dense grid sized by the matrix,
+/// referencing the shared palette on one layer, each solid voxel sampling its
+/// color material. Errors on an oversized grid.
+fn build_object(
+    matrix: &QbtMatrix,
+    palette_id: U32Id<BVoxPalette>,
+    material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
+) -> Result<VoxObject> {
+    let [size_x, size_y, size_z] = matrix.size;
+    let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
+        .map_err(|_| {
+            Error::invalid(format!(
+                "matrix grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
+                VoxObject::MAX_GRID_CELLS
+            ))
+        })?;
+
+    object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+
+    for x in 0..size_x {
+        for y in 0..size_y {
+            for z in 0..size_z {
+                let Some(voxel) = matrix.voxel(x, y, z) else {
+                    continue;
+                };
+                if voxel.is_empty() {
+                    continue;
+                }
+                let material_id = material_ids
+                    .get(&[voxel.r, voxel.g, voxel.b])
+                    .copied()
+                    .expect("every solid color is in the palette");
+                let voxel_id = object
+                    .voxel_id(TyVector3U32::new(x, y, z))
+                    .expect("a coordinate inside the matrix is inside the grid");
+                object
+                    .retain_voxel(voxel_id, &[material_id])
+                    .expect("one sample for the one layer");
+            }
+        }
+    }
+
+    Ok(object)
+}
+
+/// The visibility masks of an object's solid voxels, in live-voxel raster
+/// order, read back from the matrix the object was built from.
+fn masks_of(object: &VoxObject, matrix: &QbtMatrix) -> Vec<u8> {
+    object
+        .iter_live()
+        .map(|voxel_id| {
+            let position = object
+                .voxel_position(voxel_id)
+                .expect("a live voxel is within the grid");
+            matrix
+                .voxel(position.x, position.y, position.z)
+                .map_or(0, |voxel| voxel.mask)
+        })
+        .collect()
+}
+
+/// A translation-only transform from a scene position.
+fn translation(position: [i32; 3]) -> TyTransformF64 {
+    TyTransformF64::from_translation(TyVector3I32::from_array(position).as_dvec3())
+}
+
+/// The linear-light components of an `[r, g, b]` byte color.
+fn color_floats(color: [u8; 3]) -> [f64; 3] {
+    let [red, green, blue] = color;
+    let linear = lin_srgba_f64_from_srgba_u8(TySrgbaU8::new(red, green, blue, 255));
+    [linear.red, linear.green, linear.blue]
 }
 
 #[cfg(test)]

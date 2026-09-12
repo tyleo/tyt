@@ -1,11 +1,12 @@
 use crate::{
-    Dependencies, Format, Result, VoxDocumentFile,
+    Dependencies, Result, VoxDocumentFile,
     ext::{FormatExt, VoxconvExt, VoxconvVoxMain, box_ext, ext_from_slot, find_ext, push_ext_slot},
     qbcl::Qbcl,
 };
 use qbcl_voxcore::{
-    codec::{from_qbcl_bytes_with_ext, to_qbcl_bytes_with_ext},
-    ext::QbclExt,
+    QbclExt,
+    codec::{from_qbcl_bytes, to_qbcl_bytes},
+    to_qbcl_vox_main,
 };
 use voxcore::VoxMapEntry;
 
@@ -18,7 +19,7 @@ impl FormatExt for Qbcl {
         dependencies: &D,
         files: &[VoxDocumentFile],
     ) -> Result<VoxconvVoxMain> {
-        Ok(box_ext(from_qbcl_bytes_with_ext(
+        Ok(box_ext(from_qbcl_bytes(
             dependencies.qbcl(),
             VoxDocumentFile::single_bytes(files)?,
         )?))
@@ -26,14 +27,15 @@ impl FormatExt for Qbcl {
 
     fn write_with_ext<D: Dependencies>(
         dependencies: &D,
-        options: &(),
+        _options: &(),
         state: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let Some(ext) = find_ext::<QbclExt>(KEY, state.ext().as_ref())? else {
-            return Self::write(dependencies, options, &state.take_ext().0);
+        let state = match find_ext::<QbclExt>(KEY, state.ext().as_ref())? {
+            Some(ext) => state.take_ext().state.put_ext(ext),
+            None => to_qbcl_vox_main(state.take_ext().state)?,
         };
 
-        let bytes = to_qbcl_bytes_with_ext(dependencies.qbcl(), &state.take_ext().0.put_ext(ext))?;
+        let bytes = to_qbcl_bytes(dependencies.qbcl(), &state)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

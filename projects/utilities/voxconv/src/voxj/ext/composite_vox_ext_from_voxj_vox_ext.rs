@@ -4,7 +4,7 @@ use crate::{
     voxj::ext::{CompositeVoxExt, InertVoxExt},
 };
 use voxcore::VoxMapEntry;
-use voxj_voxcore::ext::VoxjVoxExt;
+use voxj_voxcore::VoxjVoxExt;
 
 /// Decodes a document's `ext` block into a [`CompositeVoxExt`]. Each slot
 /// under an installed format's key becomes that format's ext, and every

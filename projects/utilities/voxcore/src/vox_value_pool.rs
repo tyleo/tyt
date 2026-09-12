@@ -150,49 +150,6 @@ impl VoxValuePool {
         }
     }
 
-    /// Deep copy. Liveness lives in the id pool, so the column can't derive
-    /// `Clone`. Rebuild it against the cloned id pool.
-    pub fn clone_value_pool(&self) -> Self {
-        let kind = match &self.kind {
-            VoxValuePoolKind::Bool(values) => {
-                VoxValuePoolKind::Bool(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Float(values) => {
-                VoxValuePoolKind::Float(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Int(values) => VoxValuePoolKind::Int(cloned(&self.value_ids, values)),
-            VoxValuePoolKind::Json(values) => {
-                VoxValuePoolKind::Json(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::String(values) => {
-                VoxValuePoolKind::String(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Vec2Float(values) => {
-                VoxValuePoolKind::Vec2Float(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Vec2Int(values) => {
-                VoxValuePoolKind::Vec2Int(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Vec3Float(values) => {
-                VoxValuePoolKind::Vec3Float(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Vec3Int(values) => {
-                VoxValuePoolKind::Vec3Int(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Vec4Float(values) => {
-                VoxValuePoolKind::Vec4Float(cloned(&self.value_ids, values))
-            }
-            VoxValuePoolKind::Vec4Int(values) => {
-                VoxValuePoolKind::Vec4Int(cloned(&self.value_ids, values))
-            }
-        };
-
-        Self {
-            value_ids: self.value_ids.clone(),
-            kind,
-        }
-    }
-
     /// The kind, for matching.
     pub fn kind(&self) -> &VoxValuePoolKind {
         &self.kind
@@ -432,20 +389,6 @@ fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxValuePoolValue>, IdField<BVoxValu
     (ids, column)
 }
 
-/// Clones the values retained in `column` against the same ids.
-fn cloned<T: Clone>(
-    ids: &IdStruct<BVoxValuePoolValue>,
-    column: &IdField<BVoxValuePoolValue, T>,
-) -> IdField<BVoxValuePoolValue, T> {
-    let mut copy = IdField::with_capacity(ids.len());
-    for value_id in ids.iter() {
-        // Safety: retained ids have a value.
-        copy.retain(value_id, unsafe { column.get(value_id) }.clone());
-    }
-
-    copy
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{BVoxValuePoolValue, Error, VoxValuePool, VoxValuePoolValueRef};
@@ -535,28 +478,6 @@ mod tests {
                 value_id: U32Id::from_u32(9)
             })
         );
-    }
-
-    #[test]
-    fn clone_value_pool_is_an_independent_deep_copy() {
-        let mut value_pool =
-            VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
-
-        // Hole the value pool first: equality compares values in listing order,
-        // so only reading back by id catches a clone that relabels.
-        value_pool.release_value_stable(U32Id::from_u32(1));
-
-        let mut copy = value_pool.clone_value_pool();
-        assert_eq!(value_pool, copy);
-        assert_eq!(copy.value(U32Id::from_u32(1)), None);
-
-        assert_eq!(
-            copy.value(U32Id::from_u32(2)),
-            Some(VoxValuePoolValueRef::String("c"))
-        );
-
-        copy.move_value(U32Id::from_u32(0), 1).unwrap();
-        assert_ne!(value_pool, copy);
     }
 
     #[test]

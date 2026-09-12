@@ -1,4 +1,4 @@
-use crate::ext::{
+use crate::{
     MVoxExtCamera, MVoxExtLayer, MVoxExtMaterial, MVoxExtNode, MVoxExtNodeBody, MVoxExtShapeModel,
     MVoxExtUnknownChunk,
 };

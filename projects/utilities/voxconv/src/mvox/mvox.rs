@@ -1,5 +1,8 @@
 use crate::{Dependencies, Format, ReadFormat, Result, VoxDocumentFile, WriteFormat};
-use mvox_voxcore::codec::{from_mvox_bytes, to_mvox_bytes};
+use mvox_voxcore::{
+    codec::{from_mvox_bytes, to_mvox_bytes},
+    to_mvox_vox_main,
+};
 use voxcore::VoxMain;
 
 /// MagicaVoxel, the `.vox` file. The codec needs no dependencies.
@@ -22,15 +25,17 @@ impl Format for MVox {
     }
 
     fn read<D: Dependencies>(_dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<()>> {
-        Ok(from_mvox_bytes(VoxDocumentFile::single_bytes(files)?)?)
+        Ok(from_mvox_bytes(VoxDocumentFile::single_bytes(files)?)?
+            .take_ext()
+            .state)
     }
 
     fn write<D: Dependencies>(
         _dependencies: &D,
         _options: &(),
-        state: &VoxMain<()>,
+        state: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let bytes = to_mvox_bytes(state)?;
+        let bytes = to_mvox_bytes(&to_mvox_vox_main(state)?)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

@@ -81,29 +81,6 @@ impl VoxObject {
             .saturating_mul(bounds.z as u64)
     }
 
-    /// Deep copy. Liveness lives in the layer id pool, so the columns can't
-    /// derive `Clone`; rebuild them against the cloned pool.
-    pub fn clone_object(&self) -> Self {
-        // The inner sample columns own storage, so clone them one by one;
-        // `layer_palette_ids` is Copy-valued and clones wholesale below.
-        let mut samples = IdField::new();
-        for layer_id in self.layer_ids.iter() {
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get(layer_id) };
-            samples.retain(layer_id, column.clone());
-        }
-
-        Self {
-            name: self.name.clone(),
-            bounds: self.bounds,
-            origin: self.origin,
-            liveness: self.liveness.clone(),
-            layer_ids: self.layer_ids.clone(),
-            layer_palette_ids: self.layer_palette_ids.clone(),
-            samples,
-        }
-    }
-
     /// Rewrites this object's cross-references to match id pools a
     /// [`VoxMain`](crate::VoxMain) is compacting, then compacts its own layer
     /// id pool. Each layer's palette is translated through `palette_remap`, and
@@ -575,32 +552,6 @@ mod tests {
 
         // A layer id the object never minted is rejected.
         assert!(object.iter_live_samples(U32Id::from_u32(9)).is_none());
-    }
-
-    #[test]
-    fn clone_object_is_an_independent_deep_copy() {
-        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(3), material_id(0));
-        let voxel_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
-        object.retain_voxel(voxel_id, &[material_id(7)]).unwrap();
-
-        let copy = object.clone_object();
-        assert_eq!(copy.name(), "o");
-        assert_eq!(copy.bounds(), TyVector3U32::new(2, 1, 1));
-        assert_eq!(copy.live_count(), 1);
-        assert_eq!(
-            copy.voxel_material(voxel_id, layer_id),
-            Some(material_id(7))
-        );
-        assert_eq!(
-            copy.iter_layers().collect::<Vec<_>>(),
-            [(layer_id, U32Id::<BVoxPalette>::from_u32(3))]
-        );
-
-        // Editing the original must not touch the copy.
-        object.release_voxel(voxel_id).unwrap();
-        assert_eq!(object.live_count(), 0);
-        assert_eq!(copy.live_count(), 1);
     }
 
     #[test]

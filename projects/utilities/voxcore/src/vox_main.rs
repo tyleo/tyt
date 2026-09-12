@@ -1,8 +1,8 @@
 use crate::{
     BVoxEffectiveProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
-    BVoxProperty, BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxEffectivePalette,
-    VoxEffectiveProperty, VoxExt, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette,
-    VoxRuntimeState, VoxValuePool,
+    BVoxProperty, BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, TakenExt,
+    VoxEffectivePalette, VoxEffectiveProperty, VoxExt, VoxGcRemap, VoxHierarchyNode, VoxObject,
+    VoxPalette, VoxRuntimeState, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -27,28 +27,17 @@ pub struct VoxMain<T = ()> {
 }
 
 impl<T> VoxMain<T> {
-    /// Deep copy. Every id stays valid in the clone.
-    pub fn clone_state(&self) -> Self
-    where
-        T: Clone,
-    {
-        Self {
-            runtime_state: self.runtime_state.clone_runtime_state(),
-            ext: self.ext.clone(),
-        }
-    }
-
     /// Takes the ext off the state, leaving the scene as a bare state. A
     /// conversion that drops or replaces a foreign ext makes the drop explicit
     /// here.
-    pub fn take_ext(self) -> (VoxMain<()>, T) {
-        (
-            VoxMain {
+    pub fn take_ext(self) -> TakenExt<T> {
+        TakenExt {
+            state: VoxMain {
                 runtime_state: self.runtime_state,
                 ext: (),
             },
-            self.ext,
-        )
+            ext: self.ext,
+        }
     }
 
     /// Audits the full rule set. Every rule here is also enforced at a mutation
@@ -2465,33 +2454,6 @@ mod tests {
             state.retain_hierarchy_node(node),
             Err(Error::InsertedNonUnitRotation { index: 0 })
         );
-    }
-
-    #[test]
-    fn clone_state_is_an_independent_deep_copy() {
-        let mut state: VoxMain = VoxMain::default();
-        state.retain_value_pool(VoxValuePool::int(vec![7]).unwrap());
-        state.retain_palette(bare_palette()).unwrap();
-        state.retain_object(unit_object("o")).unwrap();
-
-        let copy = state.clone_state();
-        assert_eq!(copy.value_pool_count(), 1);
-
-        assert_eq!(
-            copy.value_pool(U32Id::<BVoxValuePool>::from_u32(0)),
-            Some(&VoxValuePool::int(vec![7]).unwrap())
-        );
-
-        assert_eq!(copy.palette_count(), 1);
-        assert_eq!(copy.object_count(), 1);
-
-        // Mutating the original must not touch the copy.
-        state.retain_value_pool(VoxValuePool::boolean(vec![true]));
-        state.retain_object(unit_object("p")).unwrap();
-        assert_eq!(state.value_pool_count(), 2);
-        assert_eq!(state.object_count(), 2);
-        assert_eq!(copy.value_pool_count(), 1);
-        assert_eq!(copy.object_count(), 1);
     }
 
     #[test]

@@ -1,11 +1,12 @@
 use crate::{
-    Dependencies, Format, Result, VoxDocumentFile,
+    Dependencies, Result, VoxDocumentFile,
     ext::{FormatExt, VoxconvExt, VoxconvVoxMain, box_ext, ext_from_slot, find_ext, push_ext_slot},
     vmax::{VMax, VMaxWriteOptions, package_file},
 };
 use vmax_voxcore::{
-    codec::{from_vmax_package_with_ext, to_vmax_package_with_ext},
-    ext::VMaxExt,
+    VMaxExt,
+    codec::{from_vmax_package, to_vmax_package},
+    to_vmax_vox_main,
 };
 use voxcore::VoxMapEntry;
 
@@ -19,7 +20,7 @@ impl FormatExt for VMax {
     ) -> Result<VoxconvVoxMain> {
         let paths = files.iter().map(|file| file.path.clone()).collect();
 
-        Ok(box_ext(from_vmax_package_with_ext(
+        Ok(box_ext(from_vmax_package(
             dependencies.vmax(),
             || Ok(paths),
             |path| Ok(package_file(files, path)),
@@ -31,15 +32,14 @@ impl FormatExt for VMax {
         options: &VMaxWriteOptions,
         state: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let Some(ext) = find_ext::<VMaxExt>(KEY, state.ext().as_ref())? else {
-            return Self::write(dependencies, options, &state.take_ext().0);
+        let state = match find_ext::<VMaxExt>(KEY, state.ext().as_ref())? {
+            Some(ext) => state.take_ext().state.put_ext(ext),
+            None => to_vmax_vox_main(state.take_ext().state)?,
         };
-
-        let state = state.take_ext().0.put_ext(ext);
 
         let mut files = Vec::new();
 
-        to_vmax_package_with_ext(dependencies.vmax(), &state, options, |path, bytes| {
+        to_vmax_package(dependencies.vmax(), &state, options, |path, bytes| {
             files.push(VoxDocumentFile::new(path, bytes.to_vec()));
 
             Ok(())

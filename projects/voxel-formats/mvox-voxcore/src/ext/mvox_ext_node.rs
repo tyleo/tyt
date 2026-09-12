@@ -1,4 +1,4 @@
-use crate::ext::MVoxExtNodeBody;
+use crate::MVoxExtNodeBody;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 

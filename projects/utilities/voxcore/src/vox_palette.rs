@@ -32,34 +32,6 @@ pub struct VoxPalette {
 }
 
 impl VoxPalette {
-    /// Deep copy. Liveness lives in the id pools, so the columns can't derive
-    /// `Clone`; rebuild them against the cloned id pools.
-    pub fn clone_palette(&self) -> Self {
-        let mut properties = IdField::new();
-        for property_id in self.property_ids.iter() {
-            // Safety: retained ids have a value.
-            let property = unsafe { self.properties.get(property_id) }.clone();
-            properties.retain(property_id, property);
-        }
-
-        let mut materials = IdField::new();
-        for material_id in self.material_ids.iter() {
-            // Safety: a retained material has a value row. Its value ids are
-            // Copy, so the row clones bytewise, unlike the properties above
-            // whose name strings are rebuilt.
-            let row = unsafe { self.materials.get(material_id) }.clone();
-            materials.retain(material_id, row);
-        }
-
-        Self {
-            property_ids: self.property_ids.clone(),
-            properties,
-            material_ids: self.material_ids.clone(),
-            materials,
-            property_id_by_name: self.property_id_by_name.clone(),
-        }
-    }
-
     /// Compacts the property and material id pools back to a contiguous
     /// `0..len`, moving every value to its relabeled id, and returns the
     /// material relabeling so a [`VoxMain`](crate::VoxMain) can translate the
@@ -542,25 +514,6 @@ mod tests {
 
         assert_eq!(palette.value_id(material_id, color_id), Some(value_id(7)));
         assert_eq!(palette.value_id(material_id, added_id), Some(value_id(3)));
-    }
-
-    #[test]
-    fn clone_palette_is_an_independent_deep_copy() {
-        let mut palette = VoxPalette::default();
-        let property_id = palette
-            .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
-            .unwrap();
-
-        let material_id = palette.retain_material(vec![value_id(2)]).unwrap();
-
-        let copy = palette.clone_palette();
-        assert_eq!(copy.value_id(material_id, property_id), Some(value_id(2)));
-        assert_eq!(copy.property(property_id).unwrap().name, "baseColor");
-
-        // Mutating the original must not touch the copy.
-        palette.retain_material(vec![value_id(5)]).unwrap();
-        assert_eq!(palette.material_count(), 2);
-        assert_eq!(copy.material_count(), 1);
     }
 
     #[test]

@@ -1,11 +1,10 @@
-use crate::{Result, from_vmax_file};
+use crate::{Result, VMaxVoxMain, from_vmax_file};
 use vmax_codec::{
     DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse, Result as CodecResult,
     from_vmax_package as read_vmax_package,
 };
-use voxcore::VoxMain;
 
-/// Loads a `.vmax` package into a bare [`VoxMain`] through `dependencies`,
+/// Loads a `.vmax` package through `dependencies` into a [`VMaxVoxMain`],
 /// the package form of [`from_vmax_file`].
 ///
 /// # Arguments
@@ -13,12 +12,13 @@ use voxcore::VoxMain;
 ///   entries keep their subdirectory prefix.
 /// * `resolve` - returns a file's bytes by that path, or `Ok(None)` if it has
 ///   since vanished.
-pub fn from_vmax_package<D, L, R>(dependencies: &D, list: L, resolve: R) -> Result<VoxMain<()>>
+pub fn from_vmax_package<D, L, R>(dependencies: &D, list: L, resolve: R) -> Result<VMaxVoxMain>
 where
     D: DecompressLzfse + DecodeVMaxPlist + DecodePng + DecodeVMaxSceneJson,
     L: FnOnce() -> CodecResult<Vec<String>>,
     R: FnMut(&str) -> CodecResult<Option<Vec<u8>>>,
 {
     let file = read_vmax_package(dependencies, list, resolve)?;
+
     from_vmax_file(&file)
 }

@@ -9,12 +9,11 @@ use crate::{
         },
     },
 };
-use voxcore::VoxMapEntry;
-use voxj_voxcore::codec::{
-    from_voxj_bytes_with_ext, to_voxj_bytes_with_ext, to_voxj_pretty_bytes_with_ext,
-    to_voxjz_bytes_with_ext,
+use voxcore::{TakenExt, VoxMapEntry};
+use voxj_voxcore::{
+    VoxjVoxExt,
+    codec::{from_voxj_bytes, to_voxj_bytes, to_voxj_pretty_bytes, to_voxjz_bytes},
 };
-use voxj_voxcore::ext::VoxjVoxExt;
 
 impl FormatExt for Voxj {
     /// The `ext` block decodes into a
@@ -24,9 +23,8 @@ impl FormatExt for Voxj {
         dependencies: &D,
         files: &[VoxDocumentFile],
     ) -> Result<VoxconvVoxMain> {
-        let (state, ext) =
-            from_voxj_bytes_with_ext(dependencies.voxj(), VoxDocumentFile::single_bytes(files)?)?
-                .take_ext();
+        let TakenExt { state, ext } =
+            from_voxj_bytes(dependencies.voxj(), VoxDocumentFile::single_bytes(files)?)?.take_ext();
 
         Ok(box_ext(
             state.put_ext(composite_vox_ext_from_voxj_vox_ext(ext)?),
@@ -41,20 +39,16 @@ impl FormatExt for Voxj {
     ) -> Result<Vec<VoxDocumentFile>> {
         let ext = voxj_vox_ext_from_ext(state.ext().as_ref())?;
 
-        let state = state.take_ext().0.put_ext(ext);
+        let state = state.take_ext().state.put_ext(ext);
 
         let dependencies = dependencies.voxj();
 
         let bytes = match options.serialization {
-            VoxjSerialization::Compact => {
-                to_voxj_bytes_with_ext(dependencies, &state, &options.options)?
-            }
+            VoxjSerialization::Compact => to_voxj_bytes(dependencies, &state, &options.options)?,
             VoxjSerialization::Pretty => {
-                to_voxj_pretty_bytes_with_ext(dependencies, &state, &options.options)?
+                to_voxj_pretty_bytes(dependencies, &state, &options.options)?
             }
-            VoxjSerialization::Zip => {
-                to_voxjz_bytes_with_ext(dependencies, &state, &options.options)?
-            }
+            VoxjSerialization::Zip => to_voxjz_bytes(dependencies, &state, &options.options)?,
         };
 
         Ok(vec![VoxDocumentFile::single(bytes)])

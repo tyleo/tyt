@@ -1,5 +1,8 @@
 use crate::{Dependencies, Format, ReadFormat, Result, VoxDocumentFile, WriteFormat};
-use goxl_voxcore::codec::{from_goxl_bytes, to_goxl_bytes};
+use goxl_voxcore::{
+    codec::{from_goxl_bytes, to_goxl_bytes},
+    to_goxl_vox_main,
+};
 use voxcore::VoxMain;
 
 /// Goxel, the `.gox` file.
@@ -22,18 +25,19 @@ impl Format for Goxl {
     }
 
     fn read<D: Dependencies>(dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<()>> {
-        Ok(from_goxl_bytes(
-            dependencies.goxl(),
-            VoxDocumentFile::single_bytes(files)?,
-        )?)
+        Ok(
+            from_goxl_bytes(dependencies.goxl(), VoxDocumentFile::single_bytes(files)?)?
+                .take_ext()
+                .state,
+        )
     }
 
     fn write<D: Dependencies>(
         dependencies: &D,
         _options: &(),
-        state: &VoxMain<()>,
+        state: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let bytes = to_goxl_bytes(dependencies.goxl(), state)?;
+        let bytes = to_goxl_bytes(dependencies.goxl(), &to_goxl_vox_main(state)?)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

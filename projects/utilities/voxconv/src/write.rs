@@ -9,7 +9,7 @@ use voxcore::VoxMain;
 pub fn write<D: Dependencies>(
     dependencies: &D,
     format: &WriteFormat,
-    state: &VoxMain<()>,
+    state: VoxMain<()>,
 ) -> Result<Vec<VoxDocumentFile>> {
     format.with(Write {
         dependencies,
@@ -20,7 +20,7 @@ pub fn write<D: Dependencies>(
 /// The bare write of one format.
 struct Write<'a, D> {
     dependencies: &'a D,
-    state: &'a VoxMain<()>,
+    state: VoxMain<()>,
 }
 
 impl<D: Dependencies> WriteFormatVisitor for Write<'_, D> {
@@ -54,7 +54,7 @@ mod tests {
         ];
 
         for format in formats {
-            let files = write(&DependenciesImpl, &format, &test_state(())).unwrap();
+            let files = write(&DependenciesImpl, &format, test_state(())).unwrap();
 
             let loaded = read(&DependenciesImpl, format.read_format(), &files).unwrap();
 
@@ -66,7 +66,7 @@ mod tests {
     /// its scene file among others.
     #[test]
     fn documents_take_their_file_shape() {
-        let single = write(&DependenciesImpl, &WriteFormat::MVox, &test_state(())).unwrap();
+        let single = write(&DependenciesImpl, &WriteFormat::MVox, test_state(())).unwrap();
 
         assert_eq!(single.len(), 1);
 
@@ -75,7 +75,7 @@ mod tests {
         let package = write(
             &DependenciesImpl,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            &test_state(()),
+            test_state(()),
         )
         .unwrap();
 
@@ -91,7 +91,7 @@ mod tests {
                 options: VoxjWriteOptions::default(),
             });
 
-            write(&DependenciesImpl, &format, &test_state(()))
+            write(&DependenciesImpl, &format, test_state(()))
                 .unwrap()
                 .remove(0)
                 .bytes
@@ -107,7 +107,7 @@ mod tests {
     /// A single-file format given two files is an error.
     #[test]
     fn two_files_for_one_format_error() {
-        let mut files = write(&DependenciesImpl, &WriteFormat::MVox, &test_state(())).unwrap();
+        let mut files = write(&DependenciesImpl, &WriteFormat::MVox, test_state(())).unwrap();
 
         files.push(files[0].clone());
 

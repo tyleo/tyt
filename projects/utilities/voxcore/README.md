@@ -149,12 +149,12 @@ state.release_object(first_id)?;
 assert_eq!(state.ext().0, [0]);
 ```
 
-`take_ext` takes the ext off a state, leaving a bare `VoxMain<()>`, and
-`put_ext` puts one on a bare state. Together they change a state's ext type
-and move the scene over unchanged.
+`take_ext` takes the ext off a state. The result is a `TakenExt` holding the
+bare `VoxMain<()>` beside the ext. `put_ext` puts an ext on a bare state.
+Together they change a state's ext type and move the scene over unchanged.
 
 ```rust
-let (bare, released) = state.take_ext();
+let TakenExt { state: bare, ext: released } = state.take_ext();
 let state: VoxMain<Released> = bare.put_ext(released);
 ```
 
