@@ -39,12 +39,19 @@ feature turns it on.
 ## The ext
 
 `GoxlExt` holds the Goxel state with no native voxcore home: the header,
-image, preview, materials, cameras, light, unknown chunks, and per-layer
-provenance aligned by index with the hierarchy nodes, each with its stamp
-placements. The ext follows the state's listings through voxcore's `VoxExt`
-hooks. After a node or object is released or reordered, the file still
-writes back with the surviving provenance. A node retained after the load is
-written as a synthesized layer. voxconv carries the ext through a Voxel Json
-document's `ext` block.
+image, preview, materials, cameras, light, unknown chunks, and one layer
+entry per hierarchy node, keyed by the node's id, each with its stamp
+placements. The ext stores only what the scene cannot derive. The writer
+takes a layer's name from its node.
 
-The `serde` feature, on by default, derives serde for the ext types.
+The ext follows the state through voxcore's `VoxExt` hooks, which see the
+`VoxState`. A node retained after the load gets a complete entry on the spot,
+stamping its objects at its translation, the entry the synthesizer would
+have built. A released node drops its entry. A released object leaves every
+entry's placements. A gc rekeys the entries. Releasing a layer that another
+layer clones is refused, because the clone's `base-id` would dangle. Release
+the clones first. voxconv carries the ext through a Voxel Json document's
+`ext` block.
+
+The `serde` feature, on by default, derives serde for the ext types. Ids
+serialize as bare numbers.

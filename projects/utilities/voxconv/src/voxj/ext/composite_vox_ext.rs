@@ -1,10 +1,15 @@
 use crate::ext::VoxconvExt;
 use branded_id::U32Id;
-use voxcore::{BVoxVoxel, VoxExt};
+use std::collections::HashMap;
+use voxcore::{
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxVoxel, Result, VoxExt,
+    VoxGcRemap, VoxState,
+};
 
 /// Several exts as one: a Voxel Json document's `ext` block with each entry as
-/// an ext, in the block's order. Every hook forwards to every entry, so a
-/// decoded ext follows a mutation while an inert one cannot.
+/// an ext, in the block's order. Every hook forwards to every entry and stops
+/// at the first refusal. A decoded ext follows a mutation. An inert one
+/// cannot.
 /// `composite_vox_ext_from_voxj_vox_ext` builds one from a block, and
 /// [`voxj_vox_ext_from_ext`](crate::voxj::ext::voxj_vox_ext_from_ext) takes it
 /// back, erroring when two entries share a key.
@@ -15,81 +20,128 @@ pub struct CompositeVoxExt {
 }
 
 impl VoxExt for CompositeVoxExt {
-    fn hierarchy_node_did_retain(&mut self, index: usize) {
+    fn hierarchy_node_did_retain(
+        &mut self,
+        main: &VoxState,
+        node_id: U32Id<BVoxHierarchyNode>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.hierarchy_node_did_retain(index);
+            ext.hierarchy_node_did_retain(main, node_id)?;
         }
+        Ok(())
     }
 
-    fn hierarchy_node_will_release(&mut self, index: usize) {
+    fn hierarchy_node_will_release(
+        &mut self,
+        main: &VoxState,
+        node_id: U32Id<BVoxHierarchyNode>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.hierarchy_node_will_release(index);
+            ext.hierarchy_node_will_release(main, node_id)?;
         }
+        Ok(())
     }
 
-    fn object_did_retain(&mut self, index: usize) {
+    fn object_did_retain(&mut self, main: &VoxState, object_id: U32Id<BVoxObject>) -> Result<()> {
         for ext in &mut self.exts {
-            ext.object_did_retain(index);
+            ext.object_did_retain(main, object_id)?;
         }
+        Ok(())
     }
 
-    fn object_will_release(&mut self, index: usize) {
+    fn object_will_release(&mut self, main: &VoxState, object_id: U32Id<BVoxObject>) -> Result<()> {
         for ext in &mut self.exts {
-            ext.object_will_release(index);
+            ext.object_will_release(main, object_id)?;
         }
+        Ok(())
     }
 
-    fn object_did_move(&mut self, from: usize, to: usize) {
+    fn palette_did_retain(
+        &mut self,
+        main: &VoxState,
+        palette_id: U32Id<BVoxPalette>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.object_did_move(from, to);
+            ext.palette_did_retain(main, palette_id)?;
         }
+        Ok(())
     }
 
-    fn palette_did_retain(&mut self, index: usize) {
+    fn palette_will_release(
+        &mut self,
+        main: &VoxState,
+        palette_id: U32Id<BVoxPalette>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.palette_did_retain(index);
+            ext.palette_will_release(main, palette_id)?;
         }
+        Ok(())
     }
 
-    fn palette_will_release(&mut self, index: usize) {
+    fn material_did_retain(
+        &mut self,
+        main: &VoxState,
+        palette_id: U32Id<BVoxPalette>,
+        material_id: U32Id<BVoxMaterial>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.palette_will_release(index);
+            ext.material_did_retain(main, palette_id, material_id)?;
         }
+        Ok(())
     }
 
-    fn palette_did_move(&mut self, from: usize, to: usize) {
+    fn materials_will_release(
+        &mut self,
+        main: &VoxState,
+        palette_id: U32Id<BVoxPalette>,
+        material_ids: &[U32Id<BVoxMaterial>],
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.palette_did_move(from, to);
+            ext.materials_will_release(main, palette_id, material_ids)?;
         }
+        Ok(())
     }
 
-    fn material_did_retain(&mut self, palette: usize, index: usize) {
+    fn materials_did_repaint(
+        &mut self,
+        main: &VoxState,
+        palette_id: U32Id<BVoxPalette>,
+        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.material_did_retain(palette, index);
+            ext.materials_did_repaint(main, palette_id, replacement_ids)?;
         }
+        Ok(())
     }
 
-    fn materials_will_release(&mut self, palette: usize, indices: &[usize]) {
+    fn voxel_did_retain(
+        &mut self,
+        main: &VoxState,
+        object_id: U32Id<BVoxObject>,
+        voxel_id: U32Id<BVoxVoxel>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.materials_will_release(palette, indices);
+            ext.voxel_did_retain(main, object_id, voxel_id)?;
         }
+        Ok(())
     }
 
-    fn materials_did_repaint(&mut self, palette: usize, remap: &[(usize, usize)]) {
+    fn voxel_will_release(
+        &mut self,
+        main: &VoxState,
+        object_id: U32Id<BVoxObject>,
+        voxel_id: U32Id<BVoxVoxel>,
+    ) -> Result<()> {
         for ext in &mut self.exts {
-            ext.materials_did_repaint(palette, remap);
+            ext.voxel_will_release(main, object_id, voxel_id)?;
         }
+        Ok(())
     }
 
-    fn voxel_did_retain(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
+    fn did_gc(&mut self, main: &VoxState, remap: &VoxGcRemap) -> Result<()> {
         for ext in &mut self.exts {
-            ext.voxel_did_retain(object, voxel);
+            ext.did_gc(main, remap)?;
         }
-    }
-
-    fn voxel_will_release(&mut self, object: usize, voxel: U32Id<BVoxVoxel>) {
-        for ext in &mut self.exts {
-            ext.voxel_will_release(object, voxel);
-        }
+        Ok(())
     }
 }

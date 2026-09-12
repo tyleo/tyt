@@ -1,38 +1,54 @@
-use crate::{VMaxExt, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette};
+use crate::{VMaxExt, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, synthesized_object_state};
+use branded_id::U32Id;
+use std::collections::BTreeMap;
 use vmax::{VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxObject};
+use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxMain};
 
-/// The ext of a read of `serde`. `palettes` holds each folded palette's
-/// provenance in palette listing order. `object_data` holds each object's
-/// contents filename in object listing order.
+/// The ext of a read of `serde` into `main`.
+///
+/// 1. `node_ids`: the hierarchy node ids in scene order, groups then objects
+/// 2. `palettes`: each folded palette's provenance by palette id
+/// 3. `object_data`: each object's contents filename by object id, or `None`
+///    for an object with no contents file, which takes a synthesized editor
+///    state
 pub fn vmax_ext_from_file(
     serde: &VMaxFile,
-    palettes: Vec<VMaxExtPalette>,
-    object_data: Vec<Option<String>>,
+    main: &VoxMain<()>,
+    node_ids: &[U32Id<BVoxHierarchyNode>],
+    palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
+    object_data: Vec<(U32Id<BVoxObject>, Option<String>)>,
 ) -> VMaxExt {
     let scene = &serde.scene_json_file;
     let mut scene_block = scene.clone();
     scene_block.groups = Vec::new();
     scene_block.objects = Vec::new();
 
-    // Aligned with the hierarchy nodes: groups first, then objects.
-    let mut hierarchy_nodes: Vec<VMaxExtNode> = scene.groups.iter().map(node_from_group).collect();
-    hierarchy_nodes.extend(scene.objects.iter().map(node_from_object));
-
-    let object_states = object_data
+    let entries = scene
+        .groups
         .iter()
-        .map(|data| {
-            data.as_deref()
-                .and_then(|data| serde.contents_files.get(data))
-                .map(object_state_from_contents)
-        })
-        .collect();
+        .map(node_from_group)
+        .chain(scene.objects.iter().map(node_from_object));
+    let hierarchy_nodes = node_ids.iter().copied().zip(entries).collect();
 
-    VMaxExt {
+    let mut ext = VMaxExt {
         scene: scene_block,
         hierarchy_nodes,
-        palettes: palettes.into_iter().map(Some).collect(),
-        object_states,
+        palettes,
+        object_states: BTreeMap::new(),
+    };
+
+    for (object_id, data) in object_data {
+        let entry = match data.and_then(|data| serde.contents_files.get(&data)) {
+            Some(contents) => object_state_from_contents(contents),
+            None => {
+                let object = main.object(object_id).expect("a loaded object is live");
+                synthesized_object_state(&ext, object)
+            }
+        };
+        ext.object_states.insert(object_id, entry);
     }
+
+    ext
 }
 
 /// Captures the editor state of a contents file for the ext. The tool partition
@@ -51,32 +67,30 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VMaxExtObjectStat
     }
 }
 
-/// The per-node provenance for a scene object. The content box is not kept; it
-/// is derived on write from the object's native tight bounds.
+/// The per-node provenance for a scene object. The hierarchy carries the
+/// parent. The write derives the content box from the object's tight bounds.
 fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
     VMaxExtNode {
         id: object.id.clone(),
-        parent_id: object.parent_id.clone(),
-        index: Some(object.ind),
-        rotation: Some(object.rotation),
-        alignment: Some(object.t_al.clone()),
-        pivot_face: Some(object.t_pf.clone()),
-        pivot_align: Some(object.t_pa.clone()),
+        index: object.ind,
+        rotation: object.rotation,
+        alignment: object.t_al.clone(),
+        pivot_face: object.t_pf.clone(),
+        pivot_align: object.t_pa.clone(),
         selected: object.s,
     }
 }
 
-/// The per-node provenance for a scene group. The content box is not kept; it
-/// is derived on write from the bounding box of the group's subtree.
+/// The per-node provenance for a scene group. The hierarchy carries the
+/// parent. The write derives the content box from the group's subtree.
 fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
     VMaxExtNode {
         id: group.id.clone(),
-        parent_id: group.parent_id.clone(),
-        index: Some(group.ind),
-        rotation: Some(group.rotation),
-        alignment: Some(group.t_al.clone()),
-        pivot_face: Some(group.t_pf.clone()),
-        pivot_align: Some(group.t_pa.clone()),
+        index: group.ind,
+        rotation: group.rotation,
+        alignment: group.t_al.clone(),
+        pivot_face: group.t_pf.clone(),
+        pivot_align: group.t_pa.clone(),
         selected: group.s,
     }
 }

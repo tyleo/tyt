@@ -23,11 +23,11 @@ impl FormatExt for Voxj {
         dependencies: &D,
         files: &[VoxDocumentFile],
     ) -> Result<VoxconvVoxMain> {
-        let TakenExt { state, ext } =
+        let TakenExt { main, ext } =
             from_voxj_bytes(dependencies.voxj(), VoxDocumentFile::single_bytes(files)?)?.take_ext();
 
         Ok(box_ext(
-            state.put_ext(composite_vox_ext_from_voxj_vox_ext(ext)?),
+            main.put_ext(composite_vox_ext_from_voxj_vox_ext(ext)?),
         ))
     }
 
@@ -35,20 +35,20 @@ impl FormatExt for Voxj {
     fn write_with_ext<D: Dependencies>(
         dependencies: &D,
         options: &VoxjWriteFormat,
-        state: VoxconvVoxMain,
+        main: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let ext = voxj_vox_ext_from_ext(state.ext().as_ref())?;
+        let ext = voxj_vox_ext_from_ext(main.ext().as_ref())?;
 
-        let state = state.take_ext().state.put_ext(ext);
+        let main = main.take_ext().main.put_ext(ext);
 
         let dependencies = dependencies.voxj();
 
         let bytes = match options.serialization {
-            VoxjSerialization::Compact => to_voxj_bytes(dependencies, &state, &options.options)?,
+            VoxjSerialization::Compact => to_voxj_bytes(dependencies, &main, &options.options)?,
             VoxjSerialization::Pretty => {
-                to_voxj_pretty_bytes(dependencies, &state, &options.options)?
+                to_voxj_pretty_bytes(dependencies, &main, &options.options)?
             }
-            VoxjSerialization::Zip => to_voxjz_bytes(dependencies, &state, &options.options)?,
+            VoxjSerialization::Zip => to_voxjz_bytes(dependencies, &main, &options.options)?,
         };
 
         Ok(vec![VoxDocumentFile::single(bytes)])

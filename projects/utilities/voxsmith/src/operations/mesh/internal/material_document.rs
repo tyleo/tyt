@@ -11,7 +11,7 @@ use crate::{
 use serde_json::{Map, Value, json};
 use ty_math::{TyVector3Ext, TyVector3F32};
 use voxcore::{
-    VoxMain, VoxObject,
+    VoxExt, VoxMain, VoxObject,
     material::{EMISSIVE_STRENGTH, IOR, TRANSMISSION, default_scalar},
 };
 
@@ -52,24 +52,24 @@ pub(crate) struct MaterialDocument {
 /// `target` decides how embedded images travel, and `request.storage` whether
 /// they are embedded, loose, or both. `dependencies` encodes the images. An
 /// object with no geometry yields an empty scene. Errors if a layer references
-/// a palette `state` does not hold, or if a vocabulary property's value is
+/// a palette `main` does not hold, or if a vocabulary property's value is
 /// outside its glTF range.
-pub(crate) fn build_material_document<D: EncodePng, T>(
+pub(crate) fn build_material_document<D: EncodePng, T: VoxExt>(
     dependencies: &D,
-    state: &VoxMain<T>,
+    main: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
     target: MeshTarget,
 ) -> Result<MaterialDocument> {
     // Nothing out of range reaches a mesh file: the vocabulary range check
     // gates the export before anything is written.
-    check_gltf_property_ranges(state)?;
+    check_gltf_property_ranges(main)?;
 
     // Every map reads its properties as the kinds the object's layers bind
     // them to, checked once here before the bake reads texel by texel.
-    check_material_maps(state, object, &request.maps)?;
+    check_material_maps(main, object, &request.maps)?;
 
-    let used = resolve_used_materials(state, object)?;
+    let used = resolve_used_materials(main, object)?;
 
     let geometry = mesh_slices(
         object,

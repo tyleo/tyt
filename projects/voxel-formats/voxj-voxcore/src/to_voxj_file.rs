@@ -4,7 +4,7 @@ use crate::{
     voxj_palette_from_vox_palette, voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxExt, VoxMain, VoxObject};
 use voxj::{
     CostVoxjObject, EncodeBase64, VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain,
     VoxjRuntimeState,
@@ -31,23 +31,23 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 ///    candidates. A pinned pair is never costed.
 pub fn to_voxj_file<D: EncodeBase64 + CostVoxjObject>(
     dependencies: &D,
-    state: &VoxjVoxMain,
+    main: &VoxjVoxMain,
     options: &VoxjWriteOptions,
 ) -> Result<VoxjFile> {
-    let value_pools = state
+    let value_pools = main
         .iter_value_pools()
         .map(|(_, value_pool)| voxj_value_pool_from_vox_value_pool(value_pool))
         .collect::<Vec<_>>();
 
-    let palettes = state
+    let palettes = main
         .iter_palettes()
         .map(|(_, palette)| voxj_palette_from_vox_palette(palette))
         .collect::<Vec<_>>();
 
-    let objects = state
+    let objects = main
         .iter_objects()
         .map(|(object_id, _)| {
-            let decoded = voxj_decoded_object_from_vox_object(state, object_id);
+            let decoded = voxj_decoded_object_from_vox_object(main, object_id);
             let material_counts = voxj_palette_material_counts(&decoded.layers, &palettes)?;
             encode_voxj_object_optimized(
                 dependencies,
@@ -59,12 +59,12 @@ pub fn to_voxj_file<D: EncodeBase64 + CostVoxjObject>(
         })
         .collect::<ObjectsResult<Vec<_>>>()?;
 
-    let nodes = state
+    let nodes = main
         .iter_hierarchy_nodes()
         .map(|(_, node)| voxj_hierarchy_node_from_vox_hierarchy_node(node))
         .collect();
 
-    let root_nodes = state
+    let root_nodes = main
         .root_hierarchy_node_ids()
         .iter()
         .map(|node_id| node_id.to_u32() as usize)
@@ -72,8 +72,8 @@ pub fn to_voxj_file<D: EncodeBase64 + CostVoxjObject>(
 
     // Editor state, aligned by index with the objects. Each entry is the
     // object's build volume.
-    let edit_state = emit_edit_state(state, options.edit_state).then(|| VoxjEditState {
-        objects: state
+    let edit_state = emit_edit_state(main, options.edit_state).then(|| VoxjEditState {
+        objects: main
             .iter_objects()
             .map(|(_, object)| {
                 let bounds = object.bounds();
@@ -87,8 +87,8 @@ pub fn to_voxj_file<D: EncodeBase64 + CostVoxjObject>(
     });
 
     // An empty ext is no block.
-    let ext = if options.ext && !state.ext().is_empty() {
-        Some(voxj_map_from_vox_map_entries(state.ext().slots()))
+    let ext = if options.ext && !main.ext().is_empty() {
+        Some(voxj_map_from_vox_map_entries(main.ext().slots()))
     } else {
         None
     };
@@ -112,11 +112,11 @@ pub fn to_voxj_file<D: EncodeBase64 + CostVoxjObject>(
 /// Whether the document records editor build volumes under `mode`. Auto records
 /// them only when some object carries margin around its live voxels. An
 /// already-tight object recreates its build volume on load.
-fn emit_edit_state<T>(state: &VoxMain<T>, mode: EditStateMode) -> bool {
+fn emit_edit_state<T: VoxExt>(main: &VoxMain<T>, mode: EditStateMode) -> bool {
     match mode {
         EditStateMode::Always => true,
         EditStateMode::Never => false,
-        EditStateMode::Auto => state.iter_objects().any(|(_, object)| !is_tight(object)),
+        EditStateMode::Auto => main.iter_objects().any(|(_, object)| !is_tight(object)),
     }
 }
 

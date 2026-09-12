@@ -28,16 +28,16 @@ impl Format for Qbcl {
         Ok(
             from_qbcl_bytes(dependencies.qbcl(), VoxDocumentFile::single_bytes(files)?)?
                 .take_ext()
-                .state,
+                .main,
         )
     }
 
     fn write<D: Dependencies>(
         dependencies: &D,
         _options: &(),
-        state: VoxMain<()>,
+        main: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let bytes = to_qbcl_bytes(dependencies.qbcl(), &to_qbcl_vox_main(state)?)?;
+        let bytes = to_qbcl_bytes(dependencies.qbcl(), &to_qbcl_vox_main(main)?)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

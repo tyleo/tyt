@@ -1,91 +1,62 @@
-use crate::{Error, Placement, Result, VMaxExt, VMaxVoxMain, synth_uuid, synthesized_node};
+use crate::{Error, Placement, Result, VMaxVoxMain};
 use branded_id::U32Id;
-use std::collections::{HashMap, HashSet};
-use voxcore::{BVoxHierarchyNode, VoxMain};
+use std::collections::BTreeMap;
+use voxcore::BVoxHierarchyNode;
 
-/// Pairs each voxcore node with its ext entry by listing index, the placement
-/// the writer emits. A vmax-origin scene is a tree with one ext node per
-/// voxcore node, so this reproduces it exactly. An entry with no id was
-/// inserted by a hook for a node retained after the load, so it is filled in
-/// like a synthesized node: a fresh UUID no other entry uses, its first
-/// parent's id, the node's rotation, and the default anchor tokens. Errors
-/// when the ext is out of step with the listings.
-pub fn ext_placements(state: &VMaxVoxMain) -> Result<Vec<Placement<'_>>> {
-    let vmax_ext = state.ext();
-    check_alignment(state, vmax_ext)?;
+/// Pairs each voxcore node, in listing order, with its ext entry by id and
+/// its parent's id from the scene. Voxel Max holds a tree. Errors when:
+///
+/// 1. a node has no entry, which means the ext is out of step
+/// 2. a node has more than one parent
+/// 3. a root is also a child, because a written node with a parent is no
+///    longer a root
+pub fn ext_placements(main: &VMaxVoxMain) -> Result<Vec<Placement<'_>>> {
+    let ext = main.ext();
 
-    // Every id first, so a child can link to an inserted parent anywhere in
-    // the listing.
-    let taken: HashSet<&str> = vmax_ext
-        .hierarchy_nodes
-        .iter()
-        .map(|node| node.id.as_str())
-        .collect();
-    let mut counter = 0usize;
-    let ids: Vec<String> = vmax_ext
-        .hierarchy_nodes
-        .iter()
-        .map(|node| {
-            if !node.id.is_empty() {
-                return node.id.clone();
-            }
-            loop {
-                let id = synth_uuid(counter);
-                counter += 1;
-                if !taken.contains(id.as_str()) {
-                    return id;
-                }
-            }
-        })
-        .collect();
-
-    let mut parent_indices: HashMap<U32Id<BVoxHierarchyNode>, usize> = HashMap::new();
-    for (index, (_, node)) in state.iter_hierarchy_nodes().enumerate() {
+    let mut parent_ids: BTreeMap<U32Id<BVoxHierarchyNode>, U32Id<BVoxHierarchyNode>> =
+        BTreeMap::new();
+    for (parent_id, node) in main.iter_hierarchy_nodes() {
         for &child_id in &node.child_node_ids {
-            parent_indices.entry(child_id).or_insert(index);
+            if let Some(&other_id) = parent_ids.get(&child_id) {
+                return Err(Error::invalid(format!(
+                    "node {} has parents {} and {}, but a Voxel Max node has one parent",
+                    child_id.to_u32(),
+                    other_id.to_u32(),
+                    parent_id.to_u32()
+                )));
+            }
+            parent_ids.insert(child_id, parent_id);
         }
     }
 
-    Ok(state
-        .iter_hierarchy_nodes()
-        .enumerate()
-        .map(|(index, (node_id, node))| {
-            let stored = &vmax_ext.hierarchy_nodes[index];
-            let ext = if stored.id.is_empty() {
-                let parent_id = parent_indices
-                    .get(&node_id)
-                    .map(|&parent_index| ids[parent_index].clone());
-                synthesized_node(ids[index].clone(), parent_id, node)
-            } else {
-                stored.clone()
-            };
-            Placement { node_id, node, ext }
-        })
-        .collect())
-}
-
-/// Checks that each aligned list of the ext is as long as its listing. The
-/// hooks keep them in step, so a mismatch is a malformed ext.
-fn check_alignment<T>(state: &VoxMain<T>, vmax_ext: &VMaxExt) -> Result<()> {
-    let lists = [
-        (
-            "hierarchy nodes",
-            vmax_ext.hierarchy_nodes.len(),
-            state.hierarchy_node_count(),
-        ),
-        ("palettes", vmax_ext.palettes.len(), state.palette_count()),
-        (
-            "object states",
-            vmax_ext.object_states.len(),
-            state.object_count(),
-        ),
-    ];
-    for (list, stored, count) in lists {
-        if stored != count {
+    for &root_id in main.root_hierarchy_node_ids() {
+        if let Some(parent_id) = parent_ids.get(&root_id) {
             return Err(Error::invalid(format!(
-                "vmax ext has {stored} {list} but the state has {count}"
+                "node {} is a root and a child of node {}, but a Voxel Max node with a parent \
+                 is not a root",
+                root_id.to_u32(),
+                parent_id.to_u32()
             )));
         }
     }
-    Ok(())
+
+    main.iter_hierarchy_nodes()
+        .map(|(node_id, node)| {
+            let entry = |id: U32Id<BVoxHierarchyNode>| {
+                ext.hierarchy_nodes.get(&id).ok_or_else(|| {
+                    Error::invalid(format!("vmax ext holds no entry for node {}", id.to_u32()))
+                })
+            };
+            let parent_id = match parent_ids.get(&node_id) {
+                Some(&parent_id) => Some(entry(parent_id)?.id.clone()),
+                None => None,
+            };
+            Ok(Placement {
+                node_id,
+                node,
+                ext: entry(node_id)?,
+                parent_id,
+            })
+        })
+        .collect()
 }

@@ -6,10 +6,10 @@ use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxExt, VoxMain, material::BASE_C
 /// material's color in turn, then the colors no material uses. Rendering is
 /// unchanged. A no-op without a `baseColor` property.
 ///
-/// Requires a referentially valid state, which
+/// Requires a referentially valid main, which
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) checks.
-pub fn order_palette_colors<T: VoxExt>(state: &mut VoxMain<T>, palette_id: U32Id<BVoxPalette>) {
-    let Some(palette_ref) = state.palette(palette_id) else {
+pub fn order_palette_colors<T: VoxExt>(main: &mut VoxMain<T>, palette_id: U32Id<BVoxPalette>) {
+    let Some(palette_ref) = main.palette(palette_id) else {
         return;
     };
     let Some(color_id) = palette_ref.property_id_by_name(BASE_COLOR) else {
@@ -21,7 +21,7 @@ pub fn order_palette_colors<T: VoxExt>(state: &mut VoxMain<T>, palette_id: U32Id
     else {
         return;
     };
-    let Some(value_pool) = state.value_pool(value_pool_id) else {
+    let Some(value_pool) = main.value_pool(value_pool_id) else {
         return;
     };
 
@@ -43,8 +43,7 @@ pub fn order_palette_colors<T: VoxExt>(state: &mut VoxMain<T>, palette_id: U32Id
         }
     }
 
-    state
-        .reorder_value_pool(value_pool_id, &new_order)
+    main.reorder_value_pool(value_pool_id, &new_order)
         .expect("the color value pool is live and new_order is a permutation by construction");
 }
 
@@ -56,10 +55,10 @@ mod tests {
 
     #[test]
     fn orders_colors_to_material_order() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         // Three colors; materials reference them out of order: blue, red,
         // green.
-        let value_pool_id = state.retain_value_pool(
+        let value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
@@ -74,15 +73,15 @@ mod tests {
         let blue_id = palette.retain_material(vec![U32Id::from_u32(2)]).unwrap();
         let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
         let green_id = palette.retain_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
-        state.validate().unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
+        main.validate().unwrap();
 
-        order_palette_colors(&mut state, palette_id);
+        order_palette_colors(&mut main, palette_id);
 
         // The value pool lists the colors in material order. Ids and what each
         // material resolves to are unchanged.
         assert_eq!(
-            state.value_pool(value_pool_id),
+            main.value_pool(value_pool_id),
             Some(
                 &VoxValuePool::vec_4_float(vec![
                     [0.0, 0.0, 1.0, 1.0],
@@ -92,11 +91,11 @@ mod tests {
                 .unwrap()
             )
         );
-        state.validate().unwrap();
+        main.validate().unwrap();
 
         // After a gc the material color value ids follow the listing: 0, 1, 2.
-        state.gc();
-        let palette = state.palette(palette_id).unwrap();
+        main.gc().unwrap();
+        let palette = main.palette(palette_id).unwrap();
         assert_eq!(
             palette.value_id(blue_id, color_property_id),
             Some(U32Id::from_u32(0))
@@ -109,13 +108,13 @@ mod tests {
             palette.value_id(green_id, color_property_id),
             Some(U32Id::from_u32(2))
         );
-        state.validate().unwrap();
+        main.validate().unwrap();
     }
 
     #[test]
     fn orders_colors_past_an_unused_color_and_a_hole() {
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = state.retain_value_pool(
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
@@ -132,20 +131,19 @@ mod tests {
         palette.retain_material(vec![U32Id::from_u32(2)]).unwrap();
         palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
         palette.retain_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         // Hole the value pool, so the live value ids the reorder walks are
         // sparse.
-        state
-            .release_value_pool_value(value_pool_id, U32Id::from_u32(4))
+        main.release_value_pool_value(value_pool_id, U32Id::from_u32(4))
             .unwrap();
-        state.validate().unwrap();
+        main.validate().unwrap();
 
-        order_palette_colors(&mut state, palette_id);
+        order_palette_colors(&mut main, palette_id);
 
         // The three drawn colors lead in material order, then the unused one.
         assert_eq!(
-            state.value_pool(value_pool_id),
+            main.value_pool(value_pool_id),
             Some(
                 &VoxValuePool::vec_4_float(vec![
                     [0.0, 0.0, 1.0, 1.0],
@@ -156,9 +154,9 @@ mod tests {
                 .unwrap()
             )
         );
-        state.validate().unwrap();
+        main.validate().unwrap();
 
-        state.gc();
-        state.validate().unwrap();
+        main.gc().unwrap();
+        main.validate().unwrap();
     }
 }

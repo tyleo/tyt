@@ -1,6 +1,6 @@
 /// What [`info`](crate::operations::info::info()) reports about a document
 /// beyond its scene: where it came from and what the source carried that the
-/// loaded state drops.
+/// loaded main drops.
 #[derive(Clone, Copy, Debug)]
 pub struct InfoDocument<'a> {
     /// The file name, printed as the report title.

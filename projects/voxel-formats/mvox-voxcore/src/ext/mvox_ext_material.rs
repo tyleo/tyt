@@ -1,16 +1,14 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Per-material provenance in the `mvox` ext: the authoritative type
-/// token and scalar fields written back to the `MATL` chunk. They also fold
-/// into the palette's value pools, which default an absent field, so the exact
-/// optionals are kept here.
+/// Per-material provenance in the `mvox` ext, keyed by the material it folds
+/// into: the authoritative type token and scalar fields written back to the
+/// `MATL` chunk. They also fold into the palette's value pools, which default
+/// an absent field, so the exact optionals are kept here. The `MATL` id is the
+/// material id.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct MVoxExtMaterial {
-    /// The material id, which is the material index it folds into.
-    pub id: i32,
-
     /// The `_type` shading token.
     #[cfg_attr(
         feature = "serde",

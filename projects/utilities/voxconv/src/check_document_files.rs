@@ -44,7 +44,7 @@ impl<D: Dependencies> ReadFormatVisitor for Check<'_, D> {
 mod tests {
     use crate::{
         DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat, check_document_files,
-        test_state, write,
+        test_main, write,
     };
     use voxcore::check::VoxCheckStatus;
 
@@ -54,7 +54,7 @@ mod tests {
         let files = write(
             &DependenciesImpl,
             &WriteFormat::from(ReadFormat::Voxj),
-            test_state(()),
+            test_main(()),
         )
         .unwrap();
 

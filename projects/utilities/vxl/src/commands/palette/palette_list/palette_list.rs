@@ -73,9 +73,9 @@ impl PaletteList {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
 
-        let output = palette_list(&state, &self.filters, fields, self.layout)?;
+        let output = palette_list(&main, &self.filters, fields, self.layout)?;
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

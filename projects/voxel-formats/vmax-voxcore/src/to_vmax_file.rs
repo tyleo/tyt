@@ -1,24 +1,23 @@
 use crate::{
-    ABSORPTION, Error, FALLBACK_CONTENT_VERSION, IDENTITY_AXIS_ANGLE, Result, SHADOWS,
-    SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode, VMaxExtPalette,
-    VMaxVoxMain, VMaxWriteOptions, ext_placements, pbr_factor_to_vm_coefficient, tighten,
+    ABSORPTION, Error, ObjectPlacement, Placement, Result, SHADOWS, SYNTH_CAMERA,
+    SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState,
+    VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, axis_angle, ext_placements,
+    pbr_factor_to_vm_coefficient, place_object, tighten,
 };
 use branded_id::U32Id;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use ty_math::{
     TyBoundsF64, TyLinSrgbaF64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64,
-    TyVector3I32, TyVector3U32, ZERO_LENGTH_TOLERANCE,
+    ZERO_LENGTH_TOLERANCE,
 };
 use vmax::{
-    VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
-    VMaxFile, VMaxFlag, VMaxFlagValue, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxMode,
-    VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
-    VMaxToolMode, VMaxTools, VMaxViewBox,
+    VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
+    VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
     snapshots::{VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, BVoxValuePoolValue,
-    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+    VoxExt, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     color::value_pool_color,
     material::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, ROUGHNESS, TRANSMISSION,
@@ -49,42 +48,41 @@ const DEFAULT_ROUGHNESS: f64 = 0.9;
 /// object shares the first color palette's name and writes no file of its own.
 const FALLBACK_PALETTE: &str = "palette1.png";
 
+/// How far a node's rotation may drift from its preserved axis-angle before
+/// the writer encodes the live rotation instead.
+const ROTATION_TOLERANCE: f64 = 1e-9;
+
 /// Writes a [`VMaxVoxMain`] to a Voxel Max document, the inverse of
 /// [`from_vmax_file`](crate::from_vmax_file). A loaded document writes back
 /// exactly through its ext. A state
 /// [`to_vmax_vox_main`](crate::to_vmax_vox_main) gave its ext writes as a
-/// document synthesized from the scene. The ext supplies the placements, the
-/// scene-level state, and each palette's and object's provenance.
-pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
-    let placements = ext_placements(state)?;
-
-    // The ext's lists align with the listings, not the ids.
-    let object_indices: HashMap<U32Id<BVoxObject>, usize> = state
-        .iter_objects()
-        .enumerate()
-        .map(|(index, (object_id, _))| (object_id, index))
-        .collect();
-    let palette_indices: HashMap<U32Id<BVoxPalette>, usize> = state
-        .iter_palettes()
-        .enumerate()
-        .map(|(index, (palette_id, _))| (palette_id, index))
-        .collect();
+/// document synthesized from the scene. The ext supplies each node's,
+/// palette's, and object's provenance and the scene-level state. The scene
+/// supplies the rest: names, transforms, parents, and content boxes. Nodes
+/// write in listing order, children before parents when the listing has them
+/// so, as Voxel Max's documents do. Errors when an entity has no ext entry.
+pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
+    let placements = ext_placements(main)?;
 
     let mut objects: Vec<VMaxObject> = Vec::new();
     let mut groups: Vec<VMaxGroup> = Vec::new();
     // Color palette id -> the `pal` filename written for it.
-    let mut palette_files: HashMap<U32Id<BVoxPalette>, String> = HashMap::new();
+    let mut palette_files: BTreeMap<U32Id<BVoxPalette>, String> = BTreeMap::new();
     // Object id -> its `data` filename, shared by every node that places it.
-    let mut contents_by_object: HashMap<U32Id<BVoxObject>, String> = HashMap::new();
+    let mut contents_by_object: BTreeMap<U32Id<BVoxObject>, String> = BTreeMap::new();
 
     let mut contents_files: BTreeMap<String, VMaxContentsVmaxbFile> = BTreeMap::new();
     let mut palette_settings_files: BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile> =
         BTreeMap::new();
     let mut palette_png_files: BTreeMap<String, VMaxPalettePngFile> = BTreeMap::new();
 
-    // A distinct `ind` per emitted node; Voxel Max collapses nodes that share
-    // `[0, 0, 0]`. The lossless path keeps its preserved `ind` and skips this.
-    let mut ind_counter = 0i64;
+    // Every node's `ind` is distinct through its entry. An extra object on a
+    // node placing several is emitted without an entry, so it takes a triplet
+    // no entry uses.
+    let mut used_indices: HashSet<[i64; 3]> = placements
+        .iter()
+        .map(|placement| placement.ext.index)
+        .collect();
 
     // A group's content box is derived from its subtree, the same box for every
     // path to a shared node, so it is memoized by node id.
@@ -92,12 +90,12 @@ pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<V
 
     for placement in &placements {
         let node = placement.node;
-        let ext_node = &placement.ext;
+        let ext_node = placement.ext;
+        let rotation = node_rotation(ext_node, node);
 
         if node.child_object_ids.is_empty() {
-            let ind = node_ind(ext_node, true, &mut ind_counter);
-            let (center, half) = subtree_box_local(state, placement.node_id, &mut box_memo);
-            groups.push(group_from_node(node, ext_node, ind, center, half));
+            let (center, half) = subtree_box_local(main, placement.node_id, &mut box_memo);
+            groups.push(group_from_node(placement, rotation, center, half));
             continue;
         }
 
@@ -108,23 +106,27 @@ pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<V
         // the same parent.
         for (slot, object_id) in node.child_object_ids.iter().enumerate() {
             let object_id = *object_id;
-            let object = state.object(object_id).expect("a valid node child object");
-            let folded = folded_ref(state, object);
+            let object = main.object(object_id).expect("a valid node child object");
+            let folded = folded_ref(main, object);
             let plan = match folded.as_ref() {
                 Some(folded) => {
-                    let provenance =
-                        state.ext().palettes[palette_indices[&folded.palette_id]].as_ref();
-                    material_plan(state, folded, provenance)?
+                    let provenance = ext_entry(
+                        main.ext().palettes.get(&folded.palette_id),
+                        "palette",
+                        folded.palette_id.to_u32(),
+                    )?;
+                    material_plan(main, folded, provenance)?
                 }
                 None => MaterialPlan::default(),
             };
             let suffix = suffix(object_id);
-            // The node's ext places its first object; an extra object gets a
-            // per-object variant with a distinct id and its own bounds.
+            // The node's ext places its first object. An extra object gets a
+            // per-object variant with a distinct id and index and its own
+            // bounds.
             let object_ext = if slot == 0 {
                 ext_node.clone()
             } else {
-                secondary_object_ext(ext_node, slot)
+                secondary_object_ext(ext_node, slot, &mut used_indices)
             };
 
             // Re-derive the object's internal-grid placement by convention:
@@ -133,57 +135,31 @@ pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<V
             // runtime grid is the live voxels' tight extent within the object's
             // build volume; the content box follows from it and the build
             // volume, the scene placement from the node transform.
-            let (tight, (edit_bounds, edit_origin)) = tighten(object);
-            let placement =
-                object_placement(tight.bounds(), tight.origin(), edit_bounds, edit_origin);
-            let object_state = state.ext().object_states[object_indices[&object_id]].clone();
+            let (tight, object_placement) = place_object(object);
+            let object_state = ext_entry(
+                main.ext().object_states.get(&object_id),
+                "object",
+                object_id.to_u32(),
+            )?;
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
                 Some(data) => data.clone(),
                 None => {
                     let voxels = reconstruct_voxels(
-                        state,
+                        main,
                         &tight,
                         folded.as_ref(),
                         &plan,
-                        placement.box_min,
+                        object_placement.box_min,
                     )?;
                     let data = format!("contents{suffix}.vmaxb");
                     // Voxels re-encode into snapshots; serde-only state the
                     // decoded voxcore object does not model (`pal`) stays
                     // absent.
-                    let contents = match object_state {
-                        // Keep the preserved editor session, but re-scope its
-                        // canvas (`vp`) to the derived build volume.
-                        Some(state) => {
-                            let mut tools = state.tools;
-                            if let Some(tools) = tools.as_mut() {
-                                tools.vp = Some(placement.view_box.clone());
-                            }
-                            VMaxContentsVmaxbFile {
-                                snapshots: encode_vmax_snapshots(&voxels),
-                                uuid: state.uuid,
-                                v: state.v,
-                                tools,
-                                brush: state.brush,
-                                cam: state.cam,
-                                pal: None,
-                            }
-                        }
-                        // Voxel Max's object decoder rejects a sparse editor
-                        // state, so a synthesized object carries default
-                        // `tools`, `brush`, and `cam`. Its `vp` frames the
-                        // object's build volume.
-                        None => VMaxContentsVmaxbFile {
-                            snapshots: encode_vmax_snapshots(&voxels),
-                            uuid: object_ext.id.clone(),
-                            v: FALLBACK_CONTENT_VERSION,
-                            tools: Some(default_tools(placement.view_box.clone())),
-                            brush: Some(default_brush()),
-                            cam: Some(default_camera(placement.center)),
-                            pal: None,
-                        },
+                    let contents = VMaxContentsVmaxbFile {
+                        snapshots: encode_vmax_snapshots(&voxels),
+                        ..contents_editor_state(object_state, &object_placement)
                     };
                     contents_files.insert(data.clone(), contents);
                     contents_by_object.insert(object_id, data.clone());
@@ -192,7 +168,7 @@ pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<V
             };
 
             let pal = build_palette(
-                state,
+                main,
                 folded.as_ref(),
                 &plan,
                 &mut palette_files,
@@ -201,20 +177,20 @@ pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<V
                 options.color_format,
             )?;
 
-            let ind = node_ind(&object_ext, false, &mut ind_counter);
             objects.push(object_from_node(
                 node,
                 &object_ext,
-                &placement,
+                placement.parent_id.clone(),
+                rotation,
+                &object_placement,
                 data,
                 pal,
                 &suffix,
-                ind,
             ));
         }
     }
 
-    let mut scene = state.ext().scene.clone();
+    let mut scene = main.ext().scene.clone();
     scene.groups = groups;
     scene.objects = objects;
     apply_scene_camera(&mut scene, options.scene_camera);
@@ -234,119 +210,31 @@ pub fn to_vmax_file(state: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<V
     })
 }
 
-/// Default `tools` for a synthesized object. Voxel Max's object decoder rejects
-/// a sparse `tools`, so this mirrors a fresh object's editor state. `view_box`
-/// scopes the view/edit partition (`vp`) to the object's build volume.
-fn default_tools(view_box: VMaxViewBox) -> VMaxTools {
-    // A mode dict that sets only `mo`, or only `m`.
-    let mo = |mo: &str| VMaxMode {
-        mo: Some(mo.to_owned()),
-        ..Default::default()
-    };
-    let m = |m: &str| VMaxMode {
-        m: Some(m.to_owned()),
-        ..Default::default()
-    };
-    let flag = |x: VMaxFlagValue| {
-        Some(VMaxFlag {
-            x,
-            y: None,
-            z: None,
-        })
-    };
-    // A tool with a single active surface; the closure picks the surface field.
-    fn tool(set: impl FnOnce(&mut VMaxToolMode)) -> Option<VMaxToolMode> {
-        let mut mode = VMaxToolMode::default();
-        set(&mut mode);
-        Some(mode)
-    }
-    VMaxTools {
-        bs: 1,
-        mi: 0,
-        bi: 0,
-        al: "1".to_owned(),
-        src: None,
-        stf: flag(VMaxFlagValue::Int(1)),
-        mr: flag(VMaxFlagValue::Bool(false)),
-        st: flag(VMaxFlagValue::Bool(false)),
-        vp: Some(view_box),
-        bst: Some(VMaxBrushState {
-            cm: "ng".to_owned(),
-            cp: "n".to_owned(),
-            gm: "u".to_owned(),
-            gp: "n".to_owned(),
-            ocx: Some(0),
-            ocn: Some(-1),
-            sfaz: None,
-            sfat: None,
-        }),
-        ct: tool(|t| t.c = Some(mo("v"))),
-        ctc: tool(|t| t.c = Some(mo("v"))),
-        cte: tool(|t| t.e = Some(mo("v"))),
-        ctp: tool(|t| t.p = Some(mo("v"))),
-        cts: tool(|t| {
-            t.s = Some(VMaxMode {
-                mo: Some("v".to_owned()),
-                mf: Some("nw".to_owned()),
-                ..Default::default()
-            })
-        }),
-        ctm: tool(|t| t.m = Some(mo("d"))),
-        pctm: tool(|t| t.m = Some(mo("d"))),
-        cta: tool(|t| t.a = Some(mo("ma"))),
-        dm: tool(|t| t.b = Some(m("d"))),
-        dmb: tool(|t| t.b = Some(m("d"))),
-        dmc: tool(|t| t.c = Some(m("e"))),
-        dml: tool(|t| t.l = Some(m("d"))),
-        dms: tool(|t| {
-            t.s = Some(VMaxMode {
-                m: Some("c8".to_owned()),
-                t: Some("f".to_owned()),
-                ..Default::default()
-            })
-        }),
-    }
+/// The entry for an entity, or the error for an ext out of step with the
+/// scene.
+fn ext_entry<'a, T>(entry: Option<&'a T>, what: &str, id: u32) -> Result<&'a T> {
+    entry.ok_or_else(|| Error::invalid(format!("vmax ext holds no entry for {what} {id}")))
 }
 
-/// Default `brush` palette for a synthesized object, mirroring a fresh
-/// document.
-fn default_brush() -> VMaxBrush {
-    use VMaxBrushEntry::{Bb, C, Ch, Db, E, Eh, Pr, Py};
-    let color = |dm: [i64; 3]| VMaxBrushColor { dm: dm.to_vec() };
-    VMaxBrush {
-        name: "Palette #1".to_owned(),
-        current: 0,
-        brushes: vec![
-            C(color([1, 1, 1])),
-            Ch(color([5, 5, 5])),
-            E(color([5, 5, 5])),
-            Eh(color([5, 5, 5])),
-            Bb(color([5, 5, 5])),
-            Db(color([5, 5, 5])),
-            Pr(color([5, 5, 5])),
-            Py(color([5, 5, 5])),
-        ],
+/// The editor state a contents file carries, without its snapshots: the
+/// entry's session as it is, with the canvas `vp` re-scoped to the derived
+/// build volume.
+fn contents_editor_state(
+    object_state: &VMaxExtObjectState,
+    placement: &ObjectPlacement,
+) -> VMaxContentsVmaxbFile {
+    let mut tools = object_state.tools.clone();
+    if let Some(tools) = tools.as_mut() {
+        tools.vp = Some(placement.view_box.clone());
     }
-}
-
-/// Default editor `cam` for a synthesized object. A single-object document
-/// opens straight into this object-editor view, so the camera must orbit the
-/// object's content, not the corner of its 0..256 internal grid: `target` is
-/// the content center in internal-grid coordinates (the object's `e_c`),
-/// matching the rig Voxel Max writes when it frames the object. The rest is a
-/// neutral framed-view rig.
-fn default_camera(target: [f64; 3]) -> VMaxCamera {
-    VMaxCamera {
-        wa: 0.0,
-        ha: 0.1959133446216583,
-        da: 0.0,
-        lwa: 0.25,
-        lha: 1.820913314819336,
-        lda: 0.0,
-        px: 0.0,
-        py: 0.0,
-        z: 512.0,
-        o: target,
+    VMaxContentsVmaxbFile {
+        snapshots: Vec::new(),
+        uuid: object_state.uuid.clone(),
+        v: object_state.v,
+        tools,
+        brush: object_state.brush.clone(),
+        cam: object_state.cam.clone(),
+        pal: None,
     }
 }
 
@@ -361,112 +249,24 @@ fn apply_scene_camera(scene: &mut VMaxSceneJsonFile, scene_camera: SceneCameraSo
 }
 
 /// The per-object ext for an extra object on a node placing several, such as a
-/// Goxel layer's blocks. It takes a distinct id and inherits the node's parent,
-/// rotation, and alignment to stay a sibling of the node's first object; its
-/// content box is derived from its own bounds on write.
-fn secondary_object_ext(node_ext: &VMaxExtNode, slot: usize) -> VMaxExtNode {
+/// Goxel layer's blocks. It takes a distinct id and a distinct index triplet
+/// and inherits the node's rotation and alignment to stay a sibling of the
+/// node's first object. Its content box is derived from its own bounds on
+/// write.
+fn secondary_object_ext(
+    node_ext: &VMaxExtNode,
+    slot: usize,
+    used_indices: &mut HashSet<[i64; 3]>,
+) -> VMaxExtNode {
+    let index = (0..)
+        .map(|counter| [0, 0, counter])
+        .find(|index| !used_indices.contains(index))
+        .expect("a fresh counter exists");
+    used_indices.insert(index);
     VMaxExtNode {
         id: secondary_uuid(&node_ext.id, slot),
+        index,
         ..node_ext.clone()
-    }
-}
-
-/// The build volume's edit-space origin for a synthesized object grid of
-/// `size`: centered in the 256-wide workspace in x and y and on the floor in z,
-/// where Voxel Max frames a fresh object. A model wider than the workspace
-/// keeps the origin corner so its voxels stay non-negative.
-fn centered_origin(size: TyVector3U32) -> [i32; 3] {
-    let centered = |s: u32| ((256 - s as i64) / 2).max(0) as i32;
-    [centered(size.x), centered(size.y), 0]
-}
-
-/// An object's internal-grid placement derived for the Voxel Max write: where
-/// its voxels sit in the private workspace, and the content box and build
-/// volume that follow. The scene placement is recovered separately from the
-/// node transform.
-struct ObjectPlacement {
-    /// The runtime grid's min corner in the workspace.
-    box_min: [i32; 3],
-
-    /// The grid `origin` carried over from the object, for the pivot math.
-    origin: [i32; 3],
-
-    /// The content center (`e_c`): `box_min + bounds / 2`.
-    center: [f64; 3],
-
-    /// The content box min relative to the center (`e_mi`): `-bounds / 2`.
-    bounds_min: [f64; 3],
-
-    /// The content box max relative to the center (`e_ma`): `bounds / 2`.
-    bounds_max: [f64; 3],
-
-    /// The build volume (`tools.vp`): the edit grid placed in the workspace.
-    view_box: VMaxViewBox,
-}
-
-/// Derives an object's internal-grid placement by convention. The canvas (edit
-/// grid) is centered in the 256-wide workspace, and the runtime grid sits
-/// inside it by the runtime/edit origin offset. The content box follows from
-/// the tight bounds. The internal-grid position is invisible to the scene,
-/// which the node transform places, so re-deriving it loses nothing.
-fn object_placement(
-    bounds: TyVector3U32,
-    origin: TyVector3I32,
-    edit_bounds: TyVector3U32,
-    edit_origin: TyVector3I32,
-) -> ObjectPlacement {
-    let canvas_min = centered_origin(edit_bounds);
-    let origin = [origin.x, origin.y, origin.z];
-    let box_min = [
-        canvas_min[0] + origin[0] - edit_origin.x,
-        canvas_min[1] + origin[1] - edit_origin.y,
-        canvas_min[2] + origin[2] - edit_origin.z,
-    ];
-    // An empty runtime grid has no content box of its own; frame it on the
-    // build volume so Voxel Max keeps a sensible content center and box for the
-    // object.
-    let (content_min, content_size) = if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
-        (canvas_min, edit_bounds)
-    } else {
-        (box_min, bounds)
-    };
-    let (center, bounds_min, bounds_max) = content_box(content_min, content_size);
-    ObjectPlacement {
-        box_min,
-        origin,
-        center,
-        bounds_min,
-        bounds_max,
-        view_box: object_view_box(canvas_min, edit_bounds),
-    }
-}
-
-/// The Voxel Max content bounds `(e_c, e_mi, e_ma)` for a grid of `bounds`
-/// whose min corner sits at `box_min`: the box center and its symmetric
-/// half-extents. Voxel Max renders and frames against this and pivots about the
-/// center.
-fn content_box(box_min: [i32; 3], bounds: TyVector3U32) -> ([f64; 3], [f64; 3], [f64; 3]) {
-    let box_local = TyBoundsF64::from_min_size(
-        TyVector3I32::from_array(box_min).as_dvec3(),
-        bounds.as_dvec3(),
-    );
-    (
-        box_local.center.to_array(),
-        (-box_local.extents).to_array(),
-        box_local.extents.to_array(),
-    )
-}
-
-/// The `tools.vp` partition box for an object: its build volume at `origin`,
-/// inclusive, so Voxel Max frames the whole authored grid.
-fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
-    VMaxViewBox {
-        min: [origin[0] as i64, origin[1] as i64, origin[2] as i64],
-        max: [
-            origin[0] as i64 + size.x.max(1) as i64 - 1,
-            origin[1] as i64 + size.y.max(1) as i64 - 1,
-            origin[2] as i64 + size.z.max(1) as i64 - 1,
-        ],
     }
 }
 
@@ -481,9 +281,9 @@ struct FoldedRef {
 
 /// The one folded palette an object references on its single layer, or `None`
 /// when it references no layer.
-fn folded_ref<T>(state: &VoxMain<T>, object: &VoxObject) -> Option<FoldedRef> {
+fn folded_ref<T: VoxExt>(main: &VoxMain<T>, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
-    let palette = state.palette(palette_id)?;
+    let palette = main.palette(palette_id)?;
     let color_property_id = palette.property_id_by_name(BASE_COLOR);
     let material_property_ids = palette
         .iter_properties()
@@ -503,7 +303,7 @@ fn folded_ref<T>(state: &VoxMain<T>, object: &VoxObject) -> Option<FoldedRef> {
 #[derive(Default)]
 struct MaterialPlan {
     name: String,
-    material_indices: HashMap<U32Id<BVoxMaterial>, u8>,
+    material_indices: BTreeMap<U32Id<BVoxMaterial>, u8>,
     materials: Vec<VMaxMaterial>,
 }
 
@@ -512,15 +312,13 @@ struct MaterialPlan {
 /// slot each folded material draws. A state loaded from another format has no
 /// such list, so the materials are derived from the value pools, one per
 /// distinct material signature.
-fn material_plan<T>(
-    state: &VoxMain<T>,
+fn material_plan<T: VoxExt>(
+    main: &VoxMain<T>,
     folded: &FoldedRef,
-    provenance: Option<&VMaxExtPalette>,
+    provenance: &VMaxExtPalette,
 ) -> Result<MaterialPlan> {
-    let name = provenance
-        .map(|palette| palette.name.clone())
-        .unwrap_or_default();
-    let palette = state
+    let name = provenance.name.clone();
+    let palette = main
         .palette(folded.palette_id)
         .expect("a referenced palette");
 
@@ -537,19 +335,18 @@ fn material_plan<T>(
         });
     }
 
-    // The slot list follows the palette's materials through the hooks, so a
-    // mismatch is a malformed ext. A hand-edited slot can still exceed the
-    // slots a palette holds, so it is checked.
-    if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
-        let stored = provenance.slots.len();
-        let count = palette.material_count();
-        if stored != count {
-            return Err(Error::invalid(format!(
-                "vmax ext palette has {stored} material slots but the palette has {count} materials"
-            )));
-        }
-        let mut material_indices = HashMap::new();
-        for (material_id, &slot) in palette.iter_materials().zip(&provenance.slots) {
+    // The slots follow the palette's materials through the hooks. A missing
+    // one means a malformed ext. A hand-edited slot can still exceed the list,
+    // hence the check.
+    if !provenance.materials.is_empty() {
+        let mut material_indices = BTreeMap::new();
+        for material_id in palette.iter_materials() {
+            let Some(&slot) = provenance.slots.get(&material_id) else {
+                return Err(Error::invalid(format!(
+                    "vmax ext palette holds no material slot for material {}",
+                    material_id.to_u32()
+                )));
+            };
             if usize::from(slot) >= MATERIAL_SLOTS {
                 return Err(Error::invalid(format!(
                     "a voxel references material {slot}, but a Voxel Max palette holds only \
@@ -571,7 +368,7 @@ fn material_plan<T>(
         });
     }
 
-    derive_materials(state, folded, palette, name)
+    derive_materials(main, folded, palette, name)
 }
 
 /// Derives a Voxel Max material per distinct signature of the material
@@ -581,8 +378,8 @@ fn material_plan<T>(
 /// [`MATERIAL_SLOTS`], since a Voxel Max palette holds only that many, so a
 /// cross-format source with too many materials cannot be represented rather
 /// than silently wrapping.
-fn derive_materials<T>(
-    state: &VoxMain<T>,
+fn derive_materials<T: VoxExt>(
+    main: &VoxMain<T>,
     folded: &FoldedRef,
     palette: &VoxPalette,
     name: String,
@@ -592,7 +389,7 @@ fn derive_materials<T>(
     let base_luminance = |material_id| -> Option<f64> {
         let color_property_id = folded.color_property_id?;
         let value_id = palette.value_id(material_id, color_property_id)?;
-        let value_pool = property_value_pool(state, folded.palette_id, color_property_id)?;
+        let value_pool = property_value_pool(main, folded.palette_id, color_property_id)?;
         let [r, g, b, _] = value_pool_color(value_pool, value_id)?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
@@ -605,7 +402,7 @@ fn derive_materials<T>(
     // claim each slot, the reference its emissive is read against.
     let mut base_luminances: Vec<Option<f64>> = Vec::new();
     let mut index_of: HashMap<Vec<U32Id<BVoxValuePoolValue>>, u8> = HashMap::new();
-    let mut material_indices = HashMap::new();
+    let mut material_indices = BTreeMap::new();
     for material_id in palette.iter_materials() {
         let signature: Vec<U32Id<BVoxValuePoolValue>> = folded
             .material_property_ids
@@ -639,7 +436,7 @@ fn derive_materials<T>(
         .enumerate()
         .map(|(slot, signature)| {
             derived_material(
-                state,
+                main,
                 folded.palette_id,
                 &folded.material_property_ids,
                 slot,
@@ -659,8 +456,8 @@ fn derive_materials<T>(
 /// value pool at the signature's value id. Metalness and roughness map from the
 /// 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`].
-fn derived_material<T>(
-    state: &VoxMain<T>,
+fn derived_material<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     properties: &[(String, U32Id<BVoxProperty>)],
     slot: usize,
@@ -676,7 +473,7 @@ fn derived_material<T>(
             return Ok(None);
         };
         value_pool_scalar(
-            state,
+            main,
             palette_id,
             properties[position].1,
             signature[position],
@@ -691,7 +488,7 @@ fn derived_material<T>(
     let flag = |property: &str| -> Option<bool> {
         let position = properties.iter().position(|(name, _)| name == property)?;
         value_pool_flag(
-            state,
+            main,
             palette_id,
             properties[position].1,
             signature[position],
@@ -704,7 +501,7 @@ fn derived_material<T>(
         let position = properties
             .iter()
             .position(|(name, _)| name == EMISSIVE_COLOR)?;
-        let value_pool = property_value_pool(state, palette_id, properties[position].1)?;
+        let value_pool = property_value_pool(main, palette_id, properties[position].1)?;
         let [r, g, b, _] = value_pool_color(value_pool, signature[position])?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
@@ -784,49 +581,49 @@ fn unbound_scalar(value: Option<f64>, key: &str) -> f64 {
 }
 
 /// The `f64` value at `value_id` in a property's `float` value pool, or `None`.
-fn value_pool_scalar<T>(
-    state: &VoxMain<T>,
+fn value_pool_scalar<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<f64> {
-    match property_value_pool(state, palette_id, property_id)?.value(value_id) {
+    match property_value_pool(main, palette_id, property_id)?.value(value_id) {
         Some(VoxValuePoolValueRef::Float(number)) => Some(number),
         _ => None,
     }
 }
 
 /// The `bool` value at `value_id` in a property's `bool` value pool, or `None`.
-fn value_pool_flag<T>(
-    state: &VoxMain<T>,
+fn value_pool_flag<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<bool> {
-    match property_value_pool(state, palette_id, property_id)?.value(value_id) {
+    match property_value_pool(main, palette_id, property_id)?.value(value_id) {
         Some(VoxValuePoolValueRef::Bool(flag)) => Some(flag),
         _ => None,
     }
 }
 
 /// The value pool a property draws from.
-fn property_value_pool<T>(
-    state: &VoxMain<T>,
+fn property_value_pool<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
-    let value_pool_id = state
+    let value_pool_id = main
         .palette(palette_id)?
         .property(property_id)?
         .value_pool_id;
-    state.value_pool(value_pool_id)
+    main.value_pool(value_pool_id)
 }
 
 /// Re-bases the tight object's voxels to absolute model space, recovering each
 /// one's `color_idx` from its material's `baseColor` value id and its
 /// `material_idx` from the material plan. A colorless voxel takes index 1.
-fn reconstruct_voxels<T>(
-    state: &VoxMain<T>,
+fn reconstruct_voxels<T: VoxExt>(
+    main: &VoxMain<T>,
     object: &VoxObject,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
@@ -842,7 +639,7 @@ fn reconstruct_voxels<T>(
             let material_id =
                 layer_id.and_then(|layer_id| object.voxel_material(voxel_id, layer_id));
             let color_index = match (folded, material_id) {
-                (Some(folded), Some(material_id)) => voxel_color_index(state, folded, material_id)?,
+                (Some(folded), Some(material_id)) => voxel_color_index(main, folded, material_id)?,
                 // A colorless voxel still needs a non-empty index, so it takes
                 // 1, not the empty index 0.
                 _ => 1,
@@ -870,15 +667,15 @@ fn reconstruct_voxels<T>(
 /// `baseColor`. Errors when the color value id reaches
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
-fn voxel_color_index<T>(
-    state: &VoxMain<T>,
+fn voxel_color_index<T: VoxExt>(
+    main: &VoxMain<T>,
     folded: &FoldedRef,
     material_id: U32Id<BVoxMaterial>,
 ) -> Result<u8> {
     let Some(color_property_id) = folded.color_property_id else {
         return Ok(1);
     };
-    let index = state
+    let index = main
         .palette(folded.palette_id)
         .and_then(|palette| palette.value_id(material_id, color_property_id))
         .map_or(0, |value_id| value_id.to_u32());
@@ -895,11 +692,11 @@ fn voxel_color_index<T>(
 /// material sidecar the first time the folded palette is seen. An object with
 /// no color property borrows the default palette name and writes no file.
 #[allow(clippy::too_many_arguments)]
-fn build_palette<T>(
-    state: &VoxMain<T>,
+fn build_palette<T: VoxExt>(
+    main: &VoxMain<T>,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
-    palette_files: &mut HashMap<U32Id<BVoxPalette>, String>,
+    palette_files: &mut BTreeMap<U32Id<BVoxPalette>, String>,
     palette_settings_files: &mut BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
     vmax_color_format: VMaxColorFormat,
@@ -921,7 +718,7 @@ fn build_palette<T>(
     let stem = palette_files.len() + 1;
     let pal = format!("palette{stem}.png");
 
-    let colors = color_palette_colors(state, palette_id, color_property_id)?;
+    let colors = color_palette_colors(main, palette_id, color_property_id)?;
     if matches!(
         vmax_color_format,
         VMaxColorFormat::Png | VMaxColorFormat::All
@@ -945,7 +742,7 @@ fn build_palette<T>(
         };
         // The per-color material map Voxel Max renders from: each used color
         // cell carries a bit for the material it draws.
-        let (lc, indices, current) = color_material_map(state, palette_id, color_property_id, plan);
+        let (lc, indices, current) = color_material_map(main, palette_id, color_property_id, plan);
         palette_settings_files.insert(
             sidecar,
             material_settings(
@@ -969,13 +766,13 @@ fn build_palette<T>(
 ///
 /// Errors when the bound value pool holds no color because a transparent
 /// stand-in would write a model Voxel Max renders as empty.
-fn color_palette_colors<T>(
-    state: &VoxMain<T>,
+fn color_palette_colors<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
 ) -> Result<Vec<[u8; 4]>> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
-    if let Some(value_pool) = property_value_pool(state, palette_id, color_property_id) {
+    if let Some(value_pool) = property_value_pool(main, palette_id, color_property_id) {
         for (value_id, _) in value_pool.iter_values().take(PALETTE_COLORS) {
             let color = value_pool_color(value_pool, value_id).ok_or_else(|| {
                 Error::invalid(format!(
@@ -1091,8 +888,8 @@ fn default_material(slot: usize) -> VMaxMaterial {
 /// `current`. Empty for a palette with no materials, which Voxel Max renders
 /// with its own defaults. Voxel Max reads a voxel's material from this map, not
 /// the per-voxel byte.
-fn color_material_map<T>(
-    state: &VoxMain<T>,
+fn color_material_map<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
     plan: &MaterialPlan,
@@ -1102,7 +899,7 @@ fn color_material_map<T>(
         return (lc, Vec::new(), 0);
     }
     let mut cells: BTreeSet<u32> = BTreeSet::new();
-    if let Some(palette_ref) = state.palette(palette_id) {
+    if let Some(palette_ref) = main.palette(palette_id) {
         for material_id in palette_ref.iter_materials() {
             let Some(cell) = palette_ref
                 .value_id(material_id, color_property_id)
@@ -1124,15 +921,16 @@ fn color_material_map<T>(
     (lc, indices, current)
 }
 
-/// Builds a scene object from its node and preserved provenance.
+#[allow(clippy::too_many_arguments)]
 fn object_from_node(
     node: &VoxHierarchyNode,
     ext_node: &VMaxExtNode,
+    parent_id: Option<String>,
+    rotation: [f64; 4],
     placement: &ObjectPlacement,
     data: String,
     pal: String,
     suffix: &str,
-    ind: [i64; 3],
 ) -> VMaxObject {
     VMaxObject {
         name: node.name.clone(),
@@ -1140,16 +938,16 @@ fn object_from_node(
         palette: pal,
         history: format!("history{suffix}.vmaxhb"),
         id: ext_node.id.clone(),
-        parent_id: ext_node.parent_id.clone(),
+        parent_id,
         hidden: None,
-        position: unbake_position(&node.transform, ext_rotation(ext_node), placement),
-        rotation: ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE),
+        position: unbake_position(&node.transform, decode_axis_angle(rotation), placement),
+        rotation,
         scale: node.transform.scale.to_array(),
-        ind,
+        ind: ext_node.index,
         s: ext_node.selected,
-        t_al: ext_node.alignment.clone().unwrap_or_default(),
-        t_pa: ext_node.pivot_align.clone().unwrap_or_default(),
-        t_pf: ext_node.pivot_face.clone().unwrap_or_default(),
+        t_al: ext_node.alignment.clone(),
+        t_pa: ext_node.pivot_align.clone(),
+        t_pf: ext_node.pivot_face.clone(),
         t_po: None,
         center: placement.center,
         bounds_min: Some(placement.bounds_min),
@@ -1164,25 +962,25 @@ fn object_from_node(
 /// is derived here rather than kept in the ext. Memoized by node id so a
 /// subtree shared across parents is walked once. A node with no geometry
 /// collapses to a zero box.
-fn subtree_box_local<T>(
-    state: &VoxMain<T>,
+fn subtree_box_local<T: VoxExt>(
+    main: &VoxMain<T>,
     node_id: U32Id<BVoxHierarchyNode>,
     memo: &mut HashMap<u32, ([f64; 3], [f64; 3])>,
 ) -> ([f64; 3], [f64; 3]) {
     if let Some(&box_local) = memo.get(&node_id.to_u32()) {
         return box_local;
     }
-    let node = state
+    let node = main
         .hierarchy_node(node_id)
         .expect("a valid hierarchy node");
     let mut bounds: Option<([f64; 3], [f64; 3])> = None;
     for &object_id in &node.child_object_ids {
-        let (center, half) = object_box_local(state, object_id);
+        let (center, half) = object_box_local(main, object_id);
         extend_bounds(&mut bounds, center, half);
     }
     for &child_id in &node.child_node_ids {
-        let (child_center, child_half) = subtree_box_local(state, child_id, memo);
-        let transform = state
+        let (child_center, child_half) = subtree_box_local(main, child_id, memo);
+        let transform = main
             .hierarchy_node(child_id)
             .expect("a valid child node")
             .transform;
@@ -1213,8 +1011,11 @@ fn subtree_box_local<T>(
 /// frame: the tight runtime grid `[origin, origin + bounds]`. An empty object
 /// has no runtime extent of its own, so it frames its build volume instead,
 /// matching the content box the write path gives it.
-fn object_box_local<T>(state: &VoxMain<T>, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
-    let object = state.object(object_id).expect("a valid child object");
+fn object_box_local<T: VoxExt>(
+    main: &VoxMain<T>,
+    object_id: U32Id<BVoxObject>,
+) -> ([f64; 3], [f64; 3]) {
+    let object = main.object(object_id).expect("a valid child object");
     let (tight, (edit_bounds, edit_origin)) = tighten(object);
     let bounds = tight.bounds();
     let box_local = if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
@@ -1256,29 +1057,29 @@ fn transform_half(transform: &TyTransformF64, half: [f64; 3]) -> [f64; 3] {
     ]
 }
 
-/// Builds a scene group from its node and preserved provenance. The content box
-/// `(center, half)` is the group's derived subtree box, written as the
-/// symmetric `e_c`/`e_mi`/`e_ma` Voxel Max stores.
+/// The content box `(center, half)` is the group's derived subtree box,
+/// written as the symmetric `e_c`, `e_mi`, and `e_ma` Voxel Max stores.
 fn group_from_node(
-    node: &VoxHierarchyNode,
-    ext_node: &VMaxExtNode,
-    ind: [i64; 3],
+    placement: &Placement<'_>,
+    rotation: [f64; 4],
     center: [f64; 3],
     half: [f64; 3],
 ) -> VMaxGroup {
+    let node = placement.node;
+    let ext_node = placement.ext;
     VMaxGroup {
         name: node.name.clone(),
         id: ext_node.id.clone(),
-        parent_id: ext_node.parent_id.clone(),
+        parent_id: placement.parent_id.clone(),
         hidden: None,
         position: node.transform.position.to_array(),
-        rotation: ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE),
+        rotation,
         scale: node.transform.scale.to_array(),
-        ind,
+        ind: ext_node.index,
         s: ext_node.selected,
-        t_al: ext_node.alignment.clone().unwrap_or_default(),
-        t_pa: ext_node.pivot_align.clone().unwrap_or_default(),
-        t_pf: ext_node.pivot_face.clone().unwrap_or_default(),
+        t_al: ext_node.alignment.clone(),
+        t_pa: ext_node.pivot_align.clone(),
+        t_pf: ext_node.pivot_face.clone(),
         t_po: None,
         center,
         bounds_min: Some([-half[0], -half[1], -half[2]]),
@@ -1286,27 +1087,26 @@ fn group_from_node(
     }
 }
 
-/// The `ind` path triple for an emitted node: the preserved one from the ext,
-/// or a synthesized triple keeping every node distinct, since Voxel Max
-/// collapses nodes that share `[0, 0, 0]`. Groups take the `1` lane and objects
-/// the `0` lane.
-fn node_ind(ext_node: &VMaxExtNode, is_group: bool, counter: &mut i64) -> [i64; 3] {
-    if let Some(index) = ext_node.index {
-        return index;
+/// The axis-angle a node writes: the preserved spelling while it still
+/// decodes to the node's rotation, which keeps a loaded document byte for
+/// byte, or the live rotation encoded afresh once the node was rotated after
+/// the load.
+fn node_rotation(ext_node: &VMaxExtNode, node: &VoxHierarchyNode) -> [f64; 4] {
+    let stored = decode_axis_angle(ext_node.rotation);
+    let live = node.transform.rotation;
+    if stored.abs_diff_eq(live, ROTATION_TOLERANCE) || stored.abs_diff_eq(-live, ROTATION_TOLERANCE)
+    {
+        return ext_node.rotation;
     }
-    let ind = [0, i64::from(is_group), *counter];
-    *counter += 1;
-    ind
+    axis_angle(live)
 }
 
-/// The node's rotation as a quaternion, decoded from the stored axis-angle like
-/// the read path so the two stay inverses. A degenerate axis decodes to
-/// identity.
-fn ext_rotation(ext_node: &VMaxExtNode) -> TyQuaternionF64 {
-    let [x, y, z, angle] = ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE);
+/// Decodes a stored `[x, y, z, angle]` axis-angle like the read path so the
+/// two stay inverses. A degenerate axis decodes to identity.
+fn decode_axis_angle(rotation: [f64; 4]) -> TyQuaternionF64 {
+    let [x, y, z, angle] = rotation;
     let axis = TyVector3F64::new(x, y, z);
     if axis.length() < ZERO_LENGTH_TOLERANCE {
-        // A degenerate (zero) axis decodes to identity, matching the read path.
         return TyQuaternionF64::IDENTITY;
     }
     TyQuaternionF64::from_axis_angle(axis.normalize(), angle)
@@ -1316,8 +1116,7 @@ fn ext_rotation(ext_node: &VMaxExtNode) -> TyQuaternionF64 {
 /// `object_transform`. It backs out the `t_p` Voxel Max renders with from the
 /// node's transform, the content center it pivots about, and the grid `origin`:
 /// `t_p = position - center - R*S* (box_min - center - origin)`. Uses the
-/// stored axis-angle `rotation`, not the live transform's, so it stays an exact
-/// inverse when synthesis drops a node's rotation to identity.
+/// axis-angle the object writes, so the two stay exact inverses.
 fn unbake_position(
     transform: &TyTransformF64,
     rotation: TyQuaternionF64,
@@ -1367,15 +1166,16 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
-    use ty_math::TyVector3U32;
+    use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3U32};
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
         VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera,
-        VMaxSceneJsonFile,
+        VMaxSceneJsonFile, VMaxViewBox,
         snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
     };
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxObject,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue,
+        VoxHierarchyNode, VoxObject, material::BASE_COLOR,
     };
 
     fn material(
@@ -1616,14 +1416,14 @@ mod tests {
     }
 
     /// Releasing a middle node, its object, and the object's palette, then
-    /// compacting, leaves the survivors' provenance aligned. The rebuilt
-    /// document carries their ids and editor state, and reloads to the loaded
-    /// ext minus the released entries.
+    /// compacting, drops their entries and rekeys the survivors' to their
+    /// compacted ids. The rebuilt document carries the survivors' ids and
+    /// editor state, and reloads to the same ext.
     #[test]
-    fn released_entities_leave_the_survivors_provenance_aligned() {
+    fn released_entities_leave_the_survivors_provenance_rekeyed() {
         let file = three_object_sample();
-        let mut state = from_vmax_file(&file).unwrap();
-        let original = state.ext().clone();
+        let mut main = from_vmax_file(&file).unwrap();
+        let original = main.ext().clone();
 
         // The group, node 0, places nodes 1..=3. Node 2 places object 1, which
         // folds palette 1.
@@ -1631,21 +1431,31 @@ mod tests {
         let doomed_node_id = U32Id::<BVoxHierarchyNode>::from_u32(2);
         let doomed_object_id = U32Id::<BVoxObject>::from_u32(1);
         let doomed_palette_id = U32Id::<BVoxPalette>::from_u32(1);
-        let mut group = state.hierarchy_node(group_id).unwrap().clone();
+        let mut group = main.hierarchy_node(group_id).unwrap().clone();
         group.child_node_ids.retain(|&id| id != doomed_node_id);
-        state.set_hierarchy_node(group_id, group).unwrap();
-        state.release_hierarchy_node(doomed_node_id).unwrap();
-        state.release_object(doomed_object_id).unwrap();
-        state.release_palette(doomed_palette_id).unwrap();
-        state.gc();
+        main.set_hierarchy_node(group_id, group).unwrap();
+        main.release_hierarchy_node(doomed_node_id).unwrap();
+        main.release_object(doomed_object_id).unwrap();
+        main.release_palette(doomed_palette_id).unwrap();
+        main.gc().unwrap();
 
+        // The last node, object, and palette each slide down one id.
         let mut expected = original;
-        expected.hierarchy_nodes.remove(2);
-        expected.object_states.remove(1);
-        expected.palettes.remove(1);
-        assert_eq!(state.ext(), &expected.clone());
+        expected.hierarchy_nodes.remove(&doomed_node_id);
+        let last_node = expected
+            .hierarchy_nodes
+            .remove(&U32Id::from_u32(3))
+            .unwrap();
+        expected.hierarchy_nodes.insert(doomed_node_id, last_node);
+        expected.object_states.remove(&doomed_object_id);
+        let last_object = expected.object_states.remove(&U32Id::from_u32(2)).unwrap();
+        expected.object_states.insert(doomed_object_id, last_object);
+        expected.palettes.remove(&doomed_palette_id);
+        let last_palette = expected.palettes.remove(&U32Id::from_u32(2)).unwrap();
+        expected.palettes.insert(doomed_palette_id, last_palette);
+        assert_eq!(main.ext(), &expected);
 
-        let rebuilt = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         let ids: Vec<&str> = rebuilt
             .scene_json_file
             .objects
@@ -1664,12 +1474,12 @@ mod tests {
         assert_eq!(reloaded.ext(), &expected);
     }
 
-    /// A node retained after the load takes a default entry, which the writer
-    /// fills in like a synthesized node: a fresh id, no parent for a root, and
-    /// the default anchor tokens.
+    /// A node and an object retained after the load take synthesized entries
+    /// as they are retained. The write reads them back out and links no
+    /// parent for a root.
     #[test]
-    fn a_node_retained_after_the_load_writes_like_a_synthesized_node() {
-        let mut state = from_vmax_file(&sample()).unwrap();
+    fn a_node_retained_after_the_load_takes_a_synthesized_entry() {
+        let mut main = from_vmax_file(&sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let mut object = VoxObject::new(String::new(), TyVector3U32::splat(1)).unwrap();
         object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
@@ -1677,23 +1487,41 @@ mod tests {
         object
             .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
-        let object_id = state.retain_object(object).unwrap();
-        let node_id = state
+        let object_id = main.retain_object(object).unwrap();
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 name: "added".to_owned(),
                 child_object_ids: vec![object_id],
                 ..Default::default()
             })
             .unwrap();
-        state.push_root_hierarchy_node_id(node_id).unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
 
-        let ext = state.ext();
+        let ext = main.ext();
         assert_eq!(ext.hierarchy_nodes.len(), 3);
-        assert_eq!(ext.hierarchy_nodes[2], VMaxExtNode::default());
+        assert_eq!(
+            ext.hierarchy_nodes[&node_id],
+            VMaxExtNode {
+                id: "00000000-0000-0000-0000-000000000001".to_owned(),
+                index: [0, 0, 1],
+                rotation: [0.0, 0.0, 0.0, 0.0],
+                alignment: "f".to_owned(),
+                pivot_face: "8".to_owned(),
+                pivot_align: "4".to_owned(),
+                selected: None,
+            }
+        );
         assert_eq!(ext.object_states.len(), 2);
-        assert_eq!(ext.object_states[1], None);
+        let object_state = &ext.object_states[&object_id];
+        assert_eq!(object_state.uuid, "00000000-0000-0001-0000-000000000001");
+        assert_eq!(object_state.v, 4);
+        assert!(object_state.tools.is_some() && object_state.brush.is_some());
+        assert_eq!(
+            object_state.cam.as_ref().map(|cam| cam.o),
+            Some([127.5, 127.5, 0.5])
+        );
 
-        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         let added = file
             .scene_json_file
             .objects
@@ -1701,11 +1529,141 @@ mod tests {
             .find(|object| object.name == "added")
             .expect("the retained node writes as an object");
         assert_eq!(added.id, "00000000-0000-0000-0000-000000000001");
+        assert_eq!(added.ind, [0, 0, 1]);
         assert_eq!(added.parent_id, None);
         assert_eq!(added.t_al, "f");
+        let contents = &file.contents_files[&added.data];
+        assert_eq!(contents.uuid, "00000000-0000-0001-0000-000000000001");
+        assert_eq!(
+            contents.tools.as_ref().and_then(|tools| tools.vp.clone()),
+            Some(VMaxViewBox {
+                min: [127, 127, 0],
+                max: [127, 127, 0],
+            })
+        );
 
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
+    }
+
+    /// A node rotated after the load writes its live rotation, while an
+    /// unrotated one keeps the preserved spelling.
+    #[test]
+    fn a_node_rotated_after_the_load_writes_its_live_rotation() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
+        let mut group = main.hierarchy_node(group_id).unwrap().clone();
+        group.transform.rotation = TyQuaternionF64::from_axis_angle(TyVector3F64::Z, 0.5);
+        main.set_hierarchy_node(group_id, group).unwrap();
+
+        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let [x, y, z, angle] = file.scene_json_file.groups[0].rotation;
+        assert!(x.abs() < 1e-12 && y.abs() < 1e-12);
+        assert!((z - 1.0).abs() < 1e-12);
+        assert!((angle - 0.5).abs() < 1e-12);
+        assert_eq!(
+            file.scene_json_file.objects[0].rotation,
+            [0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    /// Voxel Max holds a tree, so a node placed by two parents, or a root
+    /// that is also a child, refuses to write instead of picking a parent.
+    #[test]
+    fn a_node_with_two_parents_or_a_root_child_errors() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
+        let object_node_id = U32Id::<BVoxHierarchyNode>::from_u32(1);
+        let other_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "other".to_owned(),
+                child_node_ids: vec![object_node_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.push_root_hierarchy_node_id(other_id).unwrap();
+        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+
+        let mut main = from_vmax_file(&sample()).unwrap();
+        main.push_root_hierarchy_node_id(object_node_id).unwrap();
+        assert!(main.root_hierarchy_node_ids().contains(&group_id));
+        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+    }
+
+    /// A material retained to a palette with an exact material list takes the
+    /// slot its material-axis value ids select, and the writer draws it. A
+    /// retain after the value pools were pruned refuses, because the pools no
+    /// longer index the list.
+    #[test]
+    fn a_retained_material_takes_the_slot_its_values_select() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        // Color cell 0 in slot 1: every material-axis property takes value 1.
+        let palette = main.palette(palette_id).unwrap();
+        let value_ids: Vec<U32Id<BVoxValuePoolValue>> = palette
+            .iter_properties()
+            .map(|(_, property)| U32Id::from_u32(u32::from(property.name != BASE_COLOR)))
+            .collect();
+        let material_id = main.retain_material(palette_id, value_ids).unwrap();
+        assert_eq!(main.ext().palettes[&palette_id].slots[&material_id], 1);
+
+        main.prune_value_pools();
+        let value_ids: Vec<U32Id<BVoxValuePoolValue>> = main
+            .palette(palette_id)
+            .unwrap()
+            .iter_properties()
+            .map(|_| U32Id::from_u32(0))
+            .collect();
+        assert!(main.retain_material(palette_id, value_ids).is_err());
+    }
+
+    /// Voxel Max lists child groups before their parents in its own files:
+    /// in `tyt-assets/src/vmax/mixed-shapes.vmax/scene.json` the groups at
+    /// index 0 and 1 have a `pid` naming the group at index 2. The loader and
+    /// the writer keep that listing order.
+    #[test]
+    fn child_groups_listed_before_their_parent_round_trip_in_order() {
+        let mut file = sample();
+        let root = file.scene_json_file.groups[0].clone();
+        let group = |id: &str, parent_id: Option<&str>, ind: [i64; 3]| VMaxGroup {
+            id: id.to_owned(),
+            parent_id: parent_id.map(str::to_owned),
+            ind,
+            ..root.clone()
+        };
+        // The listing from the asset, with the object under the innermost
+        // group so every group has geometry.
+        file.scene_json_file.groups = vec![
+            group(
+                "233A8A71-7B3C-48D0-B0A8-D774275FA80E",
+                Some("528B9E32-71C7-4887-9570-D920B7D9C988"),
+                [0, 1, 0],
+            ),
+            group(
+                "528B9E32-71C7-4887-9570-D920B7D9C988",
+                Some("DEB88339-5C59-4CC6-B7F6-1DAC39397C1B"),
+                [0, 1, 1],
+            ),
+            group("DEB88339-5C59-4CC6-B7F6-1DAC39397C1B", None, [0, 1, 2]),
+        ];
+        file.scene_json_file.objects[0].parent_id =
+            Some("233A8A71-7B3C-48D0-B0A8-D774275FA80E".to_owned());
+
+        let main = from_vmax_file(&file).unwrap();
+        assert_eq!(main.root_hierarchy_node_ids(), [U32Id::from_u32(2)]);
+        assert_eq!(
+            main.hierarchy_node(U32Id::from_u32(2))
+                .unwrap()
+                .child_node_ids,
+            [U32Id::from_u32(1)]
+        );
+
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        assert_eq!(rebuilt.scene_json_file.groups, file.scene_json_file.groups);
+        assert_eq!(
+            rebuilt.scene_json_file.objects[0].parent_id,
+            file.scene_json_file.objects[0].parent_id
+        );
     }
 
     /// A reduction repaints onto a survivor, releases the rest, prunes the
@@ -1714,7 +1672,7 @@ mod tests {
     /// renumbered, and the reload records the one slot.
     #[test]
     fn a_reduction_keeps_the_survivors_material_slot_through_prune_and_gc() {
-        let mut state = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         // The folded materials sort by color cell then slot: material 0 draws
         // cell 2 in slot 1 and material 1 draws cell 4 in slot 0. Keep material
@@ -1722,15 +1680,17 @@ mod tests {
         // pruned away and its own renumber to 0.
         let doomed_id = U32Id::<BVoxMaterial>::from_u32(1);
         let survivor_id = U32Id::<BVoxMaterial>::from_u32(0);
-        state
-            .repaint_materials(palette_id, &HashMap::from([(doomed_id, survivor_id)]))
+        main.repaint_materials(palette_id, &HashMap::from([(doomed_id, survivor_id)]))
             .unwrap();
-        state.release_material(palette_id, doomed_id).unwrap();
-        state.prune_value_pools();
-        state.gc();
-        assert_eq!(state.ext().palettes[0].as_ref().unwrap().slots, [1]);
+        main.release_material(palette_id, doomed_id).unwrap();
+        main.prune_value_pools();
+        main.gc().unwrap();
+        assert_eq!(
+            main.ext().palettes[&palette_id].slots,
+            BTreeMap::from([(survivor_id, 1)])
+        );
 
-        let file = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         let voxels =
             decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
         assert!(voxels.iter().all(|voxel| voxel.material_idx == 1));
@@ -1738,31 +1698,36 @@ mod tests {
         assert_eq!(settings.materials[1], material("2", 0.5, 0.25, 2.0, false));
 
         let reloaded = from_vmax_file(&file).unwrap();
-        let palette = reloaded.ext().palettes[0].as_ref().unwrap();
-        assert_eq!(palette.slots, [1]);
+        let palette = &reloaded.ext().palettes[&palette_id];
+        assert_eq!(palette.slots, BTreeMap::from([(survivor_id, 1)]));
         assert_eq!(palette.materials.len(), 8);
     }
 
-    /// An ext whose lists fall out of step with the listings is malformed, so
-    /// the writer errors instead of pairing entries by a shifted index.
+    /// An ext missing an entity's entry is malformed, so the writer errors
+    /// instead of synthesizing one.
     #[test]
-    fn an_ext_out_of_step_with_its_listings_errors() {
-        let mut state = from_vmax_file(&sample()).unwrap();
-        let ext = state.ext_mut();
-        ext.hierarchy_nodes.pop();
-        assert!(to_vmax_file(&state, &VMaxWriteOptions::default()).is_err());
+    fn an_ext_missing_an_entry_errors() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let ext = main.ext_mut();
+        ext.hierarchy_nodes.remove(&U32Id::from_u32(1));
+        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
 
-        let mut state = from_vmax_file(&sample()).unwrap();
-        let ext = state.ext_mut();
-        ext.object_states.pop();
-        assert!(to_vmax_file(&state, &VMaxWriteOptions::default()).is_err());
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let ext = main.ext_mut();
+        ext.object_states.remove(&U32Id::from_u32(0));
+        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let ext = main.ext_mut();
+        ext.palettes.remove(&U32Id::from_u32(0));
+        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
     }
 
     #[test]
     fn round_trips_through_vox_state() {
         let original = sample();
-        let state = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
@@ -1800,31 +1765,31 @@ mod tests {
             .get_mut("palette1.settings.vmaxpsb")
             .unwrap()
             .materials = materials;
-        let state = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
     /// Puts a scene camera in the state's ext for the typed path to keep or
     /// replace.
-    fn with_ext_scene_camera(state: &mut VMaxVoxMain, cam: VMaxSceneCamera) {
-        let vmax_ext = state.ext_mut();
+    fn with_ext_scene_camera(main: &mut VMaxVoxMain, cam: VMaxSceneCamera) {
+        let vmax_ext = main.ext_mut();
         vmax_ext.scene.cam = Some(cam);
     }
 
     #[test]
     fn scene_camera_ext_keeps_the_ext_camera() {
-        let mut state = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&sample()).unwrap();
         let cam = VMaxSceneCamera {
             z: 321.0,
             ..Default::default()
         };
-        with_ext_scene_camera(&mut state, cam);
+        with_ext_scene_camera(&mut main, cam);
         let options = VMaxWriteOptions {
             scene_camera: SceneCameraSource::Ext,
             ..Default::default()
         };
-        let file = to_vmax_file(&state, &options).unwrap();
+        let file = to_vmax_file(&main, &options).unwrap();
         assert_eq!(file.scene_json_file.cam, Some(cam));
     }
 
@@ -1832,21 +1797,21 @@ mod tests {
     /// default, while leaving the camera unset keeps it.
     #[test]
     fn scene_camera_empty_replaces_the_ext_camera() {
-        let mut state = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&sample()).unwrap();
         let cam = VMaxSceneCamera {
             z: 999.0,
             ..Default::default()
         };
-        with_ext_scene_camera(&mut state, cam);
+        with_ext_scene_camera(&mut main, cam);
 
-        let kept = to_vmax_file(&state, &VMaxWriteOptions::default()).unwrap();
+        let kept = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(kept.scene_json_file.cam, Some(cam));
 
         let options = VMaxWriteOptions {
             scene_camera: SceneCameraSource::Empty,
             ..Default::default()
         };
-        let empty = to_vmax_file(&state, &options).unwrap();
+        let empty = to_vmax_file(&main, &options).unwrap();
         assert_ne!(empty.scene_json_file.cam, Some(cam));
     }
 }

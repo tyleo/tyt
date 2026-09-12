@@ -4,7 +4,7 @@ use crate::{
     operations::mesh::{MaterialMeshRequest, MeshFiles, MeshTarget, build_material_document},
 };
 use serde_json::Value;
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` material-aware and writes it as a text glTF (`.gltf`) with a
 /// material sampling the baked palette atlas, plus any loose image files
@@ -13,14 +13,13 @@ use voxcore::{VoxMain, VoxObject};
 /// self-contained file. An object with no live voxels writes a valid glTF with
 /// an empty scene. `dependencies` encodes the atlas images and the base64 of
 /// every data URI.
-pub fn object_to_material_gltf<D: EncodeBase64 + EncodePng, T>(
+pub fn object_to_material_gltf<D: EncodeBase64 + EncodePng, T: VoxExt>(
     dependencies: &D,
-    state: &VoxMain<T>,
+    main: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
 ) -> Result<MeshFiles> {
-    let mut built =
-        build_material_document(dependencies, state, object, request, MeshTarget::Gltf)?;
+    let mut built = build_material_document(dependencies, main, object, request, MeshTarget::Gltf)?;
 
     if !built.blob.is_empty() {
         let uri = format!(
@@ -66,10 +65,10 @@ mod tests {
     /// A one-voxel red cube through a single `baseColor` palette, and the
     /// request the test bakes; `maps` and `storage` vary per test.
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
 
         let base_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -80,13 +79,13 @@ mod tests {
             )
             .unwrap();
         let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, red_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[red_id]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,
@@ -98,8 +97,8 @@ mod tests {
 
         object_to_material_gltf(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &request,
         )
         .unwrap()

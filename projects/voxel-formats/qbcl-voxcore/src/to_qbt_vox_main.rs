@@ -1,69 +1,33 @@
-use crate::{QbtExtNode, QbtVoxMain, Result, SOLID_MASK, fold_under_root, qbt_ext_from_file};
-use qbcl::qbt::{QbtFile, QbtMatrix};
-use voxcore::{VoxHierarchyNode, VoxMain};
+use crate::{QbtVoxMain, Result, fold_under_root, qbt_ext_from_file, synthesized_qbt_ext_node};
+use qbcl::qbt::QbtFile;
+use voxcore::VoxMain;
 
 /// Gives a bare state a synthesized [`QbtExt`](crate::QbtExt), the state
 /// [`to_qbt_file`](crate::to_qbt_file) writes as a file synthesized from the
 /// scene. The hierarchy first takes the shape of a Qubicle scene tree: one
 /// synthetic root model over every root, a node cloned per extra path to it,
 /// each node at its world position, and an object no node places under a
-/// node of its own at the origin. Each node then takes an entry. A node
-/// placing an object takes a matrix entry, or a compound entry when it also
-/// lists children or further objects, named for the node at its position,
-/// pivoted at the grid origin at unit local scale, with the solid mask per
-/// voxel. Any other node takes a model entry. The header takes the defaults.
+/// node of its own at the origin. Each node then takes the entry a retained
+/// node takes. The header takes the defaults.
 ///
 /// Lossy where Qubicle cannot represent the source. A model carries no name
 /// or translation, so a group's name drops and its placement folds into its
 /// descendants. Node rotation and scale drop. A color's alpha drops because a
 /// Qubicle voxel stores none.
-pub fn to_qbt_vox_main(mut state: VoxMain<()>) -> Result<QbtVoxMain> {
-    fold_under_root(&mut state, "")?;
+pub fn to_qbt_vox_main(mut main: VoxMain<()>) -> Result<QbtVoxMain> {
+    fold_under_root(&mut main, "")?;
 
-    let nodes = state
+    let nodes = main
         .iter_hierarchy_nodes()
-        .map(|(_, node)| Some(synthesized_entry(&state, node)))
+        .map(|(node_id, node)| (node_id, synthesized_qbt_ext_node(node)))
         .collect();
 
-    Ok(state.put_ext(qbt_ext_from_file(&QbtFile::default(), nodes)))
-}
-
-/// The entry a folded node takes.
-fn synthesized_entry(state: &VoxMain<()>, node: &VoxHierarchyNode) -> QbtExtNode {
-    let [first, extras @ ..] = node.child_object_ids.as_slice() else {
-        return QbtExtNode::Model;
-    };
-    let object = state
-        .object(*first)
-        .expect("a placed object is one of the state's");
-    let name = node.name.clone();
-    let position = node.transform.position.round().as_ivec3().to_array();
-    let local_scale = [1, 1, 1];
-    let pivot = QbtMatrix::default().pivot;
-    let masks = vec![SOLID_MASK; object.live_count()];
-
-    if extras.is_empty() && node.child_node_ids.is_empty() {
-        return QbtExtNode::Matrix {
-            name,
-            position,
-            local_scale,
-            pivot,
-            masks,
-        };
-    }
-
-    QbtExtNode::Compound {
-        name,
-        position,
-        local_scale,
-        pivot,
-        masks,
-    }
+    Ok(main.put_ext(qbt_ext_from_file(&QbtFile::default(), nodes)))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{QbtExtNode, SOLID_MASK, from_qbt_file, to_qbt_file, to_qbt_vox_main};
+    use crate::{QbtExtNode, from_qbt_file, to_qbt_file, to_qbt_vox_main};
     use branded_id::U32Id;
     use qbcl::qbt::{QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtVoxel};
     use std::collections::BTreeSet;
@@ -84,10 +48,10 @@ mod tests {
     /// blue object sharing one `baseColor` palette, placed by a hierarchy of
     /// a nested group and two roots. This is the cross-format synthesis input.
     fn source_state() -> VoxMain<()> {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
         // One baseColor palette: red, green, blue.
-        let value_pool_id = state.retain_value_pool(
+        let value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_3_float(
                 ["#FF0000", "#00FF00", "#0000FF"]
                     .iter()
@@ -105,7 +69,7 @@ mod tests {
                 .retain_material(vec![U32Id::from_u32(index)])
                 .expect("one value id for the one property");
         }
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
@@ -119,7 +83,7 @@ mod tests {
             wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
-        state.retain_object(wide).unwrap();
+        main.retain_object(wide).unwrap();
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
@@ -130,7 +94,7 @@ mod tests {
             .expect("a position within the grid");
         unit.retain_voxel(voxel_id, &[material_id(2)])
             .expect("one sample for the one layer");
-        state.retain_object(unit).unwrap();
+        main.retain_object(unit).unwrap();
 
         let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -139,34 +103,32 @@ mod tests {
 
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
-        state
-            .retain_hierarchy_nodes(vec![
-                VoxHierarchyNode {
-                    name: "group".to_owned(),
-                    child_node_ids: vec![node_id(1)],
-                    child_object_ids: Vec::new(),
-                    transform: TyTransformF64::default(),
-                },
-                VoxHierarchyNode {
-                    name: "wide".to_owned(),
-                    child_node_ids: Vec::new(),
-                    child_object_ids: vec![object_id(0)],
-                    transform: placed_at(5.0, 0.0, 0.0),
-                },
-                VoxHierarchyNode {
-                    name: "unit".to_owned(),
-                    child_node_ids: Vec::new(),
-                    child_object_ids: vec![object_id(1)],
-                    transform: placed_at(0.0, 3.0, 0.0),
-                },
-            ])
-            .unwrap();
-        state
-            .set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
+        main.retain_hierarchy_nodes(vec![
+            VoxHierarchyNode {
+                name: "group".to_owned(),
+                child_node_ids: vec![node_id(1)],
+                child_object_ids: Vec::new(),
+                transform: TyTransformF64::default(),
+            },
+            VoxHierarchyNode {
+                name: "wide".to_owned(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id(0)],
+                transform: placed_at(5.0, 0.0, 0.0),
+            },
+            VoxHierarchyNode {
+                name: "unit".to_owned(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id(1)],
+                transform: placed_at(0.0, 3.0, 0.0),
+            },
+        ])
+        .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
             .unwrap();
 
-        state.validate().expect("a well-formed source state");
-        state
+        main.validate().expect("a well-formed source state");
+        main
     }
 
     /// A solid voxel in world space: `x`, `y`, `z`, and an `rgb` color.
@@ -228,8 +190,8 @@ mod tests {
     /// file rooted at a childless model.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
-        let state = to_qbt_vox_main(VoxMain::default()).unwrap();
-        let file = to_qbt_file(&state).unwrap();
+        let main = to_qbt_vox_main(VoxMain::default()).unwrap();
+        let file = to_qbt_file(&main).unwrap();
         let QbtNode::Model(model) = &file.root else {
             panic!("synthesis roots under a model");
         };
@@ -242,8 +204,8 @@ mod tests {
     /// with both objects.
     #[test]
     fn synthesizes_a_file_without_an_ext() {
-        let state = to_qbt_vox_main(source_state()).unwrap();
-        let file = to_qbt_file(&state).unwrap();
+        let main = to_qbt_vox_main(source_state()).unwrap();
+        let file = to_qbt_file(&main).unwrap();
 
         let red = (0xFF, 0, 0);
         let green = (0, 0xFF, 0);
@@ -264,58 +226,52 @@ mod tests {
     /// each object node.
     #[test]
     fn synthesizes_an_entry_per_node() {
-        let state = to_qbt_vox_main(source_state()).unwrap();
+        let main = to_qbt_vox_main(source_state()).unwrap();
 
-        let ext = state.ext();
+        let ext = main.ext();
 
         assert_eq!(ext.version, (1, 0));
 
-        assert_eq!(state.hierarchy_node_count(), 4);
+        assert_eq!(main.hierarchy_node_count(), 4);
 
         assert_eq!(ext.nodes.len(), 4);
 
-        let [root_id] = state.root_hierarchy_node_ids() else {
+        let [root_id] = main.root_hierarchy_node_ids() else {
             panic!("one root");
         };
 
-        let root = state.hierarchy_node(*root_id).unwrap();
+        let root = main.hierarchy_node(*root_id).unwrap();
 
         assert_eq!(root.child_node_ids.len(), 2);
 
-        assert_eq!(ext.nodes[0], Some(QbtExtNode::Model));
+        let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+
+        let matrix = QbtExtNode::Matrix {
+            local_scale: [1, 1, 1],
+            pivot: [0.0, 0.0, 0.0],
+        };
+
+        assert_eq!(ext.nodes[&node_id(0)], QbtExtNode::Model);
+
+        assert_eq!(ext.nodes[&node_id(1)], matrix);
 
         assert_eq!(
-            ext.nodes[1],
-            Some(QbtExtNode::Matrix {
-                name: "wide".to_owned(),
-                position: [5, 0, 0],
-                local_scale: [1, 1, 1],
-                pivot: [0.0, 0.0, 0.0],
-                masks: vec![SOLID_MASK; 2],
-            })
+            main.hierarchy_node(node_id(1)).unwrap().transform,
+            TyTransformF64::from_translation(TyVector3F64::new(5.0, 0.0, 0.0))
         );
 
-        assert_eq!(
-            ext.nodes[2],
-            Some(QbtExtNode::Matrix {
-                name: "unit".to_owned(),
-                position: [0, 3, 0],
-                local_scale: [1, 1, 1],
-                pivot: [0.0, 0.0, 0.0],
-                masks: vec![SOLID_MASK],
-            })
-        );
+        assert_eq!(ext.nodes[&node_id(2)], matrix);
 
-        assert_eq!(ext.nodes[3], Some(QbtExtNode::Model));
+        assert_eq!(ext.nodes[&node_id(3)], QbtExtNode::Model);
     }
 
     /// The written tree pins the synthesized shape: the group becomes a
     /// nameless model, and each object node a matrix at its world position.
     #[test]
     fn writes_the_synthesized_tree() {
-        let state = to_qbt_vox_main(source_state()).unwrap();
+        let main = to_qbt_vox_main(source_state()).unwrap();
 
-        let file = to_qbt_file(&state).unwrap();
+        let file = to_qbt_file(&main).unwrap();
 
         let matrix = |name: &str, position: [i32; 3], voxels: Vec<QbtVoxel>| {
             QbtNode::Matrix(QbtMatrix {
@@ -337,16 +293,12 @@ mod tests {
                             "wide",
                             [5, 0, 0],
                             vec![
-                                QbtVoxel::new(0xFF, 0, 0, SOLID_MASK),
-                                QbtVoxel::new(0, 0xFF, 0, SOLID_MASK),
+                                QbtVoxel::new(0xFF, 0, 0, 0x7e & !4),
+                                QbtVoxel::new(0, 0xFF, 0, 0x7e & !2),
                             ],
                         )],
                     }),
-                    matrix(
-                        "unit",
-                        [0, 3, 0],
-                        vec![QbtVoxel::new(0, 0, 0xFF, SOLID_MASK)]
-                    ),
+                    matrix("unit", [0, 3, 0], vec![QbtVoxel::new(0, 0, 0xFF, 0x7e)]),
                 ],
             })
         );
@@ -356,43 +308,48 @@ mod tests {
     /// subtree placed twice is cloned per path.
     #[test]
     fn synthesizes_a_compound_and_clones_a_shared_subtree() {
-        let mut state = source_state();
+        let mut main = source_state();
 
         // The group also places object 1, and node 1 hangs under both roots.
         let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
 
-        let mut group = state.hierarchy_node(group_id).unwrap().clone();
+        let mut group = main.hierarchy_node(group_id).unwrap().clone();
 
         group.child_object_ids.push(U32Id::from_u32(1));
 
-        state.set_hierarchy_node(group_id, group).unwrap();
+        main.set_hierarchy_node(group_id, group).unwrap();
 
         let unit_id = U32Id::<BVoxHierarchyNode>::from_u32(2);
 
-        let mut unit = state.hierarchy_node(unit_id).unwrap().clone();
+        let mut unit = main.hierarchy_node(unit_id).unwrap().clone();
 
         unit.child_node_ids.push(U32Id::from_u32(1));
 
-        state.set_hierarchy_node(unit_id, unit).unwrap();
+        main.set_hierarchy_node(unit_id, unit).unwrap();
 
-        let state = to_qbt_vox_main(state).unwrap();
+        let main = to_qbt_vox_main(main).unwrap();
 
         // The group, wide, unit, the clone of wide, and the root.
-        assert_eq!(state.hierarchy_node_count(), 5);
+        assert_eq!(main.hierarchy_node_count(), 5);
 
-        let ext = state.ext();
+        let ext = main.ext();
 
-        assert!(matches!(ext.nodes[0], Some(QbtExtNode::Compound { .. })));
+        assert!(matches!(ext.nodes[&group_id], QbtExtNode::Compound { .. }));
 
-        let Some(QbtExtNode::Matrix { name, position, .. }) = &ext.nodes[3] else {
-            panic!("a matrix entry for the clone");
-        };
+        let clone_id = U32Id::<BVoxHierarchyNode>::from_u32(3);
 
-        assert_eq!(name, "wide");
+        assert!(matches!(ext.nodes[&clone_id], QbtExtNode::Matrix { .. }));
 
-        assert_eq!(*position, [5, 3, 0]);
+        let clone = main.hierarchy_node(clone_id).unwrap();
 
-        let file = to_qbt_file(&state).unwrap();
+        assert_eq!(clone.name, "wide");
+
+        assert_eq!(
+            clone.transform,
+            TyTransformF64::from_translation(TyVector3F64::new(5.0, 3.0, 0.0))
+        );
+
+        let file = to_qbt_file(&main).unwrap();
 
         let QbtNode::Model(root) = &file.root else {
             panic!("a model root");

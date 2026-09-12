@@ -1,11 +1,13 @@
 use crate::{
-    GoxlExt, GoxlExtCamera, GoxlExtImage, GoxlExtLayer, GoxlExtLight, GoxlExtMaterial,
-    GoxlExtPreview, GoxlExtUnknownChunk,
+    GoxlExt, GoxlExtCamera, GoxlExtImage, GoxlExtLight, GoxlExtMaterial, GoxlExtPreview,
+    GoxlExtUnknownChunk, layer_provenance,
 };
-use goxl::{GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
+use branded_id::U32Id;
+use goxl::{GoxlCamera, GoxlFile, GoxlLight, GoxlMaterial};
 
 /// The ext of a read of `file`: everything but the blocks, with one layer
-/// entry per layer in stored order.
+/// entry per layer, keyed by the node id the loader gives the layer, its
+/// stored index.
 pub fn goxl_ext_from_file(file: &GoxlFile) -> GoxlExt {
     GoxlExt {
         version: file.version,
@@ -22,7 +24,8 @@ pub fn goxl_ext_from_file(file: &GoxlFile) -> GoxlExt {
         layers: file
             .layers
             .iter()
-            .map(|layer| Some(layer_provenance(layer)))
+            .enumerate()
+            .map(|(index, layer)| (U32Id::from_u32(index as u32), layer_provenance(layer)))
             .collect(),
         cameras: file.cameras.iter().map(camera_provenance).collect(),
         light: file.light.as_ref().map(light_provenance),
@@ -34,30 +37,6 @@ pub fn goxl_ext_from_file(file: &GoxlFile) -> GoxlExt {
                 data: chunk.data.clone(),
             })
             .collect(),
-    }
-}
-
-/// The ext provenance for one layer: its metadata, clone and shape definition,
-/// and the full placement list.
-fn layer_provenance(layer: &GoxlLayer) -> GoxlExtLayer {
-    GoxlExtLayer {
-        name: layer.name.clone(),
-        id: layer.id,
-        base_id: layer.base_id,
-        material: layer.material,
-        mode: layer.mode,
-        visible: layer.visible,
-        transform: layer.transform,
-        bounding_box: layer.bounding_box,
-        image_path: layer.image_path.clone(),
-        shape: layer.shape.map(shape_token),
-        color: layer.color,
-        placements: layer
-            .blocks
-            .iter()
-            .map(|block| (block.block_index, block.position))
-            .collect(),
-        extra: layer.extra.0.clone(),
     }
 }
 
@@ -95,14 +74,5 @@ fn light_provenance(light: &GoxlLight) -> GoxlExtLight {
         ambient: light.ambient,
         shadow: light.shadow,
         extra: light.extra.0.clone(),
-    }
-}
-
-/// The on-disk shape name for a procedural shape.
-fn shape_token(shape: GoxlShape) -> String {
-    match shape {
-        GoxlShape::Sphere => "sphere".to_owned(),
-        GoxlShape::Cube => "cube".to_owned(),
-        GoxlShape::Cylinder => "cylinder".to_owned(),
     }
 }

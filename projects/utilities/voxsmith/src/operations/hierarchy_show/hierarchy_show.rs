@@ -13,7 +13,7 @@ use treegrid::{
 };
 use treeselect::TreeSelection;
 use ty_math::{TyQuaternionExt, TyTransformF64, TyVector3F64};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxExt, VoxMain, VoxObject};
 
 /// A hierarchy-node id in the loaded [`VoxMain`], aliased so signatures stay
 /// short and a node id never mixes with an object id.
@@ -27,12 +27,15 @@ type ObjectId = U32Id<BVoxObject>;
 /// [`ObjectId`] so the three id spaces stay distinct in signatures.
 type GridNodeId = U32Id<BTreeGridNode>;
 
-/// Renders the scene graph of `state` under `options`: a `root` section over
+/// Renders the scene graph of `main` under `options`: a `root` section over
 /// each root subtree, then an `unplaced` section of the nodes nothing places
 /// and the objects no node places, with instanced nodes marked. Errors when a
 /// `pattern` is malformed or matches nothing.
-pub fn hierarchy_show<T>(state: &VoxMain<T>, options: &HierarchyShowOptions) -> Result<String> {
-    let scene = Scene::from_state(state);
+pub fn hierarchy_show<T: VoxExt>(
+    main: &VoxMain<T>,
+    options: &HierarchyShowOptions,
+) -> Result<String> {
+    let scene = Scene::from_main(main);
 
     let filter = match &options.pattern {
         Some(pattern) => Some(scene.build_filter(pattern)?),
@@ -44,8 +47,8 @@ pub fn hierarchy_show<T>(state: &VoxMain<T>, options: &HierarchyShowOptions) -> 
         collapse_instances: options.collapse_instances,
         views: options.views,
         filter,
-        seen_nodes: IdVec::from_vec(vec![0; state.hierarchy_node_count()]),
-        seen_objects: IdVec::from_vec(vec![0; state.object_count()]),
+        seen_nodes: IdVec::from_vec(vec![0; main.hierarchy_node_count()]),
+        seen_objects: IdVec::from_vec(vec![0; main.object_count()]),
         grid: TreeGrid::new(),
     };
 
@@ -73,11 +76,11 @@ pub fn hierarchy_show<T>(state: &VoxMain<T>, options: &HierarchyShowOptions) -> 
 /// drive the instanced and unplaced marks: a node's count is its parent
 /// references plus a root listing, an object's its parent references; two or
 /// more is instanced, zero unplaced. The counts live in dense id-indexed
-/// columns, sized once to the loaded state's live counts, since a loaded state
+/// columns, sized once to the loaded main's live counts because a loaded main
 /// is never mutated here and numbers its ids `0..count`.
-struct Scene<'a, T> {
-    /// The loaded state, read directly for every per-entity lookup.
-    state: &'a VoxMain<T>,
+struct Scene<'a, T: VoxExt> {
+    /// The loaded main, read directly for every per-entity lookup.
+    main: &'a VoxMain<T>,
 
     /// Placement count per node, indexed by node id.
     node_placements: IdVec<BVoxHierarchyNode, usize>,
@@ -86,10 +89,10 @@ struct Scene<'a, T> {
     object_placements: IdVec<BVoxObject, usize>,
 }
 
-impl<'a, T> Scene<'a, T> {
-    /// Tallies the placement counts over `state`; every other datum is read back
-    /// from `state` on demand.
-    fn from_state(state: &'a VoxMain<T>) -> Scene<'a, T> {
+impl<'a, T: VoxExt> Scene<'a, T> {
+    /// Tallies the placement counts over `main`; every other datum is read back
+    /// from `main` on demand.
+    fn from_main(main: &'a VoxMain<T>) -> Scene<'a, T> {
         /// Tallies one placement for `id`, ignoring an id outside the sized
         /// range so an unvalidated document's dangling reference is a no-op
         /// rather than a panic.
@@ -100,16 +103,16 @@ impl<'a, T> Scene<'a, T> {
         }
 
         let mut node_placements: IdVec<BVoxHierarchyNode, usize> =
-            IdVec::from_vec(vec![0; state.hierarchy_node_count()]);
+            IdVec::from_vec(vec![0; main.hierarchy_node_count()]);
 
         let mut object_placements: IdVec<BVoxObject, usize> =
-            IdVec::from_vec(vec![0; state.object_count()]);
+            IdVec::from_vec(vec![0; main.object_count()]);
 
-        for &root_id in state.root_hierarchy_node_ids() {
+        for &root_id in main.root_hierarchy_node_ids() {
             bump(&mut node_placements, root_id);
         }
 
-        for (_, node) in state.iter_hierarchy_nodes() {
+        for (_, node) in main.iter_hierarchy_nodes() {
             for &child_id in &node.child_node_ids {
                 bump(&mut node_placements, child_id);
             }
@@ -120,7 +123,7 @@ impl<'a, T> Scene<'a, T> {
         }
 
         Scene {
-            state,
+            main,
             node_placements,
             object_placements,
         }
@@ -128,7 +131,7 @@ impl<'a, T> Scene<'a, T> {
 
     /// The scene's roots, hierarchy node ids in listing order.
     fn root_ids(&self) -> &[NodeId] {
-        self.state.root_hierarchy_node_ids()
+        self.main.root_hierarchy_node_ids()
     }
 
     /// Placement count of node `id`, or `0` when `id` is outside the sized
@@ -151,7 +154,7 @@ impl<'a, T> Scene<'a, T> {
 
     /// Display name of node `id`, or `""` when it does not resolve.
     fn node_name(&self, id: NodeId) -> &str {
-        self.state
+        self.main
             .hierarchy_node(id)
             .map(|node| node.name.as_str())
             .unwrap_or("")
@@ -159,7 +162,7 @@ impl<'a, T> Scene<'a, T> {
 
     /// Display name of object `id`, or `""` when it does not resolve.
     fn object_name(&self, id: ObjectId) -> &str {
-        self.state
+        self.main
             .object(id)
             .map(|object| object.name())
             .unwrap_or("")
@@ -167,7 +170,7 @@ impl<'a, T> Scene<'a, T> {
 
     /// Node ids that are neither a root nor a child, in listing order.
     fn unplaced_node_ids(&self) -> Vec<NodeId> {
-        self.state
+        self.main
             .iter_hierarchy_nodes()
             .map(|(node_id, _)| node_id)
             .filter(|&node_id| self.node_placement(node_id) == 0)
@@ -176,7 +179,7 @@ impl<'a, T> Scene<'a, T> {
 
     /// Object ids that no node places, in listing order.
     fn orphan_object_ids(&self) -> Vec<ObjectId> {
-        self.state
+        self.main
             .iter_objects()
             .map(|(object_id, _)| object_id)
             .filter(|&object_id| self.object_placement(object_id) == 0)
@@ -230,7 +233,7 @@ impl<'a, T> Scene<'a, T> {
         branch: &mut HashSet<NodeId>,
         out: &mut Vec<Placement>,
     ) {
-        let Some(node) = self.state.hierarchy_node(node_id) else {
+        let Some(node) = self.main.hierarchy_node(node_id) else {
             return;
         };
 
@@ -414,7 +417,7 @@ impl Filter {
 }
 
 /// One populate pass over a [`Scene`].
-struct Walk<'a, T> {
+struct Walk<'a, T: VoxExt> {
     /// The scene being rendered.
     scene: &'a Scene<'a, T>,
 
@@ -438,7 +441,7 @@ struct Walk<'a, T> {
     grid: TreeGrid,
 }
 
-impl<T> Walk<'_, T> {
+impl<T: VoxExt> Walk<'_, T> {
     /// Whether the filter, when present, asks to collapse ancestors.
     fn collapse_ancestors(&self) -> bool {
         self.filter.as_ref().is_some_and(|f| f.collapse_ancestors)
@@ -613,7 +616,7 @@ impl<T> Walk<'_, T> {
     ) {
         let scene = self.scene;
 
-        let Some(node) = scene.state.hierarchy_node(id) else {
+        let Some(node) = scene.main.hierarchy_node(id) else {
             self.retain_node(
                 parent_id,
                 TreeGridLabel::bare(format!("missing node {}", id.to_u32())),
@@ -760,7 +763,7 @@ impl<T> Walk<'_, T> {
     ) {
         let scene = self.scene;
 
-        let Some(object) = scene.state.object(id) else {
+        let Some(object) = scene.main.object(id) else {
             self.retain_node(
                 parent_id,
                 TreeGridLabel::bare(format!("missing object {}", id.to_u32())),
@@ -915,7 +918,7 @@ impl<T> Walk<'_, T> {
             .retain_child(parent_id, TreeGridLabel::bare("layers"));
 
         for (_, palette_id) in object.iter_layers() {
-            match self.scene.state.palette(palette_id) {
+            match self.scene.main.palette(palette_id) {
                 Some(palette) => {
                     let materials = palette.material_count();
                     self.retain_value_leaf(
@@ -1049,16 +1052,16 @@ mod tests {
         VoxPalette, VoxValuePool,
     };
 
-    /// Renders `state` with the given pattern and collapse flags, unwrapping.
+    /// Renders `main` with the given pattern and collapse flags, unwrapping.
     fn show(
-        state: &VoxMain,
+        main: &VoxMain,
         pattern: Option<&str>,
         collapse_instances: bool,
         collapse_ancestors: bool,
         collapse_descendants: bool,
     ) -> String {
         try_show(
-            state,
+            main,
             pattern,
             collapse_instances,
             collapse_ancestors,
@@ -1067,9 +1070,9 @@ mod tests {
         .unwrap()
     }
 
-    /// Renders `state`, returning the error instead of unwrapping.
+    /// Renders `main`, returning the error instead of unwrapping.
     fn try_show(
-        state: &VoxMain,
+        main: &VoxMain,
         pattern: Option<&str>,
         collapse_instances: bool,
         collapse_ancestors: bool,
@@ -1077,7 +1080,7 @@ mod tests {
     ) -> Result<String> {
         let patterns: Vec<&str> = pattern.into_iter().collect();
         try_show_many(
-            state,
+            main,
             &patterns,
             collapse_instances,
             collapse_ancestors,
@@ -1085,16 +1088,16 @@ mod tests {
         )
     }
 
-    /// Renders `state` with several patterns, unwrapping.
+    /// Renders `main` with several patterns, unwrapping.
     fn show_many(
-        state: &VoxMain,
+        main: &VoxMain,
         patterns: &[&str],
         collapse_instances: bool,
         collapse_ancestors: bool,
         collapse_descendants: bool,
     ) -> String {
         try_show_many(
-            state,
+            main,
             patterns,
             collapse_instances,
             collapse_ancestors,
@@ -1103,10 +1106,10 @@ mod tests {
         .unwrap()
     }
 
-    /// Renders `state` with several patterns, returning the error instead of
+    /// Renders `main` with several patterns, returning the error instead of
     /// unwrapping. An empty slice means no filter.
     fn try_show_many(
-        state: &VoxMain,
+        main: &VoxMain,
         patterns: &[&str],
         collapse_instances: bool,
         collapse_ancestors: bool,
@@ -1120,7 +1123,7 @@ mod tests {
             collapse_descendants,
         });
         hierarchy_show(
-            state,
+            main,
             &HierarchyShowOptions {
                 pattern,
                 layout: HierarchyShowLayout::Hierarchy,
@@ -1130,10 +1133,10 @@ mod tests {
         )
     }
 
-    /// Renders `state` with the given views, no pattern or collapse flags.
-    fn render_views(state: &VoxMain, views: HierarchyViews) -> String {
+    /// Renders `main` with the given views, no pattern or collapse flags.
+    fn render_views(main: &VoxMain, views: HierarchyViews) -> String {
         hierarchy_show(
-            state,
+            main,
             &HierarchyShowOptions {
                 pattern: None,
                 layout: HierarchyShowLayout::Hierarchy,
@@ -1144,10 +1147,10 @@ mod tests {
         .unwrap()
     }
 
-    /// Renders `state` under `layout`, no pattern, collapse flags, or views.
-    fn render_layout(state: &VoxMain, layout: HierarchyShowLayout) -> String {
+    /// Renders `main` under `layout`, no pattern, collapse flags, or views.
+    fn render_layout(main: &VoxMain, layout: HierarchyShowLayout) -> String {
         hierarchy_show(
-            state,
+            main,
             &HierarchyShowOptions {
                 pattern: None,
                 layout,
@@ -1233,68 +1236,68 @@ mod tests {
     }
 
     /// A root placing one object under one node.
-    fn simple_state() -> VoxMain {
-        let mut state = VoxMain::default();
-        let body_id = state.retain_object(object("body")).unwrap();
-        let root_id = state
+    fn simple_main() -> VoxMain {
+        let mut main = VoxMain::default();
+        let body_id = main.retain_object(object("body")).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
-        state
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main
     }
 
     /// A root whose two arms both place one shared leaf node, which itself
     /// places one object: the leaf is instanced.
-    fn instanced_state() -> VoxMain {
-        let mut state = VoxMain::default();
-        let head_id = state.retain_object(object("head")).unwrap();
-        let leaf_id = state
+    fn instanced_main() -> VoxMain {
+        let mut main = VoxMain::default();
+        let head_id = main.retain_object(object("head")).unwrap();
+        let leaf_id = main
             .retain_hierarchy_node(node("leaf", vec![], vec![head_id]))
             .unwrap();
-        let arm_a_id = state
+        let arm_a_id = main
             .retain_hierarchy_node(node("armA", vec![leaf_id], vec![]))
             .unwrap();
-        let arm_b_id = state
+        let arm_b_id = main
             .retain_hierarchy_node(node("armB", vec![leaf_id], vec![]))
             .unwrap();
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
-        state
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main
     }
 
     /// A root with two arms; `armA` places node `hand` (object `handMesh`) and
     /// `armB` places node `foot` (object `footMesh`). Node ids: hand 0, foot 1,
     /// armA 2, armB 3, root 4; object ids: handMesh 0, footMesh 1.
-    fn pattern_state() -> VoxMain {
-        let mut state = VoxMain::default();
-        let hand_mesh_id = state.retain_object(object("handMesh")).unwrap();
-        let foot_mesh_id = state.retain_object(object("footMesh")).unwrap();
-        let hand_id = state
+    fn pattern_main() -> VoxMain {
+        let mut main = VoxMain::default();
+        let hand_mesh_id = main.retain_object(object("handMesh")).unwrap();
+        let foot_mesh_id = main.retain_object(object("footMesh")).unwrap();
+        let hand_id = main
             .retain_hierarchy_node(node("hand", vec![], vec![hand_mesh_id]))
             .unwrap();
-        let foot_id = state
+        let foot_id = main
             .retain_hierarchy_node(node("foot", vec![], vec![foot_mesh_id]))
             .unwrap();
-        let arm_a_id = state
+        let arm_a_id = main
             .retain_hierarchy_node(node("armA", vec![hand_id], vec![]))
             .unwrap();
-        let arm_b_id = state
+        let arm_b_id = main
             .retain_hierarchy_node(node("armB", vec![foot_id], vec![]))
             .unwrap();
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
-        state
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main
     }
 
-    /// Adds a palette with `count` `baseColor` materials to `state`; only
+    /// Adds a palette with `count` `baseColor` materials to `main`; only
     /// the material count matters to the tree, so every color is the same.
-    fn retain_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
+    fn retain_palette_with_materials(main: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
         let colors_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -1306,23 +1309,23 @@ mod tests {
         for _ in 0..count {
             palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
         }
-        state.retain_palette(palette).unwrap()
+        main.retain_palette(palette).unwrap()
     }
 
     /// A root placing one object `body` that carries a layer on palette 0 (two
     /// materials) then a layer on palette 1 (three materials).
-    fn palette_ref_state() -> VoxMain {
-        let mut state = VoxMain::default();
+    fn palette_ref_main() -> VoxMain {
+        let mut main = VoxMain::default();
 
-        let first_palette_id = retain_palette_with_materials(&mut state, 2);
-        let first_material_id = state
+        let first_palette_id = retain_palette_with_materials(&mut main, 2);
+        let first_material_id = main
             .palette(first_palette_id)
             .unwrap()
             .iter_materials()
             .next()
             .unwrap();
-        let second_palette_id = retain_palette_with_materials(&mut state, 3);
-        let second_material_id = state
+        let second_palette_id = retain_palette_with_materials(&mut main, 3);
+        let second_material_id = main
             .palette(second_palette_id)
             .unwrap()
             .iter_materials()
@@ -1332,21 +1335,21 @@ mod tests {
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         body.retain_layer(first_palette_id, first_material_id);
         body.retain_layer(second_palette_id, second_material_id);
-        let body_id = state.retain_object(body).unwrap();
+        let body_id = main.retain_object(body).unwrap();
 
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
-        state
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main
     }
 
     /// A root placing one object `body` with a distinct edit grid: build volume
     /// 6x6x6 at origin (-1, -1, -1), live voxels tight in [1, 4] on each axis, so
     /// the runtime grid is a 4x4x4 box at node-relative origin (0, 0, 0).
-    fn geometry_state() -> VoxMain {
-        let mut state = VoxMain::default();
-        let body_id = state
+    fn geometry_main() -> VoxMain {
+        let mut main = VoxMain::default();
+        let body_id = main
             .retain_object(object_live(
                 "body",
                 (6, 6, 6),
@@ -1355,16 +1358,16 @@ mod tests {
                 (4, 4, 4),
             ))
             .unwrap();
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
-        state
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main
     }
 
     #[test]
     fn markdown_renders_a_simple_tree() {
-        let output = show(&simple_state(), None, false, false, false);
+        let output = show(&simple_main(), None, false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1378,7 +1381,7 @@ mod tests {
         // The section root, the node tags, and the object tags all survive as
         // records; labels are the raw names, unquoted, and every value is the
         // pre-formatted tag text.
-        let output = render_layout(&simple_state(), HierarchyShowLayout::JsonPretty);
+        let output = render_layout(&simple_main(), HierarchyShowLayout::JsonPretty);
         assert_eq!(
             output,
             r#"[
@@ -1408,7 +1411,7 @@ mod tests {
 
     #[test]
     fn json_compact_renders_the_envelope_on_one_line() {
-        let output = render_layout(&simple_state(), HierarchyShowLayout::JsonCompact);
+        let output = render_layout(&simple_main(), HierarchyShowLayout::JsonCompact);
         assert_eq!(
             output,
             concat!(
@@ -1421,7 +1424,7 @@ mod tests {
 
     #[test]
     fn markdown_marks_every_instance_by_default() {
-        let output = show(&instanced_state(), None, false, false, false);
+        let output = show(&instanced_main(), None, false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1437,7 +1440,7 @@ mod tests {
 
     #[test]
     fn collapse_instances_stubs_repeat_placements() {
-        let output = show(&instanced_state(), None, true, false, false);
+        let output = show(&instanced_main(), None, true, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1452,21 +1455,20 @@ mod tests {
 
     #[test]
     fn markdown_lists_unplaced_nodes_and_orphan_objects() {
-        let mut state = VoxMain::default();
-        let body_id = state.retain_object(object("body")).unwrap();
+        let mut main = VoxMain::default();
+        let body_id = main.retain_object(object("body")).unwrap();
         // `looseMesh` (object 1) is placed by no node: an orphan object.
-        state.retain_object(object("looseMesh")).unwrap();
-        let spare_child_id = state.retain_object(object("spareChild")).unwrap();
-        let root_id = state
+        main.retain_object(object("looseMesh")).unwrap();
+        let spare_child_id = main.retain_object(object("spareChild")).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         // `spareNode` is neither a root nor a child: an unplaced library node.
-        state
-            .retain_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
+        main.retain_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
-        let output = show(&state, None, false, false, false);
+        let output = show(&main, None, false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1484,7 +1486,7 @@ mod tests {
     fn pattern_keeps_only_matches_and_their_ancestors() {
         // `**/hand` matches `root/armA/hand`; the `armB`/`foot` branch is pruned,
         // and the matched node's object shows.
-        let output = show(&pattern_state(), Some("hand"), false, false, false);
+        let output = show(&pattern_main(), Some("hand"), false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1497,14 +1499,14 @@ mod tests {
 
     #[test]
     fn a_pattern_matching_nothing_is_an_error() {
-        let result = try_show(&pattern_state(), Some("missing"), false, false, false);
+        let result = try_show(&pattern_main(), Some("missing"), false, false, false);
         assert!(result.is_err());
     }
 
     #[test]
     fn multiple_patterns_union_their_matches() {
         // `hand` and `foot` each select a branch; both show, objects included.
-        let output = show_many(&pattern_state(), &["hand", "foot"], false, false, false);
+        let output = show_many(&pattern_main(), &["hand", "foot"], false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1522,7 +1524,7 @@ mod tests {
     fn a_bang_pattern_deselects_a_subtree() {
         // `**` selects everything, then `!armB/` prunes the armB branch, leaving
         // only the armA branch. Git-faithful: the prune is final.
-        let output = show_many(&pattern_state(), &["**", "!armB/"], false, false, false);
+        let output = show_many(&pattern_main(), &["**", "!armB/"], false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1537,7 +1539,7 @@ mod tests {
     fn an_object_pattern_selects_the_object_and_shows_its_ancestors() {
         // `**/footMesh` selects only that object; its node chain shows as context
         // even though no node matched.
-        let output = show_many(&pattern_state(), &["**/footMesh"], false, false, false);
+        let output = show_many(&pattern_main(), &["**/footMesh"], false, false, false);
         assert_eq!(
             output,
             "root\n\
@@ -1550,21 +1552,20 @@ mod tests {
 
     #[test]
     fn an_orphan_object_is_selectable_by_name() {
-        let mut state = VoxMain::default();
-        let body_id = state.retain_object(object("body")).unwrap();
+        let mut main = VoxMain::default();
+        let body_id = main.retain_object(object("body")).unwrap();
         // `looseMesh` (object 1) is placed by no node: an orphan object.
-        state.retain_object(object("looseMesh")).unwrap();
-        let spare_child_id = state.retain_object(object("spareChild")).unwrap();
-        let root_id = state
+        main.retain_object(object("looseMesh")).unwrap();
+        let spare_child_id = main.retain_object(object("spareChild")).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state
-            .retain_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
+        main.retain_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         // The orphan object matches; nothing else does, so only it shows.
-        let output = show_many(&state, &["looseMesh"], false, false, false);
+        let output = show_many(&main, &["looseMesh"], false, false, false);
         assert_eq!(
             output,
             "unplaced\n\
@@ -1576,7 +1577,7 @@ mod tests {
     fn collapse_ancestors_hides_the_chain_above_a_match() {
         // The ancestor chain `root/armA` is replaced by one marker; no section
         // header, since the match is shown flat.
-        let output = show(&pattern_state(), Some("hand"), false, true, false);
+        let output = show(&pattern_main(), Some("hand"), false, true, false);
         assert_eq!(
             output,
             "\u{2514} ancestors\n\
@@ -1587,7 +1588,7 @@ mod tests {
 
     #[test]
     fn collapse_descendants_hides_the_subtree_below_a_match() {
-        let output = show(&pattern_state(), Some("hand"), false, false, true);
+        let output = show(&pattern_main(), Some("hand"), false, false, true);
         assert_eq!(
             output,
             "root\n\
@@ -1600,7 +1601,7 @@ mod tests {
 
     #[test]
     fn collapse_ancestors_and_descendants_combine() {
-        let output = show(&pattern_state(), Some("hand"), false, true, true);
+        let output = show(&pattern_main(), Some("hand"), false, true, true);
         assert_eq!(
             output,
             "\u{2514} ancestors\n\
@@ -1613,14 +1614,14 @@ mod tests {
     fn collapse_ancestors_prints_an_empty_named_child_once() {
         // Empty names collapse the object's path onto its parent node's, so
         // match-rootness must come from the parent link, not the path.
-        let mut state = VoxMain::default();
-        let body_id = state.retain_object(object("")).unwrap();
-        let root_id = state
+        let mut main = VoxMain::default();
+        let body_id = main.retain_object(object("")).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node("", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
-        let output = show(&state, Some("*"), false, true, false);
+        let output = show(&main, Some("*"), false, true, false);
         assert_eq!(
             output,
             "\u{2514} \"\": {node: 0}\n\
@@ -1630,16 +1631,16 @@ mod tests {
 
     #[test]
     fn collapse_flags_do_nothing_without_a_pattern() {
-        let plain = show(&pattern_state(), None, false, false, false);
-        let with_flags = show(&pattern_state(), None, false, true, true);
+        let plain = show(&pattern_main(), None, false, false, false);
+        let with_flags = show(&pattern_main(), None, false, true, true);
         assert_eq!(plain, with_flags);
     }
 
     #[test]
     fn transforms_local_prepend_the_node_transform() {
-        let mut state = VoxMain::default();
-        let body_id = state.retain_object(object("body")).unwrap();
-        let root_id = state
+        let mut main = VoxMain::default();
+        let body_id = main.retain_object(object("body")).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node_xf(
                 "root",
                 xf((1.0, 2.0, 3.0), 90.0, (1.0, 1.0, 1.0)),
@@ -1647,7 +1648,7 @@ mod tests {
                 vec![body_id],
             ))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let view = TransformView {
             world: false,
@@ -1655,7 +1656,7 @@ mod tests {
             precision: 2,
         };
         let output = render_views(
-            &state,
+            &main,
             HierarchyViews {
                 transforms: Some(view),
                 ..HierarchyViews::default()
@@ -1693,7 +1694,7 @@ mod tests {
             runtime_extents: Some(2),
             ..HierarchyViews::default()
         };
-        let output = render_views(&geometry_state(), views);
+        let output = render_views(&geometry_main(), views);
         assert_eq!(
             output,
             "root\n\
@@ -1716,8 +1717,8 @@ mod tests {
     fn edit_geometry_is_null_without_an_authoring_margin() {
         // A 2x2x2 object fully live from the corner: build volume equals the tight
         // extent, so it has no distinct edit grid and every edit row is `null`.
-        let mut state = VoxMain::default();
-        let body_id = state
+        let mut main = VoxMain::default();
+        let body_id = main
             .retain_object(object_live(
                 "body",
                 (2, 2, 2),
@@ -1726,10 +1727,10 @@ mod tests {
                 (1, 1, 1),
             ))
             .unwrap();
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let views = HierarchyViews {
             edit_origins: Some(OriginView {
@@ -1741,7 +1742,7 @@ mod tests {
             runtime_extents: Some(2),
             ..HierarchyViews::default()
         };
-        let output = render_views(&state, views);
+        let output = render_views(&main, views);
         assert!(
             output.contains("edit-origin: null"),
             "output was:\n{output}"
@@ -1765,14 +1766,14 @@ mod tests {
         // A 3x3x3 build volume at origin (-1, -1, -1) with no live voxels: the
         // runtime grid is a zero-size box at that origin, never `null`, while the
         // edit rows read the build volume.
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(3, 3, 3)).unwrap();
         body.set_origin(TyVector3I32::new(-1, -1, -1));
-        let body_id = state.retain_object(body).unwrap();
-        let root_id = state
+        let body_id = main.retain_object(body).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let views = HierarchyViews {
             edit_extents: Some(2),
@@ -1784,7 +1785,7 @@ mod tests {
             runtime_extents: Some(2),
             ..HierarchyViews::default()
         };
-        let output = render_views(&state, views);
+        let output = render_views(&main, views);
         assert_eq!(
             output,
             "root\n\
@@ -1803,8 +1804,8 @@ mod tests {
     fn runtime_origins_world_apply_the_node_transform() {
         // A unit object fully live at the grid corner under a node translated to
         // +10x. Its runtime origin is (0, 0, 0) locally, (10, 0, 0) in world.
-        let mut state = VoxMain::default();
-        let body_id = state
+        let mut main = VoxMain::default();
+        let body_id = main
             .retain_object(object_live(
                 "body",
                 (1, 1, 1),
@@ -1813,7 +1814,7 @@ mod tests {
                 (0, 0, 0),
             ))
             .unwrap();
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node_xf(
                 "root",
                 xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
@@ -1821,10 +1822,10 @@ mod tests {
                 vec![body_id],
             ))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let local = render_views(
-            &state,
+            &main,
             HierarchyViews {
                 runtime_origins: Some(OriginView {
                     world: false,
@@ -1839,7 +1840,7 @@ mod tests {
         );
 
         let world = render_views(
-            &state,
+            &main,
             HierarchyViews {
                 runtime_origins: Some(OriginView {
                     world: true,
@@ -1858,9 +1859,9 @@ mod tests {
     fn transforms_world_composes_the_parent_chain() {
         // A child at local +1x under a parent translated to +10x sits at world
         // +11x.
-        let mut state = VoxMain::default();
-        let body_id = state.retain_object(object("body")).unwrap();
-        let child_id = state
+        let mut main = VoxMain::default();
+        let body_id = main.retain_object(object("body")).unwrap();
+        let child_id = main
             .retain_hierarchy_node(node_xf(
                 "child",
                 xf((1.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
@@ -1868,7 +1869,7 @@ mod tests {
                 vec![body_id],
             ))
             .unwrap();
-        let root_id = state
+        let root_id = main
             .retain_hierarchy_node(node_xf(
                 "root",
                 xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
@@ -1876,7 +1877,7 @@ mod tests {
                 vec![],
             ))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let view = TransformView {
             world: true,
@@ -1884,7 +1885,7 @@ mod tests {
             precision: 2,
         };
         let output = render_views(
-            &state,
+            &main,
             HierarchyViews {
                 transforms: Some(view),
                 ..HierarchyViews::default()
@@ -1899,7 +1900,7 @@ mod tests {
     #[test]
     fn layers_list_each_referenced_palette_with_its_material_count() {
         let output = render_views(
-            &palette_ref_state(),
+            &palette_ref_main(),
             HierarchyViews {
                 layers: true,
                 ..HierarchyViews::default()
@@ -1918,10 +1919,10 @@ mod tests {
 
     #[test]
     fn layers_are_an_empty_array_when_an_object_has_none() {
-        // `simple_state`'s `body` has no layer, so the subtree collapses to an
+        // `simple_main`'s `body` has no layer, so the subtree collapses to an
         // empty array rather than a childless header.
         let output = render_views(
-            &simple_state(),
+            &simple_main(),
             HierarchyViews {
                 layers: true,
                 ..HierarchyViews::default()
@@ -1941,7 +1942,7 @@ mod tests {
         // With a geometry row and layers both on, layers is the last child, so
         // the geometry row keeps its non-last connector.
         let output = render_views(
-            &palette_ref_state(),
+            &palette_ref_main(),
             HierarchyViews {
                 edit_extents: Some(2),
                 layers: true,
@@ -1962,10 +1963,10 @@ mod tests {
 
     #[test]
     fn voxel_counts_report_the_filled_voxel_count() {
-        // `geometry_state`'s body fills the tight [1, 4] box on each axis, a
+        // `geometry_main`'s body fills the tight [1, 4] box on each axis, a
         // 4x4x4 block of 64 live voxels.
         let output = render_views(
-            &geometry_state(),
+            &geometry_main(),
             HierarchyViews {
                 voxel_counts: true,
                 ..HierarchyViews::default()
@@ -1986,7 +1987,7 @@ mod tests {
         // above the layers subtree, matching info's voxels-then-layers order.
         // `body` holds no live voxel, so the count is `0`.
         let output = render_views(
-            &palette_ref_state(),
+            &palette_ref_main(),
             HierarchyViews {
                 voxel_counts: true,
                 layers: true,
@@ -2009,14 +2010,14 @@ mod tests {
     fn names_are_quoted_so_empty_and_spaced_names_stay_legible() {
         // A nameless node and an object whose name carries a space both print
         // quoted; the `root` section header stays unquoted.
-        let mut state = VoxMain::default();
-        let mesh_id = state.retain_object(object("my mesh")).unwrap();
-        let root_id = state
+        let mut main = VoxMain::default();
+        let mesh_id = main.retain_object(object("my mesh")).unwrap();
+        let root_id = main
             .retain_hierarchy_node(node("", vec![], vec![mesh_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
-        let output = show(&state, None, false, false, false);
+        let output = show(&main, None, false, false, false);
         assert_eq!(
             output,
             "root\n\

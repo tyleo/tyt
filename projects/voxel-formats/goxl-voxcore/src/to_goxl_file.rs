@@ -6,38 +6,38 @@ use goxl::{
 };
 use std::collections::{HashMap, HashSet};
 use ty_math::TyVector3U32;
-use voxcore::{
-    BVoxObject, VoxHierarchyNode, VoxMain, VoxObject, color::resolve_cell_color_or_transparent,
-};
+use voxcore::{BVoxObject, VoxHierarchyNode, VoxObject, color::resolve_cell_color_or_transparent};
 
 /// Writes a [`GoxlVoxMain`] to a Goxel [`GoxlFile`], the inverse of
 /// [`from_goxl_file`](crate::from_goxl_file). A loaded file writes back
 /// exactly through its ext. A state
 /// [`to_goxl_vox_main`](crate::to_goxl_vox_main) gave its ext writes as a
 /// file synthesized from the scene. Each object emits one `16 x 16 x 16`
-/// block and the rest comes from the ext. A live voxel is written solid.
-/// Goxel reads alpha 0 as an empty cell, so a fully transparent color is
-/// forced opaque and any other alpha is kept. An empty cell is the
-/// transparent zero voxel.
+/// block and the rest comes from the ext. A layer takes its node's name and
+/// stamps its entry's placements. A live voxel is written solid. Goxel reads
+/// alpha 0 as an empty cell, so a fully transparent color is forced opaque
+/// and any other alpha is kept. An empty cell is the transparent zero voxel.
 ///
 /// Errors if:
 ///
 /// 1. an object is larger than a `16 x 16 x 16` block, which
 ///    `to_goxl_vox_main` retiles for a bare state
 /// 2. an object's `baseColor` draws from a non-color value pool
-/// 3. the ext's layers are out of step with the hierarchy
-pub fn to_goxl_file(state: &GoxlVoxMain) -> Result<GoxlFile> {
-    let ext = state.ext();
+/// 3. the ext's layers are out of step with the hierarchy: a node has no
+///    entry, an entry stamps objects its node does not place, or an entry
+///    clones a layer id no entry has
+pub fn to_goxl_file(main: &GoxlVoxMain) -> Result<GoxlFile> {
+    let ext = main.ext();
 
-    let layers = build_layers(state, &ext.layers)?;
+    let layers = build_layers(main)?;
 
     // Each object is the author's build volume, a fixed Goxel 16-cube, so a
     // block is written from it directly at the original positions, its
     // voxel colors read through the object's `baseColor` layer.
-    let blocks = state
+    let blocks = main
         .iter_objects()
         .enumerate()
-        .map(|(index, (_, object))| block_from_object(state, index, object))
+        .map(|(index, (_, object))| block_from_object(main, index, object))
         .collect::<Result<_>>()?;
 
     Ok(GoxlFile {
@@ -101,7 +101,7 @@ pub fn to_goxl_file(state: &GoxlVoxMain) -> Result<GoxlFile> {
 /// grid cell takes its color from the voxel's sampled material through the
 /// object's `baseColor` layer, or the transparent zero voxel when empty.
 /// Errors when the object is larger than a block.
-fn block_from_object<T>(state: &VoxMain<T>, index: usize, object: &VoxObject) -> Result<GoxlBlock> {
+fn block_from_object(main: &GoxlVoxMain, index: usize, object: &VoxObject) -> Result<GoxlBlock> {
     let size = GoxlBlock::SIZE;
     let bounds = object.bounds();
     if bounds.x > size || bounds.y > size || bounds.z > size {
@@ -111,7 +111,7 @@ fn block_from_object<T>(state: &VoxMain<T>, index: usize, object: &VoxObject) ->
         )));
     }
 
-    let cell_color = resolve_cell_color_or_transparent(state, object)?;
+    let cell_color = resolve_cell_color_or_transparent(main, object)?;
     let mut voxels = Vec::with_capacity((size * size * size) as usize);
 
     // Storage order is x fastest, then y, then z, matching the loop nesting.
@@ -145,92 +145,76 @@ fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
 }
 
 /// Rebuilds the layers from the ext, one per hierarchy node in listing order.
-/// A `None` entry stands for a node retained after the load. It becomes a
-/// layer like a synthesized one. Errors when the ext is out of step with the
-/// hierarchy.
-fn build_layers<T>(state: &VoxMain<T>, layers: &[Option<GoxlExtLayer>]) -> Result<Vec<GoxlLayer>> {
-    let node_count = state.hierarchy_node_count();
+/// Errors when the ext is out of step with the hierarchy.
+fn build_layers(main: &GoxlVoxMain) -> Result<Vec<GoxlLayer>> {
+    let layers = &main.ext().layers;
+    let node_count = main.hierarchy_node_count();
     if layers.len() != node_count {
         return Err(Error::invalid(format!(
-            "goxl ext has {} layers but the state has {node_count} hierarchy nodes",
+            "goxl ext has {} layer entries but the state has {node_count} hierarchy nodes",
             layers.len()
         )));
     }
 
-    let index_by_object: HashMap<U32Id<BVoxObject>, i32> = state
+    let index_by_object: HashMap<U32Id<BVoxObject>, i32> = main
         .iter_objects()
         .enumerate()
         .map(|(index, (object_id, _))| (object_id, index as i32))
         .collect();
-    let ids: HashSet<i32> = layers.iter().flatten().map(|layer| layer.id).collect();
-    // A fresh id lands above every stored id and above the no-clone id 0.
-    let mut next_id = ids.iter().copied().max().unwrap_or(0).max(0);
+    let ids: HashSet<i32> = layers.values().map(|layer| layer.id).collect();
 
-    let mut built = Vec::with_capacity(layers.len());
-    for (index, ((_, node), layer)) in state.iter_hierarchy_nodes().zip(layers).enumerate() {
-        let placed: Vec<i32> = node
-            .child_object_ids
-            .iter()
-            .map(|object_id| {
-                *index_by_object
-                    .get(object_id)
-                    .expect("a placed object is one of the state's")
-            })
-            .collect();
-        let Some(layer) = layer else {
-            next_id += 1;
-            built.push(synthesized_layer(next_id, node, &placed));
-            continue;
+    let mut built = Vec::with_capacity(node_count);
+    for (node_id, node) in main.iter_hierarchy_nodes() {
+        let Some(layer) = layers.get(&node_id) else {
+            return Err(Error::invalid(format!(
+                "goxl ext has no layer entry for node {}",
+                node_id.to_u32()
+            )));
         };
 
-        let referenced = distinct(layer.placements.iter().map(|(block, _)| *block));
-        if referenced != placed {
+        let stamped = distinct(layer.placements.iter().map(|placement| placement.object_id));
+        if stamped != node.child_object_ids {
             return Err(Error::invalid(format!(
-                "goxl ext layer {index} places blocks {referenced:?} but hierarchy node {index} \
-                 places objects {placed:?}"
+                "goxl ext layer for node {} stamps objects {:?} but the node places {:?}",
+                node_id.to_u32(),
+                bare_ids(&stamped),
+                bare_ids(&node.child_object_ids)
             )));
         }
         if layer.base_id != 0 && !ids.contains(&layer.base_id) {
             return Err(Error::invalid(format!(
-                "goxl ext layer {index} clones layer id {} but no layer has it",
+                "goxl ext layer for node {} clones layer id {} but no entry has it",
+                node_id.to_u32(),
                 layer.base_id
             )));
         }
-        built.push(layer_from_provenance(layer));
+        built.push(layer_from_provenance(node, layer, &index_by_object));
     }
 
     Ok(built)
 }
 
-/// A layer for a node retained after the load, shaped like a synthesized one.
-/// The node's objects are stamped at its translation rounded to whole voxels.
-fn synthesized_layer(id: i32, node: &VoxHierarchyNode, placed: &[i32]) -> GoxlLayer {
-    let position = node.transform.position.round().as_ivec3().to_array();
-    GoxlLayer {
-        name: node.name.clone(),
-        id,
-        blocks: placed
-            .iter()
-            .map(|&block_index| GoxlLayerBlock {
-                block_index,
-                position,
-            })
-            .collect(),
-        ..GoxlLayer::default()
-    }
-}
-
 /// `values` without repeats, in first-seen order.
-fn distinct(values: impl Iterator<Item = i32>) -> Vec<i32> {
+fn distinct(values: impl Iterator<Item = U32Id<BVoxObject>>) -> Vec<U32Id<BVoxObject>> {
     let mut seen = HashSet::new();
     values.filter(|value| seen.insert(*value)).collect()
 }
 
-/// Rebuilds one layer from its ext provenance, restoring its placements and the
-/// clone or shape definition.
-fn layer_from_provenance(layer: &GoxlExtLayer) -> GoxlLayer {
+/// `ids` as their bare `u32`s, for an error message.
+fn bare_ids(ids: &[U32Id<BVoxObject>]) -> Vec<u32> {
+    ids.iter().map(|id| id.to_u32()).collect()
+}
+
+/// Rebuilds one layer from its node and ext provenance: the node's name, the
+/// placements at their objects' listing indices, and the clone or shape
+/// definition.
+fn layer_from_provenance(
+    node: &VoxHierarchyNode,
+    layer: &GoxlExtLayer,
+    index_by_object: &HashMap<U32Id<BVoxObject>, i32>,
+) -> GoxlLayer {
     GoxlLayer {
-        name: layer.name.clone(),
+        name: node.name.clone(),
         id: layer.id,
         base_id: layer.base_id,
         material: layer.material,
@@ -240,9 +224,11 @@ fn layer_from_provenance(layer: &GoxlExtLayer) -> GoxlLayer {
         blocks: layer
             .placements
             .iter()
-            .map(|&(block_index, position)| GoxlLayerBlock {
-                block_index,
-                position,
+            .map(|placement| GoxlLayerBlock {
+                block_index: *index_by_object
+                    .get(&placement.object_id)
+                    .expect("a stamped object is one the node places"),
+                position: placement.position,
             })
             .collect(),
         bounding_box: layer.bounding_box,
@@ -266,14 +252,14 @@ fn shape_from_token(token: &str) -> Option<GoxlShape> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{GoxlVoxMain, from_goxl_file, to_goxl_file};
+    use crate::{GoxlExtPlacement, GoxlVoxMain, from_goxl_file, synthesized_layer, to_goxl_file};
     use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
     };
     use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
-    use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxObject};
+    use voxcore::{BVoxHierarchyNode, BVoxObject, Error as VoxError, VoxHierarchyNode, VoxObject};
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box
     /// fields.
@@ -428,18 +414,37 @@ mod tests {
         }
     }
 
+    fn node(index: u32) -> U32Id<BVoxHierarchyNode> {
+        U32Id::from_u32(index)
+    }
+
+    fn object(index: u32) -> U32Id<BVoxObject> {
+        U32Id::from_u32(index)
+    }
+
+    fn placement(object_index: u32, position: [i32; 3]) -> GoxlExtPlacement {
+        GoxlExtPlacement {
+            object_id: object(object_index),
+            position,
+        }
+    }
+
     #[test]
-    fn round_trips_through_vox_state() {
+    fn round_trips_through_vox_main() {
         let file = sample_file();
-        let state = from_goxl_file(&file).unwrap();
-        assert_eq!(to_goxl_file(&state).unwrap(), file);
+
+        let main = from_goxl_file(&file).unwrap();
+
+        assert_eq!(to_goxl_file(&main).unwrap(), file);
     }
 
     #[test]
     fn round_trips_the_default_file() {
         let file = GoxlFile::default();
-        let state = from_goxl_file(&file).unwrap();
-        assert_eq!(to_goxl_file(&state).unwrap(), file);
+
+        let main = from_goxl_file(&file).unwrap();
+
+        assert_eq!(to_goxl_file(&main).unwrap(), file);
     }
 
     /// A layer may stamp the same block at several positions. The voxcore node
@@ -465,8 +470,10 @@ mod tests {
             }],
             ..Default::default()
         };
-        let state = from_goxl_file(&file).unwrap();
-        assert_eq!(to_goxl_file(&state).unwrap(), file);
+
+        let main = from_goxl_file(&file).unwrap();
+
+        assert_eq!(to_goxl_file(&main).unwrap(), file);
     }
 
     /// A block of one color.
@@ -514,71 +521,90 @@ mod tests {
         }
     }
 
-    fn set_child_objects(state: &mut GoxlVoxMain, index: u32, child_object_ids: Vec<u32>) {
-        let node_id = U32Id::<BVoxHierarchyNode>::from_u32(index);
+    fn set_child_objects(main: &mut GoxlVoxMain, index: u32, child_object_ids: Vec<u32>) {
+        let node_id = node(index);
+
         let node = VoxHierarchyNode {
-            child_object_ids: child_object_ids
-                .into_iter()
-                .map(U32Id::<BVoxObject>::from_u32)
-                .collect(),
-            ..state.hierarchy_node(node_id).unwrap().clone()
+            child_object_ids: child_object_ids.into_iter().map(object).collect(),
+            ..main.hierarchy_node(node_id).unwrap().clone()
         };
-        state.set_hierarchy_node(node_id, node).unwrap();
+
+        main.set_hierarchy_node(node_id, node).unwrap();
     }
 
     /// Dropping the middle layer and its block, then compacting, leaves the
-    /// survivors' provenance aligned. The first layer keeps its two stamps of
-    /// block 0. The last layer stamps its block at the new index. The rebuilt
-    /// file reloads to the loaded ext minus the released entries.
+    /// survivors' provenance keyed by their new ids. The first layer keeps its
+    /// two stamps of block 0. The last layer stamps its block by its new id.
+    /// The rebuilt file reloads to the loaded ext minus the released entries.
     #[test]
     fn released_entities_leave_the_survivors_provenance_aligned() {
         let file = placed_blocks_file();
-        let mut state = from_goxl_file(&file).unwrap();
-        let original = state.ext().clone();
 
-        let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
-        state
-            .set_root_hierarchy_node_ids(vec![node(0), node(2)])
-            .unwrap();
-        set_child_objects(&mut state, 0, vec![0]);
-        set_child_objects(&mut state, 1, Vec::new());
-        state.release_hierarchy_node(node(1)).unwrap();
-        state
-            .release_object(U32Id::<BVoxObject>::from_u32(1))
-            .unwrap();
-        state.gc();
+        let mut main = from_goxl_file(&file).unwrap();
 
+        let original = main.ext().clone();
+
+        main.set_root_hierarchy_node_ids(vec![node(0), node(2)])
+            .unwrap();
+
+        set_child_objects(&mut main, 0, vec![0]);
+
+        set_child_objects(&mut main, 1, Vec::new());
+
+        main.release_hierarchy_node(node(1)).unwrap();
+
+        main.release_object(object(1)).unwrap();
+
+        main.gc().unwrap();
+
+        // After the gc, node 2 is node 1 and object 2 is object 1.
         let mut expected = original;
-        expected.layers.remove(1);
-        let [Some(keep), Some(tail)] = expected.layers.as_mut_slice() else {
-            panic!("two loaded layers survive");
-        };
-        keep.placements = vec![(0, [0, 0, 0]), (0, [32, 0, 0])];
-        tail.placements = vec![(1, [0, 0, 16]), (1, [0, 0, 32])];
-        assert_eq!(state.ext(), &expected.clone());
 
-        let rebuilt = to_goxl_file(&state).unwrap();
+        expected.layers.remove(&node(1));
+
+        let mut tail = expected.layers.remove(&node(2)).unwrap();
+
+        tail.placements = vec![placement(1, [0, 0, 16]), placement(1, [0, 0, 32])];
+
+        expected.layers.insert(node(1), tail);
+
+        expected.layers.get_mut(&node(0)).unwrap().placements =
+            vec![placement(0, [0, 0, 0]), placement(0, [32, 0, 0])];
+
+        assert_eq!(main.ext(), &expected);
+
+        let rebuilt = to_goxl_file(&main).unwrap();
+
         let mut want = file;
+
         want.blocks.remove(1);
+
         want.layers.remove(1);
+
         want.layers[0] = stamping_layer("keep", 1, &[(0, [0, 0, 0]), (0, [32, 0, 0])]);
+
         want.layers[1] = stamping_layer("tail", 3, &[(1, [0, 0, 16]), (1, [0, 0, 32])]);
+
         assert_eq!(rebuilt, want);
 
         let reloaded = from_goxl_file(&rebuilt).unwrap();
+
         assert_eq!(reloaded.ext(), &expected);
     }
 
-    /// A node retained after the load takes no entry. The writer fills it in
-    /// like a synthesized layer.
+    /// A node retained after the load gets a synthesized entry on the spot:
+    /// a fresh layer id, stamping the node's objects at its translation
+    /// rounded to whole voxels.
     #[test]
-    fn a_node_retained_after_the_load_writes_a_synthesized_layer() {
+    fn a_node_retained_after_the_load_gets_a_synthesized_entry() {
         let file = placed_blocks_file();
-        let mut state = from_goxl_file(&file).unwrap();
-        let node_id = state
+
+        let mut main = from_goxl_file(&file).unwrap();
+
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 name: "added".to_owned(),
-                child_object_ids: vec![U32Id::<BVoxObject>::from_u32(2)],
+                child_object_ids: vec![object(2)],
                 transform: TyTransformF64 {
                     position: TyVector3F64::new(3.4, -2.6, 16.0),
                     ..Default::default()
@@ -586,87 +612,136 @@ mod tests {
                 ..Default::default()
             })
             .unwrap();
-        state.push_root_hierarchy_node_id(node_id).unwrap();
-        assert_eq!(state.ext().layers[3], None);
 
-        let rebuilt = to_goxl_file(&state).unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
+
+        assert_eq!(
+            main.ext().layers[&node_id],
+            synthesized_layer(4, vec![placement(2, [3, -3, 16])])
+        );
+
+        let rebuilt = to_goxl_file(&main).unwrap();
+
         let mut want = file;
+
         want.layers
             .push(stamping_layer("added", 4, &[(2, [3, -3, 16])]));
+
         assert_eq!(rebuilt, want);
     }
 
-    /// Moving the last block to the front renumbers every layer's stamps, so
-    /// each layer still stamps the block it did.
+    /// Moving the last block to the front changes no id, so each layer still
+    /// stamps the object it did, at its new listing index.
     #[test]
     fn a_moved_object_keeps_each_layers_block() {
         let file = placed_blocks_file();
-        let mut state = from_goxl_file(&file).unwrap();
-        state
-            .move_object(U32Id::<BVoxObject>::from_u32(2), 0)
-            .unwrap();
 
-        let rebuilt = to_goxl_file(&state).unwrap();
+        let mut main = from_goxl_file(&file).unwrap();
+
+        main.move_object(object(2), 0).unwrap();
+
+        let rebuilt = to_goxl_file(&main).unwrap();
+
         let mut want = file;
+
         want.blocks.rotate_right(1);
+
         want.layers[0] = stamping_layer(
             "keep",
             1,
             &[(1, [0, 0, 0]), (2, [16, 0, 0]), (1, [32, 0, 0])],
         );
+
         want.layers[1] = stamping_layer("drop", 2, &[(2, [0, 16, 0])]);
+
         want.layers[2] = stamping_layer("tail", 3, &[(0, [0, 0, 16]), (0, [0, 0, 32])]);
+
         assert_eq!(rebuilt, want);
     }
 
+    /// Releasing a layer that another layer clones would leave the clone's
+    /// `base_id` dangling. The release is refused and nothing changes. The
+    /// clone releases first, then the base.
+    #[test]
+    fn releasing_a_cloned_base_layer_is_refused() {
+        let file = sample_file();
+
+        let mut main = from_goxl_file(&file).unwrap();
+
+        main.set_root_hierarchy_node_ids(vec![node(2)]).unwrap();
+
+        assert!(matches!(
+            main.release_hierarchy_node(node(0)),
+            Err(VoxError::Ext { .. })
+        ));
+
+        assert!(main.hierarchy_node(node(0)).is_some());
+
+        assert_eq!(main.ext().layers.len(), 3);
+
+        main.release_hierarchy_node(node(1)).unwrap();
+
+        main.release_hierarchy_node(node(0)).unwrap();
+
+        assert_eq!(main.ext().layers.len(), 1);
+
+        assert_eq!(
+            to_goxl_file(&main).unwrap().layers,
+            vec![file.layers[2].clone()]
+        );
+    }
+
     /// An ext out of step with the hierarchy is malformed. The writer errors
-    /// instead of pairing entries by a shifted index, stamping what the state
-    /// does not place, or cloning a layer the file lacks.
+    /// instead of stamping what the state does not place or cloning a layer
+    /// the file lacks.
     #[test]
     fn an_ext_out_of_step_with_its_listings_errors() {
         let file = placed_blocks_file();
-        let mut state = from_goxl_file(&file).unwrap();
-        let ext = state.ext_mut();
-        ext.layers.pop();
-        assert!(to_goxl_file(&state).is_err());
 
-        let mut state = from_goxl_file(&file).unwrap();
-        let ext = state.ext_mut();
-        let Some(drop) = &mut ext.layers[1] else {
-            panic!("layer 1 is loaded");
-        };
-        drop.placements.push((2, [0, 0, 0]));
-        assert!(to_goxl_file(&state).is_err());
+        let mut main = from_goxl_file(&file).unwrap();
 
-        let mut state = from_goxl_file(&file).unwrap();
-        let ext = state.ext_mut();
-        let Some(drop) = &mut ext.layers[1] else {
-            panic!("layer 1 is loaded");
-        };
-        drop.base_id = 9;
-        assert!(to_goxl_file(&state).is_err());
+        main.ext_mut().layers.remove(&node(2));
+
+        assert!(to_goxl_file(&main).is_err());
+
+        let mut main = from_goxl_file(&file).unwrap();
+
+        main.ext_mut()
+            .layers
+            .get_mut(&node(1))
+            .unwrap()
+            .placements
+            .push(placement(2, [0, 0, 0]));
+
+        assert!(to_goxl_file(&main).is_err());
+
+        let mut main = from_goxl_file(&file).unwrap();
+
+        main.ext_mut().layers.get_mut(&node(1)).unwrap().base_id = 9;
+
+        assert!(to_goxl_file(&main).is_err());
     }
 
     /// An object larger than a block cannot be one block. The writer errors
     /// instead of truncating it. `to_goxl_vox_main` retiles such a scene.
     #[test]
     fn an_object_larger_than_a_block_errors() {
-        let mut state = from_goxl_file(&GoxlFile::default()).unwrap();
+        let mut main = from_goxl_file(&GoxlFile::default()).unwrap();
 
-        let object_id = state
+        let object_id = main
             .retain_object(VoxObject::new("wide".to_owned(), TyVector3U32::new(17, 1, 1)).unwrap())
             .unwrap();
 
-        let node_id = state
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 child_object_ids: vec![object_id],
                 ..Default::default()
             })
             .unwrap();
 
-        state.push_root_hierarchy_node_id(node_id).unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
 
-        assert!(to_goxl_file(&state).is_err());
+        assert!(to_goxl_file(&main).is_err());
     }
 
     #[cfg(feature = "codec")]
@@ -678,9 +753,13 @@ mod tests {
         #[test]
         fn round_trips_through_goxl_bytes() {
             let file = sample_file();
-            let state = from_goxl_file(&file).unwrap();
-            let bytes = to_goxl_bytes(&DependenciesImpl, &state).unwrap();
+
+            let main = from_goxl_file(&file).unwrap();
+
+            let bytes = to_goxl_bytes(&DependenciesImpl, &main).unwrap();
+
             let reloaded = from_goxl_bytes(&DependenciesImpl, &bytes).unwrap();
+
             assert_eq!(to_goxl_file(&reloaded).unwrap(), file);
         }
     }

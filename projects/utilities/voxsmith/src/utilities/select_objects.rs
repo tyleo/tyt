@@ -1,7 +1,7 @@
 use crate::{Result, utilities::IndexRange};
 use branded_id::U32Id;
 use pathspec::{GitIgnoreRegex, is_file_path_match};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxExt, VoxMain};
 
 /// A hierarchy-node id.
 type NodeId = U32Id<BVoxHierarchyNode>;
@@ -9,18 +9,18 @@ type NodeId = U32Id<BVoxHierarchyNode>;
 /// An object id.
 type ObjectId = U32Id<BVoxObject>;
 
-/// Resolves object selectors against `state` to the ids of the matching
+/// Resolves object selectors against `main` to the ids of the matching
 /// objects, in document order and deduplicated. An index selector picks
 /// objects by position. A path glob matches hierarchy paths with the gitignore
 /// engine, where a matched node contributes its whole subtree and a matched
 /// object contributes itself. With neither selector every object matches. How
 /// many matches are acceptable is the caller's policy.
-pub fn select_objects<T>(
-    state: &VoxMain<T>,
+pub fn select_objects<T: VoxExt>(
+    main: &VoxMain<T>,
     select: &[String],
     select_index: &[IndexRange],
 ) -> Result<Vec<U32Id<BVoxObject>>> {
-    let object_ids: Vec<ObjectId> = state
+    let object_ids: Vec<ObjectId> = main
         .iter_objects()
         .map(|(object_id, _)| object_id)
         .collect();
@@ -41,7 +41,7 @@ pub fn select_objects<T>(
     }
 
     if !select.is_empty() {
-        select_by_path(state, &object_ids, select, &mut chosen)?;
+        select_by_path(main, &object_ids, select, &mut chosen)?;
     }
 
     Ok(object_ids
@@ -56,17 +56,17 @@ pub fn select_objects<T>(
 /// pulls an object in when its own path matches or when a selected ancestor
 /// node does, so a matched node selects its whole subtree. Matching any of a
 /// DAG object's placement paths selects it.
-fn select_by_path<T>(
-    state: &VoxMain<T>,
+fn select_by_path<T: VoxExt>(
+    main: &VoxMain<T>,
     object_ids: &[ObjectId],
     select: &[String],
     chosen: &mut [bool],
 ) -> Result<()> {
     let patterns = GitIgnoreRegex::from_spans_ignore_inert(select)?;
 
-    let node_paths = node_paths(state);
+    let node_paths = node_paths(main);
 
-    let object_paths = object_paths(state, object_ids, &node_paths);
+    let object_paths = object_paths(main, object_ids, &node_paths);
 
     for (object_index, path) in &object_paths {
         // Objects are file leaves; the ancestor walk in `is_file_path_match` is
@@ -82,13 +82,13 @@ fn select_by_path<T>(
 /// Every hierarchy node's path strings, one per placement (a node reached
 /// through several parents gets one path each), a chain of node names from a
 /// root.
-fn node_paths<T>(state: &VoxMain<T>) -> Vec<(NodeId, String)> {
+fn node_paths<T: VoxExt>(main: &VoxMain<T>) -> Vec<(NodeId, String)> {
     let mut paths = Vec::new();
 
     let mut stack = Vec::new();
 
-    for &root_id in state.root_hierarchy_node_ids() {
-        walk_node_paths(state, root_id, "", &mut stack, &mut paths);
+    for &root_id in main.root_hierarchy_node_ids() {
+        walk_node_paths(main, root_id, "", &mut stack, &mut paths);
     }
 
     paths
@@ -96,8 +96,8 @@ fn node_paths<T>(state: &VoxMain<T>) -> Vec<(NodeId, String)> {
 
 /// Records `node_id`'s path (built from `prefix`), then recurses into its child
 /// nodes. `stack` is the current root-to-node chain and guards against a cycle.
-fn walk_node_paths<T>(
-    state: &VoxMain<T>,
+fn walk_node_paths<T: VoxExt>(
+    main: &VoxMain<T>,
     node_id: NodeId,
     prefix: &str,
     stack: &mut Vec<NodeId>,
@@ -107,7 +107,7 @@ fn walk_node_paths<T>(
         return;
     }
 
-    let Some(node) = state.hierarchy_node(node_id) else {
+    let Some(node) = main.hierarchy_node(node_id) else {
         return;
     };
 
@@ -122,7 +122,7 @@ fn walk_node_paths<T>(
     stack.push(node_id);
 
     for &child_id in &node.child_node_ids {
-        walk_node_paths(state, child_id, &path, stack, paths);
+        walk_node_paths(main, child_id, &path, stack, paths);
     }
 
     stack.pop();
@@ -131,8 +131,8 @@ fn walk_node_paths<T>(
 /// Every object's path strings, one per placement (a placing node's path plus
 /// the object name), or the bare object name when no node places it. Each entry
 /// pairs the object's index in `object_ids` with a path.
-fn object_paths<T>(
-    state: &VoxMain<T>,
+fn object_paths<T: VoxExt>(
+    main: &VoxMain<T>,
     object_ids: &[ObjectId],
     node_paths: &[(NodeId, String)],
 ) -> Vec<(usize, String)> {
@@ -141,7 +141,7 @@ fn object_paths<T>(
     let mut paths = Vec::new();
 
     for (node_id, node_path) in node_paths {
-        let Some(node) = state.hierarchy_node(*node_id) else {
+        let Some(node) = main.hierarchy_node(*node_id) else {
             continue;
         };
 
@@ -153,7 +153,7 @@ fn object_paths<T>(
                 continue;
             };
 
-            let Some(object) = state.object(child_object_id) else {
+            let Some(object) = main.object(child_object_id) else {
                 continue;
             };
 
@@ -168,7 +168,7 @@ fn object_paths<T>(
             continue;
         }
 
-        if let Some(object) = state.object(object_id) {
+        if let Some(object) = main.object(object_id) {
             paths.push((object_index, object.name().to_owned()));
         }
     }
@@ -186,15 +186,15 @@ mod tests {
     use voxcore::{VoxHierarchyNode, VoxMain, VoxObject};
 
     /// Adds an empty named object and returns its id.
-    fn object_id(state: &mut VoxMain, name: &str) -> ObjectId {
+    fn object_id(main: &mut VoxMain, name: &str) -> ObjectId {
         let object = VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
-        state.retain_object(object).unwrap()
+        main.retain_object(object).unwrap()
     }
 
     /// Adds a hierarchy node placing the given child nodes and objects.
     fn node_id(
-        state: &mut VoxMain,
+        main: &mut VoxMain,
         name: &str,
         child_node_ids: Vec<NodeId>,
         child_object_ids: Vec<ObjectId>,
@@ -206,7 +206,7 @@ mod tests {
             ..Default::default()
         };
 
-        state.retain_hierarchy_node(node).unwrap()
+        main.retain_hierarchy_node(node).unwrap()
     }
 
     /// The path globs as the owned `String`s the resolver takes.
@@ -221,106 +221,103 @@ mod tests {
 
     #[test]
     fn no_selectors_select_every_object() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
 
-        assert_eq!(select_objects(&state, &[], &[]).unwrap(), vec![a_id, b_id]);
+        assert_eq!(select_objects(&main, &[], &[]).unwrap(), vec![a_id, b_id]);
     }
 
     #[test]
     fn select_index_picks_by_position() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
+        object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
 
-        assert_eq!(
-            select_objects(&state, &[], &[index(1)]).unwrap(),
-            vec![b_id]
-        );
+        assert_eq!(select_objects(&main, &[], &[index(1)]).unwrap(), vec![b_id]);
     }
 
     #[test]
     fn a_glob_matches_an_object_by_its_path() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
 
-        let root_id = node_id(&mut state, "root", vec![], vec![a_id, b_id]);
-        state.push_root_hierarchy_node_id(root_id).unwrap();
+        let root_id = node_id(&mut main, "root", vec![], vec![a_id, b_id]);
+        main.push_root_hierarchy_node_id(root_id).unwrap();
 
         assert_eq!(
-            select_objects(&state, &globs(&["root/b"]), &[]).unwrap(),
+            select_objects(&main, &globs(&["root/b"]), &[]).unwrap(),
             vec![b_id]
         );
     }
 
     #[test]
     fn a_glob_on_a_node_selects_its_subtree() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
 
-        let group_id = node_id(&mut state, "group", vec![], vec![a_id, b_id]);
-        state.push_root_hierarchy_node_id(group_id).unwrap();
+        let group_id = node_id(&mut main, "group", vec![], vec![a_id, b_id]);
+        main.push_root_hierarchy_node_id(group_id).unwrap();
 
         assert_eq!(
-            select_objects(&state, &globs(&["group"]), &[]).unwrap(),
+            select_objects(&main, &globs(&["group"]), &[]).unwrap(),
             vec![a_id, b_id]
         );
     }
 
     #[test]
     fn a_negation_prunes_a_subtree() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
 
-        let keep_id = node_id(&mut state, "keep", vec![], vec![a_id]);
-        let drop_id = node_id(&mut state, "drop", vec![], vec![b_id]);
-        let root_id = node_id(&mut state, "root", vec![keep_id, drop_id], vec![]);
-        state.push_root_hierarchy_node_id(root_id).unwrap();
+        let keep_id = node_id(&mut main, "keep", vec![], vec![a_id]);
+        let drop_id = node_id(&mut main, "drop", vec![], vec![b_id]);
+        let root_id = node_id(&mut main, "root", vec![keep_id, drop_id], vec![]);
+        main.push_root_hierarchy_node_id(root_id).unwrap();
 
         // Select everything under root, then subtract the `drop` branch;
         // last-match-wins leaves only `a`.
         assert_eq!(
-            select_objects(&state, &globs(&["root/**", "!drop/"]), &[]).unwrap(),
+            select_objects(&main, &globs(&["root/**", "!drop/"]), &[]).unwrap(),
             vec![a_id]
         );
     }
 
     #[test]
     fn a_nonmatching_glob_selects_nothing() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        object_id(&mut state, "a");
+        object_id(&mut main, "a");
 
         assert_eq!(
-            select_objects(&state, &globs(&["nope"]), &[]).unwrap(),
+            select_objects(&main, &globs(&["nope"]), &[]).unwrap(),
             Vec::<ObjectId>::new(),
         );
     }
 
     #[test]
     fn selectors_union_and_deduplicate() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
-        let c_id = object_id(&mut state, "c");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
+        let c_id = object_id(&mut main, "c");
 
-        let root_id = node_id(&mut state, "root", vec![], vec![a_id, b_id, c_id]);
-        state.push_root_hierarchy_node_id(root_id).unwrap();
+        let root_id = node_id(&mut main, "root", vec![], vec![a_id, b_id, c_id]);
+        main.push_root_hierarchy_node_id(root_id).unwrap();
 
         // A `root/**` path glob selects every object under root; an index-0
         // selector re-selects `a`, which still appears once, in document order.
         assert_eq!(
-            select_objects(&state, &globs(&["root/**"]), &[index(0)]).unwrap(),
+            select_objects(&main, &globs(&["root/**"]), &[index(0)]).unwrap(),
             vec![a_id, b_id, c_id],
         );
     }

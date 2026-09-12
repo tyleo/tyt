@@ -1,7 +1,7 @@
 use crate::{Error, Result, parse_index_range};
 use branded_id::U32Id;
 use clap::Args;
-use voxcore::{BVoxObject, VoxMain};
+use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::utilities::{IndexRange, select_objects};
 
 /// The `--select` / `--select-index` object selectors, shared by every command
@@ -26,11 +26,11 @@ impl ObjectSelection {
         !self.select.is_empty() || !self.select_index.is_empty()
     }
 
-    /// The ids of the objects the selectors match in `state`, in document
+    /// The ids of the objects the selectors match in `main`, in document
     /// order. A selector that matches nothing is a usage error, so a stray
     /// glob or index is caught.
-    pub fn resolve<T>(&self, state: &VoxMain<T>) -> Result<Vec<U32Id<BVoxObject>>> {
-        let object_ids = select_objects(state, &self.select, &self.select_index)?;
+    pub fn resolve<T: VoxExt>(&self, main: &VoxMain<T>) -> Result<Vec<U32Id<BVoxObject>>> {
+        let object_ids = select_objects(main, &self.select, &self.select_index)?;
 
         if self.has_selectors() && object_ids.is_empty() {
             return Err(Error::usage(
@@ -78,10 +78,10 @@ mod tests {
     #[test]
     fn a_selector_matching_nothing_is_an_error_but_no_selector_is_not() {
         // An empty document: nothing to match.
-        let state: VoxMain = VoxMain::default();
+        let main: VoxMain = VoxMain::default();
 
-        assert!(selection(&["--select", "door"]).resolve(&state).is_err());
-        assert!(selection(&["--select-index", "3"]).resolve(&state).is_err());
-        assert!(selection(&[]).resolve(&state).unwrap().is_empty());
+        assert!(selection(&["--select", "door"]).resolve(&main).is_err());
+        assert!(selection(&["--select-index", "3"]).resolve(&main).is_err());
+        assert!(selection(&[]).resolve(&main).unwrap().is_empty());
     }
 }

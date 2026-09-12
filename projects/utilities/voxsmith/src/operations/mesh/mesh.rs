@@ -6,7 +6,7 @@ use crate::{
         object_to_material_glb, object_to_material_gltf,
     },
 };
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` into a `format` file. With no maps in `request` it writes
 /// pure geometry: no material and no images, so `request.storage` and
@@ -14,9 +14,9 @@ use voxcore::{VoxMain, VoxObject};
 /// flattened layer materials into the requested maps, which the mesh samples,
 /// with any loose images as sidecars. `dependencies` encodes the atlas images
 /// and the base64 of a text glTF's data URIs.
-pub fn mesh<D: EncodeBase64 + EncodePng, T>(
+pub fn mesh<D: EncodeBase64 + EncodePng, T: VoxExt>(
     dependencies: &D,
-    state: &VoxMain<T>,
+    main: &VoxMain<T>,
     object: &VoxObject,
     format: MeshFormat,
     request: &MaterialMeshRequest,
@@ -36,7 +36,7 @@ pub fn mesh<D: EncodeBase64 + EncodePng, T>(
     }
 
     match format {
-        MeshFormat::Gltf => object_to_material_gltf(dependencies, state, object, request),
-        MeshFormat::Glb => object_to_material_glb(dependencies, state, object, request),
+        MeshFormat::Gltf => object_to_material_gltf(dependencies, main, object, request),
+        MeshFormat::Glb => object_to_material_glb(dependencies, main, object, request),
     }
 }

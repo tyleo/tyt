@@ -37,7 +37,7 @@ pub trait Format: 'static {
     fn write<D: Dependencies>(
         dependencies: &D,
         options: &Self::WriteOptions,
-        state: VoxMain<()>,
+        main: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>>;
 
     /// The format's spec checks over a document's files that decode. A

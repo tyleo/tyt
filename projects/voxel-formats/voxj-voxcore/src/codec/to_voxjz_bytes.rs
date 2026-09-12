@@ -6,9 +6,9 @@ use voxj_codec::{Deflate, EncodeVoxjJson, to_voxjz_file_bytes};
 /// `.voxj` member, the bytes form of [`to_voxj_file`].
 pub fn to_voxjz_bytes<D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate>(
     dependencies: &D,
-    state: &VoxjVoxMain,
+    main: &VoxjVoxMain,
     options: &VoxjWriteOptions,
 ) -> Result<Vec<u8>> {
-    let file = to_voxj_file(dependencies, state, options)?;
+    let file = to_voxj_file(dependencies, main, options)?;
     Ok(to_voxjz_file_bytes(dependencies, &file))
 }

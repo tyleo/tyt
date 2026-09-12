@@ -716,25 +716,24 @@ mod tests {
     /// The value pool and value id one attribute resolves to on the material a
     /// given voxel samples, through the object's first layer.
     fn voxel_attribute<'a>(
-        state: &'a VoxMain,
+        main: &'a VoxMain,
         position: TyVector3U32,
         attribute: &str,
     ) -> (&'a VoxValuePool, U32Id<BVoxValuePoolValue>) {
-        let (_, object) = state.iter_objects().next().unwrap();
+        let (_, object) = main.iter_objects().next().unwrap();
         let (layer_id, palette_id) = object.iter_layers().next().unwrap();
-        let palette = state.palette(palette_id).unwrap();
+        let palette = main.palette(palette_id).unwrap();
         let property_id = palette.property_id_by_name(attribute).unwrap();
         let voxel_id = object.voxel_id(position).unwrap();
         let material_id = object.voxel_material(voxel_id, layer_id).unwrap();
-        state
-            .material_value(palette_id, material_id, property_id)
+        main.material_value(palette_id, material_id, property_id)
             .unwrap()
     }
 
     /// The `#RRGGBBAA` hex of the `baseColor` a given voxel samples, encoded
     /// to sRGB from the stored linear color.
-    fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
-        let (value_pool, value_id) = voxel_attribute(state, position, BASE_COLOR);
+    fn voxel_hex(main: &VoxMain, position: TyVector3U32) -> String {
+        let (value_pool, value_id) = voxel_attribute(main, position, BASE_COLOR);
         match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Vec4Float(&[r, g, b, a])) => {
                 srgba_u8_from_lin_srgba_f64(TyLinSrgbaF64::new(r, g, b, a)).to_hex()
@@ -744,8 +743,8 @@ mod tests {
     }
 
     /// The numeric value of one float attribute a given voxel samples.
-    fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
-        let (value_pool, value_id) = voxel_attribute(state, position, attribute);
+    fn voxel_number(main: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
+        let (value_pool, value_id) = voxel_attribute(main, position, attribute);
         match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             other => panic!("expected a float value pool for {attribute}, got {other:?}"),
@@ -1068,7 +1067,7 @@ mod tests {
 
     #[test]
     fn flat_paints_the_whole_body_one_color_over_the_gltf_properties() {
-        let state = voxelize(
+        let main = voxelize(
             &box_glb(1.0, 4.0, 1.0, None, None),
             TyVector3U32::new(1, 1, 4),
             SurfaceMode::CenterInside,
@@ -1080,16 +1079,16 @@ mod tests {
             "voxelized",
         )
         .unwrap();
-        assert_eq!(state.validate(), Ok(()));
-        assert_eq!(state.object_count(), 1);
-        assert_eq!(state.palette_count(), 1);
+        assert_eq!(main.validate(), Ok(()));
+        assert_eq!(main.object_count(), 1);
+        assert_eq!(main.palette_count(), 1);
 
-        let (_, object) = state.iter_objects().next().unwrap();
+        let (_, object) = main.iter_objects().next().unwrap();
         assert_eq!(object.bounds(), TyVector3U32::new(1, 1, 4));
         assert_eq!(object.live_count(), 4);
 
         // Every mode carries the glTF material properties.
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 1);
         assert_eq!(
             palette
@@ -1108,22 +1107,19 @@ mod tests {
             ]
         );
         assert_eq!(
-            voxel_number(&state, TyVector3U32::new(0, 0, 0), EMISSIVE_STRENGTH),
+            voxel_number(&main, TyVector3U32::new(0, 0, 0), EMISSIVE_STRENGTH),
             0.0
         );
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
 
         // The root node records the meters-per-voxel scale.
-        let root_id = state.root_hierarchy_node_ids()[0];
-        assert_eq!(
-            state.hierarchy_node(root_id).unwrap().transform.scale.z,
-            2.0
-        );
+        let root_id = main.root_hierarchy_node_ids()[0];
+        assert_eq!(main.hierarchy_node(root_id).unwrap().transform.scale.z, 2.0);
     }
 
     #[test]
     fn flat_defaults_fill_none_to_white() {
-        let state = voxelize(
+        let main = voxelize(
             &box_glb(1.0, 1.0, 1.0, None, None),
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::CenterInside,
@@ -1135,7 +1131,7 @@ mod tests {
             "voxelized",
         )
         .unwrap();
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FFFFFFFF");
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(0, 0, 0)), "#FFFFFFFF");
     }
 
     #[test]
@@ -1143,7 +1139,7 @@ mod tests {
         // The glTF base color factor is linear light, the form the value pool
         // stores, so it imports bit-exact. Its sRGB display encoding is
         // #FFBC00, where a curve applied on import would shift it to #FF8000.
-        let state = voxelize(
+        let main = voxelize(
             &box_glb(
                 1.0,
                 1.0,
@@ -1161,26 +1157,26 @@ mod tests {
             "voxelized",
         )
         .unwrap();
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(main.validate(), Ok(()));
 
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 1);
         let origin = TyVector3U32::new(0, 0, 0);
-        let (value_pool, value_id) = voxel_attribute(&state, origin, BASE_COLOR);
+        let (value_pool, value_id) = voxel_attribute(&main, origin, BASE_COLOR);
         assert_eq!(
             value_pool.value(value_id),
             Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.5, 0.0, 1.0]))
         );
-        assert_eq!(voxel_hex(&state, origin), "#FFBC00FF");
-        assert_eq!(voxel_number(&state, origin, METALLIC), 0.25);
-        assert_eq!(voxel_number(&state, origin, ROUGHNESS), 0.75);
-        assert_eq!(voxel_number(&state, origin, OCCLUSION_STRENGTH), 1.0);
+        assert_eq!(voxel_hex(&main, origin), "#FFBC00FF");
+        assert_eq!(voxel_number(&main, origin, METALLIC), 0.25);
+        assert_eq!(voxel_number(&main, origin, ROUGHNESS), 0.75);
+        assert_eq!(voxel_number(&main, origin, OCCLUSION_STRENGTH), 1.0);
     }
 
     #[test]
     fn per_primitive_reads_the_khr_material_extensions() {
         // The three KHR extension factors import at their authored values.
-        let state = voxelize(
+        let main = voxelize(
             &extended_material_glb(1.4, 0.5, 3.0),
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::CenterInside,
@@ -1192,19 +1188,19 @@ mod tests {
             "voxelized",
         )
         .unwrap();
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(main.validate(), Ok(()));
 
         let origin = TyVector3U32::new(0, 0, 0);
         // glTF factors are f32, widened to f64 on store.
-        assert_eq!(voxel_number(&state, origin, IOR), 1.4f32 as f64);
-        assert_eq!(voxel_number(&state, origin, TRANSMISSION), 0.5);
-        assert_eq!(voxel_number(&state, origin, EMISSIVE_STRENGTH), 3.0);
+        assert_eq!(voxel_number(&main, origin, IOR), 1.4f32 as f64);
+        assert_eq!(voxel_number(&main, origin, TRANSMISSION), 0.5);
+        assert_eq!(voxel_number(&main, origin, EMISSIVE_STRENGTH), 3.0);
     }
 
     #[test]
     fn a_plain_gltf_imports_the_neutral_ior_and_transmission_defaults() {
         // No KHR extensions imports the defaults: ior 1.5, transmission 0.
-        let state = voxelize(
+        let main = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::CenterInside,
@@ -1218,8 +1214,8 @@ mod tests {
         .unwrap();
 
         let origin = TyVector3U32::new(0, 0, 0);
-        assert_eq!(voxel_number(&state, origin, IOR), 1.5);
-        assert_eq!(voxel_number(&state, origin, TRANSMISSION), 0.0);
+        assert_eq!(voxel_number(&main, origin, IOR), 1.5);
+        assert_eq!(voxel_number(&main, origin, TRANSMISSION), 0.0);
     }
 
     #[test]
@@ -1236,7 +1232,7 @@ mod tests {
 
         // Import the three KHR factors, voxelize, then mesh back out: each factor
         // rides on the exported material as its flat KHR extension.
-        let state = voxelize(
+        let main = voxelize(
             &extended_material_glb(1.4, 0.5, 3.0),
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::CenterInside,
@@ -1249,7 +1245,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, object) = state.iter_objects().next().unwrap();
+        let (_, object) = main.iter_objects().next().unwrap();
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,
             scale: 1.0,
@@ -1258,7 +1254,7 @@ mod tests {
             shape: AtlasShape::Fit,
         };
 
-        let files = object_to_material_glb(&DependenciesImpl, &state, object, &request).unwrap();
+        let files = object_to_material_glb(&DependenciesImpl, &main, object, &request).unwrap();
         let gltf = Gltf::from_slice(&files.mesh).unwrap();
         let material = gltf.materials().next().unwrap();
 
@@ -1277,7 +1273,7 @@ mod tests {
     fn per_primitive_fills_a_solid_interior_from_the_nearest_surface() {
         // A one-material solid box: with fill none, the invented interior adopts
         // the surface material, so the whole body is that one color and cell.
-        let state = voxelize(
+        let main = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(4, 4, 4),
             SurfaceMode::CenterInside,
@@ -1290,19 +1286,19 @@ mod tests {
         )
         .unwrap();
 
-        let (_, object) = state.iter_objects().next().unwrap();
+        let (_, object) = main.iter_objects().next().unwrap();
         assert_eq!(object.live_count(), 64);
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 1);
         // A deep interior voxel resolved to the surface color.
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(2, 2, 2)), "#FF0000FF");
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(2, 2, 2)), "#FF0000FF");
     }
 
     #[test]
     fn per_primitive_paints_a_solid_interior_with_a_given_fill_color() {
         // With an explicit fill color, the interior is that color, not the
         // sampled surface, so the palette carries both.
-        let state = voxelize(
+        let main = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(4, 4, 4),
             SurfaceMode::CenterInside,
@@ -1315,10 +1311,10 @@ mod tests {
         )
         .unwrap();
 
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 2);
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(2, 2, 2)), "#0000FFFF");
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(2, 2, 2)), "#0000FFFF");
     }
 
     #[test]
@@ -1341,7 +1337,7 @@ mod tests {
 
     /// Voxelizes a 1x1x1 box and returns the one object's name.
     fn object_name(bytes: &[u8], name: Option<&str>, fallback: &str) -> String {
-        let state = voxelize(
+        let main = voxelize(
             bytes,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::CenterInside,
@@ -1353,7 +1349,7 @@ mod tests {
             fallback,
         )
         .unwrap();
-        state.iter_objects().next().unwrap().1.name().to_owned()
+        main.iter_objects().next().unwrap().1.name().to_owned()
     }
 
     #[test]
@@ -1427,7 +1423,7 @@ mod tests {
         let png = png_rgba(1, 1, &[[255, 255, 255, 255]]);
         let glb = textured_quad_glb(&png, [0.0, 0.0, 1.0, 1.0]);
 
-        let state = voxelize(
+        let main = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::TriangleCover,
@@ -1439,7 +1435,7 @@ mod tests {
             "voxelized",
         )
         .unwrap();
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#0000FFFF");
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(0, 0, 0)), "#0000FFFF");
     }
 
     #[test]
@@ -1489,7 +1485,7 @@ mod tests {
         let png = png_rgba(2, 1, &[[0, 0, 0, 255], [255, 255, 255, 255]]);
         let glb = textured_quad_glb(&png, [1.0, 1.0, 1.0, 1.0]);
 
-        let state = voxelize(
+        let main = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::TriangleCover,
@@ -1501,7 +1497,7 @@ mod tests {
             "voxelized",
         )
         .unwrap();
-        let (r, g, b) = rgb(&voxel_hex(&state, TyVector3U32::new(0, 0, 0)));
+        let (r, g, b) = rgb(&voxel_hex(&main, TyVector3U32::new(0, 0, 0)));
         assert!(
             r == g && g == b,
             "the blend of grays stays neutral: {r} {g} {b}"
@@ -1526,7 +1522,7 @@ mod tests {
             }],
         );
 
-        let state = voxelize(
+        let main = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::TriangleCover,
@@ -1539,8 +1535,8 @@ mod tests {
         )
         .unwrap();
 
-        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC);
-        let roughness = voxel_number(&state, TyVector3U32::new(0, 0, 0), ROUGHNESS);
+        let metallic = voxel_number(&main, TyVector3U32::new(0, 0, 0), METALLIC);
+        let roughness = voxel_number(&main, TyVector3U32::new(0, 0, 0), ROUGHNESS);
         assert!(
             (metallic - 0.5 * 64.0 / 255.0).abs() < 0.01,
             "metallic {metallic}"
@@ -1568,7 +1564,7 @@ mod tests {
             }],
         );
 
-        let state = voxelize(
+        let main = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::TriangleCover,
@@ -1582,7 +1578,7 @@ mod tests {
         .unwrap();
 
         let origin = TyVector3U32::new(0, 0, 0);
-        let (value_pool, value_id) = voxel_attribute(&state, origin, EMISSIVE_COLOR);
+        let (value_pool, value_id) = voxel_attribute(&main, origin, EMISSIVE_COLOR);
         let [r, g, b] = match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Vec3Float(&color)) => color,
             other => panic!("expected an emissiveColor value pool, got {other:?}"),
@@ -1590,7 +1586,7 @@ mod tests {
         assert!(r < 0.01 && b < 0.01, "emissiveColor red {r} blue {b}");
         assert!((g - 0.503).abs() < 0.01, "emissiveColor green {g}");
         assert_eq!(
-            voxel_number(&state, origin, EMISSIVE_STRENGTH),
+            voxel_number(&main, origin, EMISSIVE_STRENGTH),
             1.0,
             "emissive strength stays the material's unit factor"
         );
@@ -1612,7 +1608,7 @@ mod tests {
             }],
         );
 
-        let state = voxelize(
+        let main = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::TriangleCover,
@@ -1625,7 +1621,7 @@ mod tests {
         )
         .unwrap();
 
-        let occlusion = voxel_number(&state, TyVector3U32::new(0, 0, 0), OCCLUSION_STRENGTH);
+        let occlusion = voxel_number(&main, TyVector3U32::new(0, 0, 0), OCCLUSION_STRENGTH);
         assert!((occlusion - 0.751).abs() < 0.01, "occlusion {occlusion}");
     }
 
@@ -1657,7 +1653,7 @@ mod tests {
             ],
         );
 
-        let state = voxelize(
+        let main = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
             SurfaceMode::TriangleCover,
@@ -1670,8 +1666,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
-        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC);
+        assert_eq!(voxel_hex(&main, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
+        let metallic = voxel_number(&main, TyVector3U32::new(0, 0, 0), METALLIC);
         assert!((metallic - 1.0).abs() < 1e-9, "metallic {metallic}");
     }
 }

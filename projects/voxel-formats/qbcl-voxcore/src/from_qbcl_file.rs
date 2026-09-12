@@ -1,7 +1,7 @@
 use crate::{Error, QbclExtNode, QbclExtNodeBody, QbclVoxMain, Result, qbcl_ext_from_file};
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclNode, QbclNodeBody};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
@@ -10,76 +10,59 @@ use voxcore::{
 
 /// Loads a decoded Qubicle Construction Library [`QbclFile`] into a
 /// [`QbclVoxMain`], the inverse of [`to_qbcl_file`](crate::to_qbcl_file).
-/// Matrix and compound grids become objects
-/// sharing one `baseColor` palette, and the scene tree becomes the hierarchy
-/// nodes. The rest of the Qubicle state, such as the per-voxel visibility
-/// masks, node names and editor flags, the model transform chunks, matrix
-/// placements and pivots, the thumbnail, the metadata strings, the guid, and
-/// the versions, goes to the ext.
+/// Matrix and compound grids become objects sharing one `baseColor` palette,
+/// and the scene tree becomes the hierarchy nodes, each named for its scene
+/// node at its position. The rest of the Qubicle state goes to the ext, the
+/// per-node part keyed by node id. The per-voxel visibility masks are not
+/// kept: the writer derives them from the grid.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
 pub fn from_qbcl_file(file: &QbclFile) -> Result<QbclVoxMain> {
-    let mut state = VoxMain::default();
-    let mut nodes = Vec::new();
+    let mut main = VoxMain::default();
+    let mut nodes = BTreeMap::new();
 
-    let (palette, material_ids) = build_palette(&mut state, &file.root);
-    let palette_id = state.retain_palette(palette)?;
+    let (palette, material_ids) = build_palette(&mut main, &file.root);
+    let palette_id = main.retain_palette(palette)?;
 
-    let root_id = build_node(
-        &file.root,
-        &mut state,
-        palette_id,
-        &material_ids,
-        &mut nodes,
-    )?;
-    state.set_root_hierarchy_node_ids(vec![root_id])?;
+    let root_id = build_node(&file.root, &mut main, palette_id, &material_ids, &mut nodes)?;
+    main.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    Ok(state.put_ext(qbcl_ext_from_file(
-        file,
-        nodes.into_iter().map(Some).collect(),
-    )))
+    Ok(main.put_ext(qbcl_ext_from_file(file, nodes)))
 }
 
-/// Builds the hierarchy node for one scene node and its subtree, adding it and
-/// any objects to the state and appending its provenance to `nodes` so the ext
-/// entry at each index lines up with the hierarchy node id. Returns the new
-/// node's id.
+/// Builds the hierarchy node for one scene node and its subtree, adding it
+/// and any objects to `main` and its provenance to `nodes` under the new
+/// node's id. Returns that id.
 fn build_node(
     node: &QbclNode,
-    state: &mut VoxMain<()>,
+    main: &mut VoxMain<()>,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
-    nodes: &mut Vec<QbclExtNode>,
+    nodes: &mut BTreeMap<U32Id<BVoxHierarchyNode>, QbclExtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
-    let node_id = match &node.body {
+    let (node_id, body) = match &node.body {
         QbclNodeBody::Matrix(matrix) => {
-            // The matrix grid becomes the object's build volume directly; it
-            // may carry empty margin. The masks are read from that same grid.
+            // The matrix grid becomes the object's build volume directly. It
+            // may carry empty margin.
             let object = build_object(matrix, palette_id, material_ids)?;
-            let masks = masks_of(&object, matrix);
-            let object_id = state.retain_object(object)?;
+            let object_id = main.retain_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
                 child_node_ids: Vec::new(),
                 child_object_ids: vec![object_id],
                 transform: translation(matrix.position),
             };
-            let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(node_provenance(
-                node,
-                QbclExtNodeBody::Matrix {
-                    position: matrix.position,
-                    pivot: matrix.pivot,
-                    masks,
-                },
-            ));
-            node_id
+            let node_id = main.retain_hierarchy_node(hierarchy)?;
+            let body = QbclExtNodeBody::Matrix {
+                pivot: matrix.pivot,
+            };
+            (node_id, body)
         }
         QbclNodeBody::Model(model) => {
             let mut child_node_ids = Vec::with_capacity(model.children.len());
             for child in &model.children {
-                child_node_ids.push(build_node(child, state, palette_id, material_ids, nodes)?);
+                child_node_ids.push(build_node(child, main, palette_id, material_ids, nodes)?);
             }
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
@@ -87,54 +70,53 @@ fn build_node(
                 child_object_ids: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(node_provenance(
-                node,
-                QbclExtNodeBody::Model {
-                    transform: model.transform.to_vec(),
-                },
-            ));
-            node_id
+            let node_id = main.retain_hierarchy_node(hierarchy)?;
+            let body = QbclExtNodeBody::Model {
+                transform: model.transform.to_vec(),
+            };
+            (node_id, body)
         }
         QbclNodeBody::Compound(compound) => {
             let mut child_node_ids = Vec::with_capacity(compound.children.len());
             for child in &compound.children {
-                child_node_ids.push(build_node(child, state, palette_id, material_ids, nodes)?);
+                child_node_ids.push(build_node(child, main, palette_id, material_ids, nodes)?);
             }
-            // The compound grid becomes the object's build volume directly; it
-            // may carry empty margin. The masks are read from that same grid.
+            // The compound grid becomes the object's build volume directly.
+            // It may carry empty margin.
             let object = build_object(&compound.matrix, palette_id, material_ids)?;
-            let masks = masks_of(&object, &compound.matrix);
-            let object_id = state.retain_object(object)?;
+            let object_id = main.retain_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
                 child_node_ids,
                 child_object_ids: vec![object_id],
                 transform: translation(compound.matrix.position),
             };
-            let node_id = state.retain_hierarchy_node(hierarchy)?;
-            nodes.push(node_provenance(
-                node,
-                QbclExtNodeBody::Compound {
-                    position: compound.matrix.position,
-                    pivot: compound.matrix.pivot,
-                    masks,
-                },
-            ));
-            node_id
+            let node_id = main.retain_hierarchy_node(hierarchy)?;
+            let body = QbclExtNodeBody::Compound {
+                pivot: compound.matrix.pivot,
+            };
+            (node_id, body)
         }
     };
+    nodes.insert(
+        node_id,
+        QbclExtNode {
+            visible: node.visible,
+            locked: node.locked,
+            body,
+        },
+    );
     Ok(node_id)
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
 /// color across every matrix and compound voxel in the tree, bound to
 /// `baseColor`, with one material per color and a map from a color to its
-/// material. The value pool is added to `state`. A tree with no solid voxels
+/// material. The value pool is added to `main`. A tree with no solid voxels
 /// gets a single placeholder color so objects have a default material to
 /// sample.
 fn build_palette(
-    state: &mut VoxMain<()>,
+    main: &mut VoxMain<()>,
     root: &QbclNode,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -147,7 +129,7 @@ fn build_palette(
     // A Qubicle voxel carries no alpha, so colors decode to linear light and
     // ride in a shared `vec-3-float` value pool. Each material draws one value
     // id into it.
-    let value_pool_id = state.retain_value_pool(
+    let value_pool_id = main.retain_value_pool(
         VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are finite and the list is non-empty"),
     );
@@ -241,32 +223,6 @@ fn build_object(
     }
 
     Ok(object)
-}
-
-/// The visibility masks of an object's solid voxels, in live-voxel raster
-/// order, read back from the matrix the object was built from.
-fn masks_of(object: &VoxObject, matrix: &QbclMatrix) -> Vec<u8> {
-    object
-        .iter_live()
-        .map(|voxel_id| {
-            let position = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            matrix
-                .voxel(position.x, position.y, position.z)
-                .map_or(0, |voxel| voxel.mask)
-        })
-        .collect()
-}
-
-/// The ext provenance for one node: its name, editor flags, and per-kind body.
-fn node_provenance(node: &QbclNode, body: QbclExtNodeBody) -> QbclExtNode {
-    QbclExtNode {
-        name: node.name.clone(),
-        visible: node.visible,
-        locked: node.locked,
-        body,
-    }
 }
 
 /// A translation-only transform from a scene position.

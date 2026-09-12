@@ -18,19 +18,14 @@ pub(crate) fn write_vmax_package(
 
     // A `vmax` entry in the document's `ext` block decodes back into the
     // package.
-    let state = read_with_ext(&DependenciesImpl, ReadFormat::Voxj, &files)?;
+    let main = read_with_ext(&DependenciesImpl, ReadFormat::Voxj, &files)?;
 
     let options = VMaxWriteOptions {
         color_format: vmax_color_format(color_format),
         scene_camera: SceneCameraSource::Ext,
     };
 
-    save_with_ext(
-        &DependenciesImpl,
-        &WriteFormat::VMax(options),
-        state,
-        output,
-    )?;
+    save_with_ext(&DependenciesImpl, &WriteFormat::VMax(options), main, output)?;
 
     Ok(())
 }

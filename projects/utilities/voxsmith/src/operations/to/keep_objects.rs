@@ -17,17 +17,17 @@ type ObjectId = U32Id<BVoxObject>;
 /// preserved throughout: child lists, roots, and the node and object
 /// listings. Palettes and value pools are untouched. The releases leave
 /// holes until [`VoxMain::gc`] renumbers. Errors, changing nothing, when an
-/// id is not one of the state's objects.
-pub fn keep_objects<T: VoxExt>(state: &mut VoxMain<T>, object_ids: &[ObjectId]) -> Result<()> {
+/// id is not one of the main's objects.
+pub fn keep_objects<T: VoxExt>(main: &mut VoxMain<T>, object_ids: &[ObjectId]) -> Result<()> {
     for &object_id in object_ids {
-        if state.object(object_id).is_none() {
+        if main.object(object_id).is_none() {
             return Err(VoxError::UnknownObject { object_id }.into());
         }
     }
 
     let kept: HashSet<ObjectId> = object_ids.iter().copied().collect();
 
-    let nodes: Vec<(NodeId, VoxHierarchyNode)> = state
+    let nodes: Vec<(NodeId, VoxHierarchyNode)> = main
         .iter_hierarchy_nodes()
         .map(|(node_id, node)| (node_id, node.clone()))
         .collect();
@@ -40,14 +40,14 @@ pub fn keep_objects<T: VoxExt>(state: &mut VoxMain<T>, object_ids: &[ObjectId]) 
     let alive = alive_nodes(&by_id, &kept);
 
     // A dead root has to leave the roots before it can be released.
-    let root_ids: Vec<NodeId> = state
+    let root_ids: Vec<NodeId> = main
         .root_hierarchy_node_ids()
         .iter()
         .copied()
         .filter(|root_id| alive.contains(root_id))
         .collect();
 
-    state.set_root_hierarchy_node_ids(root_ids)?;
+    main.set_root_hierarchy_node_ids(root_ids)?;
 
     // A surviving node drops its dead child nodes and dropped objects. A dead
     // node is emptied because a listed child cannot be released. After this
@@ -69,24 +69,24 @@ pub fn keep_objects<T: VoxExt>(state: &mut VoxMain<T>, object_ids: &[ObjectId]) 
         }
 
         if pruned != *node {
-            state.set_hierarchy_node(*node_id, pruned)?;
+            main.set_hierarchy_node(*node_id, pruned)?;
         }
     }
 
     for (node_id, _) in &nodes {
         if !alive.contains(node_id) {
-            state.release_hierarchy_node(*node_id)?;
+            main.release_hierarchy_node(*node_id)?;
         }
     }
 
-    let dropped: Vec<ObjectId> = state
+    let dropped: Vec<ObjectId> = main
         .iter_objects()
         .map(|(object_id, _)| object_id)
         .filter(|object_id| !kept.contains(object_id))
         .collect();
 
     for object_id in dropped {
-        state.release_object(object_id)?;
+        main.release_object(object_id)?;
     }
 
     Ok(())
@@ -145,15 +145,15 @@ mod tests {
     use voxcore::{VoxHierarchyNode, VoxMain, VoxObject, VoxPalette};
 
     /// Adds an empty named object and returns its id.
-    fn object_id(state: &mut VoxMain, name: &str) -> ObjectId {
+    fn object_id(main: &mut VoxMain, name: &str) -> ObjectId {
         let object = VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
-        state.retain_object(object).unwrap()
+        main.retain_object(object).unwrap()
     }
 
     /// Adds a hierarchy node placing the given child nodes and objects.
     fn node_id(
-        state: &mut VoxMain,
+        main: &mut VoxMain,
         name: &str,
         child_node_ids: Vec<NodeId>,
         child_object_ids: Vec<ObjectId>,
@@ -165,33 +165,31 @@ mod tests {
             ..Default::default()
         };
 
-        state.retain_hierarchy_node(node).unwrap()
+        main.retain_hierarchy_node(node).unwrap()
     }
 
     /// The object names in listing order.
-    fn object_names(state: &VoxMain) -> Vec<&str> {
-        state
-            .iter_objects()
+    fn object_names(main: &VoxMain) -> Vec<&str> {
+        main.iter_objects()
             .map(|(_, object)| object.name())
             .collect()
     }
 
     /// Each node's name, child node names, and child object names, in listing
     /// order.
-    fn node_shapes(state: &VoxMain) -> Vec<(String, Vec<String>, Vec<String>)> {
-        state
-            .iter_hierarchy_nodes()
+    fn node_shapes(main: &VoxMain) -> Vec<(String, Vec<String>, Vec<String>)> {
+        main.iter_hierarchy_nodes()
             .map(|(_, node)| {
                 let child_nodes = node
                     .child_node_ids
                     .iter()
-                    .map(|&child_id| state.hierarchy_node(child_id).unwrap().name.clone())
+                    .map(|&child_id| main.hierarchy_node(child_id).unwrap().name.clone())
                     .collect();
 
                 let child_objects = node
                     .child_object_ids
                     .iter()
-                    .map(|&child_id| state.object(child_id).unwrap().name().to_owned())
+                    .map(|&child_id| main.object(child_id).unwrap().name().to_owned())
                     .collect();
 
                 (node.name.clone(), child_nodes, child_objects)
@@ -200,11 +198,10 @@ mod tests {
     }
 
     /// The root node names in order.
-    fn root_names(state: &VoxMain) -> Vec<String> {
-        state
-            .root_hierarchy_node_ids()
+    fn root_names(main: &VoxMain) -> Vec<String> {
+        main.root_hierarchy_node_ids()
             .iter()
-            .map(|&root_id| state.hierarchy_node(root_id).unwrap().name.clone())
+            .map(|&root_id| main.hierarchy_node(root_id).unwrap().name.clone())
             .collect()
     }
 
@@ -224,142 +221,142 @@ mod tests {
     /// Two roots. `root` places `a` and holds `group`, which places `b` and
     /// `c`. `other` places `d`. Object `e` is unplaced.
     fn scene() -> (VoxMain, Vec<ObjectId>) {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
-        let c_id = object_id(&mut state, "c");
-        let d_id = object_id(&mut state, "d");
-        let e_id = object_id(&mut state, "e");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
+        let c_id = object_id(&mut main, "c");
+        let d_id = object_id(&mut main, "d");
+        let e_id = object_id(&mut main, "e");
 
-        let group_id = node_id(&mut state, "group", vec![], vec![b_id, c_id]);
-        let root_id = node_id(&mut state, "root", vec![group_id], vec![a_id]);
-        let other_id = node_id(&mut state, "other", vec![], vec![d_id]);
-        state.push_root_hierarchy_node_id(root_id).unwrap();
-        state.push_root_hierarchy_node_id(other_id).unwrap();
+        let group_id = node_id(&mut main, "group", vec![], vec![b_id, c_id]);
+        let root_id = node_id(&mut main, "root", vec![group_id], vec![a_id]);
+        let other_id = node_id(&mut main, "other", vec![], vec![d_id]);
+        main.push_root_hierarchy_node_id(root_id).unwrap();
+        main.push_root_hierarchy_node_id(other_id).unwrap();
 
-        (state, vec![a_id, b_id, c_id, d_id, e_id])
+        (main, vec![a_id, b_id, c_id, d_id, e_id])
     }
 
     #[test]
     fn keeping_every_object_leaves_the_scene_as_it_was() {
-        let (mut state, ids) = scene();
+        let (mut main, ids) = scene();
 
         let before = (
-            node_shapes(&state),
-            root_names(&state),
-            object_names(&state).len(),
+            node_shapes(&main),
+            root_names(&main),
+            object_names(&main).len(),
         );
 
-        keep_objects(&mut state, &ids).unwrap();
+        keep_objects(&mut main, &ids).unwrap();
 
         assert_eq!(
             (
-                node_shapes(&state),
-                root_names(&state),
-                object_names(&state).len()
+                node_shapes(&main),
+                root_names(&main),
+                object_names(&main).len()
             ),
             before
         );
-        assert_eq!(object_names(&state), ["a", "b", "c", "d", "e"]);
-        state.validate().unwrap();
+        assert_eq!(object_names(&main), ["a", "b", "c", "d", "e"]);
+        main.validate().unwrap();
     }
 
     #[test]
     fn keeping_one_object_prunes_the_nodes_left_placing_nothing() {
-        let (mut state, ids) = scene();
+        let (mut main, ids) = scene();
 
-        keep_objects(&mut state, &[ids[2]]).unwrap();
+        keep_objects(&mut main, &[ids[2]]).unwrap();
 
         // Only `c` remains. `group` and `root` survive as its ancestors, their
         // other children gone. `other` is dropped with `d`.
-        assert_eq!(object_names(&state), ["c"]);
+        assert_eq!(object_names(&main), ["c"]);
         assert_eq!(
-            node_shapes(&state),
+            node_shapes(&main),
             [shape("group", &[], &["c"]), shape("root", &["group"], &[])]
         );
-        assert_eq!(root_names(&state), ["root"]);
-        state.validate().unwrap();
+        assert_eq!(root_names(&main), ["root"]);
+        main.validate().unwrap();
 
         // The holes compact away for a deterministic write.
-        state.gc();
-        assert_eq!(state.object_count(), 1);
-        assert_eq!(state.hierarchy_node_count(), 2);
-        state.validate().unwrap();
+        main.gc().unwrap();
+        assert_eq!(main.object_count(), 1);
+        assert_eq!(main.hierarchy_node_count(), 2);
+        main.validate().unwrap();
     }
 
     #[test]
     fn a_kept_unplaced_object_survives_without_a_node() {
-        let (mut state, ids) = scene();
+        let (mut main, ids) = scene();
 
-        keep_objects(&mut state, &[ids[4]]).unwrap();
+        keep_objects(&mut main, &[ids[4]]).unwrap();
 
-        assert_eq!(object_names(&state), ["e"]);
-        assert_eq!(state.hierarchy_node_count(), 0);
-        assert!(state.root_hierarchy_node_ids().is_empty());
-        state.validate().unwrap();
+        assert_eq!(object_names(&main), ["e"]);
+        assert_eq!(main.hierarchy_node_count(), 0);
+        assert!(main.root_hierarchy_node_ids().is_empty());
+        main.validate().unwrap();
     }
 
     #[test]
     fn a_shared_node_survives_through_any_parent_and_a_dead_parent_goes() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let a_id = object_id(&mut state, "a");
-        let b_id = object_id(&mut state, "b");
+        let a_id = object_id(&mut main, "a");
+        let b_id = object_id(&mut main, "b");
 
         // `shared` places `a` under both `left` and `right`. `right` also
         // places `b`.
-        let shared_id = node_id(&mut state, "shared", vec![], vec![a_id]);
-        let left_id = node_id(&mut state, "left", vec![shared_id], vec![]);
-        let right_id = node_id(&mut state, "right", vec![shared_id], vec![b_id]);
-        state.push_root_hierarchy_node_id(left_id).unwrap();
-        state.push_root_hierarchy_node_id(right_id).unwrap();
+        let shared_id = node_id(&mut main, "shared", vec![], vec![a_id]);
+        let left_id = node_id(&mut main, "left", vec![shared_id], vec![]);
+        let right_id = node_id(&mut main, "right", vec![shared_id], vec![b_id]);
+        main.push_root_hierarchy_node_id(left_id).unwrap();
+        main.push_root_hierarchy_node_id(right_id).unwrap();
 
-        keep_objects(&mut state, &[a_id]).unwrap();
+        keep_objects(&mut main, &[a_id]).unwrap();
 
-        assert_eq!(object_names(&state), ["a"]);
+        assert_eq!(object_names(&main), ["a"]);
         assert_eq!(
-            node_shapes(&state),
+            node_shapes(&main),
             [
                 shape("shared", &[], &["a"]),
                 shape("left", &["shared"], &[]),
                 shape("right", &["shared"], &[]),
             ]
         );
-        assert_eq!(root_names(&state), ["left", "right"]);
+        assert_eq!(root_names(&main), ["left", "right"]);
 
         // Keeping only a re-added `b`, which no node places, drops every node.
-        let mut state = state;
-        let b_id = object_id(&mut state, "b");
-        keep_objects(&mut state, &[b_id]).unwrap();
+        let mut main = main;
+        let b_id = object_id(&mut main, "b");
+        keep_objects(&mut main, &[b_id]).unwrap();
 
-        assert_eq!(object_names(&state), ["b"]);
-        assert_eq!(state.hierarchy_node_count(), 0);
-        state.validate().unwrap();
+        assert_eq!(object_names(&main), ["b"]);
+        assert_eq!(main.hierarchy_node_count(), 0);
+        main.validate().unwrap();
     }
 
     #[test]
     fn keeping_the_object_order_and_the_palettes() {
-        let (mut state, ids) = scene();
-        state.retain_palette(VoxPalette::default()).unwrap();
+        let (mut main, ids) = scene();
+        main.retain_palette(VoxPalette::default()).unwrap();
 
-        keep_objects(&mut state, &[ids[3], ids[0]]).unwrap();
+        keep_objects(&mut main, &[ids[3], ids[0]]).unwrap();
 
         // Objects keep the listing order, not the order given.
-        assert_eq!(object_names(&state), ["a", "d"]);
-        assert_eq!(state.palette_count(), 1);
-        state.validate().unwrap();
+        assert_eq!(object_names(&main), ["a", "d"]);
+        assert_eq!(main.palette_count(), 1);
+        main.validate().unwrap();
     }
 
     #[test]
     fn an_unknown_object_is_an_error_that_changes_nothing() {
-        let (mut state, ids) = scene();
+        let (mut main, ids) = scene();
 
-        let before = node_shapes(&state);
+        let before = node_shapes(&main);
 
-        assert!(keep_objects(&mut state, &[ids[0], U32Id::from_u32(99)]).is_err());
+        assert!(keep_objects(&mut main, &[ids[0], U32Id::from_u32(99)]).is_err());
 
-        assert_eq!(node_shapes(&state), before);
-        assert_eq!(object_names(&state), ["a", "b", "c", "d", "e"]);
+        assert_eq!(node_shapes(&main), before);
+        assert_eq!(object_names(&main), ["a", "b", "c", "d", "e"]);
     }
 }

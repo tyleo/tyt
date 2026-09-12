@@ -28,16 +28,16 @@ impl Format for Goxl {
         Ok(
             from_goxl_bytes(dependencies.goxl(), VoxDocumentFile::single_bytes(files)?)?
                 .take_ext()
-                .state,
+                .main,
         )
     }
 
     fn write<D: Dependencies>(
         dependencies: &D,
         _options: &(),
-        state: VoxMain<()>,
+        main: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let bytes = to_goxl_bytes(dependencies.goxl(), &to_goxl_vox_main(state)?)?;
+        let bytes = to_goxl_bytes(dependencies.goxl(), &to_goxl_vox_main(main)?)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

@@ -1,29 +1,16 @@
+use qbcl::qbcl::QbclModel;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The per-kind body of a scene node in the `qbcl` ext, one variant per
-/// node type. The geometry and colors of a matrix or compound become a native
-/// object; this holds the placement, pivot, and the per-voxel visibility masks
-/// the voxcore object cannot represent, plus a model's opaque transform chunk.
+/// The per-kind body of a scene node in the `qbcl` ext. The position, grid,
+/// and per-voxel masks derive from the scene at write time.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum QbclExtNodeBody {
-    /// A matrix node: a single voxel grid. Its size is the object's grid
-    /// bounds.
+    /// A matrix node: a single voxel grid.
     Matrix {
-        /// `[x, y, z]` position in the scene.
-        position: [i32; 3],
-
         /// `[x, y, z]` pivot, in voxel coordinates.
         pivot: [f32; 3],
-
-        /// Per solid voxel, its visibility mask, in the object's live-voxel
-        /// raster order.
-        #[cfg_attr(
-            feature = "serde",
-            serde(default, skip_serializing_if = "Vec::is_empty")
-        )]
-        masks: Vec<u8>,
     },
 
     /// A model node: groups child nodes.
@@ -39,26 +26,15 @@ pub enum QbclExtNodeBody {
 
     /// A compound node: a baked voxel grid plus child nodes.
     Compound {
-        /// `[x, y, z]` position in the scene.
-        position: [i32; 3],
-
         /// `[x, y, z]` pivot, in voxel coordinates.
         pivot: [f32; 3],
-
-        /// Per solid voxel, its visibility mask, in the object's live-voxel
-        /// raster order.
-        #[cfg_attr(
-            feature = "serde",
-            serde(default, skip_serializing_if = "Vec::is_empty")
-        )]
-        masks: Vec<u8>,
     },
 }
 
 impl Default for QbclExtNodeBody {
     fn default() -> Self {
         QbclExtNodeBody::Model {
-            transform: Vec::new(),
+            transform: QbclModel::DEFAULT_TRANSFORM.to_vec(),
         }
     }
 }

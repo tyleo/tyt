@@ -28,14 +28,14 @@ impl FormatExt for Qbcl {
     fn write_with_ext<D: Dependencies>(
         dependencies: &D,
         _options: &(),
-        state: VoxconvVoxMain,
+        main: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let state = match find_ext::<QbclExt>(KEY, state.ext().as_ref())? {
-            Some(ext) => state.take_ext().state.put_ext(ext),
-            None => to_qbcl_vox_main(state.take_ext().state)?,
+        let main = match find_ext::<QbclExt>(KEY, main.ext().as_ref())? {
+            Some(ext) => main.take_ext().main.put_ext(ext),
+            None => to_qbcl_vox_main(main.take_ext().main)?,
         };
 
-        let bytes = to_qbcl_bytes(dependencies.qbcl(), &state)?;
+        let bytes = to_qbcl_bytes(dependencies.qbcl(), &main)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

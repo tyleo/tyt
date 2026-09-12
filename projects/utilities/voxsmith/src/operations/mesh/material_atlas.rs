@@ -6,7 +6,7 @@ use crate::{
     },
     utilities::check_gltf_property_ranges,
 };
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// A baked material atlas: the shared texel dimensions and one PNG image per
 /// requested [`MaterialBake`], in request order.
@@ -25,24 +25,24 @@ pub struct MaterialAtlas {
 /// [`MaterialAtlas`], the object's layers merged per property name by the
 /// format's override rule: one texel per distinct material tuple the object
 /// samples across its winning layers, laid out per `shape`, each image a PNG.
-/// `state` resolves the object's referenced palettes. This is the
+/// `main` resolves the object's referenced palettes. This is the
 /// geometry-free material bake the palette atlas shares with the textured
 /// mesh writer, and the surface a bake-only material command builds on.
 /// `dependencies` encodes each image. Errors if a layer references a palette
-/// `state` does not hold, if a vocabulary property carries a value outside its
+/// `main` does not hold, if a vocabulary property carries a value outside its
 /// glTF range, or if `shape` is too small to hold the materials.
-pub fn object_to_material_atlas<D: EncodePng, T>(
+pub fn object_to_material_atlas<D: EncodePng, T: VoxExt>(
     dependencies: &D,
-    state: &VoxMain<T>,
+    main: &VoxMain<T>,
     object: &VoxObject,
     bakes: &[MaterialBake],
     shape: AtlasShape,
 ) -> Result<MaterialAtlas> {
     // The texels this bakes reach a glTF material, so the boundary runs the
     // same vocabulary check the mesh export does rather than growing its own.
-    check_gltf_property_ranges(state)?;
+    check_gltf_property_ranges(main)?;
 
-    let used = resolve_used_materials(state, object)?;
+    let used = resolve_used_materials(main, object)?;
 
     let (width, height) = atlas_dimensions(used.len(), shape)?;
 
@@ -89,10 +89,10 @@ mod tests {
 
     #[test]
     fn bakes_one_png_per_requested_map() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
 
         let base_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -103,14 +103,14 @@ mod tests {
             )
             .unwrap();
         let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, red_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[red_id]).unwrap();
 
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
         let bakes = [
             MaterialBake::RgbaColor,
@@ -123,8 +123,8 @@ mod tests {
 
         let atlas = object_to_material_atlas(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &bakes,
             AtlasShape::Fit,
         )
@@ -143,26 +143,26 @@ mod tests {
     fn an_out_of_range_vocabulary_value_errors_before_the_bake() {
         // The atlas is a glTF boundary, so it runs the vocabulary check its
         // sibling mesh export runs rather than baking a lying texel.
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![2.5]).unwrap());
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = main.retain_value_pool(VoxValuePool::float(vec![2.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
             .retain_property(ROUGHNESS.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
         let error = object_to_material_atlas(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &[MaterialBake::RgbaColor],
             AtlasShape::Fit,
         )
@@ -173,17 +173,17 @@ mod tests {
 
     #[test]
     fn a_layerless_object_bakes_one_texel_of_spec_defaults() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
         let atlas = object_to_material_atlas(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &[MaterialBake::RgbaColor],
             AtlasShape::Fit,
         )

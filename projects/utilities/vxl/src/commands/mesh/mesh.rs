@@ -181,9 +181,9 @@ impl Mesh {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
 
-        let object_ids = self.selection.resolve(&state)?;
+        let object_ids = self.selection.resolve(&main)?;
 
         // `mesh` outputs one object, so the selection must resolve to exactly
         // one. `resolve` already rejects a selector matching nothing; an empty
@@ -210,11 +210,11 @@ impl Mesh {
             shape: self.texture_shape,
         };
 
-        let object = state
+        let object = main
             .object(object_id)
-            .expect("the selection resolved an id from the state's objects");
+            .expect("the selection resolved an id from the main's objects");
 
-        let files = mesh(&VoxsmithDependenciesImpl, &state, object, format, &request)?;
+        let files = mesh(&VoxsmithDependenciesImpl, &main, object, format, &request)?;
 
         dependencies.write_file(&output, &files.mesh)?;
 

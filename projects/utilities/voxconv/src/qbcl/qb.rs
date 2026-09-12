@@ -27,15 +27,15 @@ impl Format for Qb {
     fn read<D: Dependencies>(_dependencies: &D, files: &[VoxDocumentFile]) -> Result<VoxMain<()>> {
         Ok(from_qb_bytes(VoxDocumentFile::single_bytes(files)?)?
             .take_ext()
-            .state)
+            .main)
     }
 
     fn write<D: Dependencies>(
         _dependencies: &D,
         _options: &(),
-        state: VoxMain<()>,
+        main: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let bytes = to_qb_bytes(&to_qb_vox_main(state)?)?;
+        let bytes = to_qb_bytes(&to_qb_vox_main(main)?)?;
 
         Ok(vec![VoxDocumentFile::single(bytes)])
     }

@@ -3,7 +3,7 @@ use crate::{
     VMaxVoxMain, vm_coefficient_to_pbr_factor, vmax_ext_from_file,
 };
 use branded_id::U32Id;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use ty_math::{
     TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
     ZERO_LENGTH_TOLERANCE,
@@ -45,15 +45,15 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// reject.
 pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
-    let mut state = VoxMain::default();
+    let mut main = VoxMain::default();
 
-    // One folded palette per distinct object, in palette listing order.
-    let mut palette_provenance: Vec<VMaxExtPalette> = Vec::new();
+    // One folded palette per distinct object, by palette id.
+    let mut palette_provenance: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette> = BTreeMap::new();
 
     // One voxcore object per distinct geometry; instances of one geometry
     // collapse to a single object placed by several nodes.
     let mut object_transforms: Vec<TyTransformF64> = Vec::new();
-    let mut object_data: Vec<Option<String>> = Vec::new();
+    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>)> = Vec::new();
     let mut object_ids: Vec<usize> = Vec::new();
     let mut instances: HashMap<InstanceKey, usize> = HashMap::new();
     for object in &scene.objects {
@@ -68,9 +68,9 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
             continue;
         }
         let (vox_object, data, transform) =
-            build_object(serde, object, &mut state, &mut palette_provenance)?;
-        let object_id = state.retain_object(vox_object)?;
-        object_data.push(data);
+            build_object(serde, object, &mut main, &mut palette_provenance)?;
+        let object_id = main.retain_object(vox_object)?;
+        object_data.push((object_id, data));
         object_transforms.push(transform);
         object_ids.push(object_id.to_u32() as usize);
         if let Some(key) = key {
@@ -81,10 +81,11 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     // The scene nodes land as one batch: a group's children may sit after
     // it in the listing.
     let (nodes, roots) = build_hierarchy(scene, &object_transforms, &object_ids);
-    state.retain_hierarchy_nodes(nodes)?;
-    state.set_root_hierarchy_node_ids(roots)?;
+    let node_ids = main.retain_hierarchy_nodes(nodes)?;
+    main.set_root_hierarchy_node_ids(roots)?;
 
-    Ok(state.put_ext(vmax_ext_from_file(serde, palette_provenance, object_data)))
+    let ext = vmax_ext_from_file(serde, &main, &node_ids, palette_provenance, object_data);
+    Ok(main.put_ext(ext))
 }
 
 /// Builds the voxcore object for one scene object, adding any palettes it
@@ -95,8 +96,8 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
 fn build_object(
     serde: &VMaxFile,
     object: &VMaxObject,
-    state: &mut VoxMain<()>,
-    palette_provenance: &mut Vec<VMaxExtPalette>,
+    main: &mut VoxMain<()>,
+    palette_provenance: &mut BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
 ) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
@@ -163,8 +164,8 @@ fn build_object(
     // Fold the color and material palettes into one: each voxel samples a
     // single material carrying both its color and its material coefficients, one
     // material per distinct color-and-material combination the voxels use.
-    let folded = folded_palette(serde, object, &voxels, state)?;
-    palette_provenance.push(folded.provenance);
+    let folded = folded_palette(serde, object, &voxels, main)?;
+    palette_provenance.insert(folded.palette_id, folded.provenance);
 
     // Back-fill the layer with material 0; the live voxels overwrite theirs.
     vox_object.retain_layer(folded.palette_id, U32Id::<BVoxMaterial>::from_u32(0));
@@ -227,7 +228,7 @@ fn folded_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
     voxels: &[VMaxVoxel],
-    state: &mut VoxMain<()>,
+    main: &mut VoxMain<()>,
 ) -> Result<FoldedPalette> {
     let colors = color_cells(serde, object);
     let (name, materials) = material_list(serde, object);
@@ -239,7 +240,7 @@ fn folded_palette(
     // one value id per property.
     let mut palette = VoxPalette::default();
     let mut color_axis: Vec<bool> = Vec::new();
-    let color_value_pool_id = state.retain_value_pool(VoxValuePool::vec_4_float(
+    let color_value_pool_id = main.retain_value_pool(VoxValuePool::vec_4_float(
         colors
             .iter()
             .map(|color| <[f64; 4]>::from(lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(*color))))
@@ -262,7 +263,7 @@ fn folded_palette(
     // ext for a byte-exact write-back.
     if has_materials {
         let metallic_value_pool_id = float_value_pool(
-            state,
+            main,
             materials
                 .iter()
                 .map(|m| vm_coefficient_to_pbr_factor(m.mc))
@@ -277,7 +278,7 @@ fn folded_palette(
             .expect("the property names are distinct");
         color_axis.push(false);
         let roughness_value_pool_id = float_value_pool(
-            state,
+            main,
             materials
                 .iter()
                 .map(|m| vm_coefficient_to_pbr_factor(m.rc))
@@ -297,7 +298,7 @@ fn folded_palette(
         // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
         // the color leads the strength that scales it.
         if materials.iter().any(|m| m.sic > 0.0) {
-            let emissive_color_value_pool_id = state.retain_value_pool(VoxValuePool::vec_3_float(
+            let emissive_color_value_pool_id = main.retain_value_pool(VoxValuePool::vec_3_float(
                 colors
                     .iter()
                     .map(|color| {
@@ -316,7 +317,7 @@ fn folded_palette(
             color_axis.push(true);
         }
         let emissive_value_pool_id =
-            float_value_pool(state, materials.iter().map(|m| m.sic).collect())?;
+            float_value_pool(main, materials.iter().map(|m| m.sic).collect())?;
         palette
             .retain_property(
                 EMISSIVE_STRENGTH.to_owned(),
@@ -332,7 +333,7 @@ fn folded_palette(
         if materials.iter().any(|m| m.md.is_some()) {
             let default_ior = default_scalar(IOR).expect("ior has a glTF default");
             let ior_value_pool_id = float_value_pool(
-                state,
+                main,
                 materials
                     .iter()
                     .map(|m| m.md.as_ref().map_or(default_ior, |d| d.ior))
@@ -343,7 +344,7 @@ fn folded_palette(
                 .expect("the property names are distinct");
             color_axis.push(false);
             let transmission_value_pool_id =
-                float_value_pool(state, dispersion(&materials, |d| d.transmission))?;
+                float_value_pool(main, dispersion(&materials, |d| d.transmission))?;
             palette
                 .retain_property(
                     TRANSMISSION.to_owned(),
@@ -353,7 +354,7 @@ fn folded_palette(
                 .expect("the property names are distinct");
             color_axis.push(false);
             let absorption_value_pool_id =
-                float_value_pool(state, dispersion(&materials, |d| d.absorption))?;
+                float_value_pool(main, dispersion(&materials, |d| d.absorption))?;
             palette
                 .retain_property(
                     ABSORPTION.to_owned(),
@@ -364,7 +365,7 @@ fn folded_palette(
             color_axis.push(false);
         }
 
-        let shadows_value_pool_id = state.retain_value_pool(VoxValuePool::boolean(
+        let shadows_value_pool_id = main.retain_value_pool(VoxValuePool::boolean(
             materials.iter().map(|m| m.sh).collect(),
         ));
         palette
@@ -388,7 +389,6 @@ fn folded_palette(
         .collect();
     keys.sort_unstable();
     keys.dedup();
-    let slots: Vec<u8> = keys.iter().map(|key| key.1).collect();
     let mut combo_material_ids: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
     for key in keys {
         let color_index = u32::from(key.0).saturating_sub(1);
@@ -409,7 +409,17 @@ fn folded_palette(
         combo_material_ids.insert(key, material_id);
     }
 
-    let palette_id = state.retain_palette(palette)?;
+    // The slot each folded material draws is its material byte.
+    let slots = if has_materials {
+        combo_material_ids
+            .iter()
+            .map(|(key, &material_id)| (material_id, key.1))
+            .collect()
+    } else {
+        BTreeMap::new()
+    };
+
+    let palette_id = main.retain_palette(palette)?;
     let provenance = VMaxExtPalette {
         name,
         materials: materials.iter().map(vmax_ext_material).collect(),
@@ -472,12 +482,12 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
 /// A float value pool over `values`, defaulting a NaN coefficient to zero so
 /// the value pool builds. The infinities the wire spells carry across, and the
 /// exact value rides in the ext. Errors when `values` is empty.
-fn float_value_pool(state: &mut VoxMain<()>, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
+fn float_value_pool(main: &mut VoxMain<()>, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
         .map(|v| if v.is_nan() { 0.0 } else { v })
         .collect();
-    Ok(state.retain_value_pool(VoxValuePool::float(values)?))
+    Ok(main.retain_value_pool(VoxValuePool::float(values)?))
 }
 
 /// Each material's dispersion field `read`, or zero where dispersion is absent.
@@ -787,10 +797,10 @@ mod tests {
 
     #[test]
     fn empty_object_without_content_box_loads_from_its_view_box() {
-        let state = from_vmax_file(&empty_object_with_view_box_only())
+        let main = from_vmax_file(&empty_object_with_view_box_only())
             .expect("an empty object with only a build volume must load");
         let object_id = U32Id::<BVoxObject>::from_u32(0);
-        let object = state.object(object_id).expect("the one object");
+        let object = main.object(object_id).expect("the one object");
         // The object's grid is the build volume (the 32^3 `vp`); it has no live
         // voxels, so its derived runtime extent is empty.
         assert_eq!(object.bounds(), TyVector3U32::new(32, 32, 32));

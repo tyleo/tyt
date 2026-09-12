@@ -1,11 +1,11 @@
 use crate::{
-    Result, VoxMain, VoxObject,
+    Result, VoxExt, VoxMain, VoxObject,
     color::{CellColor, resolve_cell_color},
 };
 
 /// [`resolve_cell_color`], reading transparent black when no layer supplies
 /// `baseColor`.
-pub fn resolve_cell_color_or_transparent<'a, T>(
+pub fn resolve_cell_color_or_transparent<'a, T: VoxExt>(
     state: &VoxMain<T>,
     object: &'a VoxObject,
 ) -> Result<CellColor<'a>> {

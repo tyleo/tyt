@@ -11,10 +11,10 @@ use std::path::Path;
 pub fn save_with_ext<D: Dependencies + WriteFile>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxconvVoxMain,
+    main: VoxconvVoxMain,
     output: &Path,
 ) -> Result<()> {
-    let files = write_with_ext(dependencies, format, state)?;
+    let files = write_with_ext(dependencies, format, main)?;
 
     write_document_files(dependencies, output, &files)
 }
@@ -24,7 +24,7 @@ mod tests {
     use crate::{
         MemoryFiles, ReadFormat, WriteFormat,
         ext::{load_with_ext, save_with_ext},
-        save, test_state,
+        save, test_main,
         vmax::VMaxWriteOptions,
     };
     use std::path::Path;
@@ -36,7 +36,7 @@ mod tests {
 
         let vmax = WriteFormat::VMax(VMaxWriteOptions::default());
 
-        save(&memory, &vmax, test_state(()), Path::new("out/p.vmax")).unwrap();
+        save(&memory, &vmax, test_main(()), Path::new("out/p.vmax")).unwrap();
 
         let loaded = load_with_ext(&memory, ReadFormat::VMax, Path::new("out/p.vmax")).unwrap();
 

@@ -13,20 +13,20 @@ use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain};
 /// node places gets a node named for it at the origin, after the roots. One
 /// root named `root_name` then parents every root, in order, and the
 /// unplaced objects' nodes after them.
-pub fn fold_under_root(state: &mut VoxMain<()>, root_name: &str) -> Result<()> {
+pub fn fold_under_root(main: &mut VoxMain<()>, root_name: &str) -> Result<()> {
     let mut reached = HashSet::new();
     let mut child_node_ids = Vec::new();
 
-    for root_id in state.root_hierarchy_node_ids().to_vec() {
+    for root_id in main.root_hierarchy_node_ids().to_vec() {
         child_node_ids.push(visit(
-            state,
+            main,
             root_id,
             TyVector3I32::new(0, 0, 0),
             &mut reached,
         )?);
     }
 
-    let unreached: Vec<_> = state
+    let unreached: Vec<_> = main
         .iter_hierarchy_nodes()
         .map(|(node_id, _)| node_id)
         .filter(|node_id| !reached.contains(node_id))
@@ -35,25 +35,22 @@ pub fn fold_under_root(state: &mut VoxMain<()>, root_name: &str) -> Result<()> {
     // An unreached node's parents are all unreached. Unlinking them first
     // lets each release in any order.
     for &node_id in &unreached {
-        let mut node = state
-            .hierarchy_node(node_id)
-            .expect("a listed node")
-            .clone();
+        let mut node = main.hierarchy_node(node_id).expect("a listed node").clone();
         node.child_node_ids.clear();
-        state.set_hierarchy_node(node_id, node)?;
+        main.set_hierarchy_node(node_id, node)?;
     }
 
-    state.set_root_hierarchy_node_ids(Vec::new())?;
+    main.set_root_hierarchy_node_ids(Vec::new())?;
 
     for node_id in unreached {
-        state.release_hierarchy_node(node_id)?;
+        main.release_hierarchy_node(node_id)?;
     }
 
-    let placed: HashSet<_> = state
+    let placed: HashSet<_> = main
         .iter_hierarchy_nodes()
         .flat_map(|(_, node)| node.child_object_ids.iter().copied())
         .collect();
-    let unplaced: Vec<_> = state
+    let unplaced: Vec<_> = main
         .iter_objects()
         .filter(|(object_id, _)| !placed.contains(object_id))
         .map(|(object_id, object)| VoxHierarchyNode {
@@ -64,16 +61,16 @@ pub fn fold_under_root(state: &mut VoxMain<()>, root_name: &str) -> Result<()> {
         })
         .collect();
     for node in unplaced {
-        child_node_ids.push(state.retain_hierarchy_node(node)?);
+        child_node_ids.push(main.retain_hierarchy_node(node)?);
     }
 
-    let root_id = state.retain_hierarchy_node(VoxHierarchyNode {
+    let root_id = main.retain_hierarchy_node(VoxHierarchyNode {
         name: root_name.to_owned(),
         transform: TyTransformF64::default(),
         child_node_ids,
         child_object_ids: Vec::new(),
     })?;
-    state.set_root_hierarchy_node_ids(vec![root_id])?;
+    main.set_root_hierarchy_node_ids(vec![root_id])?;
 
     Ok(())
 }
@@ -83,13 +80,13 @@ pub fn fold_under_root(state: &mut VoxMain<()>, root_name: &str) -> Result<()> {
 /// clone after. The node's translation becomes its world position, and the
 /// children are visited the same way.
 fn visit(
-    state: &mut VoxMain<()>,
+    main: &mut VoxMain<()>,
     node_id: U32Id<BVoxHierarchyNode>,
     parent: TyVector3I32,
     reached: &mut HashSet<U32Id<BVoxHierarchyNode>>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let first = reached.insert(node_id);
-    let mut node = state
+    let mut node = main
         .hierarchy_node(node_id)
         .expect("a root or child is a listed node")
         .clone();
@@ -98,16 +95,16 @@ fn visit(
 
     let mut child_node_ids = Vec::with_capacity(node.child_node_ids.len());
     for &child_id in &node.child_node_ids {
-        child_node_ids.push(visit(state, child_id, world, reached)?);
+        child_node_ids.push(visit(main, child_id, world, reached)?);
     }
     node.child_node_ids = child_node_ids;
 
     if first {
-        state.set_hierarchy_node(node_id, node)?;
+        main.set_hierarchy_node(node_id, node)?;
         return Ok(node_id);
     }
 
-    let clone_id = state.retain_hierarchy_node(node)?;
+    let clone_id = main.retain_hierarchy_node(node)?;
     reached.insert(clone_id);
     Ok(clone_id)
 }

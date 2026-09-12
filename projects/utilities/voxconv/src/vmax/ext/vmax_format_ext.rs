@@ -30,16 +30,16 @@ impl FormatExt for VMax {
     fn write_with_ext<D: Dependencies>(
         dependencies: &D,
         options: &VMaxWriteOptions,
-        state: VoxconvVoxMain,
+        main: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>> {
-        let state = match find_ext::<VMaxExt>(KEY, state.ext().as_ref())? {
-            Some(ext) => state.take_ext().state.put_ext(ext),
-            None => to_vmax_vox_main(state.take_ext().state)?,
+        let main = match find_ext::<VMaxExt>(KEY, main.ext().as_ref())? {
+            Some(ext) => main.take_ext().main.put_ext(ext),
+            None => to_vmax_vox_main(main.take_ext().main)?,
         };
 
         let mut files = Vec::new();
 
-        to_vmax_package(dependencies.vmax(), &state, options, |path, bytes| {
+        to_vmax_package(dependencies.vmax(), &main, options, |path, bytes| {
             files.push(VoxDocumentFile::new(path, bytes.to_vec()));
 
             Ok(())

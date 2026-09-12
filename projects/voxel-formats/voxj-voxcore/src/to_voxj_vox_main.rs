@@ -1,10 +1,10 @@
 use crate::{VoxjVoxExt, VoxjVoxMain};
 use voxcore::VoxMain;
 
-/// Gives a bare state an empty `ext` block, the [`VoxjVoxMain`]
+/// Gives a bare main an empty `ext` block, the [`VoxjVoxMain`]
 /// [`to_voxj_file`](crate::to_voxj_file) writes with no block.
-pub fn to_voxj_vox_main(state: VoxMain<()>) -> VoxjVoxMain {
-    state.put_ext(VoxjVoxExt::default())
+pub fn to_voxj_vox_main(main: VoxMain<()>) -> VoxjVoxMain {
+    main.put_ext(VoxjVoxExt::default())
 }
 
 #[cfg(test)]
@@ -15,11 +15,11 @@ mod tests {
 
     #[test]
     fn puts_an_empty_ext_that_writes_no_block() {
-        let state = to_voxj_vox_main(VoxMain::default());
+        let main = to_voxj_vox_main(VoxMain::default());
 
-        assert_eq!(state.ext(), &VoxjVoxExt::default());
+        assert_eq!(main.ext(), &VoxjVoxExt::default());
 
-        let file = to_voxj_file(&DependenciesImpl, &state, &VoxjWriteOptions::default()).unwrap();
+        let file = to_voxj_file(&DependenciesImpl, &main, &VoxjWriteOptions::default()).unwrap();
 
         assert_eq!(file.main.ext, None);
     }

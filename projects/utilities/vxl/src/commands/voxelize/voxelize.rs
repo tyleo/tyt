@@ -127,7 +127,7 @@ impl Voxelize {
             .and_then(|stem| stem.to_str())
             .unwrap_or("voxelized");
 
-        let state = voxelize(&mesh, stem, &options)?;
+        let main = voxelize(&mesh, stem, &options)?;
 
         Ok(save(
             &dependencies,
@@ -135,7 +135,7 @@ impl Voxelize {
                 serialization,
                 options: write_options,
             }),
-            state,
+            main,
             &output,
         )?)
     }

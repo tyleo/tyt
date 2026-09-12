@@ -90,7 +90,7 @@ impl PaletteShow {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
 
         let options = PaletteShowOptions {
             layout: self.layout,
@@ -100,7 +100,7 @@ impl PaletteShow {
             width: resolve_width(&dependencies, self.width),
         };
 
-        let output = palette_show(&state, &selectors, &options)?;
+        let output = palette_show(&main, &selectors, &options)?;
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

@@ -5,8 +5,8 @@ use qbcl_codec::{CompressZlib, qbcl::to_qbcl_file_bytes};
 /// Construction Library `.qbcl` file through `dependencies`, the bytes form
 /// of [`to_qbcl_file`] and the inverse of
 /// [`from_qbcl_bytes`](crate::codec::from_qbcl_bytes).
-pub fn to_qbcl_bytes<D: CompressZlib>(dependencies: &D, state: &QbclVoxMain) -> Result<Vec<u8>> {
-    let file = to_qbcl_file(state)?;
+pub fn to_qbcl_bytes<D: CompressZlib>(dependencies: &D, main: &QbclVoxMain) -> Result<Vec<u8>> {
+    let file = to_qbcl_file(main)?;
 
     Ok(to_qbcl_file_bytes(dependencies, &file))
 }
@@ -41,8 +41,8 @@ mod tests {
                             position: [1, 2, 3],
                             pivot: [0.5, 0.0, 0.0],
                             voxels: vec![
-                                QbclVoxel::new(10, 20, 30, 0x7e),
-                                QbclVoxel::new(1, 2, 3, 0x01),
+                                QbclVoxel::new(10, 20, 30, 0x7e & !4),
+                                QbclVoxel::new(1, 2, 3, 0x7e & !2),
                             ],
                         }),
                     }],
@@ -50,8 +50,8 @@ mod tests {
             },
             ..Default::default()
         };
-        let state = from_qbcl_file(&file).unwrap();
-        let bytes = to_qbcl_bytes(&DependenciesImpl, &state).unwrap();
+        let main = from_qbcl_file(&file).unwrap();
+        let bytes = to_qbcl_bytes(&DependenciesImpl, &main).unwrap();
         let reloaded = from_qbcl_bytes(&DependenciesImpl, &bytes).unwrap();
         assert_eq!(to_qbcl_file(&reloaded).unwrap(), file);
     }

@@ -1,29 +1,26 @@
-use crate::{
-    QbExt, QbExtMatrix, QbVoxMain, Result, SOLID_VISIBILITY, duplicate_object, qb_placements,
-};
+use crate::{QbVoxMain, Result, duplicate_object, qb_ext_from_file, qb_placements};
 use branded_id::U32Id;
 use qbcl::qb::QbFile;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use ty_math::{TyTransformF64, TyVector3I32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain};
 
-/// Gives a bare state a synthesized [`QbExt`], the state
+/// Gives a bare state a synthesized [`QbExt`](crate::QbExt), the state
 /// [`to_qb_file`](crate::to_qb_file) writes as a file synthesized from the
 /// scene. Qubicle Binary has a flat matrix list and no hierarchy, so the
 /// scene flattens first: each object placement becomes one root node placing
 /// one object at the placement's world translation, summed down from the
 /// roots and rounded to whole voxels. An object placed several times is
 /// duplicated per extra placement. An object no node places gets a root at
-/// the origin, after the placed ones. The objects take placement order. Each
-/// then takes an entry with the placement's name and position and the plain
-/// solid visibility byte per voxel. The header takes the defaults: `RGBA`,
-/// left-handed, uncompressed, with plain visibility bytes.
+/// the origin, after the placed ones. The objects take placement order. The
+/// header takes the defaults: `RGBA`, left-handed, uncompressed, with plain
+/// visibility bytes.
 ///
 /// Lossy where Qubicle Binary cannot represent the source: grouping
 /// collapses, node rotation and scale drop, and a color's alpha drops
 /// because a Qubicle voxel stores none.
-pub fn to_qb_vox_main(mut state: VoxMain<()>) -> Result<QbVoxMain> {
-    let placements = qb_placements(&state);
+pub fn to_qb_vox_main(mut main: VoxMain<()>) -> Result<QbVoxMain> {
+    let placements = qb_placements(&main);
 
     // Every placement gets an object of its own: the object itself the first
     // time, a duplicate after.
@@ -35,36 +32,34 @@ pub fn to_qb_vox_main(mut state: VoxMain<()>) -> Result<QbVoxMain> {
             continue;
         }
 
-        let object = state
+        let object = main
             .object(placement.object_id)
             .expect("a placement's object is one of the state's");
-        object_ids.push(state.retain_object(duplicate_object(object))?);
+        let copy = duplicate_object(&main, object)?;
+        object_ids.push(main.retain_object(copy)?);
     }
 
     for (index, &object_id) in object_ids.iter().enumerate() {
-        state.move_object(object_id, index)?;
+        main.move_object(object_id, index)?;
     }
 
-    let node_ids: Vec<U32Id<BVoxHierarchyNode>> = state
+    let node_ids: Vec<U32Id<BVoxHierarchyNode>> = main
         .iter_hierarchy_nodes()
         .map(|(node_id, _)| node_id)
         .collect();
-    state.set_root_hierarchy_node_ids(Vec::new())?;
+    main.set_root_hierarchy_node_ids(Vec::new())?;
     for &node_id in &node_ids {
-        let mut node = state
-            .hierarchy_node(node_id)
-            .expect("a listed node")
-            .clone();
+        let mut node = main.hierarchy_node(node_id).expect("a listed node").clone();
         node.child_node_ids.clear();
-        state.set_hierarchy_node(node_id, node)?;
+        main.set_hierarchy_node(node_id, node)?;
     }
     for node_id in node_ids {
-        state.release_hierarchy_node(node_id)?;
+        main.release_hierarchy_node(node_id)?;
     }
 
     let mut root_ids = Vec::with_capacity(placements.len());
     for (placement, &object_id) in placements.iter().zip(&object_ids) {
-        root_ids.push(state.retain_hierarchy_node(VoxHierarchyNode {
+        root_ids.push(main.retain_hierarchy_node(VoxHierarchyNode {
             name: placement.name.clone(),
             transform: TyTransformF64::from_translation(
                 TyVector3I32::from_array(placement.position).as_dvec3(),
@@ -73,40 +68,14 @@ pub fn to_qb_vox_main(mut state: VoxMain<()>) -> Result<QbVoxMain> {
             child_object_ids: vec![object_id],
         })?);
     }
-    state.set_root_hierarchy_node_ids(root_ids)?;
+    main.set_root_hierarchy_node_ids(root_ids)?;
 
-    let live_counts: HashMap<U32Id<BVoxObject>, usize> = state
-        .iter_objects()
-        .map(|(object_id, object)| (object_id, object.live_count()))
-        .collect();
-    let matrices = placements
-        .iter()
-        .zip(&object_ids)
-        .map(|(placement, object_id)| {
-            Some(QbExtMatrix {
-                name: placement.name.clone(),
-                position: placement.position,
-                visibility: vec![SOLID_VISIBILITY; live_counts[object_id]],
-            })
-        })
-        .collect();
-
-    let file = QbFile::default();
-    let ext = QbExt {
-        version: file.version,
-        bgra: false,
-        right_handed: false,
-        compressed: file.compressed,
-        visibility_mask_encoded: file.visibility_mask_encoded,
-        matrices,
-    };
-
-    Ok(state.put_ext(ext))
+    Ok(main.put_ext(qb_ext_from_file(&QbFile::default())))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{SOLID_VISIBILITY, from_qb_file, to_qb_file, to_qb_vox_main};
+    use crate::{from_qb_file, to_qb_file, to_qb_vox_main};
     use branded_id::U32Id;
     use qbcl::qb::QbFile;
     use std::collections::BTreeSet;
@@ -127,10 +96,10 @@ mod tests {
     /// blue object sharing one `baseColor` palette, placed by a hierarchy of
     /// a nested group and two roots. This is the cross-format synthesis input.
     fn source_state() -> VoxMain<()> {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
         // One baseColor palette: red, green, blue.
-        let value_pool_id = state.retain_value_pool(
+        let value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_3_float(
                 ["#FF0000", "#00FF00", "#0000FF"]
                     .iter()
@@ -148,7 +117,7 @@ mod tests {
                 .retain_material(vec![U32Id::from_u32(index)])
                 .expect("one value id for the one property");
         }
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
@@ -162,7 +131,7 @@ mod tests {
             wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
-        state.retain_object(wide).unwrap();
+        main.retain_object(wide).unwrap();
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
@@ -173,7 +142,7 @@ mod tests {
             .expect("a position within the grid");
         unit.retain_voxel(voxel_id, &[material_id(2)])
             .expect("one sample for the one layer");
-        state.retain_object(unit).unwrap();
+        main.retain_object(unit).unwrap();
 
         let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -182,34 +151,32 @@ mod tests {
 
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
-        state
-            .retain_hierarchy_nodes(vec![
-                VoxHierarchyNode {
-                    name: "group".to_owned(),
-                    child_node_ids: vec![node_id(1)],
-                    child_object_ids: Vec::new(),
-                    transform: TyTransformF64::default(),
-                },
-                VoxHierarchyNode {
-                    name: "wide".to_owned(),
-                    child_node_ids: Vec::new(),
-                    child_object_ids: vec![object_id(0)],
-                    transform: placed_at(5.0, 0.0, 0.0),
-                },
-                VoxHierarchyNode {
-                    name: "unit".to_owned(),
-                    child_node_ids: Vec::new(),
-                    child_object_ids: vec![object_id(1)],
-                    transform: placed_at(0.0, 3.0, 0.0),
-                },
-            ])
-            .unwrap();
-        state
-            .set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
+        main.retain_hierarchy_nodes(vec![
+            VoxHierarchyNode {
+                name: "group".to_owned(),
+                child_node_ids: vec![node_id(1)],
+                child_object_ids: Vec::new(),
+                transform: TyTransformF64::default(),
+            },
+            VoxHierarchyNode {
+                name: "wide".to_owned(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id(0)],
+                transform: placed_at(5.0, 0.0, 0.0),
+            },
+            VoxHierarchyNode {
+                name: "unit".to_owned(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id(1)],
+                transform: placed_at(0.0, 3.0, 0.0),
+            },
+        ])
+        .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
             .unwrap();
 
-        state.validate().expect("a well-formed source state");
-        state
+        main.validate().expect("a well-formed source state");
+        main
     }
 
     /// A solid voxel in world space: `x`, `y`, `z`, and an `rgb` color.
@@ -247,8 +214,8 @@ mod tests {
     /// file.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
-        let state = to_qb_vox_main(VoxMain::default()).unwrap();
-        let file = to_qb_file(&state).unwrap();
+        let main = to_qb_vox_main(VoxMain::default()).unwrap();
+        let file = to_qb_file(&main).unwrap();
         assert!(file.matrices.is_empty());
     }
 
@@ -258,8 +225,8 @@ mod tests {
     /// file reads back into a valid state.
     #[test]
     fn synthesizes_a_file_without_an_ext() {
-        let state = to_qb_vox_main(source_state()).unwrap();
-        let file = to_qb_file(&state).unwrap();
+        let main = to_qb_vox_main(source_state()).unwrap();
+        let file = to_qb_file(&main).unwrap();
 
         let red = (0xFF, 0, 0);
         let green = (0, 0xFF, 0);
@@ -279,45 +246,36 @@ mod tests {
         assert_eq!(reloaded.object_count(), 2);
     }
 
-    /// The ext holds one entry per matrix the file will hold, and the scene
-    /// flattens to match: one root per placement at its world position.
+    /// The scene flattens to one root per placement at its world position,
+    /// named for the placing node, under the default header.
     #[test]
-    fn synthesizes_an_entry_per_placement() {
-        let state = to_qb_vox_main(source_state()).unwrap();
+    fn flattens_to_a_root_per_placement() {
+        let main = to_qb_vox_main(source_state()).unwrap();
 
-        let ext = state.ext();
+        assert!(!main.ext().visibility_mask_encoded);
 
-        assert!(!ext.visibility_mask_encoded);
+        assert_eq!(main.hierarchy_node_count(), 2);
 
-        assert_eq!(ext.matrices.len(), 2);
+        let root_ids = main.root_hierarchy_node_ids();
 
-        let wide = ext.matrices[0].as_ref().unwrap();
+        assert_eq!(root_ids.len(), 2);
+
+        let wide = main.hierarchy_node(root_ids[0]).unwrap();
 
         assert_eq!(wide.name, "wide");
 
-        assert_eq!(wide.position, [5, 0, 0]);
+        assert_eq!(
+            wide.transform,
+            TyTransformF64::from_translation(TyVector3F64::new(5.0, 0.0, 0.0))
+        );
 
-        assert_eq!(wide.visibility, vec![SOLID_VISIBILITY; 2]);
-
-        let unit = ext.matrices[1].as_ref().unwrap();
+        let unit = main.hierarchy_node(root_ids[1]).unwrap();
 
         assert_eq!(unit.name, "unit");
 
-        assert_eq!(unit.position, [0, 3, 0]);
-
-        assert_eq!(state.hierarchy_node_count(), 2);
-
-        assert_eq!(state.root_hierarchy_node_ids().len(), 2);
-
-        let root = state
-            .hierarchy_node(state.root_hierarchy_node_ids()[0])
-            .unwrap();
-
-        assert_eq!(root.name, "wide");
-
         assert_eq!(
-            root.transform,
-            TyTransformF64::from_translation(TyVector3F64::new(5.0, 0.0, 0.0))
+            unit.transform,
+            TyTransformF64::from_translation(TyVector3F64::new(0.0, 3.0, 0.0))
         );
     }
 
@@ -325,31 +283,34 @@ mod tests {
     /// and the copy keeps the voxels.
     #[test]
     fn duplicates_an_object_placed_twice() {
-        let mut state = source_state();
+        let mut main = source_state();
 
         let node_id = U32Id::<BVoxHierarchyNode>::from_u32(2);
 
-        let mut node = state.hierarchy_node(node_id).unwrap().clone();
+        let mut node = main.hierarchy_node(node_id).unwrap().clone();
 
         node.child_object_ids.push(U32Id::from_u32(0));
 
-        state.set_hierarchy_node(node_id, node).unwrap();
+        main.set_hierarchy_node(node_id, node).unwrap();
 
-        let state = to_qb_vox_main(state).unwrap();
+        let main = to_qb_vox_main(main).unwrap();
 
-        assert_eq!(state.object_count(), 3);
+        assert_eq!(main.object_count(), 3);
 
-        let ext = state.ext();
+        let root_ids = main.root_hierarchy_node_ids();
 
-        assert_eq!(ext.matrices.len(), 3);
+        assert_eq!(root_ids.len(), 3);
 
-        assert_eq!(ext.matrices[2].as_ref().unwrap().position, [0, 3, 0]);
+        assert_eq!(
+            main.hierarchy_node(root_ids[2]).unwrap().transform,
+            TyTransformF64::from_translation(TyVector3F64::new(0.0, 3.0, 0.0))
+        );
 
-        let copy = state.object(U32Id::<BVoxObject>::from_u32(2)).unwrap();
+        let copy = main.object(U32Id::<BVoxObject>::from_u32(2)).unwrap();
 
         assert_eq!(copy.live_count(), 2);
 
-        let file = to_qb_file(&state).unwrap();
+        let file = to_qb_file(&main).unwrap();
 
         assert_eq!(file.matrices.len(), 3);
     }

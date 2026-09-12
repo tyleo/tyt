@@ -9,31 +9,34 @@ use treegrid::{
     TreeGridLabel, TreeGridRecordsTableOptions, TreeGridRenderHierarchy, TreeGridRenderJson,
     TreeGridRenderTables, TreeGridTableShape, TreeGridValue,
 };
-use voxcore::{BVoxPalette, VoxMain, VoxPalette};
+use voxcore::{BVoxPalette, VoxExt, VoxMain, VoxPalette};
 
 /// A selected palette paired with its id, the working unit the renderers walk.
 type Entry<'a> = (U32Id<BVoxPalette>, &'a VoxPalette);
 
-/// Renders a per-palette overview of `state`: each palette's index and, when
+/// Renders a per-palette overview of `main`: each palette's index and, when
 /// enabled by `fields`, its property keys, material count, and referencing
 /// objects. `filters` narrows the palettes to those whose index any range
 /// contains, every palette when empty; filters that match no palette are an
 /// error, so a stray index is caught.
-pub fn palette_list<T>(
-    state: &VoxMain<T>,
+pub fn palette_list<T: VoxExt>(
+    main: &VoxMain<T>,
     filters: &[IndexRange],
     fields: PaletteListFields,
     layout: PaletteListLayout,
 ) -> Result<String> {
-    let palettes = select_palettes(state, filters)?;
+    let palettes = select_palettes(main, filters)?;
 
-    Ok(render(state, &palettes, fields, layout))
+    Ok(render(main, &palettes, fields, layout))
 }
 
 /// The palettes to list: every palette whose index matches any of `filters`, in
 /// index order, or every palette when `filters` is empty.
-fn select_palettes<'a, T>(state: &'a VoxMain<T>, filters: &[IndexRange]) -> Result<Vec<Entry<'a>>> {
-    let selected: Vec<Entry> = state
+fn select_palettes<'a, T: VoxExt>(
+    main: &'a VoxMain<T>,
+    filters: &[IndexRange],
+) -> Result<Vec<Entry<'a>>> {
+    let selected: Vec<Entry> = main
         .iter_palettes()
         .filter(|(palette_id, _)| {
             filters.is_empty()
@@ -49,28 +52,28 @@ fn select_palettes<'a, T>(state: &'a VoxMain<T>, filters: &[IndexRange]) -> Resu
 }
 
 /// Renders `palettes` in `layout`.
-fn render<T>(
-    state: &VoxMain<T>,
+fn render<T: VoxExt>(
+    main: &VoxMain<T>,
     palettes: &[Entry],
     fields: PaletteListFields,
     layout: PaletteListLayout,
 ) -> String {
     match layout {
-        PaletteListLayout::Tables => build_records_grid(state, palettes, fields).render_tables(
+        PaletteListLayout::Tables => build_records_grid(main, palettes, fields).render_tables(
             &TreeGridTableShape::Records(TreeGridRecordsTableOptions::default()),
         ),
-        PaletteListLayout::Hierarchy => build_grid(state, palettes, fields)
+        PaletteListLayout::Hierarchy => build_grid(main, palettes, fields)
             .render_hierarchy(&TreeGridHierarchyOptions::default().with_bare_roots(true)),
-        PaletteListLayout::JsonPretty => build_grid(state, palettes, fields).render_json_pretty(),
-        PaletteListLayout::JsonCompact => build_grid(state, palettes, fields).render_json_compact(),
+        PaletteListLayout::JsonPretty => build_grid(main, palettes, fields).render_json_pretty(),
+        PaletteListLayout::JsonCompact => build_grid(main, palettes, fields).render_json_compact(),
     }
 }
 
 /// The listing tree the hierarchy and JSON layouts share: a bare `palettes`
 /// root over one bare-index branch per palette, its enabled fields as child
 /// branches.
-fn build_grid<T>(
-    state: &VoxMain<T>,
+fn build_grid<T: VoxExt>(
+    main: &VoxMain<T>,
     palettes: &[Entry],
     fields: PaletteListFields,
 ) -> TreeGrid<TreeGridJsonValueCells> {
@@ -96,7 +99,7 @@ fn build_grid<T>(
             retain_names_subtree(&mut grid, branch_id, "properties", names);
         }
         if fields.objects {
-            let names = referencing_names(state, *palette_id)
+            let names = referencing_names(main, *palette_id)
                 .into_iter()
                 .map(TreeGridLabel::quoted)
                 .collect();
@@ -110,8 +113,8 @@ fn build_grid<T>(
 /// row per palette, each enabled field one data child whose comma-joined cell
 /// text is baked as a single value, pushed even when empty so every enabled
 /// column appears in every row.
-fn build_records_grid<T>(
-    state: &VoxMain<T>,
+fn build_records_grid<T: VoxExt>(
+    main: &VoxMain<T>,
     palettes: &[Entry],
     fields: PaletteListFields,
 ) -> TreeGrid {
@@ -138,7 +141,7 @@ fn build_records_grid<T>(
             let node_id = grid.retain_child(row_id, TreeGridLabel::bare("objects"));
             grid.push_value(
                 node_id,
-                TreeGridValue::new(referencing_names(state, *palette_id).join(", ")),
+                TreeGridValue::new(referencing_names(main, *palette_id).join(", ")),
             );
         }
     }
@@ -166,9 +169,11 @@ fn retain_names_subtree(
 /// The objects that reference `palette_id`, in object order, as
 /// `(index, name)`. An object appears once however many of its layers reference
 /// the palette.
-fn referencing_objects<T>(state: &VoxMain<T>, palette_id: U32Id<BVoxPalette>) -> Vec<(u32, &str)> {
-    state
-        .iter_objects()
+fn referencing_objects<T: VoxExt>(
+    main: &VoxMain<T>,
+    palette_id: U32Id<BVoxPalette>,
+) -> Vec<(u32, &str)> {
+    main.iter_objects()
         .filter(|(_, object)| {
             object
                 .iter_layers()
@@ -179,8 +184,8 @@ fn referencing_objects<T>(state: &VoxMain<T>, palette_id: U32Id<BVoxPalette>) ->
 }
 
 /// The names of the objects that reference `palette_id`, in object order.
-fn referencing_names<T>(state: &VoxMain<T>, palette_id: U32Id<BVoxPalette>) -> Vec<&str> {
-    referencing_objects(state, palette_id)
+fn referencing_names<T: VoxExt>(main: &VoxMain<T>, palette_id: U32Id<BVoxPalette>) -> Vec<&str> {
+    referencing_objects(main, palette_id)
         .into_iter()
         .map(|(_, name)| name)
         .collect()
@@ -215,13 +220,13 @@ mod tests {
     /// Palette 0 carries `baseColor` and `metallic` with two
     /// materials, palette 1 carries `baseColor` and `emissiveStrength`
     /// with one material.
-    fn shared_state() -> VoxMain {
-        let mut state: VoxMain = VoxMain::default();
+    fn shared_main() -> VoxMain {
+        let mut main: VoxMain = VoxMain::default();
 
         // Colors and metallic values back the properties; only the property
         // names and material counts reach the listing, so the values are
         // arbitrary.
-        let colors_value_pool_id = state.retain_value_pool(
+        let colors_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 1.0],
@@ -230,7 +235,7 @@ mod tests {
             .unwrap(),
         );
         let metallic_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         let mut zero = VoxPalette::default();
         zero.retain_property(
@@ -250,7 +255,7 @@ mod tests {
             .unwrap();
         zero.retain_material(vec![value_id(1), value_id(1)])
             .unwrap();
-        let zero_palette_id = state.retain_palette(zero).unwrap();
+        let zero_palette_id = main.retain_palette(zero).unwrap();
 
         let mut one = VoxPalette::default();
         one.retain_property(
@@ -266,29 +271,29 @@ mod tests {
         )
         .unwrap();
         let one_material_id = one.retain_material(vec![value_id(2), value_id(1)]).unwrap();
-        let one_palette_id = state.retain_palette(one).unwrap();
+        let one_palette_id = main.retain_palette(one).unwrap();
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         a.retain_layer(zero_palette_id, zero_material_id);
-        state.retain_object(a).unwrap();
+        main.retain_object(a).unwrap();
 
         let mut b = VoxObject::new("b".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         b.retain_layer(zero_palette_id, zero_material_id);
         b.retain_layer(one_palette_id, one_material_id);
-        state.retain_object(b).unwrap();
+        main.retain_object(b).unwrap();
 
-        state
+        main
     }
 
-    /// Renders every palette of `state` with all fields in `layout`.
-    fn render_all(state: &VoxMain, layout: PaletteListLayout) -> String {
-        palette_list(state, &[], all_fields(), layout).unwrap()
+    /// Renders every palette of `main` with all fields in `layout`.
+    fn render_all(main: &VoxMain, layout: PaletteListLayout) -> String {
+        palette_list(main, &[], all_fields(), layout).unwrap()
     }
 
     #[test]
     fn tables_lists_one_row_per_palette() {
         assert_eq!(
-            render_all(&shared_state(), PaletteListLayout::Tables),
+            render_all(&shared_main(), PaletteListLayout::Tables),
             "# palettes\n\
              \n\
              | label | properties                  | materials | objects |\n\
@@ -300,13 +305,13 @@ mod tests {
 
     #[test]
     fn tables_drops_a_disabled_field_column() {
-        let state = shared_state();
+        let main = shared_main();
         let fields = PaletteListFields {
             properties: true,
             materials: true,
             objects: false,
         };
-        let output = palette_list(&state, &[], fields, PaletteListLayout::Tables).unwrap();
+        let output = palette_list(&main, &[], fields, PaletteListLayout::Tables).unwrap();
         assert_eq!(
             output,
             "# palettes\n\
@@ -321,7 +326,7 @@ mod tests {
     #[test]
     fn hierarchy_nests_fields_under_each_palette() {
         assert_eq!(
-            render_all(&shared_state(), PaletteListLayout::Hierarchy),
+            render_all(&shared_main(), PaletteListLayout::Hierarchy),
             "palettes\n\
              ├ 0\n\
              │ ├ materials: 2\n\
@@ -343,13 +348,13 @@ mod tests {
 
     #[test]
     fn hierarchy_drops_a_disabled_field_branch() {
-        let state = shared_state();
+        let main = shared_main();
         let fields = PaletteListFields {
             properties: false,
             materials: true,
             objects: true,
         };
-        let output = palette_list(&state, &[], fields, PaletteListLayout::Hierarchy).unwrap();
+        let output = palette_list(&main, &[], fields, PaletteListLayout::Hierarchy).unwrap();
         assert_eq!(
             output,
             "palettes\n\
@@ -368,7 +373,7 @@ mod tests {
     #[test]
     fn json_compact_nests_the_envelope_fields_under_each_palette() {
         assert_eq!(
-            render_all(&shared_state(), PaletteListLayout::JsonCompact),
+            render_all(&shared_main(), PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[\
              {\"label\":\"0\",\"children\":[\
              {\"label\":\"materials\",\"values\":[2]},\
@@ -386,9 +391,9 @@ mod tests {
 
     #[test]
     fn json_pretty_is_multiline_and_matches_compact() {
-        let state = shared_state();
-        let pretty = render_all(&state, PaletteListLayout::JsonPretty);
-        let compact = render_all(&state, PaletteListLayout::JsonCompact);
+        let main = shared_main();
+        let pretty = render_all(&main, PaletteListLayout::JsonPretty);
+        let compact = render_all(&main, PaletteListLayout::JsonCompact);
         assert!(pretty.starts_with("[\n"));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
         let compact_value: Value = serde_json::from_str(&compact).unwrap();
@@ -397,10 +402,10 @@ mod tests {
 
     #[test]
     fn a_filter_lists_only_the_matching_palettes() {
-        let state = shared_state();
+        let main = shared_main();
         let filters = [IndexRange::new(1, 1).unwrap()];
         let output =
-            palette_list(&state, &filters, all_fields(), PaletteListLayout::Tables).unwrap();
+            palette_list(&main, &filters, all_fields(), PaletteListLayout::Tables).unwrap();
         assert_eq!(
             output,
             "# palettes\n\
@@ -413,26 +418,26 @@ mod tests {
 
     #[test]
     fn a_range_filter_unions_its_indices() {
-        let state = shared_state();
+        let main = shared_main();
         let filters = [IndexRange::new(0, 5).unwrap()];
         let output =
-            palette_list(&state, &filters, all_fields(), PaletteListLayout::Tables).unwrap();
+            palette_list(&main, &filters, all_fields(), PaletteListLayout::Tables).unwrap();
         assert!(output.contains("\n| 0     |"));
         assert!(output.contains("\n| 1     |"));
     }
 
     #[test]
     fn a_filter_matching_no_palette_errors() {
-        let state = shared_state();
+        let main = shared_main();
         let filters = [IndexRange::new(9, 9).unwrap()];
-        assert!(palette_list(&state, &filters, all_fields(), PaletteListLayout::Tables).is_err());
+        assert!(palette_list(&main, &filters, all_fields(), PaletteListLayout::Tables).is_err());
     }
 
     #[test]
     fn an_unreferenced_palette_lists_no_users() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let colors_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -442,10 +447,10 @@ mod tests {
             )
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::Tables),
+            render_all(&main, PaletteListLayout::Tables),
             "# palettes\n\
              \n\
              | label | properties | materials | objects |\n\
@@ -454,7 +459,7 @@ mod tests {
         );
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::JsonCompact),
+            render_all(&main, PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
              {\"label\":\"materials\",\"values\":[1]},\
              {\"label\":\"properties\",\"children\":[{\"label\":\"baseColor\"}]},\
@@ -464,9 +469,9 @@ mod tests {
 
     #[test]
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let colors_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -476,10 +481,10 @@ mod tests {
             )
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::Hierarchy),
+            render_all(&main, PaletteListLayout::Hierarchy),
             "palettes\n\
              └ 0\n\
              \u{20}\u{20}├ materials: 1\n\

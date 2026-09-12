@@ -1,5 +1,5 @@
 use crate::{
-    Error, Result, VoxMain, VoxObject,
+    Error, Result, VoxExt, VoxMain, VoxObject,
     color::{CellColor, value_pool_color},
     material::BASE_COLOR,
 };
@@ -14,11 +14,11 @@ use branded_id::IdVec;
 ///
 /// 1. a layer references a palette the state does not hold
 /// 2. the supplier draws from a value pool that holds no colors
-pub fn resolve_cell_color<'a, T>(
-    state: &VoxMain<T>,
+pub fn resolve_cell_color<'a, T: VoxExt>(
+    main: &VoxMain<T>,
     object: &'a VoxObject,
 ) -> Result<Option<CellColor<'a>>> {
-    let effective = state.effective_palette(object)?;
+    let effective = main.effective_palette(object)?;
     let Some(property_id) = effective.property_id_by_name(BASE_COLOR) else {
         return Ok(None);
     };

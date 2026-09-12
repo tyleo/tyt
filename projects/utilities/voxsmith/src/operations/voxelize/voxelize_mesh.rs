@@ -81,12 +81,12 @@ pub fn voxelize_mesh(
 
     let cell_materials = resolve_materials(mesh, &grid, counts, material_mode, fill_color);
 
-    let mut state = VoxMain::default();
+    let mut main = VoxMain::default();
 
     let (palette, sample_ids, default_material_id) =
-        build_palette(&mut state, &cell_materials, out_of_range)?;
+        build_palette(&mut main, &cell_materials, out_of_range)?;
 
-    let palette_id = state.retain_palette(palette)?;
+    let palette_id = main.retain_palette(palette)?;
 
     // The object name: an explicit override, else the mesh's own name, else the
     // caller's fallback.
@@ -108,7 +108,7 @@ pub fn voxelize_mesh(
         }
     }
 
-    let object_id = state.retain_object(object)?;
+    let object_id = main.retain_object(object)?;
 
     // One root node placing the object and carrying the real-world scale.
     let transform = TyTransformF64 {
@@ -122,16 +122,16 @@ pub fn voxelize_mesh(
         ..Default::default()
     };
 
-    let node_id = state.retain_hierarchy_node(node)?;
+    let node_id = main.retain_hierarchy_node(node)?;
 
-    state.push_root_hierarchy_node_id(node_id)?;
+    main.push_root_hierarchy_node_id(node_id)?;
 
     // The vocabulary range check the export also runs. The values were
     // checked or clamped above, so this is the entry-side guarantee that
     // nothing out of range leaves the import.
-    check_gltf_property_ranges(&state)?;
+    check_gltf_property_ranges(&main)?;
 
-    Ok(state)
+    Ok(main)
 }
 
 /// The material of every filled cell, per the color mode: `flat` paints one fill
@@ -265,12 +265,12 @@ type PaletteBuild = (
 /// Assembles a palette from a per-cell material list. Near-identical
 /// materials merge to one palette material, and each filled cell samples its
 /// cell's material. Every glTF property draws from a deduplicated value pool
-/// added to `state`: a property carrying one value id per material.
+/// added to `main`: a property carrying one value id per material.
 /// The default material is the first built, or a lone white material for an
 /// all-empty grid, so the palette is never empty. A value outside its
 /// property's glTF range follows `out_of_range`.
 fn build_palette(
-    state: &mut VoxMain,
+    main: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
     out_of_range: OutOfRangeProperty,
 ) -> Result<PaletteBuild> {
@@ -321,18 +321,18 @@ fn build_palette(
     // any material, so no material carries a back-fill placeholder value id.
     let scalars = |values, key| property_value_pool(values, key, out_of_range);
     let base_color_value_pool_id =
-        state.retain_value_pool(VoxValuePool::vec_4_float(base_color.values)?);
-    let metallic_value_pool_id = state.retain_value_pool(scalars(metallic.values, METALLIC)?);
-    let roughness_value_pool_id = state.retain_value_pool(scalars(roughness.values, ROUGHNESS)?);
+        main.retain_value_pool(VoxValuePool::vec_4_float(base_color.values)?);
+    let metallic_value_pool_id = main.retain_value_pool(scalars(metallic.values, METALLIC)?);
+    let roughness_value_pool_id = main.retain_value_pool(scalars(roughness.values, ROUGHNESS)?);
     let emissive_color_value_pool_id =
-        state.retain_value_pool(VoxValuePool::vec_3_float(emissive_color.values)?);
+        main.retain_value_pool(VoxValuePool::vec_3_float(emissive_color.values)?);
     let emissive_strength_value_pool_id =
-        state.retain_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
+        main.retain_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
     let occlusion_value_pool_id =
-        state.retain_value_pool(scalars(occlusion.values, OCCLUSION_STRENGTH)?);
-    let ior_value_pool_id = state.retain_value_pool(scalars(ior.values, IOR)?);
+        main.retain_value_pool(scalars(occlusion.values, OCCLUSION_STRENGTH)?);
+    let ior_value_pool_id = main.retain_value_pool(scalars(ior.values, IOR)?);
     let transmission_value_pool_id =
-        state.retain_value_pool(scalars(transmission.values, TRANSMISSION)?);
+        main.retain_value_pool(scalars(transmission.values, TRANSMISSION)?);
 
     let mut palette = VoxPalette::default();
     palette
@@ -707,14 +707,14 @@ mod tests {
 
     /// The strength the given voxel's material samples from the
     /// `emissiveStrength` property.
-    fn sampled_strength(state: &VoxMain, position: TyVector3U32) -> f64 {
-        let (_, object) = state.iter_objects().next().unwrap();
+    fn sampled_strength(main: &VoxMain, position: TyVector3U32) -> f64 {
+        let (_, object) = main.iter_objects().next().unwrap();
         let (layer_id, palette_id) = object.iter_layers().next().unwrap();
-        let palette = state.palette(palette_id).unwrap();
+        let palette = main.palette(palette_id).unwrap();
         let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
         let voxel_id = object.voxel_id(position).unwrap();
         let material_id = object.voxel_material(voxel_id, layer_id).unwrap();
-        match state
+        match main
             .material_value(palette_id, material_id, property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
@@ -731,17 +731,17 @@ mod tests {
         let mut other = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
         other.emissive_strength = 2.0;
 
-        let state = voxelize(vec![emissive, other]);
+        let main = voxelize(vec![emissive, other]);
 
         // Two distinct materials share the strength, so both rows repeat the
         // deduplicated value pool's one value.
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.iter_materials().count(), 2);
         let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        assert_eq!(state.value_pool(value_pool_id).unwrap().len(), 1);
-        assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 2.0);
-        assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 2.0);
+        assert_eq!(main.value_pool(value_pool_id).unwrap().len(), 1);
+        assert_eq!(sampled_strength(&main, TyVector3U32::new(0, 0, 0)), 2.0);
+        assert_eq!(sampled_strength(&main, TyVector3U32::new(1, 0, 0)), 2.0);
     }
 
     #[test]
@@ -752,16 +752,16 @@ mod tests {
         let mut bright = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
         bright.emissive_strength = 3.0;
 
-        let state = voxelize(vec![dim, bright]);
+        let main = voxelize(vec![dim, bright]);
 
-        assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 1.0);
-        assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 3.0);
+        assert_eq!(sampled_strength(&main, TyVector3U32::new(0, 0, 0)), 1.0);
+        assert_eq!(sampled_strength(&main, TyVector3U32::new(1, 0, 0)), 3.0);
     }
 
     #[test]
     fn a_flat_fill_carries_the_default_strength() {
         // Flat mode paints one material with the default strength.
-        let state = voxelize_mesh(
+        let main = voxelize_mesh(
             &two_cell_mesh(Vec::new()),
             TyVector3U32::new(2, 1, 1),
             SurfaceMode::TriangleCover,
@@ -775,7 +775,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 0.0);
+        assert_eq!(sampled_strength(&main, TyVector3U32::new(0, 0, 0)), 0.0);
     }
 
     /// The two-cell mesh's materials with the right one's `metallic` out
@@ -801,14 +801,14 @@ mod tests {
 
     #[test]
     fn an_out_of_range_scalar_clamps_when_asked() {
-        let state = voxelize_with(over_metallic(), OutOfRangeProperty::Clamp).unwrap();
+        let main = voxelize_with(over_metallic(), OutOfRangeProperty::Clamp).unwrap();
 
         // Both materials land on the value pool, the out-of-range one at the
         // range's top.
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         let property_id = palette.property_id_by_name(METALLIC).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = state.value_pool(value_pool_id).unwrap();
+        let value_pool = main.value_pool(value_pool_id).unwrap();
         let values: Vec<VoxValuePoolValueRef> = value_pool
             .iter_values()
             .map(|(value_id, _)| value_pool.value(value_id).unwrap())
@@ -852,14 +852,14 @@ mod tests {
 
     #[test]
     fn an_out_of_range_color_clamps_when_asked() {
-        let state = voxelize_with(over_red(), OutOfRangeProperty::Clamp).unwrap();
+        let main = voxelize_with(over_red(), OutOfRangeProperty::Clamp).unwrap();
 
         // The hot red clamps onto the matte one, so the deduplicated
         // baseColor value pool holds one value.
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         let property_id = palette.property_id_by_name(BASE_COLOR).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = state.value_pool(value_pool_id).unwrap();
+        let value_pool = main.value_pool(value_pool_id).unwrap();
         assert_eq!(value_pool.len(), 1);
         let (value_id, _) = value_pool.iter_values().next().unwrap();
         assert_eq!(
@@ -911,11 +911,11 @@ mod tests {
             vec![refracting, between]
         };
 
-        let state = voxelize_with(iors(), OutOfRangeProperty::Clamp).unwrap();
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let main = voxelize_with(iors(), OutOfRangeProperty::Clamp).unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         let property_id = palette.property_id_by_name(IOR).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = state.value_pool(value_pool_id).unwrap();
+        let value_pool = main.value_pool(value_pool_id).unwrap();
         let values: Vec<VoxValuePoolValueRef> = value_pool
             .iter_values()
             .map(|(value_id, _)| value_pool.value(value_id).unwrap())

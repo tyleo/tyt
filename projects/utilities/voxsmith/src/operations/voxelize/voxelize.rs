@@ -13,7 +13,7 @@ use voxcore::VoxMain;
 pub fn voxelize(mesh: &Mesh, fallback_name: &str, options: &VoxelizeOptions) -> Result<VoxMain> {
     let (counts, node_scale) = resolve_grid(mesh.extent(), options.resolution);
 
-    let mut state = voxelize_mesh(
+    let mut main = voxelize_mesh(
         mesh,
         counts,
         options.surface_mode,
@@ -26,26 +26,26 @@ pub fn voxelize(mesh: &Mesh, fallback_name: &str, options: &VoxelizeOptions) -> 
         options.out_of_range_property,
     )?;
 
-    let palette_id = state
+    let palette_id = main
         .iter_palettes()
         .next()
         .map(|(palette_id, _)| palette_id)
         .expect("voxelize_mesh builds one palette");
 
     if let Some(reduction) = options.reduction {
-        reduce_palette(&mut state, palette_id, reduction)?;
+        reduce_palette(&mut main, palette_id, reduction)?;
     }
 
     // Canonicalize the generated palette: its materials reference colors in
     // listing order, whatever order voxelize and the reduction left.
-    order_palette_colors(&mut state, palette_id);
+    order_palette_colors(&mut main, palette_id);
 
     // The reduction and the reorder both keep value ids stable, so compact
     // them to listing order: a writer serializes each material cell as an
     // index into the value pool it emits in listing order.
-    state.gc();
+    main.gc()?;
 
-    Ok(state)
+    Ok(main)
 }
 
 /// Resolves the grid counts and the placing node's scale from the mesh `extent`
@@ -219,15 +219,15 @@ mod tests {
             TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0),
         ]);
 
-        let state = voxelize(&mesh, "fallback", &options(None)).unwrap();
-        assert_eq!(state.validate(), Ok(()));
+        let main = voxelize(&mesh, "fallback", &options(None)).unwrap();
+        assert_eq!(main.validate(), Ok(()));
 
-        let (_, object) = state.iter_objects().next().unwrap();
+        let (_, object) = main.iter_objects().next().unwrap();
         assert_eq!(object.name(), "shape");
         assert_eq!(object.bounds(), TyVector3U32::new(3, 1, 1));
         assert_eq!(object.live_count(), 3);
 
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 3);
     }
 
@@ -247,17 +247,17 @@ mod tests {
             keep_unused_values: false,
         };
 
-        let state = voxelize(&mesh, "fallback", &options(Some(reduction))).unwrap();
-        assert_eq!(state.validate(), Ok(()));
+        let main = voxelize(&mesh, "fallback", &options(Some(reduction))).unwrap();
+        assert_eq!(main.validate(), Ok(()));
 
-        let (palette_id, palette) = state.iter_palettes().next().unwrap();
+        let (palette_id, palette) = main.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 2);
 
         // The merged-away color is pruned and the survivors are compacted to
         // ids `0..2`, in material order.
         let color_property_id = palette.property_id_by_name(BASE_COLOR).unwrap();
         let value_pool_id = palette.property(color_property_id).unwrap().value_pool_id;
-        assert_eq!(state.value_pool(value_pool_id).unwrap().len(), 2);
+        assert_eq!(main.value_pool(value_pool_id).unwrap().len(), 2);
         let value_ids: Vec<u32> = palette
             .iter_materials()
             .map(|material_id| {
@@ -268,7 +268,7 @@ mod tests {
             })
             .collect();
         assert_eq!(value_ids, [0, 1]);
-        assert_eq!(state.palette(palette_id).unwrap().material_count(), 2);
+        assert_eq!(main.palette(palette_id).unwrap().material_count(), 2);
     }
 
     #[test]
@@ -279,12 +279,12 @@ mod tests {
             name: Some("override".to_owned()),
             ..options(None)
         };
-        let state = voxelize(&mesh, "fallback", &named).unwrap();
-        assert_eq!(state.iter_objects().next().unwrap().1.name(), "override");
+        let main = voxelize(&mesh, "fallback", &named).unwrap();
+        assert_eq!(main.iter_objects().next().unwrap().1.name(), "override");
 
         let mut nameless = cells_mesh(&[TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0)]);
         nameless.name = None;
-        let state = voxelize(&nameless, "fallback", &options(None)).unwrap();
-        assert_eq!(state.iter_objects().next().unwrap().1.name(), "fallback");
+        let main = voxelize(&nameless, "fallback", &options(None)).unwrap();
+        assert_eq!(main.iter_objects().next().unwrap().1.name(), "fallback");
     }
 }

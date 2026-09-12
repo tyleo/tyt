@@ -10,10 +10,11 @@
 //! loaded file. The `qbt` and `qbcl` pairs work the same way.
 //! [`to_qb_vox_main`], [`to_qbt_vox_main`], and [`to_qbcl_vox_main`] give a
 //! bare `VoxMain<()>` a synthesized ext, and `take_ext` takes the ext back
-//! off. The exts follow the listings through
-//! the [`VoxExt`](voxcore::VoxExt) hooks, so a state mutated after the load
-//! still writes back with the surviving provenance. The `codec` module,
-//! behind the default `codec` feature, goes straight to and from file bytes.
+//! off. An ext stores only what the scene cannot derive, keyed by entity
+//! id, and follows the state through the [`VoxExt`](voxcore::VoxExt) hooks.
+//! A state mutated after the load still writes back with its surviving
+//! provenance. The `codec` module, behind the default `codec` feature, goes
+//! straight to and from file bytes.
 //! Its `.qbt` and `.qbcl` conversions take the codec's dependencies, which
 //! `qbcl_codec::DependenciesImpl` supplies. The `serde` feature, on by
 //! default, derives serde for the ext types.

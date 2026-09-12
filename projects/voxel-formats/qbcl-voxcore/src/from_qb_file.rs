@@ -1,4 +1,4 @@
-use crate::{Error, QbExtMatrix, QbVoxMain, Result, qb_ext_from_file};
+use crate::{Error, QbVoxMain, Result, qb_ext_from_file};
 use branded_id::U32Id;
 use qbcl::qb::{QbFile, QbMatrix};
 use std::collections::{HashMap, HashSet};
@@ -10,52 +10,45 @@ use voxcore::{
 
 /// Loads a decoded Qubicle Binary [`QbFile`] into a [`QbVoxMain`], the
 /// inverse of [`to_qb_file`](crate::to_qb_file). Each matrix becomes an
-/// object sharing one `baseColor` palette, placed by a hierarchy node at the
-/// matrix's scene position. The rest of the Qubicle state, such as the header
-/// flags, matrix names, positions, and the per-voxel visibility bytes, goes
-/// to the ext.
+/// object sharing one `baseColor` palette, placed by a root hierarchy node
+/// named for the matrix at the matrix's scene position. The header flags go
+/// to the ext. The per-voxel visibility bytes are not kept: the writer
+/// derives them from the grid.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
 pub fn from_qb_file(file: &QbFile) -> Result<QbVoxMain> {
-    let mut state = VoxMain::default();
+    let mut main = VoxMain::default();
 
-    let (palette, material_ids) = build_palette(&mut state, file);
-    let palette_id = state.retain_palette(palette)?;
+    let (palette, material_ids) = build_palette(&mut main, file);
+    let palette_id = main.retain_palette(palette)?;
 
     let mut root_ids = Vec::with_capacity(file.matrices.len());
-    let mut matrices = Vec::with_capacity(file.matrices.len());
     for matrix in &file.matrices {
-        // The matrix grid becomes the object's build volume directly; it may
-        // carry empty margin around the live voxels. The visibility bytes are
-        // read from that same grid.
+        // The matrix grid becomes the object's build volume directly. It may
+        // carry empty margin around the live voxels.
         let object = build_object(matrix, palette_id, &material_ids)?;
-        matrices.push(Some(QbExtMatrix {
-            name: matrix.name.clone(),
-            position: matrix.position,
-            visibility: visibility_of(&object, matrix),
-        }));
-        let object_id = state.retain_object(object)?;
+        let object_id = main.retain_object(object)?;
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
             child_node_ids: Vec::new(),
             child_object_ids: vec![object_id],
             transform: translation(matrix.position),
         };
-        root_ids.push(state.retain_hierarchy_node(node)?);
+        root_ids.push(main.retain_hierarchy_node(node)?);
     }
-    state.set_root_hierarchy_node_ids(root_ids)?;
+    main.set_root_hierarchy_node_ids(root_ids)?;
 
-    Ok(state.put_ext(qb_ext_from_file(file, matrices)))
+    Ok(main.put_ext(qb_ext_from_file(file)))
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
 /// color across every matrix's solid voxels, bound to `baseColor`, with
 /// one material per color and a map from a color to its material. The
-/// value pool is added to `state`. A file with no solid voxels gets a single
+/// value pool is added to `main`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
 fn build_palette(
-    state: &mut VoxMain<()>,
+    main: &mut VoxMain<()>,
     file: &QbFile,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -78,7 +71,7 @@ fn build_palette(
     // A Qubicle voxel carries no alpha, so colors decode to linear light and
     // ride in a shared `vec-3-float` value pool. Each material draws one value
     // id into it.
-    let value_pool_id = state.retain_value_pool(
+    let value_pool_id = main.retain_value_pool(
         VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are finite and the list is non-empty"),
     );
@@ -141,22 +134,6 @@ fn build_object(
     }
 
     Ok(object)
-}
-
-/// The visibility bytes of an object's solid voxels, in live-voxel raster
-/// order, read back from the matrix the object was built from.
-fn visibility_of(object: &VoxObject, matrix: &QbMatrix) -> Vec<u8> {
-    object
-        .iter_live()
-        .map(|voxel_id| {
-            let position = object
-                .voxel_position(voxel_id)
-                .expect("a live voxel is within the grid");
-            matrix
-                .voxel(position.x, position.y, position.z)
-                .map_or(0, |voxel| voxel.visibility)
-        })
-        .collect()
 }
 
 /// A translation-only transform from a scene position.

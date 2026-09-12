@@ -17,7 +17,7 @@ state with no native voxcore home as its ext.
   synthesized ext, which writes as a document synthesized from the scene.
   The hierarchy becomes a tree first. A node placed along several paths is
   cloned per extra path. A node no root reaches is released. `take_ext` on
-  the state takes the ext back off.
+  the `VMaxVoxMain` takes the ext back off.
 - `VMaxWriteOptions`: the writer's options. `Default` stores palette colors
   as PNG and keeps the ext's camera. `VMaxColorFormat` picks where each
   palette's colors are stored. `SceneCameraSource` picks the scene camera the
@@ -42,11 +42,26 @@ This crate's `impl` feature turns it on.
 
 `VMaxExt` holds the Voxel Max state with no native voxcore home: the scene
 around its objects and groups, and per-node, per-palette, and per-object
-provenance aligned by index with the state's listings. The ext follows the
-listings through voxcore's `VoxExt` hooks. A node, object, palette, or
-material released or reordered after the load still writes back with the
-surviving provenance. A node retained after the load writes like a
-synthesized one. voxconv carries the ext through a Voxel Json document's
-`ext` block.
+provenance keyed by the entity's id. Every live entity has an entry. The ext
+holds only what the scene cannot derive. A node's name, position, scale, and
+parent, an object's content box, and a group's bounds are read from the
+scene on write. A node's preserved axis-angle writes back while it still
+decodes to the node's rotation. A node rotated after the load writes its
+live rotation.
 
-The `serde` feature, on by default, derives serde for the ext types.
+The ext follows the state through voxcore's `VoxExt` hooks, each of which
+sees the `VoxState`. A node, object, or palette retained after the load
+takes the entry `to_vmax_vox_main` would synthesize for it as it is retained:
+a fresh UUID, a fresh index triplet, and the default anchors or editor
+session.
+
+A material retained to a palette with an exact material list takes the slot
+its material-axis value ids select, and refuses when they disagree or when a
+pruned value pool no longer indexes the list. A release drops the entry.
+`gc` rekeys every entry to its compacted id. The writer errors on an entity
+with no entry, on a node with two parents, and on a root that is also a
+child, because Voxel Max holds a tree. voxconv carries the ext through a
+Voxel Json document's `ext` block.
+
+The `serde` feature, on by default, derives serde for the ext types. A map
+keyed by id serializes under the bare ids.

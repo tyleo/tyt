@@ -11,6 +11,10 @@ use std::{
 /// An error from voxcore.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
+    /// The ext could not follow a mutation. A `will` hook's refusal leaves the
+    /// state unchanged.
+    Ext { reason: String },
+
     /// A value pool was given a value outside its kind's value domain.
     MalformedValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
@@ -252,6 +256,7 @@ impl Display for Error {
         // Ids print as their bare `u32`: a branded id's `Display` carries the
         // brand name, which the surrounding wording already gives.
         match self {
+            Error::Ext { reason } => write!(f, "ext: {reason}"),
             Error::MalformedValuePoolValue { value_id } => write!(
                 f,
                 "value {} is outside its kind's value domain",

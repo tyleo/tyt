@@ -1,5 +1,4 @@
 mod qb_ext;
-mod qb_ext_matrix;
 mod qbcl_ext;
 mod qbcl_ext_metadata;
 mod qbcl_ext_node;
@@ -9,7 +8,6 @@ mod qbt_ext;
 mod qbt_ext_node;
 
 pub use qb_ext::*;
-pub use qb_ext_matrix::*;
 pub use qbcl_ext::*;
 pub use qbcl_ext_metadata::*;
 pub use qbcl_ext_node::*;

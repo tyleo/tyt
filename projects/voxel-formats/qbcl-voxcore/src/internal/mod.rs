@@ -1,19 +1,25 @@
 mod duplicate_object;
+mod face_mask;
 mod fold_under_root;
 mod qb_ext_from_file;
 mod qb_placement;
 mod qb_placements;
 mod qbcl_ext_from_file;
 mod qbt_ext_from_file;
-mod solid_mask;
+mod rekey_hierarchy_nodes;
 mod solid_visibility;
+mod synthesized_qbcl_ext_node;
+mod synthesized_qbt_ext_node;
 
 pub(crate) use duplicate_object::*;
+pub(crate) use face_mask::*;
 pub(crate) use fold_under_root::*;
 pub(crate) use qb_ext_from_file::*;
 pub(crate) use qb_placement::*;
 pub(crate) use qb_placements::*;
 pub(crate) use qbcl_ext_from_file::*;
 pub(crate) use qbt_ext_from_file::*;
-pub(crate) use solid_mask::*;
+pub(crate) use rekey_hierarchy_nodes::*;
 pub(crate) use solid_visibility::*;
+pub(crate) use synthesized_qbcl_ext_node::*;
+pub(crate) use synthesized_qbt_ext_node::*;

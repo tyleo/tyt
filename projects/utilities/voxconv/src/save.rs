@@ -7,10 +7,10 @@ use voxcore::VoxMain;
 pub fn save<D: Dependencies + WriteFile>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxMain<()>,
+    main: VoxMain<()>,
     output: &Path,
 ) -> Result<()> {
-    let files = write(dependencies, format, state)?;
+    let files = write(dependencies, format, main)?;
 
     write_document_files(dependencies, output, &files)
 }
@@ -18,7 +18,7 @@ pub fn save<D: Dependencies + WriteFile>(
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        MemoryFiles, ReadFormat, WriteFormat, load, save, test_state, vmax::VMaxWriteOptions,
+        MemoryFiles, ReadFormat, WriteFormat, load, save, test_main, vmax::VMaxWriteOptions,
     };
     use std::path::Path;
 
@@ -29,7 +29,7 @@ mod tests {
         save(
             &memory,
             &WriteFormat::MVox,
-            test_state(()),
+            test_main(()),
             Path::new("out/m.vox"),
         )
         .unwrap();
@@ -48,7 +48,7 @@ mod tests {
         save(
             &memory,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            test_state(()),
+            test_main(()),
             Path::new("out/p.vmax"),
         )
         .unwrap();

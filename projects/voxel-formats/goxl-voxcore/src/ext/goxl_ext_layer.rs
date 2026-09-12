@@ -1,24 +1,19 @@
+use crate::GoxlExtPlacement;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Per-layer provenance preserved in the `goxl` ext, aligned by index with the
-/// hierarchy nodes, in stored order.
+/// Per-layer provenance preserved in the `goxl` ext, keyed by the hierarchy
+/// node the layer became.
 ///
 /// A `.gox` layer assembles its volume from shared blocks stamped at positions,
 /// from a clone of another layer, or from a procedural shape. The blocks become
 /// native objects and the placements that stamp them are recorded in
-/// [`placements`](Self::placements); this struct keeps the layer's metadata and
-/// the clone/shape definition so the layer rebuilds exactly.
+/// [`placements`](Self::placements). This keeps the layer's metadata and the
+/// clone or shape definition, so the layer rebuilds exactly. The name comes
+/// from the node.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct GoxlExtLayer {
-    /// Layer name.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "String::is_empty")
-    )]
-    pub name: String,
-
     /// Unique id within the file, referenced by a cloning layer's `base-id`.
     pub id: i32,
 
@@ -38,7 +33,7 @@ pub struct GoxlExtLayer {
     /// `mat`: the `4 x 4` transform applied to the layer.
     pub transform: [[f32; 4]; 4],
 
-    /// `box`: the optional `4 x 4` bounding box.
+    /// `box`: the optional `4 x 4` edit box the author set.
     #[cfg_attr(
         feature = "serde",
         serde(
@@ -74,14 +69,14 @@ pub struct GoxlExtLayer {
     )]
     pub color: Option<[u8; 4]>,
 
-    /// The placed blocks, in stored order, as `(block index, [x, y, z])`. The
-    /// block index is an object's listing index. The same block may be stamped
-    /// at several positions. Empty for clone and shape layers.
+    /// The placed blocks, in stored order. The same object may be stamped
+    /// at several positions. The distinct objects are the node's child
+    /// objects. Empty for clone and shape layers.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
-    pub placements: Vec<(i32, [i32; 3])>,
+    pub placements: Vec<GoxlExtPlacement>,
 
     /// Any further layer-dictionary keys, preserved verbatim as raw bytes.
     #[cfg_attr(

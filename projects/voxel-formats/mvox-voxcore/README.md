@@ -35,12 +35,27 @@ from `.vox` bytes over `mvox-codec`:
 
 `MVoxExt` holds the MagicaVoxel state with no native voxcore home: the
 format version, the layers, cameras, render settings, palette notes, and
-index map, each material's exact optional fields, and per scene-node
-provenance aligned by index with the hierarchy nodes. The ext follows the
-state's listings through voxcore's `VoxExt` hooks. After a node or object is
-released or reordered, the file still writes back with the surviving
-provenance. A released material shifts the recorded ids above it. The writer
-errors on a node retained after the load because it has no scene node.
-voxconv carries the ext through a Voxel Json document's `ext` block.
+index map, each material's exact optional fields keyed by material, and per
+scene-node provenance keyed by hierarchy node. An entry holds only what the
+scene cannot derive. A scene node's name and child links come from the
+voxcore node at write. A shape's model indices come from the object listing.
+A node renamed or an object moved after the load writes as it stands. The
+kind, the scene-node id, the layer, the exact frames, and the per-frame
+model list stay in the entry.
 
-The `serde` feature, on by default, derives serde for the ext types.
+The ext follows the state through voxcore's `VoxExt` hooks, which see the
+`VoxState`. A node retained after the load takes a synthesized entry on the
+spot, a shape when it places objects, a transform when it has one child
+node, a group otherwise, under a fresh scene-node id. A released node or
+material drops its entry. Releasing the palette drops every material entry
+and the index map. `gc` rekeys every entry. An index-map byte for a
+released material takes an index the compaction freed, which keeps the map
+a permutation. The writer errors on an ext out of step with the
+state, on a node whose children do not fit its kind, on a transform node
+moved after the load without its frames, on a second palette, and on a
+material past the 256 color slots. An object release is refused while a
+shape entry still draws the object. voxconv carries the ext through a Voxel
+Json document's `ext` block.
+
+The `serde` feature, on by default, derives serde for the ext types. Ids
+serialize as bare integers.

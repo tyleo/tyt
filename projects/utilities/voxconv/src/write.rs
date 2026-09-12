@@ -9,32 +9,29 @@ use voxcore::VoxMain;
 pub fn write<D: Dependencies>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxMain<()>,
+    main: VoxMain<()>,
 ) -> Result<Vec<VoxDocumentFile>> {
-    format.with(Write {
-        dependencies,
-        state,
-    })
+    format.with(Write { dependencies, main })
 }
 
 /// The bare write of one format.
 struct Write<'a, D> {
     dependencies: &'a D,
-    state: VoxMain<()>,
+    main: VoxMain<()>,
 }
 
 impl<D: Dependencies> WriteFormatVisitor for Write<'_, D> {
     type Output = Result<Vec<VoxDocumentFile>>;
 
     fn visit<F: InstalledFormat>(self, options: &F::WriteOptions) -> Self::Output {
-        F::write(self.dependencies, options, self.state)
+        F::write(self.dependencies, options, self.main)
     }
 }
 
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, ReadFormat, WriteFormat, read, test_state,
+        DependenciesImpl, ReadFormat, WriteFormat, read, test_main,
         vmax::VMaxWriteOptions,
         voxj::{VoxjSerialization, VoxjWriteFormat, VoxjWriteOptions},
         write,
@@ -54,7 +51,7 @@ mod tests {
         ];
 
         for format in formats {
-            let files = write(&DependenciesImpl, &format, test_state(())).unwrap();
+            let files = write(&DependenciesImpl, &format, test_main(())).unwrap();
 
             let loaded = read(&DependenciesImpl, format.read_format(), &files).unwrap();
 
@@ -66,7 +63,7 @@ mod tests {
     /// its scene file among others.
     #[test]
     fn documents_take_their_file_shape() {
-        let single = write(&DependenciesImpl, &WriteFormat::MVox, test_state(())).unwrap();
+        let single = write(&DependenciesImpl, &WriteFormat::MVox, test_main(())).unwrap();
 
         assert_eq!(single.len(), 1);
 
@@ -75,7 +72,7 @@ mod tests {
         let package = write(
             &DependenciesImpl,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            test_state(()),
+            test_main(()),
         )
         .unwrap();
 
@@ -91,7 +88,7 @@ mod tests {
                 options: VoxjWriteOptions::default(),
             });
 
-            write(&DependenciesImpl, &format, test_state(()))
+            write(&DependenciesImpl, &format, test_main(()))
                 .unwrap()
                 .remove(0)
                 .bytes
@@ -107,7 +104,7 @@ mod tests {
     /// A single-file format given two files is an error.
     #[test]
     fn two_files_for_one_format_error() {
-        let mut files = write(&DependenciesImpl, &WriteFormat::MVox, test_state(())).unwrap();
+        let mut files = write(&DependenciesImpl, &WriteFormat::MVox, test_main(())).unwrap();
 
         files.push(files[0].clone());
 

@@ -3,18 +3,16 @@ use crate::{MVoxExtFrame, MVoxExtShapeModel};
 use serde::{Deserialize, Serialize};
 
 /// The per-kind body of a scene node in the `mvox` ext, one variant per
-/// scene-graph chunk. The voxcore node keeps a deduplicated structural view of
-/// the same references; this holds their exact, possibly repeated form so the
-/// scene graph rebuilds unchanged.
+/// scene-graph chunk. The kind is provenance: a node with one child node is a
+/// transform or a group by what the file said. The child links themselves come
+/// from the voxcore node at write.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum MVoxExtNodeBody {
-    /// An `nTRN` transform node: the id of the child it places, its layer, and
-    /// its animation frames.
+    /// An `nTRN` transform node: its layer and its animation frames. The
+    /// voxcore node's transform projects the first frame, and the writer
+    /// errors when the two no longer agree.
     Transform {
-        /// The id of the child node this transform places.
-        child: i32,
-
         /// The layer this node belongs to, or `-1` for none.
         layer: i32,
 
@@ -22,11 +20,8 @@ pub enum MVoxExtNodeBody {
         frames: Vec<MVoxExtFrame>,
     },
 
-    /// An `nGRP` group node: the ids of its child nodes, in stored order.
-    Group {
-        /// The ids of the child nodes.
-        children: Vec<i32>,
-    },
+    /// An `nGRP` group node.
+    Group,
 
     /// An `nSHP` shape node: the models it draws, in stored order.
     Shape {

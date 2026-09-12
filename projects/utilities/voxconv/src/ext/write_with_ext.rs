@@ -12,25 +12,22 @@ use crate::{
 pub fn write_with_ext<D: Dependencies>(
     dependencies: &D,
     format: &WriteFormat,
-    state: VoxconvVoxMain,
+    main: VoxconvVoxMain,
 ) -> Result<Vec<VoxDocumentFile>> {
-    format.with(WriteWithExt {
-        dependencies,
-        state,
-    })
+    format.with(WriteWithExt { dependencies, main })
 }
 
 /// The typed write of one format.
 struct WriteWithExt<'a, D> {
     dependencies: &'a D,
-    state: VoxconvVoxMain,
+    main: VoxconvVoxMain,
 }
 
 impl<D: Dependencies> WriteFormatVisitor for WriteWithExt<'_, D> {
     type Output = Result<Vec<VoxDocumentFile>>;
 
     fn visit<F: InstalledFormat>(self, options: &F::WriteOptions) -> Self::Output {
-        F::write_with_ext(self.dependencies, options, self.state)
+        F::write_with_ext(self.dependencies, options, self.main)
     }
 }
 
@@ -39,7 +36,7 @@ mod tests {
     use crate::{
         DependenciesImpl, ReadFormat, VoxDocumentFile, WriteFormat,
         ext::{VoxconvExt, read_with_ext, write_with_ext},
-        test_state,
+        test_main,
         vmax::VMaxWriteOptions,
         voxj::ext::{CompositeVoxExt, InertVoxExt, voxj_vox_ext_from_ext},
         write,
@@ -52,7 +49,7 @@ mod tests {
         write(
             &DependenciesImpl,
             &WriteFormat::VMax(VMaxWriteOptions::default()),
-            test_state(()),
+            test_main(()),
         )
         .unwrap()
     }
@@ -133,12 +130,12 @@ mod tests {
             value: VoxValue::Bool(true),
         };
 
-        let state = test_state(Box::new(inert.clone()) as Box<dyn VoxconvExt>);
+        let main = test_main(Box::new(inert.clone()) as Box<dyn VoxconvExt>);
 
         let files = write_with_ext(
             &DependenciesImpl,
             &WriteFormat::from(ReadFormat::Voxj),
-            state,
+            main,
         )
         .unwrap();
 

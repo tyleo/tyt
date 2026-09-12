@@ -8,11 +8,11 @@
 //! [`to_vmax_file`] writes one back, exactly for a loaded document, with
 //! [`VMaxWriteOptions`] picking the color format and the scene camera.
 //! [`to_vmax_vox_main`] gives a bare `VoxMain<()>` a synthesized ext, and
-//! `take_ext` takes the ext back off. The ext follows the state's listings
-//! through voxcore's [`VoxExt`](voxcore::VoxExt) hooks. The `codec` module,
-//! behind the default `codec` feature, goes straight to and from a package's
-//! files. It takes the codec's dependencies, which
-//! `vmax_codec::DependenciesImpl` supplies. The `serde` feature, on by
+//! `take_ext` takes the ext back off. The ext keys an entry per entity by id
+//! and follows the state through voxcore's [`VoxExt`](voxcore::VoxExt)
+//! hooks. The `codec` module, behind the default `codec` feature, goes
+//! straight to and from a package's files. It takes the codec's dependencies,
+//! which `vmax_codec::DependenciesImpl` supplies. The `serde` feature, on by
 //! default, derives serde for the ext types.
 
 // Public API

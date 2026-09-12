@@ -5,21 +5,21 @@ use crate::{
         MaterialMeshRequest, MeshFiles, MeshTarget, build_material_document, glb_bytes,
     },
 };
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` material-aware and writes it as a binary glTF (`.glb`) with a
 /// material sampling the baked palette atlas, plus any loose image files
-/// `request.storage` asks for. `state` resolves the object's referenced
+/// `request.storage` asks for. `main` resolves the object's referenced
 /// palettes; embedded images share the GLB binary chunk with the geometry. An
 /// object with no live voxels writes a valid glTF with an empty scene.
 /// `dependencies` encodes the atlas images.
-pub fn object_to_material_glb<D: EncodePng, T>(
+pub fn object_to_material_glb<D: EncodePng, T: VoxExt>(
     dependencies: &D,
-    state: &VoxMain<T>,
+    main: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
 ) -> Result<MeshFiles> {
-    let built = build_material_document(dependencies, state, object, request, MeshTarget::Glb)?;
+    let built = build_material_document(dependencies, main, object, request, MeshTarget::Glb)?;
 
     let json = serde_json::to_vec(&built.document).map_err(Error::invalid)?;
 
@@ -52,9 +52,9 @@ mod tests {
     /// A 2x1x1 bar whose two voxels are red and blue through one
     /// `baseColor` palette, so the mesh uses two materials.
     fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
 
-        let base_value_pool_id = state.retain_value_pool(
+        let base_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
 
@@ -68,7 +68,7 @@ mod tests {
             .unwrap();
         let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue_id = palette.retain_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         object.retain_layer(palette_id, red_id);
@@ -76,9 +76,9 @@ mod tests {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        (state, object_id)
+        (main, object_id)
     }
 
     /// An albedo (base-color) request under `storage`.
@@ -98,11 +98,11 @@ mod tests {
 
     #[test]
     fn embeds_a_base_color_material_and_a_uv_set() {
-        let (state, object_id) = red_blue_bar();
+        let (main, object_id) = red_blue_bar();
         let files = object_to_material_glb(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &albedo_request(ResourceStorage::Embedded),
         )
         .unwrap();
@@ -140,11 +140,11 @@ mod tests {
     fn an_out_of_range_vocabulary_value_fails_the_export() {
         // A metallic outside the glTF `[0, 1]` trips the vocabulary range
         // check before anything is written.
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let base_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let metallic_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -164,18 +164,18 @@ mod tests {
         let material_id = palette
             .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(0)])
             .unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
         let result = object_to_material_glb(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &albedo_request(ResourceStorage::Embedded),
         );
 
@@ -189,11 +189,11 @@ mod tests {
 
     #[test]
     fn external_storage_writes_a_sidecar_and_references_it() {
-        let (state, object_id) = red_blue_bar();
+        let (main, object_id) = red_blue_bar();
         let files = object_to_material_glb(
             &DependenciesImpl,
-            &state,
-            state.object(object_id).unwrap(),
+            &main,
+            main.object(object_id).unwrap(),
             &albedo_request(ResourceStorage::External),
         )
         .unwrap();

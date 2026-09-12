@@ -12,7 +12,7 @@ use voxconv::{
 /// stdout, round-tripping through voxcore.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
     // The `vmax` ext rides through boxed into the document's `ext` block.
-    let state = load_with_ext(&DependenciesImpl, ReadFormat::VMax, input)?;
+    let main = load_with_ext(&DependenciesImpl, ReadFormat::VMax, input)?;
 
     let (position_encoding, sample_encoding) = block_encoding(encoding);
 
@@ -25,7 +25,7 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
         },
     });
 
-    let files = write_with_ext(&DependenciesImpl, &format, state)?;
+    let files = write_with_ext(&DependenciesImpl, &format, main)?;
 
     let file = files.first().expect("the Voxel Json writer emits one file");
 

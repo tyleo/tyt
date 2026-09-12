@@ -18,21 +18,21 @@ use treegrid::{
 };
 use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbF64, TySrgbaF64};
 use voxcore::{
-    BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
+    BVoxValuePoolValue, VoxExt, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
     VoxValuePoolValueRef, material::MaterialPropertyKind,
 };
 
-/// Renders the value collections `selectors` name in `state`, each a
+/// Renders the value collections `selectors` name in `main`, each a
 /// property's values down a palette, populated into a tree grid of palette,
 /// property, and component nodes and rendered under `options`. Errors when a
 /// selector names an absent palette or property, a component off its shape,
 /// a color reading off a color shape, or an option the layout ignores.
-pub fn palette_show<T>(
-    state: &VoxMain<T>,
+pub fn palette_show<T: VoxExt>(
+    main: &VoxMain<T>,
     selectors: &[PropertySelector],
     options: &PaletteShowOptions,
 ) -> Result<String> {
-    let value_collections = resolve_value_collections(state, selectors)?;
+    let value_collections = resolve_value_collections(main, selectors)?;
 
     let grid = build_grid(value_collections);
 
@@ -68,18 +68,18 @@ enum Reading {
 /// collection per match; a named palette or property that is absent is an
 /// error, while a `*` palette quietly skips a palette that lacks a named
 /// property.
-fn resolve_value_collections<T>(
-    state: &VoxMain<T>,
+fn resolve_value_collections<T: VoxExt>(
+    main: &VoxMain<T>,
     selectors: &[PropertySelector],
 ) -> Result<Vec<ValueCollection>> {
-    let palettes: Vec<&VoxPalette> = state.iter_palettes().map(|(_, palette)| palette).collect();
+    let palettes: Vec<&VoxPalette> = main.iter_palettes().map(|(_, palette)| palette).collect();
     let mut value_collections = Vec::new();
     for selector in selectors {
         match selector.palette {
             PaletteRef::All => {
                 for (palette_index, palette) in palettes.iter().enumerate() {
                     value_collections.extend(expand_property(
-                        state,
+                        main,
                         palette_index,
                         palette,
                         selector,
@@ -95,7 +95,7 @@ fn resolve_value_collections<T>(
                     ))
                 })?;
                 value_collections.extend(expand_property(
-                    state,
+                    main,
                     palette_index,
                     palette,
                     selector,
@@ -110,8 +110,8 @@ fn resolve_value_collections<T>(
 /// Expands one selector's property against one palette into its value
 /// collections. A `palette_is_wild` palette, one from a `*`, skips a named
 /// property it lacks instead of erroring.
-fn expand_property<T>(
-    state: &VoxMain<T>,
+fn expand_property<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_index: usize,
     palette: &VoxPalette,
     selector: &PropertySelector,
@@ -122,7 +122,7 @@ fn expand_property<T>(
             .into_iter()
             .map(|name| {
                 build_value_collection(
-                    state,
+                    main,
                     palette_index,
                     palette,
                     name,
@@ -143,7 +143,7 @@ fn expand_property<T>(
                 )));
             }
             Ok(vec![build_value_collection(
-                state,
+                main,
                 palette_index,
                 palette,
                 key,
@@ -156,8 +156,8 @@ fn expand_property<T>(
 }
 
 /// Builds one value collection from a property the caller verified present.
-fn build_value_collection<T>(
-    state: &VoxMain<T>,
+fn build_value_collection<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_index: usize,
     palette: &VoxPalette,
     key: &str,
@@ -172,9 +172,9 @@ fn build_value_collection<T>(
         .property(property_id)
         .expect("a property id from this palette resolves")
         .value_pool_id;
-    let value_pool = state
+    let value_pool = main
         .value_pool(value_pool_id)
-        .expect("a property references a value pool the state holds");
+        .expect("a property references a value pool the main holds");
 
     // A component is shape addressing: legal on any vector value pool whose
     // width exceeds its index, whatever the reading.
@@ -700,7 +700,7 @@ mod tests {
 
     /// A `vec-4-float` value pool of the given 8-bit sRGB colors, each decoded
     /// to linear light, the way the importers store colors.
-    fn lin_srgba_f64_value_pool(state: &mut VoxMain, colors: &[[u8; 4]]) -> U32Id<BVoxValuePool> {
+    fn lin_srgba_f64_value_pool(main: &mut VoxMain, colors: &[[u8; 4]]) -> U32Id<BVoxValuePool> {
         let values = colors
             .iter()
             .map(|&[red, green, blue, alpha]| {
@@ -710,20 +710,20 @@ mod tests {
                 [linear.red, linear.green, linear.blue, linear.alpha]
             })
             .collect();
-        state.retain_value_pool(VoxValuePool::vec_4_float(values).unwrap())
+        main.retain_value_pool(VoxValuePool::vec_4_float(values).unwrap())
     }
 
     /// A document with two palettes: palette 0 has `baseColor` and
     /// `metallic` with two materials, palette 1 has `baseColor` with
     /// one material.
-    fn sample_state() -> VoxMain {
-        let mut state: VoxMain = VoxMain::default();
+    fn sample_main() -> VoxMain {
+        let mut main: VoxMain = VoxMain::default();
 
         let colors_zero_value_pool_id =
-            lin_srgba_f64_value_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
+            lin_srgba_f64_value_pool(&mut main, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
         let metallic_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![1.0, 0.2]).unwrap());
-        let colors_one_value_pool_id = lin_srgba_f64_value_pool(&mut state, &[[0, 0, 255, 255]]);
+            main.retain_value_pool(VoxValuePool::float(vec![1.0, 0.2]).unwrap());
+        let colors_one_value_pool_id = lin_srgba_f64_value_pool(&mut main, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
         first
@@ -746,7 +746,7 @@ mod tests {
         first
             .retain_material(vec![value_id(1), value_id(1)])
             .unwrap();
-        state.retain_palette(first).unwrap();
+        main.retain_palette(first).unwrap();
 
         let mut second = VoxPalette::default();
         second
@@ -757,9 +757,9 @@ mod tests {
             )
             .unwrap();
         second.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(second).unwrap();
+        main.retain_palette(second).unwrap();
 
-        state
+        main
     }
 
     /// The selectors the CLI spells `<palette> <property> <presentation>
@@ -824,22 +824,22 @@ mod tests {
 
     /// Renders the selectors under `options`.
     fn show_with(
-        state: &VoxMain,
+        main: &VoxMain,
         fields: &[(&str, &str, &str, &str)],
         options: PaletteShowOptions,
     ) -> String {
-        palette_show(state, &selectors(fields), &options).unwrap()
+        palette_show(main, &selectors(fields), &options).unwrap()
     }
 
     /// Renders the selectors under `layout` with default label options and no
     /// wrapping.
     fn show(
-        state: &VoxMain,
+        main: &VoxMain,
         fields: &[(&str, &str, &str, &str)],
         layout: PaletteShowLayout,
     ) -> String {
         show_with(
-            state,
+            main,
             fields,
             PaletteShowOptions {
                 layout,
@@ -850,9 +850,9 @@ mod tests {
 
     #[test]
     fn value_presentation_prints_canonical_hex_with_a_label() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[("0", "baseColor", "value", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -861,9 +861,9 @@ mod tests {
 
     #[test]
     fn a_color_component_under_auto_spells_its_hex_pair() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[("0", "baseColor.a", "value", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -874,9 +874,9 @@ mod tests {
 
     #[test]
     fn swatch_presentation_abuts_swatches_into_a_strip() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[("0", "baseColor", "swatch", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -888,9 +888,9 @@ mod tests {
 
     #[test]
     fn swatch_spaces_values_with_no_swatch() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let shadows_value_pool_id =
-            state.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
+            main.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -901,12 +901,12 @@ mod tests {
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
         palette.retain_material(vec![value_id(1)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         // Bools have no swatch, so swatch format spaces them rather than
         // abutting them into `truefalse`.
         let output = show(
-            &state,
+            &main,
             &[("0", "shadows", "swatch", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -915,12 +915,12 @@ mod tests {
 
     #[test]
     fn rows_pad_only_the_label_not_the_values() {
-        let state = sample_state();
+        let main = sample_main();
         // The labels pad to the longest so each row's first value aligns, but
         // the values are not column-aligned: `metallic` stays compact
         // rather than padding out to the wider `baseColor` columns.
         let output = show(
-            &state,
+            &main,
             &[
                 ("0", "baseColor", "value", "auto"),
                 ("0", "metallic", "value", "auto"),
@@ -937,11 +937,11 @@ mod tests {
 
     #[test]
     fn rows_wrap_cells_to_the_width() {
-        let state = sample_state();
+        let main = sample_main();
         // Width 30 leaves 16 columns after the `0."baseColor" ` prefix:
         // one 9-wide hex fits per line, so the second wraps under the first.
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[("0", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Rows,
@@ -960,9 +960,9 @@ mod tests {
 
     #[test]
     fn rows_with_label_none_drop_the_label_column() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[("0", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Rows,
@@ -978,9 +978,9 @@ mod tests {
 
     #[test]
     fn default_selector_shows_every_palette_and_property() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &[PropertySelector::default()],
             &PaletteShowOptions::default(),
         )
@@ -997,11 +997,11 @@ mod tests {
 
     #[test]
     fn value_collections_render_in_selector_order() {
-        let state = sample_state();
+        let main = sample_main();
         // A palette revisited later starts a fresh root rather than merging
         // backward, so pre-order keeps the selector order.
         let output = show(
-            &state,
+            &main,
             &[
                 ("1", "baseColor", "value", "auto"),
                 ("0", "baseColor", "value", "auto"),
@@ -1018,9 +1018,9 @@ mod tests {
 
     #[test]
     fn a_repeated_property_keeps_one_row_per_selector() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[
                 ("0", "baseColor", "value", "auto"),
                 ("0", "baseColor", "swatch", "auto"),
@@ -1037,9 +1037,9 @@ mod tests {
 
     #[test]
     fn columns_stack_value_collections_under_labels() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[
                 ("0", "baseColor.a", "value", "auto"),
                 ("1", "baseColor.a", "value", "auto"),
@@ -1054,9 +1054,9 @@ mod tests {
 
     #[test]
     fn columns_with_label_none_drop_the_label_row() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[
                 ("0", "baseColor.a", "value", "auto"),
                 ("1", "baseColor.a", "value", "auto"),
@@ -1075,9 +1075,9 @@ mod tests {
 
     #[test]
     fn hierarchy_layout_renders_the_palette_tree() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[("0", "*", "value", "auto")],
             PaletteShowLayout::Hierarchy,
         );
@@ -1089,9 +1089,9 @@ mod tests {
 
     #[test]
     fn header_labels_group_rows_under_palette_headings() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[("*", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Rows,
@@ -1110,9 +1110,9 @@ mod tests {
 
     #[test]
     fn a_header_level_shifts_the_headings() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[("*", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Rows,
@@ -1128,9 +1128,9 @@ mod tests {
 
     #[test]
     fn nested_tables_group_one_table_per_palette() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[("*", "baseColor", "value", "auto")],
             PaletteShowLayout::Tables,
         );
@@ -1153,9 +1153,9 @@ mod tests {
 
     #[test]
     fn flat_tables_fill_one_aligned_comparison_table() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[("*", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Tables,
@@ -1177,9 +1177,9 @@ mod tests {
 
     #[test]
     fn records_tables_list_one_property_per_row() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[("*", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Tables,
@@ -1208,9 +1208,9 @@ mod tests {
 
     #[test]
     fn records_tables_add_a_column_per_component_path() {
-        let state = sample_state();
+        let main = sample_main();
         let output = palette_show(
-            &state,
+            &main,
             &selectors(&[
                 ("0", "baseColor", "value", "auto"),
                 ("0", "baseColor.a", "value", "auto"),
@@ -1236,9 +1236,9 @@ mod tests {
 
     #[test]
     fn a_label_mode_on_the_hierarchy_layout_is_invalid_input() {
-        let state = sample_state();
+        let main = sample_main();
         let result = palette_show(
-            &state,
+            &main,
             &selectors(&[("0", "baseColor", "value", "auto")]),
             &PaletteShowOptions {
                 layout: PaletteShowLayout::Hierarchy,
@@ -1253,9 +1253,9 @@ mod tests {
 
     #[test]
     fn compact_json_nests_component_records_under_the_property() {
-        let state = sample_state();
+        let main = sample_main();
         let output = show(
-            &state,
+            &main,
             &[
                 ("0", "baseColor", "value", "auto"),
                 ("0", "baseColor.a", "value", "auto"),
@@ -1272,13 +1272,13 @@ mod tests {
 
     #[test]
     fn pretty_json_is_indented_and_matches_compact() {
-        let state = sample_state();
+        let main = sample_main();
         let fields: &[(&str, &str, &str, &str)] = &[
             ("0", "baseColor", "value", "auto"),
             ("0", "baseColor.a", "value", "auto"),
         ];
-        let pretty = show(&state, fields, PaletteShowLayout::JsonPretty);
-        let compact = show(&state, fields, PaletteShowLayout::JsonCompact);
+        let pretty = show(&main, fields, PaletteShowLayout::JsonPretty);
+        let compact = show(&main, fields, PaletteShowLayout::JsonCompact);
         // Indented, and carrying the same data as the compact form.
         assert!(pretty.contains("\n  "));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
@@ -1288,19 +1288,19 @@ mod tests {
 
     #[test]
     fn star_property_expands_to_every_property() {
-        let state = sample_state();
+        let main = sample_main();
         let value_collections =
-            resolve_value_collections(&state, &selectors(&[("0", "*", "value", "auto")])).unwrap();
+            resolve_value_collections(&main, &selectors(&[("0", "*", "value", "auto")])).unwrap();
         let keys: Vec<&str> = value_collections.iter().map(|c| c.key.as_str()).collect();
         assert_eq!(keys, ["baseColor", "metallic"]);
     }
 
     #[test]
     fn star_palette_skips_a_palette_lacking_a_named_property() {
-        let state = sample_state();
+        let main = sample_main();
         // Only palette 0 has `metallic`; palette 1 is skipped, not an error.
         let value_collections =
-            resolve_value_collections(&state, &selectors(&[("*", "metallic", "value", "auto")]))
+            resolve_value_collections(&main, &selectors(&[("*", "metallic", "value", "auto")]))
                 .unwrap();
         let labels: Vec<(usize, &str)> = value_collections
             .iter()
@@ -1311,42 +1311,42 @@ mod tests {
 
     #[test]
     fn named_palette_out_of_range_is_an_error() {
-        let state = sample_state();
+        let main = sample_main();
         assert!(
-            resolve_value_collections(&state, &selectors(&[("5", "baseColor", "value", "auto")]))
+            resolve_value_collections(&main, &selectors(&[("5", "baseColor", "value", "auto")]))
                 .is_err()
         );
     }
 
     #[test]
     fn named_property_absent_on_a_named_palette_is_an_error() {
-        let state = sample_state();
+        let main = sample_main();
         assert!(
-            resolve_value_collections(&state, &selectors(&[("0", "missing", "value", "auto")]))
+            resolve_value_collections(&main, &selectors(&[("0", "missing", "value", "auto")]))
                 .is_err()
         );
     }
 
     #[test]
     fn a_component_on_a_scalar_is_an_error() {
-        let state = sample_state();
+        let main = sample_main();
         assert!(
-            resolve_value_collections(&state, &selectors(&[("0", "metallic.r", "value", "auto")]))
+            resolve_value_collections(&main, &selectors(&[("0", "metallic.r", "value", "auto")]))
                 .is_err()
         );
     }
 
     #[test]
     fn auto_presentation_prints_scalars_and_components_as_bare_text() {
-        let state = sample_state();
+        let main = sample_main();
         let scalar = show(
-            &state,
+            &main,
             &[("0", "metallic", "auto", "auto")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(scalar, "0.\"metallic\" 1 0.2\n");
         let component = show(
-            &state,
+            &main,
             &[("0", "baseColor.r", "auto", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -1355,10 +1355,10 @@ mod tests {
 
     /// One palette binding `emissiveColor`, three components per the glTF
     /// vocabulary, to a `vec-3-float` value pool holding a red.
-    fn three_component_state() -> VoxMain {
-        let mut state: VoxMain = VoxMain::default();
+    fn three_component_main() -> VoxMain {
+        let mut main: VoxMain = VoxMain::default();
         let emissive_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -1368,15 +1368,15 @@ mod tests {
             )
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
-        state
+        main.retain_palette(palette).unwrap();
+        main
     }
 
     #[test]
     fn a_three_component_color_renders_hex_without_alpha() {
-        let state = three_component_state();
+        let main = three_component_main();
         let output = show(
-            &state,
+            &main,
             &[("0", "emissiveColor", "value", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -1386,17 +1386,17 @@ mod tests {
 
     #[test]
     fn a_three_component_color_has_no_alpha_component() {
-        let state = three_component_state();
+        let main = three_component_main();
         // `.a` is out of the three-wide shape, but `.r` reads its hex pair.
         assert!(
             resolve_value_collections(
-                &state,
+                &main,
                 &selectors(&[("0", "emissiveColor.a", "value", "auto")]),
             )
             .is_err()
         );
         let red = show(
-            &state,
+            &main,
             &[("0", "emissiveColor.r", "value", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -1405,11 +1405,11 @@ mod tests {
 
     #[test]
     fn an_hdr_vocabulary_color_errors_under_auto() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         // The vocabulary bounds a glTF color at [0, 1], so auto errors on the
         // HDR red and an explicit reading spells the exact stored values.
         let emissive_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -1419,17 +1419,17 @@ mod tests {
             )
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         assert!(
             resolve_value_collections(
-                &state,
+                &main,
                 &selectors(&[("0", "emissiveColor", "value", "auto")]),
             )
             .is_err()
         );
         let output = show(
-            &state,
+            &main,
             &[("0", "emissiveColor", "value", "linear-float")],
             PaletteShowLayout::Rows,
         );
@@ -1438,13 +1438,13 @@ mod tests {
 
     #[test]
     fn a_vocabulary_color_off_its_shape_errors_under_auto() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         // `baseColor` names a glTF color, so a binding no color reading
         // spells is an error under auto, whatever the shape holds.
         let base_color_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_3_int(vec![[1, 0, 0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_3_int(vec![[1, 0, 0]]).unwrap());
         let strength_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -1463,11 +1463,11 @@ mod tests {
         palette
             .retain_material(vec![value_id(0), value_id(0)])
             .unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         for key in ["baseColor", "emissiveColor"] {
             assert!(
-                resolve_value_collections(&state, &selectors(&[("0", key, "value", "auto")]))
+                resolve_value_collections(&main, &selectors(&[("0", key, "value", "auto")]))
                     .is_err()
             );
         }
@@ -1475,48 +1475,48 @@ mod tests {
 
     /// One palette binding the custom `tint`, a key outside the glTF
     /// vocabulary, to a `vec-3-float` value pool holding a red.
-    fn custom_vector_state() -> VoxMain {
-        let mut state: VoxMain = VoxMain::default();
+    fn custom_vector_main() -> VoxMain {
+        let mut main: VoxMain = VoxMain::default();
         let tint_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
-        state
+        main.retain_palette(palette).unwrap();
+        main
     }
 
     #[test]
     fn a_custom_float_vector_defaults_to_plain_numbers() {
-        let state = custom_vector_state();
+        let main = custom_vector_main();
         // A custom vec-3-float could hold a color or a normal, so it renders
         // plain numbers. A component reads its stored float, and an index
         // past the width errors.
         let output = show(
-            &state,
+            &main,
             &[("0", "tint", "value", "auto")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"tint\" [1,0,0]\n");
         let component = show(
-            &state,
+            &main,
             &[("0", "tint.r", "value", "auto")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(component, "0.\"tint\".r 1\n");
         assert!(
-            resolve_value_collections(&state, &selectors(&[("0", "tint.w", "value", "auto")]))
+            resolve_value_collections(&main, &selectors(&[("0", "tint.w", "value", "auto")]))
                 .is_err()
         );
     }
 
     #[test]
     fn an_srgb_hex_reading_asserts_color_for_a_custom_key() {
-        let state = custom_vector_state();
+        let main = custom_vector_main();
         let output = show(
-            &state,
+            &main,
             &[
                 ("0", "tint", "value", "srgb-hex"),
                 ("0", "tint.r", "value", "srgb-hex"),
@@ -1533,12 +1533,12 @@ mod tests {
 
     #[test]
     fn a_color_reading_on_a_non_color_shape_is_an_error() {
-        let state = sample_state();
+        let main = sample_main();
         // `metallic` binds a float value pool, which no color reading spells.
         for reading in ["linear-float", "srgb-float", "srgb-hex"] {
             assert!(
                 resolve_value_collections(
-                    &state,
+                    &main,
                     &selectors(&[("0", "metallic", "value", reading)])
                 )
                 .is_err()
@@ -1548,23 +1548,23 @@ mod tests {
 
     /// One palette binding the custom `tint` to a `vec-4-float` value pool
     /// holding `[1, 0, 0.25, 0.5]`, the design page's worked example.
-    fn custom_tint_vec_4_state() -> VoxMain {
-        let mut state: VoxMain = VoxMain::default();
-        let tint_value_pool_id = state
-            .retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.25, 0.5]]).unwrap());
+    fn custom_tint_vec_4_main() -> VoxMain {
+        let mut main: VoxMain = VoxMain::default();
+        let tint_value_pool_id =
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.25, 0.5]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
-        state
+        main.retain_palette(palette).unwrap();
+        main
     }
 
     #[test]
     fn the_readings_spell_one_color_per_the_design_examples() {
-        let state = custom_tint_vec_4_state();
-        let row = |fields| show(&state, &[fields], PaletteShowLayout::Rows);
+        let main = custom_tint_vec_4_main();
+        let row = |fields| show(&main, &[fields], PaletteShowLayout::Rows);
         // The sRGB readings encode the stored 0.25 to 0.537099, byte 0x89;
         // the linear reading keeps the stored numbers; alpha never
         // transfer-encodes. A component respells under the same reading, and
@@ -1602,26 +1602,26 @@ mod tests {
 
     #[test]
     fn an_srgb_reading_errors_outside_the_unit_range() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         // The sRGB readings never clamp: the HDR red errors under both, and
         // the auto fallback stays available through linear-float.
         let tint_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         for reading in ["srgb-hex", "srgb-float"] {
             assert!(
-                resolve_value_collections(&state, &selectors(&[("0", "tint", "value", reading)]))
+                resolve_value_collections(&main, &selectors(&[("0", "tint", "value", reading)]))
                     .is_err()
             );
         }
         let output = show(
-            &state,
+            &main,
             &[("0", "tint", "value", "linear-float")],
             PaletteShowLayout::Rows,
         );
@@ -1630,9 +1630,9 @@ mod tests {
 
     #[test]
     fn a_component_reads_any_vector_shape() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let position_value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_3_int(vec![[3, 7, 2]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_3_int(vec![[3, 7, 2]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -1642,23 +1642,23 @@ mod tests {
             )
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         // An int vector's component reads its stored int; the width still
         // bounds the index, and no color reading spells an int vector.
         let output = show(
-            &state,
+            &main,
             &[("0", "position.x", "value", "auto")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"position\".x 3\n");
         assert!(
-            resolve_value_collections(&state, &selectors(&[("0", "position.w", "value", "auto")]))
+            resolve_value_collections(&main, &selectors(&[("0", "position.w", "value", "auto")]))
                 .is_err()
         );
         assert!(
             resolve_value_collections(
-                &state,
+                &main,
                 &selectors(&[("0", "position.x", "value", "srgb-hex")]),
             )
             .is_err()
@@ -1667,18 +1667,18 @@ mod tests {
 
     #[test]
     fn an_int_value_pool_renders_integers() {
-        let mut state: VoxMain = VoxMain::default();
-        let count_value_pool_id = state.retain_value_pool(VoxValuePool::int(vec![3, 7]).unwrap());
+        let mut main: VoxMain = VoxMain::default();
+        let count_value_pool_id = main.retain_value_pool(VoxValuePool::int(vec![3, 7]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property("count".to_owned(), count_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
         palette.retain_material(vec![value_id(1)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         let output = show(
-            &state,
+            &main,
             &[("0", "count", "value", "auto")],
             PaletteShowLayout::Rows,
         );
@@ -1687,8 +1687,8 @@ mod tests {
 
     #[test]
     fn a_json_value_pool_renders_arrays_rather_than_null() {
-        let mut state: VoxMain = VoxMain::default();
-        let extra_value_pool_id = state.retain_value_pool(VoxValuePool::json(vec![
+        let mut main: VoxMain = VoxMain::default();
+        let extra_value_pool_id = main.retain_value_pool(VoxValuePool::json(vec![
             VoxValue::Array(vec![VoxValue::Number(1.0), VoxValue::Number(2.0)]),
         ]));
         let mut palette = VoxPalette::default();
@@ -1696,17 +1696,17 @@ mod tests {
             .retain_property("extra".to_owned(), extra_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         // The array survives into both the text and JSON layouts.
         let text = show(
-            &state,
+            &main,
             &[("0", "extra", "value", "auto")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(text, "0.\"extra\" [1,2]\n");
         let json = show(
-            &state,
+            &main,
             &[("0", "extra", "value", "auto")],
             PaletteShowLayout::JsonCompact,
         );
@@ -1718,27 +1718,27 @@ mod tests {
 
     #[test]
     fn an_empty_property_name_is_quoted_in_the_label_but_raw_in_json() {
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = state.retain_value_pool(VoxValuePool::boolean(vec![true]));
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = main.retain_value_pool(VoxValuePool::boolean(vec![true]));
         let mut palette = VoxPalette::default();
         // A binding with no property name, reached through the `*` property.
         palette
             .retain_property(String::new(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         // An empty name prints quoted as `""` rather than vanishing after the
         // `0.` prefix.
         let row = show(
-            &state,
+            &main,
             &[("0", "*", "value", "auto")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(row, "0.\"\" true\n");
         // JSON keeps the raw name; its own string quoting is enough there.
         let json = show(
-            &state,
+            &main,
             &[("0", "*", "value", "auto")],
             PaletteShowLayout::JsonCompact,
         );
@@ -1752,9 +1752,9 @@ mod tests {
     fn a_shared_value_pool_cell_repeats_per_material() {
         // Both material rows draw the strength value pool's one value, so the
         // column shows it twice.
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let strengths_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -1765,10 +1765,10 @@ mod tests {
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
-        state.retain_palette(palette).unwrap();
+        main.retain_palette(palette).unwrap();
 
         let output = show(
-            &state,
+            &main,
             &[("0", "emissiveStrength", "value", "auto")],
             PaletteShowLayout::Rows,
         );

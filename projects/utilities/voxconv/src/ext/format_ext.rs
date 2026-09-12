@@ -23,7 +23,7 @@ pub trait FormatExt: Format {
     fn write_with_ext<D: Dependencies>(
         dependencies: &D,
         options: &Self::WriteOptions,
-        state: VoxconvVoxMain,
+        main: VoxconvVoxMain,
     ) -> Result<Vec<VoxDocumentFile>>;
 
     /// Appends to `slots` the Voxel Json `ext` block slots `ext` encodes to

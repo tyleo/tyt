@@ -11,7 +11,7 @@ pub fn voxj_version_from_bytes<D: Dependencies>(dependencies: &D, bytes: &[u8]) 
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, ReadFormat, WriteFormat, test_state, voxj::voxj_version_from_bytes, write,
+        DependenciesImpl, ReadFormat, WriteFormat, test_main, voxj::voxj_version_from_bytes, write,
     };
 
     #[test]
@@ -19,7 +19,7 @@ mod tests {
         let files = write(
             &DependenciesImpl,
             &WriteFormat::from(ReadFormat::Voxj),
-            test_state(()),
+            test_main(()),
         )
         .unwrap();
 

@@ -4,8 +4,8 @@ use qbcl_codec::qb::to_qb_file_bytes;
 /// Writes a [`QbVoxMain`] and its ext to the bytes of a Qubicle Binary `.qb`
 /// file, the bytes form of [`to_qb_file`] and the inverse of
 /// [`from_qb_bytes`](crate::codec::from_qb_bytes).
-pub fn to_qb_bytes(state: &QbVoxMain) -> Result<Vec<u8>> {
-    let file = to_qb_file(state)?;
+pub fn to_qb_bytes(main: &QbVoxMain) -> Result<Vec<u8>> {
+    let file = to_qb_file(main)?;
 
     Ok(to_qb_file_bytes(&file))
 }
@@ -28,15 +28,7 @@ mod tests {
                 name: "m".to_owned(),
                 size: [2, 1, 1],
                 position: [1, 2, 3],
-                voxels: vec![
-                    QbVoxel::new(10, 20, 30),
-                    QbVoxel {
-                        r: 1,
-                        g: 2,
-                        b: 3,
-                        visibility: 0x3f,
-                    },
-                ],
+                voxels: vec![QbVoxel::new(10, 20, 30), QbVoxel::new(1, 2, 3)],
             }],
             ..Default::default()
         };

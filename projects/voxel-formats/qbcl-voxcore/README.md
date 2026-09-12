@@ -24,7 +24,7 @@ and `QbclVoxMain` follow the same pattern.
 - `to_qb_vox_main`, `to_qbt_vox_main`, and `to_qbcl_vox_main`: a bare
   `VoxMain<()>` to the format's state with a synthesized ext, which writes
   as a file synthesized from the scene. `take_ext` on the state takes the
-  ext back off.
+  ext back off as `TakenExt { main, ext }`.
 
 The `.qb` conversion flattens the scene first. Each object placement becomes
 one root placing one object at its world translation. An object placed
@@ -51,12 +51,31 @@ both. This crate's `impl` feature turns on the codec's.
 ## The ext
 
 `QbExt`, `QbtExt`, and `QbclExt` hold the Qubicle state with no native
-voxcore home: the header, plus per-matrix or per-node provenance aligned by
-index with the state's listings. The exts follow the listings through
-voxcore's `VoxExt` hooks. After a release or a reorder, the file still
-writes back with the surviving provenance. An object retained after the load
-is written as a synthesized matrix. A node retained after the load is
-written as a synthesized node. voxconv carries each ext through a Voxel Json
-document's `ext` block.
+voxcore home. An ext stores only what the scene cannot derive. A node's
+name and position, a matrix grid, and every per-voxel visibility mask
+derive from the scene at write time. A mutation never leaves them stale.
+The `.qb` ext is the header alone. The `.qbt` and `.qbcl` exts add one
+entry per hierarchy node keyed by the node's id: a matrix or compound
+entry's scale and pivot, a model's transform chunk, the editor flags, and
+any unknown node's bytes.
 
-The `serde` feature, on by default, derives serde for the ext types.
+The entries follow the state through voxcore's `VoxExt` hooks. Each hook
+sees the `VoxState`. A retained node takes the entry synthesis would give
+it on the spot. A released node drops its entry. A gc rekeys the map. A
+hook on a node the ext does not know refuses. A release of such a node
+leaves the main unchanged. The writer errors on an ext out of step with the
+hierarchy, on a matrix or compound entry whose node places no object and
+lists no child, on an unknown entry whose node gains an object or a child,
+and on a model entry whose node gains an object under a transform chunk
+other than the default. It never writes a guess.
+
+The `.qb` writer takes the flat shape a `.qb` file holds: one root per
+matrix, each placing one object and no child node. It errors on any other
+shape. The matrices follow the roots. Reordering the roots reorders the
+file. Under visibility masks each solid voxel's byte says which faces its
+neighbors leave uncovered, in the `.qb` spec's bits. The `.qbt` and `.qbcl`
+writers derive the same mask for every voxel.
+
+voxconv carries each ext through a Voxel Json document's `ext` block. The
+`serde` feature, on by default, derives serde for the ext types and writes
+each id key as its bare integer.

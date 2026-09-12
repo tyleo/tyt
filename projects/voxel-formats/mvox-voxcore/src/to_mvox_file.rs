@@ -1,4 +1,7 @@
-use crate::{Error, MVoxExt, MVoxExtFrame, MVoxExtNode, MVoxExtNodeBody, MVoxVoxMain, Result};
+use crate::{
+    Error, MVoxExt, MVoxExtFrame, MVoxExtNode, MVoxExtNodeBody, MVoxVoxMain, Result,
+    transform_from_frames,
+};
 use branded_id::U32Id;
 use mvox::{
     MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer, MVoxMaterial,
@@ -6,40 +9,51 @@ use mvox::{
     MVoxSceneNode, MVoxSceneNodeBody, MVoxShapeModel, MVoxShapeNode, MVoxTransformNode,
     MVoxUnknownChunk, MVoxVoxel,
 };
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{HashMap, HashSet};
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject,
-    color::value_pool_color, material::BASE_COLOR,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxObject,
+    VoxState, color::value_pool_color, material::BASE_COLOR,
 };
+
+/// Colors a MagicaVoxel palette holds, so a material id past this has no
+/// color slot.
+const PALETTE_COLORS: u32 = 256;
+
+/// How far a frame's projected rotation or scale may drift from the node's
+/// before the two count as disagreeing.
+const TRANSFORM_TOLERANCE: f64 = 1e-6;
 
 /// Writes a [`MVoxVoxMain`] to a decoded MagicaVoxel [`MVoxFile`], the
 /// inverse of [`from_mvox_file`](crate::from_mvox_file). Each object emits one
-/// model and the rest comes from the ext, so a loaded file rebuilds exactly
-/// and a state [`to_mvox_vox_main`](crate::to_mvox_vox_main) gave its ext
-/// writes as a file synthesized from the scene. A model lists its voxels in
-/// ascending raster order, which need not match their original stored order.
+/// model. Each hierarchy node emits one scene node of the kind its ext entry
+/// says, with its name and child links from the node and the rest from the
+/// entry, so a loaded file rebuilds exactly and a state
+/// [`to_mvox_vox_main`](crate::to_mvox_vox_main) gave its ext writes as a
+/// file synthesized from the scene. A model lists its voxels in ascending
+/// raster order, which need not match their original stored order. `MATL`
+/// chunks write in material order.
 ///
-/// Errors if the ext's scene nodes are out of step with the hierarchy, or if
-/// a model exceeds a MagicaVoxel limit such as the per-axis voxel cap. A node
-/// retained after the load has no scene node and counts as out of step.
-pub fn to_mvox_file(state: &MVoxVoxMain) -> Result<MVoxFile> {
-    let ext = state.ext();
+/// Errors if:
+///
+/// 1. the state holds more than one palette, or a material id past 255
+/// 2. a hierarchy node has no ext entry, an entry keys nothing, or two
+///    entries share a scene-node id
+/// 3. a node's children do not fit its entry's kind: a transform places one
+///    child node and no objects, a group places no objects, a shape places
+///    objects and no child nodes, and a shape entry draws exactly the
+///    objects its node places
+/// 4. a transform's first frame no longer projects to its node's transform
+/// 5. a model exceeds a MagicaVoxel limit such as the per-axis voxel cap
+pub fn to_mvox_file(main: &MVoxVoxMain) -> Result<MVoxFile> {
+    let ext = main.ext();
+    let state = main.state();
 
-    // The loader adds exactly one palette and references it from every
-    // object on one layer. Each material's color resolves through its value
-    // pool.
-    let palette_id = state
-        .iter_palettes()
-        .next()
-        .map(|(palette_id, _)| palette_id);
+    let palette_id = check_palette(state)?;
     let file_palette = ext.palette_present.then(|| MVoxPalette {
         colors: colors_from_palette(state, palette_id),
     });
 
-    let materials = build_materials(ext);
+    let materials = build_materials(state, palette_id, ext)?;
     // Each object is the author's build volume, so the written model keeps
     // its dimensions and voxel positions directly.
     let models = state
@@ -115,21 +129,46 @@ pub fn to_mvox_file(state: &MVoxVoxMain) -> Result<MVoxFile> {
     })
 }
 
+/// The state's one palette, or `None` for a state with none. Errors on more
+/// than one, since a MagicaVoxel file holds exactly one, and on a material
+/// id past 255, which has no color slot.
+fn check_palette(state: &VoxState) -> Result<Option<U32Id<BVoxPalette>>> {
+    let count = state.palette_count();
+    if count > 1 {
+        return Err(Error::Invalid(format!(
+            "the state holds {count} palettes but a MagicaVoxel file holds one"
+        )));
+    }
+
+    let Some((palette_id, palette)) = state.iter_palettes().next() else {
+        return Ok(None);
+    };
+    if let Some(material_id) = palette
+        .iter_materials()
+        .find(|material_id| material_id.to_u32() >= PALETTE_COLORS)
+    {
+        return Err(Error::Invalid(format!(
+            "material {} has no slot in the {PALETTE_COLORS} colors a MagicaVoxel palette holds",
+            material_id.to_u32()
+        )));
+    }
+
+    Ok(Some(palette_id))
+}
+
 /// The 256 palette colors read back through `baseColor`: material `index`
 /// gives color index `index`. Transparent where the palette or its color
 /// property is absent.
-fn colors_from_palette<T>(
-    state: &VoxMain<T>,
+fn colors_from_palette(
+    state: &VoxState,
     palette_id: Option<U32Id<BVoxPalette>>,
 ) -> [MVoxColor; 256] {
     let mut colors = [MVoxColor::default(); 256];
     let Some(palette_id) = palette_id else {
         return colors;
     };
-    let Some(property_id) = state
-        .palette(palette_id)
-        .and_then(|palette| palette.property_id_by_name(BASE_COLOR))
-    else {
+    let palette = state.palette(palette_id).expect("the palette is listed");
+    let Some(property_id) = palette.property_id_by_name(BASE_COLOR) else {
         return colors;
     };
     for (index, color) in colors.iter_mut().enumerate() {
@@ -144,27 +183,50 @@ fn colors_from_palette<T>(
     colors
 }
 
-/// Rebuilds the materials from the ext, which holds each one's exact optional
-/// fields, so an absent field round-trips as absent. The palette's value pools
-/// carry only a default-substituted neutral copy.
-fn build_materials(ext: &MVoxExt) -> Vec<MVoxMaterial> {
-    ext.materials
-        .iter()
-        .map(|material| MVoxMaterial {
-            id: material.id,
-            material_type: material
-                .material_type
-                .as_deref()
-                .map(material_type_from_token),
-            weight: material.weight,
-            rough: material.rough,
-            spec: material.spec,
-            ior: material.ior,
-            att: material.att,
-            flux: material.flux,
-            extra: MVoxDict(material.extra.clone()),
+/// Rebuilds the `MATL` chunks in material order from the ext, which holds
+/// each one's exact optional fields, so an absent field round-trips as absent.
+/// The palette's value pools carry only a default-substituted neutral copy.
+/// Errors when an entry keys a material the palette does not hold.
+fn build_materials(
+    state: &VoxState,
+    palette_id: Option<U32Id<BVoxPalette>>,
+    ext: &MVoxExt,
+) -> Result<Vec<MVoxMaterial>> {
+    let palette = palette_id.and_then(|palette_id| state.palette(palette_id));
+    let listed: Vec<U32Id<BVoxMaterial>> = palette
+        .map(|palette| palette.iter_materials().collect())
+        .unwrap_or_default();
+    if let Some(material_id) = ext
+        .materials
+        .keys()
+        .find(|material_id| !listed.contains(material_id))
+    {
+        return Err(Error::Invalid(format!(
+            "mvox ext keeps material {} but the palette does not hold it",
+            material_id.to_u32()
+        )));
+    }
+
+    Ok(listed
+        .into_iter()
+        .filter_map(|material_id| {
+            let material = ext.materials.get(&material_id)?;
+            Some(MVoxMaterial {
+                id: material_id.to_u32() as i32,
+                material_type: material
+                    .material_type
+                    .as_deref()
+                    .map(material_type_from_token),
+                weight: material.weight,
+                rough: material.rough,
+                spec: material.spec,
+                ior: material.ior,
+                att: material.att,
+                flux: material.flux,
+                extra: MVoxDict(material.extra.clone()),
+            })
         })
-        .collect()
+        .collect())
 }
 
 /// The material shading model for a `_type` token. Known tokens map to their
@@ -226,11 +288,11 @@ fn model_byte(value: u32, label: &str) -> Result<u8> {
     })
 }
 
-/// Rebuilds the scene nodes from the ext, one per entry in stored order. The
-/// references come from the ext, which holds the exact lists, so a shape that
-/// draws one model on several frames or any other repeated reference
-/// round-trips. Errors if the ext is out of step with the hierarchy.
-fn build_scene_nodes<T>(state: &VoxMain<T>, ext: &MVoxExt) -> Result<Vec<MVoxSceneNode>> {
+/// Rebuilds the scene nodes, one per hierarchy node in listing order. The
+/// name and the child links come from the node, the kind and the rest from
+/// its entry. Errors if the ext is out of step with the hierarchy or a node's
+/// children do not fit its kind.
+fn build_scene_nodes(state: &VoxState, ext: &MVoxExt) -> Result<Vec<MVoxSceneNode>> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.scene_nodes.len() {
         return Err(Error::Invalid(format!(
@@ -239,66 +301,28 @@ fn build_scene_nodes<T>(state: &VoxMain<T>, ext: &MVoxExt) -> Result<Vec<MVoxSce
         )));
     }
 
-    let entries = ext
-        .scene_nodes
+    let mut entries: Vec<(U32Id<BVoxHierarchyNode>, &VoxHierarchyNode, &MVoxExtNode)> =
+        Vec::with_capacity(node_count);
+    let mut scene_ids = HashSet::with_capacity(node_count);
+    for (node_id, node) in state.iter_hierarchy_nodes() {
+        let Some(entry) = ext.scene_nodes.get(&node_id) else {
+            return Err(Error::Invalid(format!(
+                "hierarchy node {} has no mvox scene node",
+                node_id.to_u32()
+            )));
+        };
+        if !scene_ids.insert(entry.id) {
+            return Err(Error::Invalid(format!(
+                "mvox scene node id {} is declared more than once",
+                entry.id
+            )));
+        }
+        entries.push((node_id, node, entry));
+    }
+
+    let entry_by_node: HashMap<U32Id<BVoxHierarchyNode>, &MVoxExtNode> = entries
         .iter()
-        .enumerate()
-        .map(|(index, entry)| {
-            entry.as_ref().ok_or_else(|| {
-                Error::Invalid(format!(
-                    "hierarchy node {index} was retained after the load and has no mvox scene node"
-                ))
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    check_references(state, &entries)?;
-
-    Ok(entries
-        .iter()
-        .map(|provenance| MVoxSceneNode {
-            id: provenance.id,
-            attributes: MVoxNodeAttributes {
-                name: provenance.name.clone(),
-                hidden: provenance.hidden,
-                extra: MVoxDict(provenance.attr_extra.clone()),
-            },
-            body: match &provenance.body {
-                MVoxExtNodeBody::Transform {
-                    child,
-                    layer,
-                    frames,
-                } => MVoxSceneNodeBody::Transform(MVoxTransformNode {
-                    child: *child,
-                    layer: *layer,
-                    frames: frames.iter().map(frame_from_provenance).collect(),
-                }),
-                MVoxExtNodeBody::Group { children } => MVoxSceneNodeBody::Group(MVoxGroupNode {
-                    children: children.clone(),
-                }),
-                MVoxExtNodeBody::Shape { models } => MVoxSceneNodeBody::Shape(MVoxShapeNode {
-                    models: models
-                        .iter()
-                        .map(|model| MVoxShapeModel {
-                            model: model.model,
-                            frame_index: model.frame_index,
-                            extra: MVoxDict(model.extra.clone()),
-                        })
-                        .collect(),
-                }),
-            },
-        })
-        .collect())
-}
-
-/// Errors when an entry's distinct references differ from its node's children,
-/// paired through the listings: a transform's child and a group's children by
-/// scene-node id, a shape's models by object listing index.
-fn check_references<T>(state: &VoxMain<T>, entries: &[&MVoxExtNode]) -> Result<()> {
-    let id_by_node: HashMap<U32Id<BVoxHierarchyNode>, i32> = state
-        .iter_hierarchy_nodes()
-        .zip(entries)
-        .map(|((node_id, _), entry)| (node_id, entry.id))
+        .map(|&(node_id, _, entry)| (node_id, entry))
         .collect();
     let index_by_object: HashMap<U32Id<BVoxObject>, u32> = state
         .iter_objects()
@@ -306,48 +330,129 @@ fn check_references<T>(state: &VoxMain<T>, entries: &[&MVoxExtNode]) -> Result<(
         .map(|(index, (object_id, _))| (object_id, index as u32))
         .collect();
 
-    for (index, ((_, node), entry)) in state.iter_hierarchy_nodes().zip(entries).enumerate() {
-        let placed_ids: Vec<i32> = node
-            .child_node_ids
-            .iter()
-            .map(|child_id| {
-                *id_by_node
-                    .get(child_id)
-                    .expect("a child node is one of the state's")
+    entries
+        .iter()
+        .map(|&(node_id, node, entry)| {
+            let body = scene_node_body(node_id, node, entry, &entry_by_node, &index_by_object)?;
+            Ok(MVoxSceneNode {
+                id: entry.id,
+                attributes: MVoxNodeAttributes {
+                    name: (!node.name.is_empty()).then(|| node.name.clone()),
+                    hidden: entry.hidden,
+                    extra: MVoxDict(entry.attr_extra.clone()),
+                },
+                body,
             })
-            .collect();
-        let placed_indices: Vec<u32> = node
-            .child_object_ids
-            .iter()
-            .map(|object_id| {
-                *index_by_object
-                    .get(object_id)
-                    .expect("a placed object is one of the state's")
-            })
-            .collect();
-        let (referenced_ids, referenced_indices) = match &entry.body {
-            MVoxExtNodeBody::Transform { child, .. } => (vec![*child], Vec::new()),
-            MVoxExtNodeBody::Group { children } => (distinct(children.iter().copied()), Vec::new()),
-            MVoxExtNodeBody::Shape { models } => {
-                (Vec::new(), distinct(models.iter().map(|model| model.model)))
-            }
-        };
-        if referenced_ids != placed_ids || referenced_indices != placed_indices {
-            return Err(Error::Invalid(format!(
-                "mvox ext scene node {index} references nodes {referenced_ids:?} and models \
-                 {referenced_indices:?} but hierarchy node {index} places nodes {placed_ids:?} \
-                 and objects {placed_indices:?}"
-            )));
-        }
-    }
-
-    Ok(())
+        })
+        .collect()
 }
 
-/// `values` without repeats, in first-seen order.
-fn distinct<T: Copy + Eq + Hash>(values: impl Iterator<Item = T>) -> Vec<T> {
-    let mut seen = HashSet::new();
-    values.filter(|value| seen.insert(*value)).collect()
+/// The scene-node body of `node`, which is hierarchy node `node_id`, from its
+/// `entry`. Errors when the node's children do not fit the entry's kind.
+fn scene_node_body(
+    node_id: U32Id<BVoxHierarchyNode>,
+    node: &VoxHierarchyNode,
+    entry: &MVoxExtNode,
+    entry_by_node: &HashMap<U32Id<BVoxHierarchyNode>, &MVoxExtNode>,
+    index_by_object: &HashMap<U32Id<BVoxObject>, u32>,
+) -> Result<MVoxSceneNodeBody> {
+    let id = node_id.to_u32();
+    let child_entry = |child_id: &U32Id<BVoxHierarchyNode>| {
+        *entry_by_node
+            .get(child_id)
+            .expect("a child node is one of the state's")
+    };
+
+    match &entry.body {
+        MVoxExtNodeBody::Transform { layer, frames } => {
+            let [child_id] = node.child_node_ids.as_slice() else {
+                return Err(Error::Invalid(format!(
+                    "hierarchy node {id} is a transform but places {} child nodes, not one",
+                    node.child_node_ids.len()
+                )));
+            };
+            if !node.child_object_ids.is_empty() {
+                return Err(Error::Invalid(format!(
+                    "hierarchy node {id} is a transform but places objects"
+                )));
+            }
+            let child = child_entry(child_id);
+            let frames: Vec<MVoxFrame> = frames.iter().map(frame_from_provenance).collect();
+            check_frame(id, node, &frames)?;
+            Ok(MVoxSceneNodeBody::Transform(MVoxTransformNode {
+                child: child.id,
+                layer: *layer,
+                frames,
+            }))
+        }
+        MVoxExtNodeBody::Group => {
+            if !node.child_object_ids.is_empty() {
+                return Err(Error::Invalid(format!(
+                    "hierarchy node {id} is a group but places objects"
+                )));
+            }
+            let children = node
+                .child_node_ids
+                .iter()
+                .map(|child_id| child_entry(child_id).id)
+                .collect();
+            Ok(MVoxSceneNodeBody::Group(MVoxGroupNode { children }))
+        }
+        MVoxExtNodeBody::Shape { models } => {
+            if !node.child_node_ids.is_empty() {
+                return Err(Error::Invalid(format!(
+                    "hierarchy node {id} is a shape but places child nodes"
+                )));
+            }
+            let drawn: HashSet<U32Id<BVoxObject>> =
+                models.iter().map(|model| model.object).collect();
+            let placed: HashSet<U32Id<BVoxObject>> =
+                node.child_object_ids.iter().copied().collect();
+            if drawn != placed {
+                let drawn: Vec<u32> = models.iter().map(|model| model.object.to_u32()).collect();
+                let placed: Vec<u32> = node
+                    .child_object_ids
+                    .iter()
+                    .map(|object_id| object_id.to_u32())
+                    .collect();
+                return Err(Error::Invalid(format!(
+                    "mvox shape entry of hierarchy node {id} draws objects {drawn:?} but the node \
+                     places {placed:?}"
+                )));
+            }
+            Ok(MVoxSceneNodeBody::Shape(MVoxShapeNode {
+                models: models
+                    .iter()
+                    .map(|model| MVoxShapeModel {
+                        model: index_by_object[&model.object],
+                        frame_index: model.frame_index,
+                        extra: MVoxDict(model.extra.clone()),
+                    })
+                    .collect(),
+            }))
+        }
+    }
+}
+
+/// Errors when `frames` no longer projects to the transform of hierarchy node
+/// `id`, which is `node`: the node moved, turned, or scaled after the load
+/// and its frames did not follow.
+fn check_frame(id: u32, node: &VoxHierarchyNode, frames: &[MVoxFrame]) -> Result<()> {
+    let projected = transform_from_frames(frames);
+    let transform = &node.transform;
+    let agrees = projected.position == transform.position
+        && projected.rotation.dot(transform.rotation).abs() >= 1.0 - TRANSFORM_TOLERANCE
+        && projected
+            .scale
+            .abs_diff_eq(transform.scale, TRANSFORM_TOLERANCE);
+    if agrees {
+        return Ok(());
+    }
+
+    Err(Error::Invalid(format!(
+        "hierarchy node {id} has transform {transform:?} but its mvox frames project to \
+         {projected:?}; edit the ext frames along with the node"
+    )))
 }
 
 /// Rebuilds one transform-node frame from its ext provenance.
@@ -362,7 +467,9 @@ fn frame_from_provenance(frame: &MVoxExtFrame) -> MVoxFrame {
 
 #[cfg(test)]
 mod tests {
-    use crate::{MVoxExtNode, MVoxExtNodeBody, MVoxVoxMain, from_mvox_file, to_mvox_file};
+    use crate::{
+        MVoxExtNode, MVoxExtNodeBody, MVoxExtShapeModel, MVoxVoxMain, from_mvox_file, to_mvox_file,
+    };
     use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
@@ -370,9 +477,13 @@ mod tests {
         MVoxRenderObject, MVoxRotation, MVoxSceneNode, MVoxSceneNodeBody, MVoxShapeModel,
         MVoxShapeNode, MVoxTransformNode, MVoxUnknownChunk, MVoxVoxel,
     };
-    use std::{array, collections::BTreeSet};
+    use std::{
+        array,
+        collections::{BTreeMap, BTreeSet},
+    };
+    use ty_math::{TyTransformF64, TyVector3F64};
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxPalette,
         VoxValuePoolValueRef, material::IOR,
     };
 
@@ -531,18 +642,34 @@ mod tests {
         }
     }
 
+    fn node(index: u32) -> U32Id<BVoxHierarchyNode> {
+        U32Id::from_u32(index)
+    }
+
+    fn object(index: u32) -> U32Id<BVoxObject> {
+        U32Id::from_u32(index)
+    }
+
+    fn material(index: u32) -> U32Id<BVoxMaterial> {
+        U32Id::from_u32(index)
+    }
+
     #[test]
-    fn round_trips_through_vox_state() {
+    fn round_trips_through_vox_main() {
         let file = sample_file();
-        let state = from_mvox_file(&file).unwrap();
-        assert_files_eq(&to_mvox_file(&state).unwrap(), &file);
+
+        let main = from_mvox_file(&file).unwrap();
+
+        assert_files_eq(&to_mvox_file(&main).unwrap(), &file);
     }
 
     #[test]
     fn round_trips_the_empty_file() {
         let file = MVoxFile::default();
-        let state = from_mvox_file(&file).unwrap();
-        assert_eq!(to_mvox_file(&state).unwrap(), file);
+
+        let main = from_mvox_file(&file).unwrap();
+
+        assert_eq!(to_mvox_file(&main).unwrap(), file);
     }
 
     /// A file with no `RGBA` chunk keeps `palette: None`: the colors come from
@@ -562,9 +689,13 @@ mod tests {
             }],
             ..Default::default()
         };
-        let state = from_mvox_file(&file).unwrap();
-        let rebuilt = to_mvox_file(&state).unwrap();
+
+        let main = from_mvox_file(&file).unwrap();
+
+        let rebuilt = to_mvox_file(&main).unwrap();
+
         assert!(rebuilt.palette.is_none());
+
         assert_files_eq(&rebuilt, &file);
     }
 
@@ -581,15 +712,21 @@ mod tests {
             }],
             ..Default::default()
         };
-        let state = from_mvox_file(&file).unwrap();
-        assert_files_eq(&to_mvox_file(&state).unwrap(), &file);
+
+        let main = from_mvox_file(&file).unwrap();
+
+        assert_files_eq(&to_mvox_file(&main).unwrap(), &file);
 
         // The infinity reaches the value pool rather than defaulting: the wire
         // spells it and voxcore holds it.
-        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (_, palette) = main.iter_palettes().next().unwrap();
+
         let property_id = palette.property_id_by_name(IOR).unwrap();
+
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = state.value_pool(value_pool_id).unwrap();
+
+        let value_pool = main.value_pool(value_pool_id).unwrap();
+
         assert!(
             value_pool
                 .iter_values()
@@ -635,8 +772,10 @@ mod tests {
             }],
             ..Default::default()
         };
-        let state = from_mvox_file(&file).unwrap();
-        assert_files_eq(&to_mvox_file(&state).unwrap(), &file);
+
+        let main = from_mvox_file(&file).unwrap();
+
+        assert_files_eq(&to_mvox_file(&main).unwrap(), &file);
     }
 
     /// One 1x1x1 model of `color_index`.
@@ -710,107 +849,144 @@ mod tests {
 
     /// Replaces the children of hierarchy node `index`.
     fn set_children(
-        state: &mut MVoxVoxMain,
+        main: &mut MVoxVoxMain,
         index: u32,
         child_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
         child_object_ids: Vec<U32Id<BVoxObject>>,
     ) {
-        let node_id = U32Id::<BVoxHierarchyNode>::from_u32(index);
-        let node = VoxHierarchyNode {
+        let replacement = VoxHierarchyNode {
             child_node_ids,
             child_object_ids,
-            ..state.hierarchy_node(node_id).unwrap().clone()
+            ..main.hierarchy_node(node(index)).unwrap().clone()
         };
-        state.set_hierarchy_node(node_id, node).unwrap();
+
+        main.set_hierarchy_node(node(index), replacement).unwrap();
     }
 
     /// Dropping the middle placement, its two nodes, and its model, then
-    /// compacting, leaves the survivors' provenance aligned: the group lists
-    /// the surviving transforms, the last shape draws its model at the new
-    /// index, and the rebuilt file reloads to the loaded ext minus the
-    /// released entries.
+    /// compacting, rekeys the survivors' provenance: the group lists the
+    /// surviving transforms, the last shape draws its object under its new
+    /// id, and the rebuilt file reloads to the loaded ext minus the released
+    /// entries.
     #[test]
-    fn released_entities_leave_the_survivors_provenance_aligned() {
+    fn released_entities_leave_the_survivors_provenance_rekeyed() {
         let file = placed_models_file();
-        let mut state = from_mvox_file(&file).unwrap();
-        let original = state.ext().clone();
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        let original = main.ext().clone();
 
         // The group, node 1, lists transforms 2, 4, and 6. Transform 4 places
         // shape 5, which draws model 1.
-        let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
-        set_children(&mut state, 1, vec![node(2), node(6)], Vec::new());
-        set_children(&mut state, 4, Vec::new(), Vec::new());
-        set_children(&mut state, 5, Vec::new(), Vec::new());
-        state.release_hierarchy_node(node(4)).unwrap();
-        state.release_hierarchy_node(node(5)).unwrap();
-        state
-            .release_object(U32Id::<BVoxObject>::from_u32(1))
-            .unwrap();
-        state.gc();
+        set_children(&mut main, 1, vec![node(2), node(6)], Vec::new());
+
+        set_children(&mut main, 4, Vec::new(), Vec::new());
+
+        set_children(&mut main, 5, Vec::new(), Vec::new());
+
+        main.release_hierarchy_node(node(4)).unwrap();
+
+        main.release_hierarchy_node(node(5)).unwrap();
+
+        main.release_object(object(1)).unwrap();
+
+        main.gc().unwrap();
 
         let mut expected = original;
-        expected.scene_nodes.drain(4..6);
-        let Some(MVoxExtNode {
-            body: MVoxExtNodeBody::Group { children },
-            ..
-        }) = &mut expected.scene_nodes[1]
-        else {
-            panic!("node 1 is the group");
-        };
-        *children = vec![2, 6];
-        let Some(MVoxExtNode {
-            body: MVoxExtNodeBody::Shape { models },
-            ..
-        }) = &mut expected.scene_nodes[5]
-        else {
+
+        expected.scene_nodes.remove(&node(4));
+
+        expected.scene_nodes.remove(&node(5));
+
+        let mut last = expected.scene_nodes.remove(&node(7)).unwrap();
+
+        let MVoxExtNodeBody::Shape { models } = &mut last.body else {
             panic!("node 7 is the last shape");
         };
-        models[0].model = 1;
-        assert_eq!(state.ext(), &expected.clone());
 
-        let rebuilt = to_mvox_file(&state).unwrap();
+        models[0].object = object(1);
+
+        expected.scene_nodes.insert(node(5), last);
+
+        let transform = expected.scene_nodes.remove(&node(6)).unwrap();
+
+        expected.scene_nodes.insert(node(4), transform);
+
+        assert_eq!(main.ext(), &expected);
+
+        let rebuilt = to_mvox_file(&main).unwrap();
+
         let mut want = file;
+
         want.models.remove(1);
+
         want.scene_nodes.drain(4..6);
+
         want.scene_nodes[1].body = MVoxSceneNodeBody::Group(MVoxGroupNode {
             children: vec![2, 6],
         });
+
         want.scene_nodes[5] = shape_node(7, 1);
+
         assert_files_eq(&rebuilt, &want);
 
         let reloaded = from_mvox_file(&rebuilt).unwrap();
+
         assert_eq!(reloaded.ext(), &expected);
     }
 
-    /// A node retained after the load has no scene node, so the write errors.
-    /// Releasing it restores the alignment. The file then writes again.
+    /// A node retained after the load takes a synthesized entry on the spot,
+    /// under a fresh scene-node id, so the file writes with it.
     #[test]
-    fn a_node_retained_after_the_load_errors_until_released() {
+    fn a_node_retained_after_the_load_writes_with_a_synthesized_entry() {
         let file = placed_models_file();
-        let mut state = from_mvox_file(&file).unwrap();
-        let node_id = state
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 name: "added".to_owned(),
                 ..Default::default()
             })
             .unwrap();
-        assert_eq!(state.ext().scene_nodes[8], None);
-        assert!(to_mvox_file(&state).is_err());
 
-        state.release_hierarchy_node(node_id).unwrap();
-        assert_files_eq(&to_mvox_file(&state).unwrap(), &file);
+        assert_eq!(
+            main.ext().scene_nodes[&node_id],
+            MVoxExtNode {
+                id: 8,
+                hidden: None,
+                attr_extra: Vec::new(),
+                body: MVoxExtNodeBody::Group,
+            }
+        );
+
+        let rebuilt = to_mvox_file(&main).unwrap();
+
+        assert_eq!(
+            rebuilt.scene_nodes[8],
+            MVoxSceneNode {
+                id: 8,
+                attributes: MVoxNodeAttributes {
+                    name: Some("added".to_owned()),
+                    ..Default::default()
+                },
+                body: MVoxSceneNodeBody::Group(MVoxGroupNode {
+                    children: Vec::new()
+                }),
+            }
+        );
     }
 
     /// Moving the last model to the front renumbers every shape's model
     /// index, so each shape still draws the model it did.
     #[test]
     fn a_moved_object_keeps_each_shapes_model() {
-        let mut state = from_mvox_file(&placed_models_file()).unwrap();
-        state
-            .move_object(U32Id::<BVoxObject>::from_u32(2), 0)
-            .unwrap();
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
 
-        let rebuilt = to_mvox_file(&state).unwrap();
+        main.move_object(object(2), 0).unwrap();
+
+        let rebuilt = to_mvox_file(&main).unwrap();
+
         let models: Vec<u32> = rebuilt
             .scene_nodes
             .iter()
@@ -819,16 +995,16 @@ mod tests {
                 _ => None,
             })
             .collect();
+
         assert_eq!(models, [1, 2, 0]);
+
         assert_eq!(rebuilt.models[0].voxels[0].color_index, 3);
     }
 
-    /// Releasing a material shifts the recorded ids above it down with the
-    /// palette's compaction. The rebuilt file records each survivor under the
-    /// id its voxels sample.
-    #[test]
-    fn a_released_material_shifts_the_recorded_ids() {
+    /// A file with materials `1`, `2`, and `5`.
+    fn materials_file() -> MVoxFile {
         let mut file = placed_models_file();
+
         file.materials = vec![
             MVoxMaterial {
                 id: 1,
@@ -846,52 +1022,210 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let mut state = from_mvox_file(&file).unwrap();
+
+        file
+    }
+
+    /// Releasing a material drops its entry, and `gc` rekeys the survivors
+    /// with the palette's compaction. The rebuilt file records each survivor
+    /// under the id its voxels sample.
+    #[test]
+    fn a_released_material_drops_its_entry_and_gc_rekeys_the_rest() {
+        let mut main = from_mvox_file(&materials_file()).unwrap();
 
         // No voxel samples material 4, so it releases without a repaint.
-        state
-            .release_material(
-                U32Id::<BVoxPalette>::from_u32(0),
-                U32Id::<BVoxMaterial>::from_u32(4),
-            )
+        main.release_material(U32Id::<BVoxPalette>::from_u32(0), material(4))
             .unwrap();
-        state.gc();
 
-        let ids: Vec<i32> = state
-            .ext()
-            .materials
-            .iter()
-            .map(|material| material.id)
-            .collect();
+        main.gc().unwrap();
+
+        let mut ids: Vec<u32> = main.ext().materials.keys().map(|id| id.to_u32()).collect();
+
+        ids.sort_unstable();
+
         assert_eq!(ids, [1, 2, 4]);
 
-        let rebuilt = to_mvox_file(&state).unwrap();
+        let rebuilt = to_mvox_file(&main).unwrap();
+
         assert_eq!(rebuilt.materials[2].id, 4);
+
         assert_eq!(rebuilt.materials[2].ior, Some(1.5));
     }
 
+    /// An index-map byte naming a released material keeps its index until
+    /// `gc`, then takes the index the compaction freed, so the map stays a
+    /// permutation and the bytes above the release shift down with their
+    /// materials.
+    #[test]
+    fn the_index_map_follows_a_released_material_through_gc() {
+        let mut file = materials_file();
+
+        file.index_map = Some(array::from_fn(|i| (i as u8).wrapping_add(1)));
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        main.release_material(U32Id::<BVoxPalette>::from_u32(0), material(4))
+            .unwrap();
+
+        assert_eq!(to_mvox_file(&main).unwrap().index_map, file.index_map);
+
+        main.gc().unwrap();
+
+        let rebuilt = to_mvox_file(&main).unwrap();
+
+        let map = rebuilt.index_map.unwrap();
+
+        // Slot 3 named 4, the released material.
+        assert_eq!(&map[..5], &[1, 2, 3, 255, 4]);
+
+        assert_eq!(&map[253..], &[253, 254, 0]);
+
+        let mut sorted = map.to_vec();
+
+        sorted.sort_unstable();
+
+        assert_eq!(sorted, (0..=255).collect::<Vec<u8>>());
+    }
+
     /// An ext out of step with the hierarchy is malformed, so the writer
-    /// errors instead of pairing entries by a shifted index or placing what
-    /// the state does not.
+    /// errors instead of drawing what the state does not place.
     #[test]
     fn an_ext_out_of_step_with_its_listings_errors() {
         let file = placed_models_file();
-        let mut state = from_mvox_file(&file).unwrap();
-        let ext = state.ext_mut();
-        ext.scene_nodes.pop();
-        assert!(to_mvox_file(&state).is_err());
 
-        let mut state = from_mvox_file(&file).unwrap();
-        let ext = state.ext_mut();
-        let Some(MVoxExtNode {
-            body: MVoxExtNodeBody::Group { children },
-            ..
-        }) = &mut ext.scene_nodes[1]
+        let mut main = from_mvox_file(&file).unwrap();
+
+        main.ext_mut().scene_nodes.remove(&node(7));
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        let MVoxExtNodeBody::Shape { models } =
+            &mut main.ext_mut().scene_nodes.get_mut(&node(3)).unwrap().body
         else {
-            panic!("node 1 is the group");
+            panic!("node 3 is a shape");
         };
-        children.push(3);
-        assert!(to_mvox_file(&state).is_err());
+
+        models.push(MVoxExtShapeModel {
+            object: object(1),
+            frame_index: Some(1),
+            extra: Vec::new(),
+        });
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        main.ext_mut().scene_nodes.get_mut(&node(7)).unwrap().id = 0;
+
+        assert!(to_mvox_file(&main).is_err());
+    }
+
+    /// A node whose children no longer fit its entry's kind errors: a
+    /// transform over two nodes, a group placing an object, a shape placing
+    /// a node.
+    #[test]
+    fn children_that_do_not_fit_the_kind_error() {
+        let file = placed_models_file();
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        set_children(&mut main, 0, vec![node(1), node(2)], Vec::new());
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        set_children(
+            &mut main,
+            1,
+            vec![node(2), node(4), node(6)],
+            vec![object(0)],
+        );
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let mut main = from_mvox_file(&file).unwrap();
+
+        set_children(&mut main, 3, vec![node(7)], vec![object(0)]);
+
+        assert!(to_mvox_file(&main).is_err());
+    }
+
+    /// A transform node moved after the load errors until its frames follow.
+    #[test]
+    fn a_moved_transform_errors_until_its_frames_follow() {
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
+
+        let moved = VoxHierarchyNode {
+            transform: TyTransformF64::from_translation(TyVector3F64::new(2.0, 0.0, 0.0)),
+            ..main.hierarchy_node(node(2)).unwrap().clone()
+        };
+
+        main.set_hierarchy_node(node(2), moved).unwrap();
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let MVoxExtNodeBody::Transform { frames, .. } =
+            &mut main.ext_mut().scene_nodes.get_mut(&node(2)).unwrap().body
+        else {
+            panic!("node 2 is a transform");
+        };
+
+        frames[0].translation = [2, 0, 0];
+
+        let rebuilt = to_mvox_file(&main).unwrap();
+
+        let MVoxSceneNodeBody::Transform(transform) = &rebuilt.scene_nodes[2].body else {
+            panic!("node 2 is a transform");
+        };
+
+        assert_eq!(transform.frames[0].translation, [2, 0, 0]);
+    }
+
+    /// A second palette has no place in a MagicaVoxel file, and neither does
+    /// a material past the 256 color slots.
+    #[test]
+    fn a_second_palette_or_a_material_past_the_slots_errors() {
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
+
+        main.retain_palette(VoxPalette::default()).unwrap();
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
+
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+
+        let value_id = main
+            .palette(palette_id)
+            .unwrap()
+            .value_id(material(0), U32Id::from_u32(0))
+            .unwrap();
+
+        main.retain_material(palette_id, vec![value_id]).unwrap();
+
+        assert!(to_mvox_file(&main).is_err());
+    }
+
+    /// An ext material entry for a material the palette does not hold is out
+    /// of step. No entries at all is fine: no `MATL` chunks write.
+    #[test]
+    fn a_material_entry_the_palette_lacks_errors() {
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
+
+        main.ext_mut()
+            .materials
+            .insert(material(300), Default::default());
+
+        assert!(to_mvox_file(&main).is_err());
+
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
+
+        main.ext_mut().materials = BTreeMap::new();
+
+        assert!(to_mvox_file(&main).is_ok());
     }
 
     #[cfg(feature = "codec")]
@@ -902,9 +1236,13 @@ mod tests {
         #[test]
         fn round_trips_through_mvox_bytes() {
             let file = sample_file();
-            let state = from_mvox_file(&file).unwrap();
-            let bytes = to_mvox_bytes(&state).unwrap();
+
+            let main = from_mvox_file(&file).unwrap();
+
+            let bytes = to_mvox_bytes(&main).unwrap();
+
             let reloaded = from_mvox_bytes(&bytes).unwrap();
+
             assert_files_eq(&to_mvox_file(&reloaded).unwrap(), &file);
         }
     }

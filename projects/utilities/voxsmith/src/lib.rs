@@ -4,11 +4,11 @@
 //!
 //! Every operation runs over voxcore's [`VoxMain`](voxcore::VoxMain) and never
 //! sees a file format or the filesystem. voxconv decodes a document into a
-//! state and encodes one back. `operations` holds a module per vxl command,
+//! main and encodes one back. `operations` holds a module per vxl command,
 //! each behind a feature of the same name. `info`, `validate`,
 //! `hierarchy_show`, `palette_list`, and `palette_show` render reports through
-//! treegrid. `mesh` writes one object to glTF. `to` prunes a state to a chosen
-//! set of objects for conversion. `voxelize` turns a glTF mesh into a state.
+//! treegrid. `mesh` writes one object to glTF. `to` prunes a main to a chosen
+//! set of objects for conversion. `voxelize` turns a glTF mesh into a main.
 //! `utilities` holds what the operations share: palette reduction, dithering,
 //! color spaces, the object, index, and vector selectors, the glTF property
 //! ranges, and a palette's property names.

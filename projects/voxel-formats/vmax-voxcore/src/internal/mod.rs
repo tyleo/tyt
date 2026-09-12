@@ -1,8 +1,12 @@
 mod ext_placements;
 mod material_coefficient_scale;
+mod object_placement;
+mod place_object;
 mod placement;
+mod synth_object_uuid;
 mod synth_uuid;
 mod synthesized_node;
+mod synthesized_object_state;
 mod tighten;
 mod vmax_attributes;
 mod vmax_defaults;
@@ -10,9 +14,13 @@ mod vmax_ext_from_file;
 
 pub(crate) use ext_placements::*;
 pub(crate) use material_coefficient_scale::*;
+pub(crate) use object_placement::*;
+pub(crate) use place_object::*;
 pub(crate) use placement::*;
+pub(crate) use synth_object_uuid::*;
 pub(crate) use synth_uuid::*;
 pub(crate) use synthesized_node::*;
+pub(crate) use synthesized_object_state::*;
 pub(crate) use tighten::*;
 pub(crate) use vmax_attributes::*;
 pub(crate) use vmax_defaults::*;

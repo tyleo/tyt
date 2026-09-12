@@ -4,8 +4,8 @@ use mvox_codec::to_mvox_file_bytes;
 /// Writes a [`MVoxVoxMain`] to the bytes of a MagicaVoxel `.vox` file, the
 /// bytes form of [`to_mvox_file`] and the inverse of
 /// [`from_mvox_bytes`](crate::codec::from_mvox_bytes).
-pub fn to_mvox_bytes(state: &MVoxVoxMain) -> Result<Vec<u8>> {
-    let file = to_mvox_file(state)?;
+pub fn to_mvox_bytes(main: &MVoxVoxMain) -> Result<Vec<u8>> {
+    let file = to_mvox_file(main)?;
 
     Ok(to_mvox_file_bytes(&file))
 }
@@ -24,42 +24,42 @@ mod tests {
         color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
-    /// A state placing one red voxel at the origin.
-    fn red_voxel_state() -> VoxMain<()> {
-        let mut state = VoxMain::default();
+    /// A main placing one red voxel at the origin.
+    fn red_voxel_main() -> VoxMain<()> {
+        let mut main = VoxMain::default();
         let color = lin_srgba_f64_from_srgba_u8(TySrgbaU8::from([0xFF, 0, 0, 0xFF]));
         let value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![color.into()]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![color.into()]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::splat(1)).unwrap();
         object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
         let voxel_id = object.voxel_id(TyVector3U32::splat(0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        let node_id = state
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 child_object_ids: vec![object_id],
                 ..Default::default()
             })
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
-        state.validate().unwrap();
-        state
+        main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+        main.validate().unwrap();
+        main
     }
 
-    /// A state written to bytes reads back with the same geometry, so the
+    /// A main written to bytes reads back with the same geometry, so the
     /// bytes functions compose the file conversion and the codec the right
     /// way round.
     #[test]
     fn round_trips_through_vox_bytes() {
-        let bytes = to_mvox_bytes(&to_mvox_vox_main(red_voxel_state()).unwrap()).unwrap();
+        let bytes = to_mvox_bytes(&to_mvox_vox_main(red_voxel_main()).unwrap()).unwrap();
         assert!(bytes.starts_with(b"VOX "));
 
         let reloaded = from_mvox_bytes(&bytes).unwrap();
@@ -68,7 +68,7 @@ mod tests {
         assert_eq!(object.live_count(), 1);
     }
 
-    /// A default state writes through its ext and loads back.
+    /// A default main writes through its ext and loads back.
     #[test]
     fn round_trips_the_ext_through_bytes() {
         let bytes = to_mvox_bytes(&MVoxVoxMain::default()).unwrap();

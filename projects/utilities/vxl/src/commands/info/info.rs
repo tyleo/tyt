@@ -38,7 +38,7 @@ impl Info {
 
         // The boxed ext keeps any source's ext, so the report can say whether
         // the document carries entries.
-        let state = read_with_ext(&dependencies, from, &files)?;
+        let main = read_with_ext(&dependencies, from, &files)?;
 
         let format_version = match from {
             ReadFormat::Voxj => {
@@ -57,12 +57,12 @@ impl Info {
             name: &name,
             format: from.name(),
             format_version,
-            has_ext: !voxj_vox_ext_from_ext(state.ext().as_ref())?.is_empty(),
+            has_ext: !voxj_vox_ext_from_ext(main.ext().as_ref())?.is_empty(),
         };
 
-        let object_ids = self.selection.resolve(&state)?;
+        let object_ids = self.selection.resolve(&main)?;
 
-        let output = info(&state, &object_ids, &document, self.layout);
+        let output = info(&main, &object_ids, &document, self.layout);
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

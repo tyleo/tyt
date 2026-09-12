@@ -2,7 +2,7 @@ use crate::Result;
 use branded_id::{U32Id, UsizeId};
 use std::collections::HashMap;
 use voxcore::{
-    BVoxLayer, BVoxMaterial, BVoxValuePoolValue, BVoxVoxel, VoxEffectivePalette, VoxMain,
+    BVoxLayer, BVoxMaterial, BVoxValuePoolValue, BVoxVoxel, VoxEffectivePalette, VoxExt, VoxMain,
     VoxObject, VoxValuePool,
 };
 
@@ -78,12 +78,12 @@ impl<'a> UsedMaterials<'a> {
 
 /// Resolves the distinct flattened materials `object` uses, its layers merged
 /// per property name by the format's override rule, first seen in raster
-/// order. Errors when a layer references a palette `state` does not hold.
-pub(crate) fn resolve_used_materials<'a, T>(
-    state: &'a VoxMain<T>,
+/// order. Errors when a layer references a palette `main` does not hold.
+pub(crate) fn resolve_used_materials<'a, T: VoxExt>(
+    main: &'a VoxMain<T>,
     object: &'a VoxObject,
 ) -> Result<UsedMaterials<'a>> {
-    let effective = state.effective_palette(object)?;
+    let effective = main.effective_palette(object)?;
 
     let mut identity_layer_ids: Vec<U32Id<BVoxLayer>> = Vec::new();
     for index in 0..effective.property_count() {
@@ -147,14 +147,14 @@ mod tests {
     }
 
     /// Adds a `float` value pool holding `values` and returns its id.
-    fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
-        state.retain_value_pool(VoxValuePool::float(values).unwrap())
+    fn float_value_pool(main: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
+        main.retain_value_pool(VoxValuePool::float(values).unwrap())
     }
 
     /// Adds a palette binding each `(name, value id)` entry on `value_pool_id`
     /// and one material drawing the listed value ids, and returns its id.
     fn palette_over(
-        state: &mut VoxMain,
+        main: &mut VoxMain,
         value_pool_id: U32Id<BVoxValuePool>,
         entries: &[(&str, u32)],
     ) -> U32Id<BVoxPalette> {
@@ -167,7 +167,7 @@ mod tests {
         palette
             .retain_material(entries.iter().map(|&(_, index)| value_id(index)).collect())
             .unwrap();
-        state.retain_palette(palette).unwrap()
+        main.retain_palette(palette).unwrap()
     }
 
     /// A one-voxel object layering the given palettes in order, its voxel
@@ -187,14 +187,14 @@ mod tests {
     fn each_property_reads_through_its_winning_layer() {
         // The worked flatten example: layers binding {a, b}, {c}, {b, c}. The
         // winners are a from the first layer, b and c from the third.
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = float_value_pool(&mut state, vec![0.1, 0.2, 0.3, 0.4, 0.5]);
-        let first_id = palette_over(&mut state, value_pool_id, &[("a", 0), ("b", 1)]);
-        let second_id = palette_over(&mut state, value_pool_id, &[("c", 2)]);
-        let third_id = palette_over(&mut state, value_pool_id, &[("b", 3), ("c", 4)]);
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = float_value_pool(&mut main, vec![0.1, 0.2, 0.3, 0.4, 0.5]);
+        let first_id = palette_over(&mut main, value_pool_id, &[("a", 0), ("b", 1)]);
+        let second_id = palette_over(&mut main, value_pool_id, &[("c", 2)]);
+        let third_id = palette_over(&mut main, value_pool_id, &[("b", 3), ("c", 4)]);
         let object = object_over(&[first_id, second_id, third_id]);
 
-        let used = resolve_used_materials(&state, &object).unwrap();
+        let used = resolve_used_materials(&main, &object).unwrap();
         assert_eq!(used.len(), 1);
 
         let read = |key: &str| {
@@ -211,14 +211,14 @@ mod tests {
     fn properties_pull_from_their_own_palettes_and_value_pools() {
         // Two layers on different palettes over different value pools: each
         // name resolves to its own palette's value pool and value.
-        let mut state: VoxMain = VoxMain::default();
-        let first_value_pool_id = float_value_pool(&mut state, vec![0.25]);
-        let second_value_pool_id = float_value_pool(&mut state, vec![0.75]);
-        let first_id = palette_over(&mut state, first_value_pool_id, &[("a", 0)]);
-        let second_id = palette_over(&mut state, second_value_pool_id, &[("b", 0)]);
+        let mut main: VoxMain = VoxMain::default();
+        let first_value_pool_id = float_value_pool(&mut main, vec![0.25]);
+        let second_value_pool_id = float_value_pool(&mut main, vec![0.75]);
+        let first_id = palette_over(&mut main, first_value_pool_id, &[("a", 0)]);
+        let second_id = palette_over(&mut main, second_value_pool_id, &[("b", 0)]);
         let object = object_over(&[first_id, second_id]);
 
-        let used = resolve_used_materials(&state, &object).unwrap();
+        let used = resolve_used_materials(&main, &object).unwrap();
         assert_eq!(used.len(), 1);
 
         let (a_value_pool, a_value_id) = used.attribute(0, "a").unwrap();
@@ -238,14 +238,14 @@ mod tests {
         // The later layer's palette binds no properties, so it wins nothing
         // and its samples never split texels: two voxels differing only in it
         // share one texel, and the earlier layer keeps its name.
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = float_value_pool(&mut state, vec![0.5]);
-        let supplying_id = palette_over(&mut state, value_pool_id, &[("a", 0)]);
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = float_value_pool(&mut main, vec![0.5]);
+        let supplying_id = palette_over(&mut main, value_pool_id, &[("a", 0)]);
 
         let mut plain = VoxPalette::default();
         plain.retain_material(vec![]).unwrap();
         plain.retain_material(vec![]).unwrap();
-        let plain_id = state.retain_palette(plain).unwrap();
+        let plain_id = main.retain_palette(plain).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         object.retain_layer(supplying_id, U32Id::from_u32(0));
@@ -260,7 +260,7 @@ mod tests {
                 .unwrap();
         }
 
-        let used = resolve_used_materials(&state, &object).unwrap();
+        let used = resolve_used_materials(&main, &object).unwrap();
         assert_eq!(used.len(), 1);
         assert_eq!(
             used.attribute(0, "a")
@@ -271,14 +271,14 @@ mod tests {
 
     #[test]
     fn a_layerless_object_shares_one_empty_key_texel() {
-        let state: VoxMain = VoxMain::default();
+        let main: VoxMain = VoxMain::default();
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         for x in 0..2 {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[]).unwrap();
         }
 
-        let used = resolve_used_materials(&state, &object).unwrap();
+        let used = resolve_used_materials(&main, &object).unwrap();
         assert_eq!(used.len(), 1);
         for x in 0..2 {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
@@ -291,8 +291,8 @@ mod tests {
     fn distinct_winning_layer_tuples_split_texels() {
         // Two layers each binding a name over a two-material palette: voxels
         // share a texel exactly when they sample the same material in both.
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = float_value_pool(&mut state, vec![0.0, 1.0]);
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = float_value_pool(&mut main, vec![0.0, 1.0]);
 
         let mut palette = VoxPalette::default();
         palette
@@ -300,7 +300,7 @@ mod tests {
             .unwrap();
         palette.retain_material(vec![value_id(0)]).unwrap();
         palette.retain_material(vec![value_id(1)]).unwrap();
-        let first_id = state.retain_palette(palette).unwrap();
+        let first_id = main.retain_palette(palette).unwrap();
 
         let mut second = VoxPalette::default();
         second
@@ -308,7 +308,7 @@ mod tests {
             .unwrap();
         second.retain_material(vec![value_id(0)]).unwrap();
         second.retain_material(vec![value_id(1)]).unwrap();
-        let second_id = state.retain_palette(second).unwrap();
+        let second_id = main.retain_palette(second).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
         object.retain_layer(first_id, U32Id::from_u32(0));
@@ -324,7 +324,7 @@ mod tests {
                 .unwrap();
         }
 
-        let used = resolve_used_materials(&state, &object).unwrap();
+        let used = resolve_used_materials(&main, &object).unwrap();
         assert_eq!(used.len(), 2);
         let index_at = |x| {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
@@ -346,10 +346,10 @@ mod tests {
 
     #[test]
     fn a_layer_over_an_unknown_palette_errors() {
-        let state: VoxMain = VoxMain::default();
+        let main: VoxMain = VoxMain::default();
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(U32Id::from_u32(9), U32Id::from_u32(0));
 
-        assert!(resolve_used_materials(&state, &object).is_err());
+        assert!(resolve_used_materials(&main, &object).is_err());
     }
 }

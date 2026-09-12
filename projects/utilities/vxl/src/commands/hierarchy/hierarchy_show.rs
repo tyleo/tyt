@@ -141,7 +141,7 @@ impl HierarchyShow {
 
         let from = self.input.resolve_format()?;
 
-        let state: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
 
         let options = HierarchyShowOptions {
             pattern,
@@ -150,7 +150,7 @@ impl HierarchyShow {
             views,
         };
 
-        let output = hierarchy_show(&state, &options)?;
+        let output = hierarchy_show(&main, &options)?;
 
         Ok(dependencies.write_stdout(output.as_bytes())?)
     }

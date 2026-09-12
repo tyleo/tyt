@@ -1,14 +1,13 @@
-use crate::{Error, MVoxVoxMain, Result, material_type_token, mvox_ext_from_file};
+use crate::{
+    Error, MVoxVoxMain, Result, material_type_token, mvox_ext_from_file, transform_from_frames,
+};
 use branded_id::U32Id;
-use mvox::{MVoxFile, MVoxFrame, MVoxMaterial, MVoxModel, MVoxSceneNodeBody};
+use mvox::{MVoxFile, MVoxMaterial, MVoxModel, MVoxSceneNodeBody};
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
-use ty_math::{
-    TyMatrix4x4F64, TyQuaternionExt, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64,
-    TyVector3I32, TyVector3U32,
-};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
     VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
@@ -38,24 +37,25 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// 3. a scene-node reference dangles
 /// 4. a checked insertion rejects a cross-reference
 pub fn from_mvox_file(file: &MVoxFile) -> Result<MVoxVoxMain> {
-    let mut state = VoxMain::default();
+    let ext = mvox_ext_from_file(file)?;
+    let mut main = VoxMain::default();
 
-    let palette = build_palette(&mut state, file)?;
-    let palette_id = state.retain_palette(palette)?;
+    let palette = build_palette(&mut main, file)?;
+    let palette_id = main.retain_palette(palette)?;
 
     for model in &file.models {
         // The model grid becomes the object's build volume directly; it may
         // carry empty margin around the live voxels.
-        state.retain_object(build_object(model, palette_id)?)?;
+        main.retain_object(build_object(model, palette_id)?)?;
     }
 
     // The scene graph lands as one batch: a transform node lists its child by
     // listing position, which may lie ahead of it.
     let (nodes, roots) = build_hierarchy(file)?;
-    state.retain_hierarchy_nodes(nodes)?;
-    state.set_root_hierarchy_node_ids(roots)?;
+    main.retain_hierarchy_nodes(nodes)?;
+    main.set_root_hierarchy_node_ids(roots)?;
 
-    Ok(state.put_ext(mvox_ext_from_file(file)))
+    Ok(main.put_ext(ext))
 }
 
 /// Builds the shared palette: one material per color index `0..=255`, so a
@@ -65,7 +65,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<MVoxVoxMain> {
 /// holds no null and a float value pool rejects NaN; the infinities carry
 /// across, and the exact optionals ride in the ext. Errors on a material id
 /// outside `0..=255` or a duplicate id.
-fn build_palette(state: &mut VoxMain<()>, file: &MVoxFile) -> Result<VoxPalette> {
+fn build_palette(main: &mut VoxMain<()>, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
     let has_materials = !file.materials.is_empty();
 
@@ -91,7 +91,7 @@ fn build_palette(state: &mut VoxMain<()>, file: &MVoxFile) -> Result<VoxPalette>
 
     let color_bytes: Vec<[u8; 4]> = colors.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
     let (distinct_colors, color_indices) = intern(&color_bytes, |&color| color);
-    let color_value_pool_id = state.retain_value_pool(
+    let color_value_pool_id = main.retain_value_pool(
         VoxValuePool::vec_4_float(
             distinct_colors
                 .iter()
@@ -132,7 +132,7 @@ fn build_palette(state: &mut VoxMain<()>, file: &MVoxFile) -> Result<VoxPalette>
             })
             .collect();
         let (distinct_types, type_indices) = intern(&types, |token| token.clone());
-        let type_value_pool_id = state.retain_value_pool(VoxValuePool::string(distinct_types));
+        let type_value_pool_id = main.retain_value_pool(VoxValuePool::string(distinct_types));
         palette
             .retain_property("type".to_owned(), type_value_pool_id, U32Id::from_u32(0))
             .expect("the property names are distinct");
@@ -153,7 +153,7 @@ fn build_palette(state: &mut VoxMain<()>, file: &MVoxFile) -> Result<VoxPalette>
                 })
                 .collect();
             let (distinct, indices) = intern(&values, |value| value.to_bits());
-            let value_pool_id = state.retain_value_pool(
+            let value_pool_id = main.retain_value_pool(
                 VoxValuePool::float(distinct)
                     .expect("the scalars are finite and every palette cell yields one"),
             );
@@ -317,62 +317,6 @@ fn resolve(position_of_id: &HashMap<i32, usize>, id: i32) -> Result<usize> {
             "scene node references node {id}, which does not exist"
         ))
     })
-}
-
-/// The transform projecting a transform node's first frame, or the identity
-/// when it has none. The exact frames ride in the ext, so this is only a usable
-/// approximation.
-fn transform_from_frames(frames: &[MVoxFrame]) -> TyTransformF64 {
-    match frames.first() {
-        Some(frame) => transform_from_frame(frame),
-        None => TyTransformF64::default(),
-    }
-}
-
-/// Projects one keyframe to a [`TyTransformF64`]. The rotation is the frame's
-/// signed-permutation matrix; an improper one (a mirror) is split into a proper
-/// rotation and a negative x scale so voxcore's unit-quaternion invariant
-/// holds.
-fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
-    let position = TyVector3I32::from_array(frame.translation).as_dvec3();
-
-    let signed = frame.rotation.to_matrix();
-    let mut matrix = [[0.0f64; 3]; 3];
-    for row in 0..3 {
-        for column in 0..3 {
-            matrix[row][column] = signed[row][column] as f64;
-        }
-    }
-
-    let mut scale = TyVector3F64::new(1.0, 1.0, 1.0);
-    if determinant(&matrix) < 0.0 {
-        // M = R * diag(-1, 1, 1), so negating column 0 leaves a proper
-        // rotation.
-        for row in &mut matrix {
-            row[0] = -row[0];
-        }
-        scale.x = -1.0;
-    }
-
-    // Read the proper rotation into a column-major matrix and decode it. The
-    // frame is a signed permutation, so after the mirror split it is always a
-    // proper rotation.
-    let rotation = TyMatrix4x4F64::from_cols_array_2d(&[
-        [matrix[0][0], matrix[1][0], matrix[2][0], 0.0],
-        [matrix[0][1], matrix[1][1], matrix[2][1], 0.0],
-        [matrix[0][2], matrix[1][2], matrix[2][2], 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]);
-    let rotation = TyQuaternionF64::from_rotation_matrix(rotation)
-        .expect("the frame is a proper rotation after the mirror split");
-
-    TyTransformF64::new(position, rotation, scale)
-}
-
-/// The determinant of a 3x3 matrix, the scalar triple product of its columns.
-fn determinant(matrix: &[[f64; 3]; 3]) -> f64 {
-    let column = |c: usize| TyVector3F64::new(matrix[0][c], matrix[1][c], matrix[2][c]);
-    column(0).dot(column(1).cross(column(2)))
 }
 
 #[cfg(test)]

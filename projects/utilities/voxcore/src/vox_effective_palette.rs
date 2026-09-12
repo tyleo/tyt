@@ -8,9 +8,9 @@ use std::collections::HashMap;
 /// A per-object view resolving the layer override rule once: each property
 /// reads through the last layer whose palette supplies its name.
 ///
-/// Build with
-/// [`VoxMain::effective_palette`](crate::VoxMain::effective_palette). Resolve a
-/// name to an id once with [`property_id_by_name`](Self::property_id_by_name),
+/// Build with [`effective_palette`](crate::VoxState::effective_palette).
+/// Resolve a name to an id once with
+/// [`property_id_by_name`](Self::property_id_by_name),
 /// then read values by id inside voxel loops.
 #[derive(Debug)]
 pub struct VoxEffectivePalette<'a> {

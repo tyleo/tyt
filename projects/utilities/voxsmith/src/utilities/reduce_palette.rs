@@ -17,10 +17,10 @@ use voxcore::{
     color::value_pool_color, material::BASE_COLOR,
 };
 
-/// Reduces `palette_id` in `state` to at most `reduction.max_materials`
+/// Reduces `palette_id` in `main` to at most `reduction.max_materials`
 /// materials, then, unless `reduction.keep_unused_values`, prunes the
 /// value-pool values the reduction leaves unreferenced. The prune runs
-/// state-wide through [`VoxMain::prune_value_pools`]. Either way the state
+/// main-wide through [`VoxMain::prune_value_pools`]. Either way the main
 /// stays valid, with the surviving value ids left for [`VoxMain::gc`] to
 /// compact. Every object referencing the palette is remapped.
 ///
@@ -30,12 +30,12 @@ use voxcore::{
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit.
 pub fn reduce_palette<T: VoxExt>(
-    state: &mut VoxMain<T>,
+    main: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     reduction: PaletteReduction,
 ) -> Result<Option<(usize, usize)>> {
     let outcome = reduce_materials(
-        state,
+        main,
         palette_id,
         reduction.max_materials,
         reduction.method,
@@ -43,21 +43,21 @@ pub fn reduce_palette<T: VoxExt>(
         reduction.dither,
     )?;
     if !reduction.keep_unused_values {
-        state.prune_value_pools();
+        main.prune_value_pools();
     }
     Ok(outcome)
 }
 
-/// Reduces `palette` in `state` to at most `max_materials` materials:
+/// Reduces `palette` in `main` to at most `max_materials` materials:
 /// materials cluster by `baseColor` and each cluster collapses onto one
 /// real representative, so a merged voxel takes the representative's whole
 /// material. Colorless materials are left untouched.
 ///
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
-/// palette already fit (leaving `method` / `space` / `dither` inert). The state
+/// palette already fit (leaving `method` / `space` / `dither` inert). The main
 /// is left compacted and valid.
 fn reduce_materials<T: VoxExt>(
-    state: &mut VoxMain<T>,
+    main: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     max_materials: usize,
     method: ReductionMethod,
@@ -65,9 +65,9 @@ fn reduce_materials<T: VoxExt>(
     dither: Dither,
 ) -> Result<Option<(usize, usize)>> {
     // A missing palette is a caller bug.
-    let palette_ref = state
+    let palette_ref = main
         .palette(palette_id)
-        .expect("reduce_palette was given a palette not in the state");
+        .expect("reduce_palette was given a palette not in the main");
 
     let total = palette_ref.material_count();
     if total <= max_materials {
@@ -81,7 +81,7 @@ fn reduce_materials<T: VoxExt>(
         Some(property_id) => palette_ref
             .iter_materials()
             .filter_map(|material_id| {
-                let color = material_color(state, palette_id, material_id, property_id)?;
+                let color = material_color(main, palette_id, material_id, property_id)?;
                 Some((material_id.to_u32(), color))
             })
             .collect(),
@@ -96,7 +96,7 @@ fn reduce_materials<T: VoxExt>(
 
     // Tally per-material voxel usage and place each colored material in the
     // space.
-    let populations = material_populations(state, palette_id);
+    let populations = material_populations(main, palette_id);
 
     let points: Vec<Point> = colored
         .into_iter()
@@ -121,7 +121,7 @@ fn reduce_materials<T: VoxExt>(
     // voxel snaps individually, spreading one merged color across several
     // representatives.
     if !matches!(dither, Dither::None) {
-        dither_voxels(state, palette_id, &clusters, dither);
+        dither_voxels(main, palette_id, &clusters, dither);
     }
 
     // Repaint every non-representative material onto its representative,
@@ -145,16 +145,14 @@ fn reduce_materials<T: VoxExt>(
         })
         .collect();
 
-    state
-        .repaint_materials(palette_id, &replacements)
+    main.repaint_materials(palette_id, &replacements)
         .expect("the cluster's materials are live");
 
     let doomed_ids: HashSet<_> = replacements.keys().copied().collect();
-    state
-        .release_materials(palette_id, &doomed_ids)
+    main.release_materials(palette_id, &doomed_ids)
         .expect("no voxel samples a repainted material");
 
-    state.gc();
+    main.gc()?;
 
     Ok(Some((total, after)))
 }
@@ -173,26 +171,26 @@ struct Point {
 /// The sRGB bytes of a material's `baseColor`, or `None` if the value is
 /// absent or its bound value pool holds no float vectors. Resolves the bound
 /// value-pool value and encodes it with [`value_pool_color`].
-fn material_color<T>(
-    state: &VoxMain<T>,
+fn material_color<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     material_id: U32Id<BVoxMaterial>,
     property_id: U32Id<BVoxProperty>,
 ) -> Option<[u8; 4]> {
-    let (value_pool, value_id) = state.material_value(palette_id, material_id, property_id)?;
+    let (value_pool, value_id) = main.material_value(palette_id, material_id, property_id)?;
 
     value_pool_color(value_pool, value_id)
 }
 
 /// How many live voxels sample each material of `palette`, across every object
 /// referencing it.
-fn material_populations<T>(
-    state: &VoxMain<T>,
+fn material_populations<T: VoxExt>(
+    main: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
 ) -> HashMap<u32, u64> {
     let mut populations = HashMap::new();
 
-    for (_, object) in state.iter_objects() {
+    for (_, object) in main.iter_objects() {
         for (layer_id, referenced_palette_id) in object.iter_layers() {
             if referenced_palette_id != palette_id {
                 continue;
@@ -555,7 +553,7 @@ fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
 /// error per `dither`, so one merged color dithers across several
 /// representatives. Runs per referencing object in raster order.
 fn dither_voxels<T: VoxExt>(
-    state: &mut VoxMain<T>,
+    main: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     clusters: &[Vec<Point>],
     dither: Dither,
@@ -575,7 +573,7 @@ fn dither_voxels<T: VoxExt>(
 
     // Objects referencing the palette, collected so the read borrow ends before
     // the mutation below.
-    let targets: Vec<(U32Id<BVoxObject>, Vec<U32Id<BVoxLayer>>)> = state
+    let targets: Vec<(U32Id<BVoxObject>, Vec<U32Id<BVoxLayer>>)> = main
         .iter_objects()
         .filter_map(|(object_id, object)| {
             let layer_ids: Vec<_> = object
@@ -590,7 +588,7 @@ fn dither_voxels<T: VoxExt>(
     for (object_id, layer_ids) in targets {
         for layer_id in layer_ids {
             dither_layer(
-                state,
+                main,
                 object_id,
                 layer_id,
                 &coords_of,
@@ -607,7 +605,7 @@ fn dither_voxels<T: VoxExt>(
 /// [`VoxMain::retain_voxel`], swapping only this layer's material.
 #[allow(clippy::too_many_arguments)]
 fn dither_layer<T: VoxExt>(
-    state: &mut VoxMain<T>,
+    main: &mut VoxMain<T>,
     object_id: U32Id<BVoxObject>,
     layer_id: U32Id<BVoxLayer>,
     coords_of: &HashMap<u32, TyVector3F64>,
@@ -615,9 +613,9 @@ fn dither_layer<T: VoxExt>(
     spacing: f64,
     dither: Dither,
 ) {
-    let object = state
+    let object = main
         .object(object_id)
-        .expect("a referencing object is one of the state's");
+        .expect("a referencing object is one of the main's");
     let bounds = object.bounds();
 
     // Live voxels ascend by raster id, so every diffusion target is a
@@ -636,9 +634,9 @@ fn dither_layer<T: VoxExt>(
     let mut errors: HashMap<u32, TyVector3F64> = HashMap::new();
 
     for voxel_id in voxel_ids {
-        let object = state
+        let object = main
             .object(object_id)
-            .expect("a referencing object is one of the state's");
+            .expect("a referencing object is one of the main's");
         let material_id = object
             .voxel_material(voxel_id, layer_id)
             .expect("a live voxel samples every layer");
@@ -680,8 +678,7 @@ fn dither_layer<T: VoxExt>(
                 })
                 .collect();
             row[slot_index] = U32Id::from_u32(chosen.material_id);
-            state
-                .retain_voxel(object_id, voxel_id, &row)
+            main.retain_voxel(object_id, voxel_id, &row)
                 .expect("a live voxel takes a full-arity row of palette materials");
         }
     }
@@ -824,16 +821,16 @@ mod tests {
 
     /// The `#RRGGBBAA` hex of a material's `baseColor`, uppercase.
     fn material_hex(
-        state: &VoxMain,
+        main: &VoxMain,
         palette_id: U32Id<BVoxPalette>,
         material_id: U32Id<BVoxMaterial>,
     ) -> String {
-        let property_id = state
+        let property_id = main
             .palette(palette_id)
             .unwrap()
             .property_id_by_name(BASE_COLOR)
             .unwrap();
-        match state
+        match main
             .material_value(palette_id, material_id, property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
@@ -855,19 +852,19 @@ mod tests {
     /// material with a distinct `tag` scalar so a merge's whole-material take
     /// is visible. Voxel `i` samples material `i`; `repeats[i]` adds extra
     /// voxels on material `i`.
-    fn state_with_colors(
+    fn main_with_colors(
         colors: &[&str],
         repeats: &[usize],
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
         // baseColor draws from a linear `vec-4-float` value pool; tag draws
         // from a `float` one with a distinct value per material.
-        let base_value_pool_id = state.retain_value_pool(
+        let base_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
                 .unwrap(),
         );
-        let tag_value_pool_id = state.retain_value_pool(
+        let tag_value_pool_id = main.retain_value_pool(
             VoxValuePool::float((0..colors.len()).map(|index| index as f64).collect()).unwrap(),
         );
 
@@ -893,7 +890,7 @@ mod tests {
         let count: usize = colors.len() + repeats.iter().sum::<usize>();
         let mut object =
             VoxObject::new("o".to_owned(), TyVector3U32::new(count as u32, 1, 1)).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
         object.retain_layer(palette_id, material_ids[0]);
 
         // One voxel per color, plus `repeats[i]` extra voxels sampling material
@@ -911,35 +908,34 @@ mod tests {
                 retain(&mut object, material_id);
             }
         }
-        let object_id = state.retain_object(object).unwrap();
-        (state, palette_id, object_id)
+        let object_id = main.retain_object(object).unwrap();
+        (main, palette_id, object_id)
     }
 
-    fn material_count(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> usize {
-        state.palette(palette_id).unwrap().material_count()
+    fn material_count(main: &VoxMain, palette_id: U32Id<BVoxPalette>) -> usize {
+        main.palette(palette_id).unwrap().material_count()
     }
 
     /// The set of baseColor hexes still in the palette.
-    fn colors(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> Vec<String> {
-        state
-            .palette(palette_id)
+    fn colors(main: &VoxMain, palette_id: U32Id<BVoxPalette>) -> Vec<String> {
+        main.palette(palette_id)
             .unwrap()
             .iter_materials()
-            .map(|material_id| material_hex(state, palette_id, material_id))
+            .map(|material_id| material_hex(main, palette_id, material_id))
             .collect()
     }
 
     /// One object of size `bounds` with a `baseColor` palette of `colors`
     /// and one live voxel per `(position, color-index)` entry, so a dither test
     /// can place a known color at a known position.
-    fn grid_state(
+    fn grid_main(
         bounds: TyVector3U32,
         colors: &[&str],
         voxels: &[(TyVector3U32, usize)],
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let base_value_pool_id = state.retain_value_pool(
+        let base_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
                 .unwrap(),
         );
@@ -957,7 +953,7 @@ mod tests {
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
         object.retain_layer(palette_id, material_ids[0]);
 
         for &(position, color_index) in voxels {
@@ -967,56 +963,56 @@ mod tests {
                 .unwrap();
         }
 
-        let object_id = state.retain_object(object).unwrap();
-        (state, palette_id, object_id)
+        let object_id = main.retain_object(object).unwrap();
+        (main, palette_id, object_id)
     }
 
     /// The baseColor hex the voxel at `position` samples, through the
     /// object's one layer.
     fn voxel_color(
-        state: &VoxMain,
+        main: &VoxMain,
         object_id: U32Id<BVoxObject>,
         palette_id: U32Id<BVoxPalette>,
         position: TyVector3U32,
     ) -> String {
-        let object = state.object(object_id).unwrap();
+        let object = main.object(object_id).unwrap();
         let (layer_id, _) = object.iter_layers().next().unwrap();
         let voxel_id = object.voxel_id(position).unwrap();
         let material_id = object.voxel_material(voxel_id, layer_id).unwrap();
-        material_hex(state, palette_id, material_id)
+        material_hex(main, palette_id, material_id)
     }
 
     #[test]
     fn no_op_when_already_within_the_cap() {
-        let (mut state, palette_id, _) = state_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
-        let outcome = reduce_palette(&mut state, palette_id, reduction(5)).unwrap();
+        let (mut main, palette_id, _) = main_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
+        let outcome = reduce_palette(&mut main, palette_id, reduction(5)).unwrap();
         assert_eq!(outcome, None);
-        assert_eq!(material_count(&state, palette_id), 2);
+        assert_eq!(material_count(&main, palette_id), 2);
     }
 
     #[test]
     fn merges_near_colors_and_keeps_a_real_representative_material() {
         // Two near reds and a blue; cap 2 fuses the reds onto the more-sampled
         // second red, whose whole material (tag 1) survives.
-        let (mut state, palette_id, object_id) =
-            state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
-        let outcome = reduce_palette(&mut state, palette_id, reduction(2)).unwrap();
+        let (mut main, palette_id, object_id) =
+            main_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
+        let outcome = reduce_palette(&mut main, palette_id, reduction(2)).unwrap();
         assert_eq!(outcome, Some((3, 2)));
-        assert_eq!(material_count(&state, palette_id), 2);
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(material_count(&main, palette_id), 2);
+        assert_eq!(main.validate(), Ok(()));
 
-        let mut survivors = colors(&state, palette_id);
+        let mut survivors = colors(&main, palette_id);
         survivors.sort();
         assert_eq!(survivors, ["#0000FFFF", "#FF0000FF"]);
 
         // The fused first red's voxel now samples the survivor, tag 1.
-        let object = state.object(object_id).unwrap();
+        let object = main.object(object_id).unwrap();
         let (layer_id, _) = object.iter_layers().next().unwrap();
-        let palette_ref = state.palette(palette_id).unwrap();
+        let palette_ref = main.palette(palette_id).unwrap();
         let tag_property_id = palette_ref.property_id_by_name("tag").unwrap();
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let material_id = object.voxel_material(voxel_id, layer_id).unwrap();
-        match state
+        match main
             .material_value(palette_id, material_id, tag_property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
@@ -1029,10 +1025,10 @@ mod tests {
     fn octree_and_kmeans_reduce_to_the_cap() {
         // Both methods cluster four colors down to at most the cap of two.
         for method in [ReductionMethod::Octree, ReductionMethod::Kmeans] {
-            let (mut state, palette_id, _) =
-                state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF", "#FFFF00FF"], &[]);
+            let (mut main, palette_id, _) =
+                main_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF", "#FFFF00FF"], &[]);
             let outcome = reduce_palette(
-                &mut state,
+                &mut main,
                 palette_id,
                 PaletteReduction {
                     method,
@@ -1047,21 +1043,21 @@ mod tests {
                 "method {method:?} left {after} materials"
             );
             assert_eq!(
-                material_count(&state, palette_id),
+                material_count(&main, palette_id),
                 after,
                 "method {method:?}"
             );
-            assert_eq!(state.validate(), Ok(()), "method {method:?}");
+            assert_eq!(main.validate(), Ok(()), "method {method:?}");
         }
     }
 
     #[test]
     fn dither_is_inert_under_the_cap_and_reduces_over_it() {
         // Under the cap: dither is inert, so the reduction does not fire.
-        let (mut state, palette_id, _) = state_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
+        let (mut main, palette_id, _) = main_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
         assert!(
             reduce_palette(
-                &mut state,
+                &mut main,
                 palette_id,
                 PaletteReduction {
                     dither: Dither::FloydSteinberg,
@@ -1072,12 +1068,12 @@ mod tests {
             .is_none()
         );
 
-        // Over the cap: both dither methods reduce and leave the state valid.
+        // Over the cap: both dither methods reduce and leave the main valid.
         for dither in [Dither::FloydSteinberg, Dither::Ordered] {
-            let (mut state, palette_id, _) =
-                state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
+            let (mut main, palette_id, _) =
+                main_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
             let outcome = reduce_palette(
-                &mut state,
+                &mut main,
                 palette_id,
                 PaletteReduction {
                     dither,
@@ -1086,18 +1082,18 @@ mod tests {
             )
             .unwrap();
             assert_eq!(outcome, Some((3, 2)), "dither {dither:?}");
-            assert_eq!(material_count(&state, palette_id), 2, "dither {dither:?}");
-            assert_eq!(state.validate(), Ok(()), "dither {dither:?}");
+            assert_eq!(material_count(&main, palette_id), 2, "dither {dither:?}");
+            assert_eq!(main.validate(), Ok(()), "dither {dither:?}");
         }
     }
 
     #[test]
     fn reduces_across_all_color_spaces() {
         for space in [ColorSpace::Oklab, ColorSpace::Lab, ColorSpace::Srgb] {
-            let (mut state, palette_id, _) =
-                state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF", "#FFFF00FF"], &[]);
+            let (mut main, palette_id, _) =
+                main_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF", "#FFFF00FF"], &[]);
             let outcome = reduce_palette(
-                &mut state,
+                &mut main,
                 palette_id,
                 PaletteReduction {
                     space,
@@ -1106,8 +1102,8 @@ mod tests {
             )
             .unwrap();
             assert_eq!(outcome, Some((4, 2)), "space {space:?}");
-            assert_eq!(material_count(&state, palette_id), 2, "space {space:?}");
-            assert_eq!(state.validate(), Ok(()), "space {space:?}");
+            assert_eq!(material_count(&main, palette_id), 2, "space {space:?}");
+            assert_eq!(main.validate(), Ok(()), "space {space:?}");
         }
     }
 
@@ -1133,11 +1129,11 @@ mod tests {
         for x in 0..4 {
             voxels.push((TyVector3U32::new(x, 0, 2), 2));
         }
-        let (mut state, palette_id, object_id) =
-            grid_state(TyVector3U32::new(4, 1, 3), &[black, mid, red], &voxels);
+        let (mut main, palette_id, object_id) =
+            grid_main(TyVector3U32::new(4, 1, 3), &[black, mid, red], &voxels);
 
         let outcome = reduce_palette(
-            &mut state,
+            &mut main,
             palette_id,
             PaletteReduction {
                 space: ColorSpace::Srgb,
@@ -1147,7 +1143,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(main.validate(), Ok(()));
 
         // Reps differ only on x, so only the x offset decides: bayer(x,0,0) is
         // 0, 48, 6, 54 for x=0..3, below/above the midpoint 31.5, so mid snaps
@@ -1155,7 +1151,7 @@ mod tests {
         let expected = [black, red, black, red];
         for (x, want) in expected.iter().enumerate() {
             let got = voxel_color(
-                &state,
+                &main,
                 object_id,
                 palette_id,
                 TyVector3U32::new(x as u32, 0, 0),
@@ -1180,11 +1176,11 @@ mod tests {
         for z in 6..10 {
             voxels.push((TyVector3U32::new(0, 0, z), 1));
         }
-        let (mut state, palette_id, object_id) =
-            grid_state(TyVector3U32::new(1, 1, 10), &[black, mid, red], &voxels);
+        let (mut main, palette_id, object_id) =
+            grid_main(TyVector3U32::new(1, 1, 10), &[black, mid, red], &voxels);
 
         let outcome = reduce_palette(
-            &mut state,
+            &mut main,
             palette_id,
             PaletteReduction {
                 space: ColorSpace::Srgb,
@@ -1194,7 +1190,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(main.validate(), Ok(()));
 
         // On a line only +z carries, at 3/8. Tracing mid = 0.502 from zero error:
         //   z=6: 0.502          -> red   (residual -0.498, carries -0.187)
@@ -1203,18 +1199,18 @@ mod tests {
         //   z=9: 0.502 - 0.142  -> black
         let expected = [(6, red), (7, black), (8, red), (9, black)];
         for (z, want) in expected {
-            let got = voxel_color(&state, object_id, palette_id, TyVector3U32::new(0, 0, z));
+            let got = voxel_color(&main, object_id, palette_id, TyVector3U32::new(0, 0, z));
             assert_eq!(&got, want, "z = {z}");
         }
     }
 
     /// The number of values in the value pool the property `name` draws from in
     /// the first palette that carries it.
-    fn value_pool_len(state: &VoxMain, name: &str) -> usize {
-        for (_, palette) in state.iter_palettes() {
+    fn value_pool_len(main: &VoxMain, name: &str) -> usize {
+        for (_, palette) in main.iter_palettes() {
             if let Some(property_id) = palette.property_id_by_name(name) {
                 let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-                return state.value_pool(value_pool_id).unwrap().len();
+                return main.value_pool(value_pool_id).unwrap().len();
             }
         }
         panic!("no palette carries {name}");
@@ -1224,19 +1220,19 @@ mod tests {
     fn pruning_drops_the_merged_away_values() {
         // Three colors fused to two; with keep_unused_values off, the reduction
         // prunes the merged-away color and its tag from the value pools.
-        let (mut state, palette_id, _) =
-            state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
-        assert_eq!(value_pool_len(&state, BASE_COLOR), 3);
+        let (mut main, palette_id, _) =
+            main_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
+        assert_eq!(value_pool_len(&main, BASE_COLOR), 3);
 
-        let outcome = reduce_palette(&mut state, palette_id, reduction(2)).unwrap();
+        let outcome = reduce_palette(&mut main, palette_id, reduction(2)).unwrap();
         assert_eq!(outcome, Some((3, 2)));
 
         // Both value pools now carry only the two survivors' values.
-        assert_eq!(value_pool_len(&state, BASE_COLOR), 2);
-        assert_eq!(value_pool_len(&state, "tag"), 2);
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(value_pool_len(&main, BASE_COLOR), 2);
+        assert_eq!(value_pool_len(&main, "tag"), 2);
+        assert_eq!(main.validate(), Ok(()));
         // The survivors still resolve to their original colors.
-        let mut survivors = colors(&state, palette_id);
+        let mut survivors = colors(&main, palette_id);
         survivors.sort();
         assert_eq!(survivors, ["#0000FFFF", "#FF0000FF"]);
     }
@@ -1245,8 +1241,8 @@ mod tests {
     fn a_colorless_palette_is_left_untouched() {
         // The palette carries no `baseColor`, so every material counts
         // as colorless and the reduction no-ops even over the cap.
-        let mut state = VoxMain::default();
-        let tag_value_pool_id = state.retain_value_pool(
+        let mut main = VoxMain::default();
+        let tag_value_pool_id = main.retain_value_pool(
             VoxValuePool::float((0..3).map(|index| index as f64).collect()).unwrap(),
         );
 
@@ -1259,19 +1255,19 @@ mod tests {
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
         object.retain_layer(palette_id, material_ids[0]);
         for (x, &material_id) in material_ids.iter().enumerate() {
             let voxel_id = object.voxel_id(TyVector3U32::new(x as u32, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        state.retain_object(object).unwrap();
+        main.retain_object(object).unwrap();
 
-        let outcome = reduce_palette(&mut state, palette_id, reduction(2)).unwrap();
+        let outcome = reduce_palette(&mut main, palette_id, reduction(2)).unwrap();
 
         assert_eq!(outcome, None);
-        assert_eq!(material_count(&state, palette_id), 3);
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(material_count(&main, palette_id), 3);
+        assert_eq!(main.validate(), Ok(()));
     }
 
     #[test]
@@ -1279,10 +1275,10 @@ mod tests {
         // A trailing layer over another palette; the dither rebuilds
         // full-arity sample rows around its slot and the reduction still
         // lands.
-        let (mut state, palette_id, object_id) =
-            state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
+        let (mut main, palette_id, object_id) =
+            main_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
         let strength_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
 
         let mut glow_palette = VoxPalette::default();
         glow_palette
@@ -1293,13 +1289,12 @@ mod tests {
             )
             .unwrap();
         glow_palette.retain_material(vec![value_id(0)]).unwrap();
-        let glow_palette_id = state.retain_palette(glow_palette).unwrap();
-        state
-            .retain_layer(object_id, glow_palette_id, U32Id::from_u32(0))
+        let glow_palette_id = main.retain_palette(glow_palette).unwrap();
+        main.retain_layer(object_id, glow_palette_id, U32Id::from_u32(0))
             .unwrap();
 
         let outcome = reduce_palette(
-            &mut state,
+            &mut main,
             palette_id,
             PaletteReduction {
                 dither: Dither::FloydSteinberg,
@@ -1309,23 +1304,23 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome, Some((3, 2)));
-        assert_eq!(material_count(&state, palette_id), 2);
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(material_count(&main, palette_id), 2);
+        assert_eq!(main.validate(), Ok(()));
 
         // The trailing layer and its palette are untouched.
-        let object = state.object(object_id).unwrap();
+        let object = main.object(object_id).unwrap();
         assert_eq!(object.layer_count(), 2);
-        assert_eq!(material_count(&state, glow_palette_id), 1);
+        assert_eq!(material_count(&main, glow_palette_id), 1);
     }
 
     #[test]
     fn keep_unused_values_leaves_the_value_pools_whole() {
         // The same reduction with keep_unused_values keeps the merged-away
         // color in the value pool, unreferenced.
-        let (mut state, palette_id, _) =
-            state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
+        let (mut main, palette_id, _) =
+            main_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
         reduce_palette(
-            &mut state,
+            &mut main,
             palette_id,
             PaletteReduction {
                 keep_unused_values: true,
@@ -1333,8 +1328,8 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(material_count(&state, palette_id), 2);
-        assert_eq!(value_pool_len(&state, BASE_COLOR), 3);
-        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(material_count(&main, palette_id), 2);
+        assert_eq!(value_pool_len(&main, BASE_COLOR), 3);
+        assert_eq!(main.validate(), Ok(()));
     }
 }

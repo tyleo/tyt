@@ -12,38 +12,37 @@ use voxcore::{
 /// [`to_goxl_file`](crate::to_goxl_file). The shared `BL16` voxel blocks
 /// become objects sharing one `baseColor` palette, and the `LAYR` layers
 /// become root hierarchy nodes with no transform, each placing the blocks it
-/// stamps. The rest of the Goxel state, the placements included, goes to the
-/// ext.
+/// stamps. The rest of the file, the placements included, goes to the ext.
 ///
 /// Errors on a layer placement that references a block outside the block list,
 /// or on a cross-reference the checked insertions reject.
 pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxlVoxMain> {
-    let mut state = VoxMain::default();
+    let mut main = VoxMain::default();
 
-    let (palette, material_ids) = build_palette(&mut state, file);
-    let palette_id = state.retain_palette(palette)?;
+    let (palette, material_ids) = build_palette(&mut main, file);
+    let palette_id = main.retain_palette(palette)?;
 
     for block in &file.blocks {
         // A Goxel block is a fixed 16-cube; it becomes the object's build
         // volume directly, with its live voxels wherever they sit inside it.
-        state.retain_object(build_object(block, palette_id, &material_ids))?;
+        main.retain_object(build_object(block, palette_id, &material_ids))?;
     }
 
     // Every layer node is a root, in stored order.
-    let nodes = build_layer_nodes(file, state.object_count())?;
-    let root_ids = state.retain_hierarchy_nodes(nodes)?;
-    state.set_root_hierarchy_node_ids(root_ids)?;
+    let nodes = build_layer_nodes(file, main.object_count())?;
+    let root_ids = main.retain_hierarchy_nodes(nodes)?;
+    main.set_root_hierarchy_node_ids(root_ids)?;
 
-    Ok(state.put_ext(goxl_ext_from_file(file)))
+    Ok(main.put_ext(goxl_ext_from_file(file)))
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
 /// color across every block's solid voxels, bound to `baseColor`, with
 /// one material per color and a map from a color to its material. The
-/// value pool is added to `state`. A file with no solid voxels gets a single
+/// value pool is added to `main`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
 fn build_palette(
-    state: &mut VoxMain<()>,
+    main: &mut VoxMain<()>,
     file: &GoxlFile,
 ) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 4]> = Vec::new();
@@ -65,7 +64,7 @@ fn build_palette(
 
     // Colors decode to linear light and ride in a shared `vec-4-float` value
     // pool. Each material draws one value id into it.
-    let value_pool_id = state.retain_value_pool(
+    let value_pool_id = main.retain_value_pool(
         VoxValuePool::vec_4_float(
             order
                 .iter()

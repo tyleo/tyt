@@ -1,4 +1,5 @@
-use crate::{IDENTITY_AXIS_ANGLE, VMaxExtNode};
+use crate::{IDENTITY_AXIS_ANGLE, VMaxExt, VMaxExtNode, synth_uuid};
+use std::collections::HashSet;
 use ty_math::TyQuaternionF64;
 use voxcore::VoxHierarchyNode;
 
@@ -10,33 +11,48 @@ const DEFAULT_PIVOT_ALIGN: &str = "4";
 
 const DEFAULT_PIVOT_FACE: &str = "8";
 
-/// The provenance of a node the document never carried. The content box and
-/// placement are derived from the native bounds and node transform on write,
-/// so it holds the ids, the node's rotation encoded from its live quaternion,
-/// and the default anchor tokens.
-pub fn synthesized_node(
-    id: String,
-    parent_id: Option<String>,
-    node: &VoxHierarchyNode,
-) -> VMaxExtNode {
+/// The provenance of a node the document never carried, built against the
+/// entries `ext` already holds so its UUID and index triplet are fresh. The
+/// synthesizer and the retain hook both build entries here.
+pub fn synthesized_node(ext: &VMaxExt, node: &VoxHierarchyNode) -> VMaxExtNode {
+    let ids: HashSet<&str> = ext
+        .hierarchy_nodes
+        .values()
+        .map(|entry| entry.id.as_str())
+        .collect();
+    let id = (0..)
+        .map(synth_uuid)
+        .find(|id| !ids.contains(id.as_str()))
+        .expect("a fresh index exists");
+
+    // Voxel Max collapses nodes that share a triplet. Groups take the `1`
+    // lane and objects the `0` lane.
+    let lane = i64::from(node.child_object_ids.is_empty());
+    let indices: HashSet<[i64; 3]> = ext
+        .hierarchy_nodes
+        .values()
+        .map(|entry| entry.index)
+        .collect();
+    let index = (0..)
+        .map(|counter| [0, lane, counter])
+        .find(|index| !indices.contains(index))
+        .expect("a fresh counter exists");
+
     VMaxExtNode {
         id,
-        parent_id,
-        index: None,
-        rotation: Some(axis_angle(node.transform.rotation)),
-        alignment: Some(DEFAULT_ALIGNMENT.to_owned()),
-        pivot_face: Some(DEFAULT_PIVOT_FACE.to_owned()),
-        pivot_align: Some(DEFAULT_PIVOT_ALIGN.to_owned()),
+        index,
+        rotation: axis_angle(node.transform.rotation),
+        alignment: DEFAULT_ALIGNMENT.to_owned(),
+        pivot_face: DEFAULT_PIVOT_FACE.to_owned(),
+        pivot_align: DEFAULT_PIVOT_ALIGN.to_owned(),
         selected: None,
     }
 }
 
 /// The `[x, y, z, angle]` axis-angle that reproduces a quaternion rotation,
-/// the inverse of the writer's decode. A synthesized node has no preserved
-/// `t_r`, so its rotation is encoded from the live quaternion. Feeding the
-/// result back through the decode, and Voxel Max's, recovers the same
-/// rotation.
-fn axis_angle(rotation: TyQuaternionF64) -> [f64; 4] {
+/// the inverse of the writer's decode. Feeding the result back through the
+/// decode, and Voxel Max's, recovers the same rotation.
+pub fn axis_angle(rotation: TyQuaternionF64) -> [f64; 4] {
     let (axis, angle) = rotation.to_axis_angle();
     if angle == 0.0 {
         // No rotation: match Voxel Max's `[0, 0, 0, 0]` rather than emit a bare

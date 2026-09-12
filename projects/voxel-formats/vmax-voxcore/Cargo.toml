@@ -9,7 +9,7 @@ keywords = ["voxelmax", "vmax", "voxel", "3d", "conversion"]
 categories = ["encoding", "game-development", "graphics"]
 
 [dependencies]
-branded-id = "0.1.7"
+branded-id = "0.1.10"
 serde = { version = "1", features = ["derive"], optional = true }
 ty-math = "0.2.0"
 vmax = { version = "0.1.8", default-features = false }
@@ -22,5 +22,5 @@ vmax-codec = { version = "0.2.0", features = ["impl"] }
 [features]
 default = ["codec", "serde"]
 codec = ["dep:vmax-codec"]
-serde = ["dep:serde", "vmax/serde"]
+serde = ["dep:serde", "branded-id/serde", "vmax/serde"]
 impl = ["vmax-codec?/impl"]

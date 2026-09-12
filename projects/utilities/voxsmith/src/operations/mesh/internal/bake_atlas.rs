@@ -281,16 +281,16 @@ mod tests {
     /// `metallic`, and `roughness` over three value pools, with a
     /// three-voxel object whose voxels sample three materials in raster order:
     /// (red, shiny, smooth), (red, matte, rough), (blue, matte, rough).
-    fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>) {
-        let mut state: VoxMain = VoxMain::default();
+    fn single_layer_main() -> (VoxMain, U32Id<BVoxObject>) {
+        let mut main: VoxMain = VoxMain::default();
 
-        let base_value_pool_id = state.retain_value_pool(
+        let base_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
         let metallic_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
         let roughness_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -325,7 +325,7 @@ mod tests {
         let blue_matte_id = palette
             .retain_material(vec![value_id(1), value_id(1), value_id(1)])
             .unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
         object.retain_layer(palette_id, red_shiny_id);
@@ -335,16 +335,16 @@ mod tests {
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
 
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        (state, object_id)
+        (main, object_id)
     }
 
     #[test]
     fn albedo_reads_the_base_color() {
-        let (state, object_id) = single_layer_state();
-        let object = state.object(object_id).unwrap();
-        let used = resolve_used_materials(&state, object).unwrap();
+        let (main, object_id) = single_layer_main();
+        let object = main.object(object_id).unwrap();
+        let used = resolve_used_materials(&main, object).unwrap();
         assert_eq!(used.len(), 3);
 
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
@@ -362,8 +362,8 @@ mod tests {
 
     #[test]
     fn a_scalar_packing_reads_the_metallic_property() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let metallic = MaterialBake::Packing(vec![scalar(METALLIC, false)]);
@@ -378,8 +378,8 @@ mod tests {
 
     #[test]
     fn a_bool_packing_reads_one_or_zero() {
-        let mut state: VoxMain = VoxMain::default();
-        let flag_value_pool_id = state.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
+        let mut main: VoxMain = VoxMain::default();
+        let flag_value_pool_id = main.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
 
         let mut palette = VoxPalette::default();
         palette
@@ -387,7 +387,7 @@ mod tests {
             .unwrap();
         let on_id = palette.retain_material(vec![value_id(0)]).unwrap();
         let off_id = palette.retain_material(vec![value_id(1)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         object.retain_layer(palette_id, on_id);
@@ -395,9 +395,9 @@ mod tests {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let mask = MaterialBake::Packing(vec![scalar("flag", false)]);
@@ -413,12 +413,12 @@ mod tests {
     fn a_shared_value_pool_cell_bakes_one_value_for_every_material() {
         // Both material rows repeat the strength value pool's one cell, so both
         // bake the same half strength.
-        let mut state: VoxMain = VoxMain::default();
-        let base_value_pool_id = state.retain_value_pool(
+        let mut main: VoxMain = VoxMain::default();
+        let base_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
         let strength_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -441,7 +441,7 @@ mod tests {
         let blue_id = palette
             .retain_material(vec![value_id(1), value_id(0)])
             .unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         object.retain_layer(palette_id, red_id);
@@ -449,9 +449,9 @@ mod tests {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![scalar(EMISSIVE_STRENGTH, false)]);
@@ -465,8 +465,8 @@ mod tests {
 
     #[test]
     fn inversion_turns_roughness_into_smoothness() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let smoothness = MaterialBake::Packing(vec![scalar(ROUGHNESS, true)]);
@@ -481,8 +481,8 @@ mod tests {
 
     #[test]
     fn a_missing_attribute_falls_back_to_its_spec_default() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         // The palette carries no `occlusionStrength`, whose spec default is 1.
@@ -497,8 +497,8 @@ mod tests {
 
     #[test]
     fn a_color_component_reads_one_channel() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let red = MaterialBake::Packing(vec![MaterialChannel::Property {
@@ -516,24 +516,24 @@ mod tests {
         // The sRGB quantize clamps, so a custom color component outside
         // `[0, 1]` would bake the same byte a legal 1.0 does. A custom key has
         // no vocabulary range, so this guard is the only one it meets.
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
         let value_pool_id =
-            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.5, 0.0, 0.0, 1.0]]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.5, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
             .retain_property("tint".to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![MaterialChannel::Property {
@@ -548,8 +548,8 @@ mod tests {
 
     #[test]
     fn computed_occlusion_is_rejected_under_the_palette_atlas() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![MaterialChannel::ComputedOcclusion]);
@@ -558,15 +558,15 @@ mod tests {
 
     #[test]
     fn emissive_color_folds_strength_toward_the_mesh_max() {
-        let mut state: VoxMain = VoxMain::default();
+        let mut main: VoxMain = VoxMain::default();
 
         // emissiveColor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
-        let emissive_color_value_pool_id = state.retain_value_pool(
+        let emissive_color_value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_3_float(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap(),
         );
         let strength_value_pool_id =
-            state.retain_value_pool(VoxValuePool::float(vec![1.0, 0.5]).unwrap());
+            main.retain_value_pool(VoxValuePool::float(vec![1.0, 0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -589,7 +589,7 @@ mod tests {
         let dim_white_id = palette
             .retain_material(vec![value_id(1), value_id(1)])
             .unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         object.retain_layer(palette_id, full_blue_id);
@@ -597,9 +597,9 @@ mod tests {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
         let pixels = bake_atlas_image(&used, &MaterialBake::EmissiveColor, width, height)
             .unwrap()
@@ -618,23 +618,23 @@ mod tests {
     /// Bakes `bake` over a one-voxel object whose one layer binds `key` to
     /// `value_pool`.
     fn bake_one(key: &str, value_pool: VoxValuePool, bake: &MaterialBake) -> Result<Vec<[u8; 4]>> {
-        let mut state: VoxMain = VoxMain::default();
-        let value_pool_id = state.retain_value_pool(value_pool);
+        let mut main: VoxMain = VoxMain::default();
+        let value_pool_id = main.retain_value_pool(value_pool);
 
         let mut palette = VoxPalette::default();
         palette
             .retain_property(key.to_owned(), value_pool_id, value_id(0))
             .unwrap();
         let material_id = palette.retain_material(vec![value_id(0)]).unwrap();
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.retain_object(object).unwrap();
+        let object_id = main.retain_object(object).unwrap();
 
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap())?;
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap())?;
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit)?;
 
         bake_atlas_image(&used, bake, width, height).map(|image| image.pixels)
@@ -688,8 +688,8 @@ mod tests {
 
     #[test]
     fn an_unbound_custom_key_errors() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         // No layer binds `subsurface` and the glTF spec gives it no default, so
@@ -700,8 +700,8 @@ mod tests {
 
     #[test]
     fn an_unbound_color_component_bakes_its_own_spec_default() {
-        let (state, object_id) = single_layer_state();
-        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (main, object_id) = single_layer_main();
+        let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         // The palette binds no `emissiveColor`. Its spec default is black,

@@ -1,12 +1,12 @@
 # voxj-voxcore
 
-Converts between Voxel Json documents and the voxcore state. The `voxj` crate
+Converts between Voxel Json documents and a voxcore main. The `voxj` crate
 defines the document types; this crate carries a parsed document into
 voxcore's in-memory `VoxMain` and back.
 
 ## Document conversion
 
-The state is a `VoxjVoxMain`, a `VoxMain<VoxjVoxExt>` carrying the document's
+The main is a `VoxjVoxMain`, a `VoxMain<VoxjVoxExt>` carrying the document's
 `ext` block as it was parsed.
 
 - `from_voxj_file` / `to_voxj_file`: between a parsed `VoxjFile` and a
@@ -14,7 +14,7 @@ The state is a `VoxjVoxMain`, a `VoxMain<VoxjVoxExt>` carrying the document's
   blocks. A document with no block loads an empty ext, and an empty ext
   writes no block.
 - `to_voxj_vox_main`: a bare `VoxMain<()>` to a `VoxjVoxMain` with an empty
-  block. `take_ext` on the state takes the block back off.
+  block. `take_ext` on the main takes the block back off.
 - `VoxjWriteOptions`: the writer's options. `Default` searches each object's
   block encodings for the lowest cost, keeps the ext block, and records the
   edit state only when an object carries margin around its live voxels.

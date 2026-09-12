@@ -1,11 +1,13 @@
-use crate::{GoxlVoxMain, Result, goxl_ext_from_file};
+use crate::{
+    GoxlExtPlacement, GoxlVoxMain, Result, goxl_ext_from_file, next_layer_id, synthesized_layer,
+};
 use branded_id::U32Id;
-use goxl::{GoxlBlock, GoxlFile, GoxlLayer, GoxlLayerBlock};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use goxl::{GoxlBlock, GoxlFile};
+use std::collections::{BTreeMap, HashSet};
 use ty_math::{TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
 
-/// Gives a bare state a synthesized [`GoxlExt`](crate::GoxlExt), the state
+/// Gives a bare main a synthesized [`GoxlExt`](crate::GoxlExt), the main
 /// [`to_goxl_file`](crate::to_goxl_file) writes as a file synthesized from
 /// the scene. Goxel has flat layers of placed `16 x 16 x 16` blocks and no
 /// hierarchy, so the scene takes the shape a loaded file has. Every object
@@ -18,33 +20,34 @@ use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, Vox
 /// nodes is tiled per placement. The ext's layer entry for each node stamps
 /// its tiles at their world positions. The original nodes and objects are
 /// released. Palettes and value pools stay, and a tile's voxel samples the
-/// materials its source voxel did.
+/// materials its source voxel did. Every layer entry is the synthesized
+/// entry a node retained later also gets.
 ///
 /// Lossy where Goxel cannot represent the source. Grouping collapses because
 /// layers do not nest. Rotation and scale drop because only translation
 /// survives the flattening.
-pub fn to_goxl_vox_main(mut state: VoxMain<()>) -> Result<GoxlVoxMain> {
-    let old_node_ids: Vec<_> = state
+pub fn to_goxl_vox_main(mut main: VoxMain<()>) -> Result<GoxlVoxMain> {
+    let old_node_ids: Vec<_> = main
         .iter_hierarchy_nodes()
         .map(|(node_id, _)| node_id)
         .collect();
-    let old_object_ids: Vec<_> = state
+    let old_object_ids: Vec<_> = main
         .iter_objects()
         .map(|(object_id, _)| object_id)
         .collect();
 
     let mut placements = Vec::new();
     let mut placed = HashSet::new();
-    for &root_id in state.root_hierarchy_node_ids() {
+    for &root_id in main.root_hierarchy_node_ids() {
         push_placements(
-            &state,
+            &main,
             root_id,
             TyVector3I32::new(0, 0, 0),
             &mut placed,
             &mut placements,
         );
     }
-    for (object_id, object) in state.iter_objects() {
+    for (object_id, object) in main.iter_objects() {
         if !placed.contains(&object_id) {
             placements.push(Placement {
                 name: object.name().to_owned(),
@@ -58,16 +61,16 @@ pub fn to_goxl_vox_main(mut state: VoxMain<()>) -> Result<GoxlVoxMain> {
     let mut layers = Vec::with_capacity(placements.len());
     for placement in placements {
         let tiles = {
-            let object = state
+            let object = main
                 .object(placement.object_id)
-                .expect("a placed object is one of the state's");
+                .expect("a placed object is one of the main's");
             tiles(object, placement.world)?
         };
 
         let mut stamps = Vec::with_capacity(tiles.len());
         for (origin, tile) in tiles {
             stamps.push(Stamp {
-                tile_id: state.retain_object(tile)?,
+                tile_id: main.retain_object(tile)?,
                 origin,
             });
         }
@@ -77,7 +80,7 @@ pub fn to_goxl_vox_main(mut state: VoxMain<()>) -> Result<GoxlVoxMain> {
         });
     }
 
-    let node_ids = state.retain_hierarchy_nodes(
+    let node_ids = main.retain_hierarchy_nodes(
         layers
             .iter()
             .map(|layer| VoxHierarchyNode {
@@ -87,51 +90,39 @@ pub fn to_goxl_vox_main(mut state: VoxMain<()>) -> Result<GoxlVoxMain> {
             })
             .collect(),
     )?;
-    state.set_root_hierarchy_node_ids(node_ids)?;
+    main.set_root_hierarchy_node_ids(node_ids.clone())?;
 
     // The old nodes are unlinked first so each releases in any order.
     for &node_id in &old_node_ids {
-        let mut node = state
-            .hierarchy_node(node_id)
-            .expect("a listed node")
-            .clone();
+        let mut node = main.hierarchy_node(node_id).expect("a listed node").clone();
         node.child_node_ids.clear();
-        state.set_hierarchy_node(node_id, node)?;
+        main.set_hierarchy_node(node_id, node)?;
     }
     for node_id in old_node_ids {
-        state.release_hierarchy_node(node_id)?;
+        main.release_hierarchy_node(node_id)?;
     }
     for object_id in old_object_ids {
-        state.release_object(object_id)?;
+        main.release_object(object_id)?;
     }
 
-    let index_by_object: HashMap<U32Id<BVoxObject>, i32> = state
-        .iter_objects()
-        .enumerate()
-        .map(|(index, (object_id, _))| (object_id, index as i32))
-        .collect();
-    let layers = layers
-        .into_iter()
-        .enumerate()
-        .map(|(index, layer)| GoxlLayer {
-            name: layer.name,
-            id: index as i32 + 1,
-            blocks: layer
-                .stamps
-                .iter()
-                .map(|stamp| GoxlLayerBlock {
-                    block_index: index_by_object[&stamp.tile_id],
-                    position: stamp.origin,
-                })
-                .collect(),
-            ..Default::default()
-        })
-        .collect();
+    // The ext of a default file, then one entry per layer node.
+    let mut ext = goxl_ext_from_file(&GoxlFile::default());
+    for (node_id, layer) in node_ids.into_iter().zip(layers) {
+        let placements = layer
+            .stamps
+            .iter()
+            .map(|stamp| GoxlExtPlacement {
+                object_id: stamp.tile_id,
+                position: stamp.origin,
+            })
+            .collect();
+        ext.layers.insert(
+            node_id,
+            synthesized_layer(next_layer_id(&ext.layers), placements),
+        );
+    }
 
-    Ok(state.put_ext(goxl_ext_from_file(&GoxlFile {
-        layers,
-        ..Default::default()
-    })))
+    Ok(main.put_ext(ext))
 }
 
 /// A layer to synthesize: the placing node's name and the tiles it stamps.
@@ -165,13 +156,13 @@ struct Placement {
 /// recording a placement for each object it places, then recursing into its
 /// child nodes.
 fn push_placements(
-    state: &VoxMain<()>,
+    main: &VoxMain<()>,
     node_id: U32Id<BVoxHierarchyNode>,
     parent: TyVector3I32,
     placed: &mut HashSet<U32Id<BVoxObject>>,
     placements: &mut Vec<Placement>,
 ) {
-    let node = state
+    let node = main
         .hierarchy_node(node_id)
         .expect("a root or child is a listed node");
     let world = parent + node.transform.position.round().as_ivec3();
@@ -185,7 +176,7 @@ fn push_placements(
         });
     }
     for &child_id in &node.child_node_ids {
-        push_placements(state, child_id, world, placed, placements);
+        push_placements(main, child_id, world, placed, placements);
     }
 }
 
@@ -254,7 +245,7 @@ fn tiles(object: &VoxObject, world: TyVector3I32) -> Result<Vec<([i32; 3], VoxOb
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_goxl_file, to_goxl_file, to_goxl_vox_main};
+    use crate::{GoxlExtPlacement, from_goxl_file, to_goxl_file, to_goxl_vox_main};
     use branded_id::U32Id;
     use goxl::{GoxlBlock, GoxlFile};
     use std::collections::BTreeSet;
@@ -266,20 +257,27 @@ mod tests {
         VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
+    fn placement(object_index: u32, position: [i32; 3]) -> GoxlExtPlacement {
+        GoxlExtPlacement {
+            object_id: U32Id::from_u32(object_index),
+            position,
+        }
+    }
+
     /// The linear-light components of a `#RRGGBBAA` hex string.
     fn linear_rgba(hex: &str) -> [f64; 4] {
         lin_srgba_f64_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
-    /// A bare state built straight from voxcore: a red-green object and a
+    /// A bare main built straight from voxcore: a red-green object and a
     /// blue object sharing one `rgba` palette, placed by a hierarchy of a
     /// nested group and two roots. This is the cross-format synthesis input.
-    fn source_state() -> VoxMain<()> {
-        let mut state = VoxMain::default();
+    fn source_main() -> VoxMain<()> {
+        let mut main = VoxMain::default();
 
         // One baseColor palette: a transparent placeholder, then red,
         // green, blue.
-        let value_pool_id = state.retain_value_pool(
+        let value_pool_id = main.retain_value_pool(
             VoxValuePool::vec_4_float(
                 ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
                     .iter()
@@ -297,7 +295,7 @@ mod tests {
                 .retain_material(vec![U32Id::from_u32(index)])
                 .expect("one value id for the one property");
         }
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
@@ -311,7 +309,7 @@ mod tests {
             wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
-        state.retain_object(wide).unwrap();
+        main.retain_object(wide).unwrap();
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
@@ -322,7 +320,7 @@ mod tests {
             .expect("a position within the grid");
         unit.retain_voxel(voxel_id, &[material_id(3)])
             .expect("one sample for the one layer");
-        state.retain_object(unit).unwrap();
+        main.retain_object(unit).unwrap();
 
         let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -336,34 +334,32 @@ mod tests {
 
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
-        state
-            .retain_hierarchy_nodes(vec![
-                VoxHierarchyNode {
-                    name: "group".to_owned(),
-                    child_node_ids: vec![node_id(1)],
-                    child_object_ids: Vec::new(),
-                    transform: TyTransformF64::default(),
-                },
-                VoxHierarchyNode {
-                    name: "wide".to_owned(),
-                    child_node_ids: Vec::new(),
-                    child_object_ids: vec![object_id(0)],
-                    transform: placed_at(5.0, 0.0, 0.0),
-                },
-                VoxHierarchyNode {
-                    name: "unit".to_owned(),
-                    child_node_ids: Vec::new(),
-                    child_object_ids: vec![object_id(1)],
-                    transform: placed_at(0.0, 3.0, 0.0),
-                },
-            ])
-            .unwrap();
-        state
-            .set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
+        main.retain_hierarchy_nodes(vec![
+            VoxHierarchyNode {
+                name: "group".to_owned(),
+                child_node_ids: vec![node_id(1)],
+                child_object_ids: Vec::new(),
+                transform: TyTransformF64::default(),
+            },
+            VoxHierarchyNode {
+                name: "wide".to_owned(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id(0)],
+                transform: placed_at(5.0, 0.0, 0.0),
+            },
+            VoxHierarchyNode {
+                name: "unit".to_owned(),
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id(1)],
+                transform: placed_at(0.0, 3.0, 0.0),
+            },
+        ])
+        .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id(0), node_id(2)])
             .unwrap();
 
-        state.validate().expect("a well-formed source state");
-        state
+        main.validate().expect("a well-formed source main");
+        main
     }
 
     /// A solid voxel in world space: `x`, `y`, `z`, and an `rgba` color.
@@ -396,24 +392,24 @@ mod tests {
         set
     }
 
-    /// A default state has no objects, so the writer synthesizes an empty
+    /// A default main has no objects, so the writer synthesizes an empty
     /// file.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
-        let state = to_goxl_vox_main(VoxMain::default()).unwrap();
-        let file = to_goxl_file(&state).unwrap();
+        let main = to_goxl_vox_main(VoxMain::default()).unwrap();
+        let file = to_goxl_file(&main).unwrap();
         assert!(file.blocks.is_empty());
         assert!(file.layers.is_empty());
     }
 
-    /// A bare state, such as one cross-loaded from another format, synthesizes
+    /// A bare main, such as one cross-loaded from another format, synthesizes
     /// a file: the hierarchy flattens to layers of placed blocks whose world
     /// voxels and colors match the source, one layer per placement named for
-    /// its node, and the file reads back into a valid state.
+    /// its node, and the file reads back into a valid main.
     #[test]
     fn synthesizes_a_file_without_an_ext() {
-        let state = to_goxl_vox_main(source_state()).unwrap();
-        let file = to_goxl_file(&state).unwrap();
+        let main = to_goxl_vox_main(source_main()).unwrap();
+        let file = to_goxl_file(&main).unwrap();
 
         let red = (0xFF, 0, 0, 0xFF);
         let green = (0, 0xFF, 0, 0xFF);
@@ -430,49 +426,45 @@ mod tests {
         assert_eq!(file.layers[1].name, "unit");
 
         // Each object tiles to one block, and each block reads back as its own
-        // object in a valid state.
+        // object in a valid main.
         assert_eq!(file.blocks.len(), 2);
         let reloaded = from_goxl_file(&file).unwrap();
         assert_eq!(reloaded.object_count(), 2);
     }
 
-    /// The synthesized state has the shape a loaded file has: one root node
+    /// The synthesized main has the shape a loaded file has: one root node
     /// per placement with no transform, one tile object per stamped block,
     /// and a layer entry stamping each tile at its world position. The
     /// source objects and nodes are gone.
     #[test]
     fn synthesizes_a_layer_entry_per_placement() {
-        let state = to_goxl_vox_main(source_state()).unwrap();
+        let main = to_goxl_vox_main(source_main()).unwrap();
 
-        assert_eq!(state.hierarchy_node_count(), 2);
+        assert_eq!(main.hierarchy_node_count(), 2);
 
-        assert_eq!(state.object_count(), 2);
+        assert_eq!(main.object_count(), 2);
 
-        assert!(state.object(U32Id::from_u32(0)).is_none());
+        assert!(main.object(U32Id::from_u32(0)).is_none());
 
-        assert!(state.hierarchy_node(U32Id::from_u32(0)).is_none());
+        assert!(main.hierarchy_node(U32Id::from_u32(0)).is_none());
 
-        let ext = state.ext();
+        let ext = main.ext();
 
         assert_eq!(ext.layers.len(), 2);
 
-        let [Some(wide), Some(unit)] = ext.layers.as_slice() else {
-            panic!("two synthesized layers");
-        };
-
-        assert_eq!(wide.name, "wide");
+        let wide = &ext.layers[&U32Id::from_u32(3)];
 
         assert_eq!(wide.id, 1);
 
-        assert_eq!(wide.placements, vec![(0, [0, 0, 0])]);
+        assert_eq!(wide.placements, vec![placement(2, [0, 0, 0])]);
 
-        assert_eq!(unit.name, "unit");
+        let unit = &ext.layers[&U32Id::from_u32(4)];
 
         assert_eq!(unit.id, 2);
 
-        assert_eq!(unit.placements, vec![(1, [0, 0, 0])]);
+        assert_eq!(unit.placements, vec![placement(3, [0, 0, 0])]);
 
-        let node = state.hierarchy_node(U32Id::from_u32(3)).unwrap();
+        let node = main.hierarchy_node(U32Id::from_u32(3)).unwrap();
 
         assert_eq!(node.name, "wide");
 
@@ -484,13 +476,47 @@ mod tests {
         );
     }
 
+    /// A node retained on the synthesized state gets the entry the
+    /// synthesizer would have built for it, so the ext stays complete.
+    #[test]
+    fn a_node_retained_after_synthesis_gets_a_synthesized_entry() {
+        let mut main = to_goxl_vox_main(source_main()).unwrap();
+
+        let node_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "later".to_owned(),
+                child_object_ids: vec![U32Id::from_u32(3)],
+                transform: TyTransformF64::new(
+                    TyVector3F64::new(16.0, 0.0, 0.0),
+                    TyQuaternionF64::IDENTITY,
+                    TyVector3F64::new(1.0, 1.0, 1.0),
+                ),
+                ..Default::default()
+            })
+            .unwrap();
+
+        main.push_root_hierarchy_node_id(node_id).unwrap();
+
+        let later = &main.ext().layers[&node_id];
+
+        assert_eq!(later.id, 3);
+
+        assert_eq!(later.placements, vec![placement(3, [16, 0, 0])]);
+
+        let file = to_goxl_file(&main).unwrap();
+
+        assert_eq!(file.layers[2].name, "later");
+
+        assert!(world_voxels(&file).contains(&(16, 3, 0, (0, 0, 0xFF, 0xFF))));
+    }
+
     /// An object wider than a block is cut into tiles on the world grid. The
     /// file places the same world voxels, and each tile writes as one block.
     #[test]
     fn retiles_an_object_larger_than_a_block() {
-        let mut state = VoxMain::default();
+        let mut main = VoxMain::default();
 
-        let value_pool_id = state
+        let value_pool_id = main
             .retain_value_pool(VoxValuePool::vec_4_float(vec![linear_rgba("#FF0000FF")]).unwrap());
 
         let mut palette = VoxPalette::default();
@@ -501,7 +527,7 @@ mod tests {
 
         palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
 
-        let palette_id = state.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         // A 20-wide object with a voxel at each end, placed at +10x. The
         // ends land at world x 10 and 29, in two tiles.
@@ -515,9 +541,9 @@ mod tests {
             wide.retain_voxel(voxel_id, &[U32Id::from_u32(0)]).unwrap();
         }
 
-        let object_id = state.retain_object(wide).unwrap();
+        let object_id = main.retain_object(wide).unwrap();
 
-        let node_id = state
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 name: "wide".to_owned(),
                 child_object_ids: vec![object_id],
@@ -530,20 +556,21 @@ mod tests {
             })
             .unwrap();
 
-        state.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
 
-        let state = to_goxl_vox_main(state).unwrap();
+        let main = to_goxl_vox_main(main).unwrap();
 
-        assert_eq!(state.object_count(), 2);
+        assert_eq!(main.object_count(), 2);
 
-        let Some(layer) = &state.ext().layers[0] else {
-            panic!("a synthesized layer");
-        };
+        let layer = &main.ext().layers[&U32Id::from_u32(1)];
 
-        assert_eq!(layer.placements, vec![(0, [0, 0, 0]), (1, [16, 0, 0])]);
+        assert_eq!(
+            layer.placements,
+            vec![placement(1, [0, 0, 0]), placement(2, [16, 0, 0])]
+        );
 
         for (tile_id, x) in [(1u32, 10u32), (2, 13)] {
-            let tile = state.object(U32Id::from_u32(tile_id)).unwrap();
+            let tile = main.object(U32Id::from_u32(tile_id)).unwrap();
 
             assert_eq!(tile.bounds(), TyVector3U32::splat(16));
 
@@ -557,7 +584,7 @@ mod tests {
             );
         }
 
-        let file = to_goxl_file(&state).unwrap();
+        let file = to_goxl_file(&main).unwrap();
 
         let red = (0xFF, 0, 0, 0xFF);
 
@@ -573,11 +600,11 @@ mod tests {
     /// node places is tiled once at the origin under a node named for it.
     #[test]
     fn tiles_per_placement_and_places_an_unplaced_object_at_the_origin() {
-        let mut state = source_state();
+        let mut main = source_main();
 
         let unit_id = U32Id::<BVoxObject>::from_u32(1);
 
-        let node_id = state
+        let node_id = main
             .retain_hierarchy_node(VoxHierarchyNode {
                 name: "again".to_owned(),
                 child_object_ids: vec![unit_id],
@@ -590,7 +617,7 @@ mod tests {
             })
             .unwrap();
 
-        state.push_root_hierarchy_node_id(node_id).unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
 
         let mut loose = VoxObject::new("loose".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
@@ -603,30 +630,26 @@ mod tests {
 
         loose.retain_voxel(voxel_id, &[U32Id::from_u32(2)]).unwrap();
 
-        state.retain_object(loose).unwrap();
+        main.retain_object(loose).unwrap();
 
-        let state = to_goxl_vox_main(state).unwrap();
+        let main = to_goxl_vox_main(main).unwrap();
 
-        let names: Vec<&str> = state
+        let names: Vec<&str> = main
             .iter_hierarchy_nodes()
             .map(|(_, node)| node.name.as_str())
             .collect();
 
         assert_eq!(names, ["wide", "unit", "again", "loose"]);
 
-        let Some(again) = &state.ext().layers[2] else {
-            panic!("a synthesized layer");
-        };
+        let again = &main.ext().layers[&U32Id::from_u32(6)];
 
-        assert_eq!(again.placements, vec![(2, [0, 0, 16])]);
+        assert_eq!(again.placements, vec![placement(5, [0, 0, 16])]);
 
-        let Some(loose) = &state.ext().layers[3] else {
-            panic!("a synthesized layer");
-        };
+        let loose = &main.ext().layers[&U32Id::from_u32(7)];
 
-        assert_eq!(loose.placements, vec![(3, [0, 0, 0])]);
+        assert_eq!(loose.placements, vec![placement(6, [0, 0, 0])]);
 
-        let file = to_goxl_file(&state).unwrap();
+        let file = to_goxl_file(&main).unwrap();
 
         let green = (0, 0xFF, 0, 0xFF);
 

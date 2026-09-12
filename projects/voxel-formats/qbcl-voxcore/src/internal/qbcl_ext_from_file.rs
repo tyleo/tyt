@@ -1,9 +1,14 @@
 use crate::{QbclExt, QbclExtMetadata, QbclExtNode, QbclExtThumbnail};
+use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMetadata};
+use std::collections::BTreeMap;
+use voxcore::BVoxHierarchyNode;
 
-/// The ext of `file`'s header around `nodes`, one entry per hierarchy node
-/// in listing order.
-pub fn qbcl_ext_from_file(file: &QbclFile, nodes: Vec<Option<QbclExtNode>>) -> QbclExt {
+/// The ext of `file`'s header around `nodes`, one entry per hierarchy node.
+pub fn qbcl_ext_from_file(
+    file: &QbclFile,
+    nodes: BTreeMap<U32Id<BVoxHierarchyNode>, QbclExtNode>,
+) -> QbclExt {
     QbclExt {
         program_version: file.program_version,
         file_version: file.file_version,

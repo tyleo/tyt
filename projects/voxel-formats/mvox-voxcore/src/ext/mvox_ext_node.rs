@@ -2,25 +2,14 @@ use crate::MVoxExtNodeBody;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Per scene-node provenance preserved in the `mvox` ext: the original
-/// node id and the node-attributes `DICT`, plus the per-kind body. Aligned by
-/// index with the hierarchy nodes, in scene-node order.
-///
-/// The voxcore node keeps a deduplicated structural view and a transform
-/// projection; this holds the exact ids, attributes, references, and the frame
-/// data the voxcore node cannot represent.
+/// Per scene-node provenance preserved in the `mvox` ext, keyed by the
+/// hierarchy node it belongs to. The name and child links come from the
+/// voxcore node at write. This holds only what the scene cannot derive.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct MVoxExtNode {
     /// The scene-node id other nodes reference (`id`).
     pub id: i32,
-
-    /// `_name`: the node's display name.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub name: Option<String>,
 
     /// `_hidden`: whether the node is hidden.
     #[cfg_attr(

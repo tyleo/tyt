@@ -1,9 +1,9 @@
 use branded_id::U32Id;
 use ty_math::TyVector3U32;
-use voxcore::{BVoxObject, VoxMain};
+use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxj::objects::VoxjDecodedObject;
 
-/// Builds a [`VoxjDecodedObject`] from object `object_id` of `state`, emitting
+/// Builds a [`VoxjDecodedObject`] from object `object_id` of `main`, emitting
 /// the tight runtime grid: one position and sample row per live voxel in
 /// ascending raster order, rebased so the live voxels fill the grid from its
 /// origin. The object's wider build volume, when it has margin, is recorded
@@ -14,12 +14,14 @@ use voxj::objects::VoxjDecodedObject;
 ///
 /// # Panics
 ///
-/// Panics if `object_id` is not one of `state`'s objects.
-pub fn voxj_decoded_object_from_vox_object<T>(
-    state: &VoxMain<T>,
+/// Panics if `object_id` is not one of `main`'s objects.
+pub fn voxj_decoded_object_from_vox_object<T: VoxExt>(
+    main: &VoxMain<T>,
     object_id: U32Id<BVoxObject>,
 ) -> VoxjDecodedObject {
-    let object = state.object(object_id).expect("the object is the state's");
+    let object = main
+        .object(object_id)
+        .expect("object_id is one of main's objects");
 
     let origin = object.origin();
     // The runtime grid is the live voxels' tight extent within the build

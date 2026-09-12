@@ -38,19 +38,19 @@ impl Format for VMax {
             |path| Ok(package_file(files, path)),
         )?
         .take_ext()
-        .state)
+        .main)
     }
 
     fn write<D: Dependencies>(
         dependencies: &D,
         options: &VMaxWriteOptions,
-        state: VoxMain<()>,
+        main: VoxMain<()>,
     ) -> Result<Vec<VoxDocumentFile>> {
         let mut files = Vec::new();
 
-        let state = to_vmax_vox_main(state)?;
+        let main = to_vmax_vox_main(main)?;
 
-        to_vmax_package(dependencies.vmax(), &state, options, |path, bytes| {
+        to_vmax_package(dependencies.vmax(), &main, options, |path, bytes| {
             files.push(VoxDocumentFile::new(path, bytes.to_vec()));
 
             Ok(())

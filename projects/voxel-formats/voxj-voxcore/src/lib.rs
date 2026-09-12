@@ -1,8 +1,8 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
-//! Converts between Voxel Json documents and the voxcore state.
+//! Converts between Voxel Json documents and a voxcore main.
 //!
-//! The state is a [`VoxjVoxMain`], a [`VoxMain`](voxcore::VoxMain) carrying
+//! The main is a [`VoxjVoxMain`], a [`VoxMain`](voxcore::VoxMain) carrying
 //! the document's `ext` block as a [`VoxjVoxExt`]. [`from_voxj_file`] loads
 //! a [`voxj::VoxjFile`] into one and [`to_voxj_file`] encodes one back, with
 //! [`VoxjWriteOptions`] picking the block encodings and the edit state.
