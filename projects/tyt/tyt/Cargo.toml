@@ -1,6 +1,6 @@
 [package]
 name = "tyt"
-version = "0.1.8"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -16,17 +16,17 @@ required-features = ["bin"]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 tyt-claude = { version = "0.1.0" }
-tyt-common = { version = "0.1.0" }
-tyt-cubemap = { version = "0.1.0" }
-tyt-fbx = { version = "0.1.0" }
-tyt-fs = { version = "0.1.0" }
-tyt-image = { version = "0.1.0" }
-tyt-material = { version = "0.1.0" }
+tyt-common = { version = "0.1.7" }
+tyt-cubemap = { version = "0.1.8" }
+tyt-fbx = { version = "0.2.0" }
+tyt-fs = { version = "0.2.0" }
+tyt-image = { version = "0.1.8" }
+tyt-material = { version = "0.2.0" }
 tyt-meshy = { version = "0.1.0" }
-tyt-meta = { version = "0.1.0" }
+tyt-meta = { version = "0.2.0" }
 tyt-oai = { version = "0.1.0" }
-tyt-vmax = { version = "0.1.0" }
-vxl = { version = "0.1.0" }
+tyt-vmax = { version = "0.2.0" }
+vxl = { version = "0.2.0" }
 
 [features]
 default = ["impl"]

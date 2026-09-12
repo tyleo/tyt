@@ -12,7 +12,7 @@ categories = ["encoding", "game-development", "graphics"]
 branded-id = "0.1.10"
 serde = { version = "1", features = ["derive"], optional = true }
 ty-math = "0.2.0"
-vmax = { version = "0.1.8", default-features = false }
+vmax = { version = "0.1.9", default-features = false }
 vmax-codec = { version = "0.2.0", default-features = false, optional = true }
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 

@@ -10,12 +10,12 @@ categories = ["encoding", "game-development", "graphics"]
 
 [dependencies]
 branded-id = "0.1.10"
-qbcl = { version = "0.1.1", default-features = false, features = [
+qbcl = { version = "0.1.2", default-features = false, features = [
     "qb",
     "qbt",
     "qbcl",
 ] }
-qbcl-codec = { version = "0.1.1", default-features = false, features = [
+qbcl-codec = { version = "0.2.0", default-features = false, features = [
     "qb",
     "qbt",
     "qbcl",
@@ -25,7 +25,7 @@ ty-math = "0.2.0"
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 
 [dev-dependencies]
-qbcl-codec = { version = "0.1.1", features = ["impl"] }
+qbcl-codec = { version = "0.2.0", features = ["impl"] }
 
 [features]
 default = ["codec", "serde"]

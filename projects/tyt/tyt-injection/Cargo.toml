@@ -1,6 +1,6 @@
 [package]
 name = "tyt-injection"
-version = "0.1.8"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -11,12 +11,12 @@ base64 = "0.22"
 crossterm = "0.29"
 image = "0.25"
 lzfse = "0.2"
-pathspec = "0.1.0"
+pathspec = "0.2.0"
 plist = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 ty-math = { version = "0.2.0" }
 ty-math-serde = { version = "0.2.0" }
-tyt-common = { version = "0.1.0" }
+tyt-common = { version = "0.1.7" }
 ureq = { version = "3" }
 viuer = { version = "0.11", features = ["print-file"] }

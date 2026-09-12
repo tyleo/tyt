@@ -47,8 +47,6 @@ resolver = "2"
 
 [patch.crates-io]
 
-branded-id = { path = "../branded-id" }
-
 tyt = { path = "projects/tyt/tyt" }
 tyt-claude = { path = "projects/tyt/tyt-claude" }
 tyt-common = { path = "projects/tyt/tyt-common" }

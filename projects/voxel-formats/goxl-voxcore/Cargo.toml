@@ -10,14 +10,14 @@ categories = ["encoding", "game-development", "graphics"]
 
 [dependencies]
 branded-id = "0.1.10"
-goxl = "0.1.0"
-goxl-codec = { version = "0.1.0", default-features = false, optional = true }
+goxl = "0.1.1"
+goxl-codec = { version = "0.2.0", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 ty-math = { version = "0.2.0", default-features = false, features = ["color"] }
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 
 [dev-dependencies]
-goxl-codec = { version = "0.1.0", features = ["impl"] }
+goxl-codec = { version = "0.2.0", features = ["impl"] }
 serde_json = "1"
 
 [features]

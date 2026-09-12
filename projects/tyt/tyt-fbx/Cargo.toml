@@ -1,6 +1,6 @@
 [package]
 name = "tyt-fbx"
-version = "0.1.7"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -16,13 +16,13 @@ required-features = ["bin"]
 branded-id = "0.1.7"
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
-treegrid = { version = "0.1.0", default-features = false, features = [
+treegrid = { version = "0.2.0", default-features = false, features = [
     "render_hierarchy",
 ] }
-treeselect = "0.1.0"
-tyt-common = { version = "0.1.0" }
+treeselect = "0.1.1"
+tyt-common = { version = "0.1.7" }
 ty-math = { version = "0.2.0" }
-tyt-injection = { version = "0.1.0", optional = true }
+tyt-injection = { version = "0.2.0", optional = true }
 
 [features]
 default = ["impl"]

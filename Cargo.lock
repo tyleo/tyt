@@ -226,6 +226,8 @@ dependencies = [
 [[package]]
 name = "branded-id"
 version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3dd383297e0f2833501ff34b02cf056fa71bf6b27c5af063db0660919a375ab"
 dependencies = [
  "serde",
  "uuid",
@@ -720,11 +722,11 @@ dependencies = [
 
 [[package]]
 name = "goxl"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "goxl-codec"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "goxl",
  "png",
@@ -1032,11 +1034,11 @@ dependencies = [
 
 [[package]]
 name = "mvox"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mvox-codec"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "mvox",
 ]
@@ -1212,7 +1214,7 @@ checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
 name = "pathspec"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "globset",
 ]
@@ -1306,11 +1308,11 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "qbcl"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "qbcl-codec"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "qbcl",
@@ -1831,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "treegrid"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "branded-id",
  "serde_json",
@@ -1840,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "treeselect"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "ty-math"
@@ -1869,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1901,11 +1903,11 @@ dependencies = [
 
 [[package]]
 name = "tyt-common"
-version = "0.1.6"
+version = "0.1.7"
 
 [[package]]
 name = "tyt-cubemap"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1915,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-fbx"
-version = "0.1.7"
+version = "0.2.0"
 dependencies = [
  "branded-id",
  "clap",
@@ -1929,7 +1931,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-fs"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1941,7 +1943,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-image"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1951,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-injection"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "crossterm",
@@ -1970,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-material"
-version = "0.1.7"
+version = "0.2.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1992,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-meta"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -2014,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-vmax"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "branded-id",
  "clap",
@@ -2132,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "vmax"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "serde",
  "serde_bytes",
@@ -2236,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "vxl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "branded-id",
  "clap",

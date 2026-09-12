@@ -15,7 +15,7 @@ mvox-voxcore = { version = "0.1.0", default-features = false, optional = true }
 qbcl-voxcore = { version = "0.1.0", default-features = false, optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
-vmax = { version = "0.1.8", default-features = false, optional = true }
+vmax = { version = "0.1.9", default-features = false, optional = true }
 vmax-voxcore = { version = "0.1.0", default-features = false, optional = true }
 voxcore = { version = "0.2.1", default-features = false }
 voxj = { version = "0.1.3", default-features = false, optional = true }

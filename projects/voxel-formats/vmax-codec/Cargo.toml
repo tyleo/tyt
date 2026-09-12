@@ -17,7 +17,7 @@ serde_json = { version = "1", features = [
     "float_roundtrip",
     "preserve_order",
 ], optional = true }
-vmax = { version = "0.1.8", default-features = false }
+vmax = { version = "0.1.9", default-features = false }
 
 [features]
 default = ["impl"]

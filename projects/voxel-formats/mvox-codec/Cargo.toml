@@ -1,6 +1,6 @@
 [package]
 name = "mvox-codec"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -9,4 +9,4 @@ keywords = ["magicavoxel", "vox", "voxel", "3d", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
 [dependencies]
-mvox = "0.1.0"
+mvox = "0.1.1"

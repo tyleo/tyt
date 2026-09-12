@@ -1,6 +1,6 @@
 [package]
 name = "qbcl-codec"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -10,7 +10,7 @@ categories = ["parser-implementations", "encoding", "game-development", "graphic
 
 [dependencies]
 flate2 = { version = "1", optional = true }
-qbcl = { version = "0.1.1", default-features = false }
+qbcl = { version = "0.1.2", default-features = false }
 
 [features]
 default = ["impl", "qb", "qbt", "qbcl"]
