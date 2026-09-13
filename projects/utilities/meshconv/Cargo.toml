@@ -1,0 +1,27 @@
+[package]
+name = "meshconv"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Reads and writes mesh file formats through the meshdoc state."
+keywords = ["mesh", "conversion", "3d", "gltf", "glb"]
+categories = ["encoding", "game-development", "graphics"]
+
+[dependencies]
+branded-id = { version = "0.1.10", optional = true }
+gltf-meshdoc = { version = "0.1.0", default-features = false, optional = true }
+meshdoc = "0.1.0"
+
+[dev-dependencies]
+branded-id = "0.1.10"
+ty-math = { version = "0.2.0", default-features = false }
+
+[features]
+default = ["ext", "gltf", "impl"]
+
+ext = ["dep:branded-id", "gltf-meshdoc?/serde"]
+
+gltf = ["dep:gltf-meshdoc", "gltf-meshdoc/codec"]
+
+impl = ["gltf-meshdoc?/impl"]
