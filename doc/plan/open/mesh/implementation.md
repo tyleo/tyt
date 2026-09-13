@@ -5,55 +5,45 @@ the other pages._
 
 ## The tracks
 
-The work splits into four tracks, one per section below: vox-value-language,
-voxsmith, vxl, and ty-preferences. Each track's numbered phases land in order,
-each phase roughly a commit, and every phase leaves the workspace compiling with
-its tests green.
+The open work splits into three tracks: vox-value-language, voxsmith, and vxl.
+Each track's numbered phases land in order, each phase roughly a commit, and
+every phase leaves the workspace compiling with its tests green. The mesh
+crates the tracks build on and the `mesh` tail that already runs through them
+are [closed](#closed).
 
-Two seams keep the tracks parallel. The [record](#one-record) carries a whole
+Three seams keep the tracks parallel. The [record](#one-record) carries a whole
 run from vxl into voxsmith, and its shape settles early, so voxsmith's tests
-build records by hand and never wait on the flag or profile work.
+build records by hand and never wait on the flag or profile work. The
+[document](#meshdoc) carries meshes between voxsmith and meshconv, and it is
+already in place, so both sides build against it from the start.
 vox-value-language's pipeline shape settles the same way, each stage landing
 whole in its phase, so voxsmith waits on the language only from its evaluation
 phase on.
 
 The spine goes in early, across two tracks at once: vxl's new `mesh` builds a
-minimal record, and voxsmith's entry point meshes it, geometry only, through
-both containers. ty-preferences gates only vxl's profile and cascade phases,
-because the `.vxlconfig` cascade and the embedded built-ins both read through
-its jsonc deserializer. [The close](#the-close) waits on everything.
+minimal record and voxsmith meshes it into a geometry-only document, which vxl
+saves through meshconv as the shipped `mesh` already does. Profiles load
+through [ty-preferences](#ty-preferences) as it stands, so no phase waits on
+it. [The close](#the-close) waits on everything.
 
 ## One record
 
-Flags and profiles meet in one record. Every option of
-[`vxl mesh`](mesh.md#options) and every profile element lowers into the same
+Flags and profiles meet in one record. Every profile element and every option of
+[`vxl mesh`](mesh.md#options) but `--to` and `--from` lowers into the same
 element of the record. An explicit flag replaces the profile element it collides
-with. vxl only combines: it parses the flags, loads and expands the profiles,
-resolves the `{file-stem}` templates, joins the value fragments into the
-program, and hands the record over. voxsmith defines the record beside the entry
-point that takes it. The call pairs the record with the loaded document state
-and the selected object.
+with. `--to` and `--from` stay in vxl, which reads and writes the files, so the
+record carries no file format. vxl only combines: it parses the flags, loads and
+expands the profiles, resolves the `{file-stem}` templates, joins the value
+fragments into the program, and hands the record over. voxsmith defines the
+record beside the entry point that takes it. The call pairs the record with the
+loaded state and the selected object.
 
 The record is plain data. Expressions ride as text until the entry point parses
 them, and no element remembers the flag or the profile entry it came from:
 
 ```rust
 use branded_id::{IdVec, U32Id};
-
-/// The material index brand.
-pub struct BMaterial;
-
-/// The primitive index brand.
-pub struct BPrimitive;
-
-/// The target container.
-pub enum Container {
-    /// Binary glTF, `.glb`.
-    Glb,
-
-    /// glTF text, `.gltf`.
-    Gltf,
-}
+use meshdoc::{BMeshMaterial, BMeshPrimitive};
 
 /// The meshing strategy.
 pub enum Method {
@@ -148,7 +138,7 @@ pub enum FileForm {
     Png,
 }
 
-/// A loose file the run writes beside the mesh.
+/// A file the run lands in the document, written beside the mesh.
 pub struct FileWrite {
     /// The file's relative name.
     pub file: String,
@@ -169,7 +159,7 @@ pub enum SlotSource {
     Value(String),
 }
 
-/// A material slot write; the property resolves under the format's vocabulary.
+/// A material slot write; the property names a modeled material field.
 pub struct SlotWrite {
     /// The destination property.
     pub property: String,
@@ -196,7 +186,8 @@ pub enum ExtraSource {
     Value(WrittenValue),
 }
 
-/// An `extras.vxl.values` entry, on a material or the mesh.
+/// A named property of a material or the object, which the glTF bridge
+/// writes under `extras.vxl.values`.
 pub struct ExtraWrite {
     /// The entry's name.
     pub name: String,
@@ -210,7 +201,7 @@ pub struct ExtraWrite {
 
 /// A vertex attribute write.
 pub enum AttributeWrite {
-    /// An attribute glTF defines; the vocabulary fixes its encoding.
+    /// A stream the document models, which fixes its encoding.
     Builtin { attribute: String, expression: String },
 
     /// An underscore attribute.
@@ -219,7 +210,7 @@ pub enum AttributeWrite {
 
 /// One material's elements.
 pub struct MaterialRecord {
-    /// The glTF `material.name`.
+    /// The material's name.
     pub name: Option<String>,
 
     /// The declared stream list; when absent, the list derives from use.
@@ -228,19 +219,20 @@ pub struct MaterialRecord {
     /// The slot writes.
     pub slots: Vec<SlotWrite>,
 
-    /// The `extras.vxl.values` entries.
+    /// The named properties.
     pub extras: Vec<ExtraWrite>,
 }
 
 /// One primitive's elements.
 pub struct PrimitiveRecord {
     /// The material the primitive draws with; `None` is no material.
-    pub material_id: Option<U32Id<BMaterial>>,
+    pub material_id: Option<U32Id<BMeshMaterial>>,
 
     /// The select routing faces to the primitive.
     pub select: String,
 
-    /// The `extras` `vxl.name`.
+    /// The primitive's name, which the glTF bridge writes as
+    /// `extras.vxl.name`.
     pub name: Option<String>,
 
     /// Whether the primitive writes `NORMAL`.
@@ -253,11 +245,8 @@ pub struct PrimitiveRecord {
     pub attributes: Vec<AttributeWrite>,
 }
 
-/// A whole meshing run, with every flag and profile lowered in.
+/// A whole meshing run, with the flags and profiles lowered in.
 pub struct MeshRecord {
-    /// The target container.
-    pub container: Container,
-
     /// The meshing strategy.
     pub method: Method,
 
@@ -274,30 +263,69 @@ pub struct MeshRecord {
     pub program: String,
 
     /// The materials by index; the material count sets the length.
-    pub materials: IdVec<BMaterial, MaterialRecord>,
+    pub materials: IdVec<BMeshMaterial, MaterialRecord>,
 
     /// The primitives by index; the implicit primitive lowers as an entry
     /// whose `true` select takes every face, so the table holds at least one.
-    pub primitives: IdVec<BPrimitive, PrimitiveRecord>,
+    pub primitives: IdVec<BMeshPrimitive, PrimitiveRecord>,
 
     /// The loose files written beside the mesh.
     pub files: Vec<FileWrite>,
 
-    /// The mesh's `extras.vxl.values` entries.
+    /// The object's named properties.
     pub mesh_extras: Vec<ExtraWrite>,
 }
 ```
 
 Attribution stays in vxl, which maps each record element to its origin as it
-lowers. A voxsmith error names the element it rose from, and vxl rewraps the
-error to name the flag or the profile entry.
+lowers. A voxsmith error identifies the element it rose from, and vxl rewraps
+the error to point at the flag or the profile entry.
 
-The entry point bears the run. It parses, checks, and evaluates the program
-through [vox-value-language](#vox-value-language), meshes the geometry, bakes
-the atlases, and emits an output-independent document holding everything but the
-container: the geometry streams, the primitives, the materials, the images, the
-JSON payloads, and the loose files. The container writers serialize that
-document, so `glb` and `gltf` differ only at this edge.
+voxsmith's entry point, `mesh`, runs in memory. It takes the record, the loaded
+state, and the selected object, and returns the [document](#meshdoc). It calls
+[vox-value-language](#vox-value-language) to parse, check, and evaluate the
+program, then meshes the geometry, bakes the atlases, and encodes the images
+through the png encoder its dependencies inject. Every voxsmith operation takes
+that shape: it runs over voxcore and meshdoc types, reads no file, and knows no
+format. vxl holds both ends of the run. It loads the state through voxconv and
+saves the document through meshconv, which lands the document's files beside
+the mesh. The slot and attribute writes resolve under meshdoc's material and
+stream vocabulary, so voxsmith never learns the output format, and the bridge
+maps that vocabulary onto the format's schema. The tests build a state and a
+record by hand and never touch a file.
+
+## meshdoc
+
+meshdoc is the document every open phase writes into: a `MeshMain` holding
+hierarchy nodes, objects of primitives, materials, textures, images, and
+files, with every cross-reference a branded id the mutations check. The
+[closed notes](#the-meshdoc-crate) describe the crate. What the phases need is
+where each element of the [record](#one-record) lands:
+
+- A material lands as a `MeshMaterial`. A slot write fills the modeled field
+  its property names, a factor or a texture slot, under the names the
+  `material` module fixes.
+- An extras write lands as a `MeshProperty` on the material or the object:
+  the JSON forms as the typed values, an image as a texture reference, and a
+  written file as a file reference. The glTF bridge writes the properties
+  under `extras.vxl.values`.
+- A file write lands as a `MeshFile`, which meshconv writes beside the mesh.
+  A png also lands as a `MeshImage` over the file when a slot or an image
+  extra references it.
+- A primitive lands as a `MeshPrimitive` of the object, its name written by
+  the bridge as `extras.vxl.name`. A builtin attribute write fills a modeled
+  stream, the normals or the vertex colors, and a custom write appends a
+  `MeshVertexAttribute`. The UV streams it declares append in `texCoord`
+  order, and a texture reference names its stream by id.
+- The record's tables share `BMeshMaterial` and `BMeshPrimitive` with the
+  document. The materials retain in table order and the primitives retain
+  into the one object in table order, so a record id indexes the document
+  unchanged.
+
+Positions are in meters, Z-up, and the images stay encoded: the run encodes
+each atlas once through the injected png encoder, and no bridge decodes one.
+Where a written image embeds or lands loose is meshconv's write option, not a
+document fact.
 
 ## vox-value-language
 
@@ -532,10 +560,10 @@ evaluated program's end scope.
 
 ### 1. The entry point
 
-The entry point takes the [record](#one-record), meshes geometry alone through
-the kept core, and hands the document to the two container writers. This is
-voxsmith's half of the spine: the record, the document, and the writers exist
-from here on, and the later phases thicken them.
+`mesh` lands, taking the record, the state, and the object to a
+[document](#meshdoc) with geometry alone, through the kept greedy sweep. This is
+voxsmith's half of the spine: `mesh` and the record exist from here on, and the
+later phases fill in the rest of the document.
 
 ### 2. The environment
 
@@ -549,7 +577,7 @@ The entry point supplies the environment and the groupings, and `check` and
 
 ### 4. The geometry
 
-The kept greedy core learns the [merge rules](mesh.md#atlases) the run's values
+The kept greedy sweep learns the [merge rules](mesh.md#atlases) the run's values
 set.
 
 ### 5. The atlases and streams
@@ -565,54 +593,50 @@ primitive carries its own attributes and streams.
 ### 7. The files
 
 The png encoder grows grey, grey-alpha, RGB, and the transfer chunks, and the
-file writers land loose pngs and JSON beside the mesh.
+file writers land the pngs and the JSON as the document's files.
 
 ### 8. The slots
 
 The slot writers fill
 [material fields and textures](value-language.md#material-slots), embedding a
-value or referencing a written file under the format's vocabulary and its fixed
-encodings.
+value or referencing a written file, under the `material` names and the
+encodings the modeled fields fix.
 
 ### 9. The extras
 
-The extras writers land named entries under `extras.vxl.values` in their four
-forms, on the materials and on the [mesh](mesh.md#palettes).
+The extras writers land the named entries in their four forms as properties
+of the materials and of the [object](mesh.md#palettes), and the bridge writes
+them under `extras.vxl.values`.
 
 ### 10. The vertex attributes
 
 The primitive writers land
 [`COLOR_0` and the underscore attributes](value-language.md#vertex-attributes)
-on the corners, with lower domains climbing in.
-
-### 11. The containers
-
-The document serializes to either target. `glb` packs images and geometry into
-the binary chunk, `gltf` writes data URIs, and both hand back the run's loose
-files to land beside the mesh.
+on the corners, as the vertex colors and the further vertex attributes, with
+lower domains climbing in.
 
 ## vxl
 
 ### 1. `mesh-old`
 
-The shipped `mesh` renames whole, the subcommand, its module, and its flag
-types, and the shipped voxsmith material path keeps serving it untouched, so a
-working bake stands beside the rewrite until [the close](#the-close) removes
-both together.
+The shipped `mesh` renames whole on both sides: vxl's subcommand, its module,
+and its flag types, and voxsmith's `mesh` operation with its feature. The
+renamed operation keeps serving the renamed command untouched, so a working bake
+stands beside the rewrite until [the close](#the-close) removes both together.
 
 ### 2. The spine
 
 A new `mesh` lands beside it, taking the input, the output, `--to`, `--from`,
-and the selectors, building a minimal [record](#one-record), and calling the
-[entry point](#1-the-entry-point). The command runs end to end from here on,
-geometry only.
+and the selectors. It loads the state, builds a minimal [record](#one-record),
+calls [`mesh`](#1-the-entry-point), and saves the document through meshconv.
+The command runs end to end from here on, geometry only.
 
 ### 3. The flags
 
-The full surface of [`vxl mesh`](mesh.md#options) lands in clap, each flag
-lowering into its element of the record. vxl checks what flags alone decide, and
-the entry point errors on an element it cannot mesh yet, naming it, so the whole
-surface lands ahead of the meshing work.
+The full surface of [`vxl mesh`](mesh.md#options) lands in clap, each flag but
+`--to` and `--from` lowering into its element of the record. vxl checks what
+flags alone decide, and the entry point errors on an element it cannot mesh yet
+and says which, so the whole surface lands ahead of the meshing work.
 
 ### 4. The profiles
 
@@ -624,70 +648,111 @@ The [schema](profile-language.md#schema) types land with serde, the
 
 ### 5. The cascade
 
-The `.vxlconfig` layers join through [ty-preferences](#ty-preferences), and the
-track closes with profiles loading through the whole cascade.
+`.vxlconfig` loads through [ty-preferences](#ty-preferences), and the track
+closes with profiles reading through every layer.
 
 ## ty-preferences
 
-[Loading](profile-language.md#loading) reads `.vxlconfig` through the
-preferences crate, which asks five things of it, one phase each in landing
-order. The tyt call sites track each change as it lands.
-
-### 1. The jsonc read
-
-A `jsonc` feature adds a read that strips comments with json_comments ahead of
-serde_json and carries the json_comments dependency; json_comments handles
-comments alone, which is why a trailing comma stays an error. The `.tytconfig`
-loaders keep the plain json read; vxl enables the feature for everything it
-loads, and the phase lands first because the built-in profiles parse through its
-read.
-
-### 2. The file name
-
-The loaders currently hardcode `.tytconfig`, so the file name becomes a
-parameter and every tool names its own config file: vxl passes `.vxlconfig` and
-the `mesh` key its envelope already defines.
-
-### 3. The working-directory layer
-
-The cascade currently ends at the git root, so the working directory becomes a
-third layer. The `.vxlconfig` files then read as a cascade: the home
-`~/.vxlconfig`, then the repository's `<git-root>/.vxlconfig`, then the working
-directory's `.vxlconfig`. Outside a git repository the repository layer is
-absent. [Loading](profile-language.md#loading) sets how profiles read through
-the layers.
-
-### 4. The implementation
-
-The `impl` feature currently pulls in tyt-injection, which carries terminal,
-image, and network crates, and loading a config needs only serde_json and an
-atomic file write, so the crate carries its own optional implementation and the
-existing tyt tool passes an implementation in.
-
-### 5. The move
-
-tyt-preferences becomes ty-preferences and moves into utilities, joining the
-family vxl already lives in, so vxl depends on it without touching the tyt
-crates. The move lands last, so the crate arrives in utilities already
-independent.
+ty-preferences reads `.vxlconfig` as it stands: its jsonc codec accepts comments
+and trailing commas, and its loaders take the file name and the section key. The
+layers load in application order, the user's `~/.vxlconfig` first and then every
+directory from the git root down to the working directory. Outside a git
+repository only the user layer loads. [Loading](profile-language.md#loading)
+sets how profiles read through the layers, and vxl passes `.vxlconfig` and the
+`mesh` key its envelope defines.
 
 ## The close
 
 `mesh-old` deletes whole, the command, its flag types, and the voxsmith material
-path only it still calls, taking the first two [code deletions](#code-deletions)
-with it; the third lands inside voxsmith's image writer. A sweep follows the
+path only it still calls, taking the first [code deletion](#code-deletions)
+with it; the second lands inside voxsmith's png encoder. A sweep follows the
 delete: every `.rs` file the shipped implementation reached is checked for
-remaining callers, and the files nothing reaches anymore go too. The plan closes
-when the [worked examples](examples.md) run as written.
+remaining callers, and the files nothing reaches anymore go too. The sweep also
+drops `MeshGeometry` and its mesher from voxsmith's public surface, because
+nothing outside the crate reads them. Raw geometry stays a crate-internal seam
+between the kept sweep and the [document](#meshdoc). The plan closes when the
+[worked examples](examples.md) run as written.
 
 ## Code deletions
 
 1. voxsmith's `MaterialSlot::OcclusionMetallicRoughness`: two
    `--write-material-slot-value` flags naming one value share the image, so the
    combined variant goes.
-2. The `extras.vxl.maps` emission: nothing slotless embeds anymore, so the
-   automatic listing has no producer; `--write-material-extra-image-value` is
-   its deliberate replacement.
-3. `png_bytes.rs` hardcodes RGBA; the sized-to-value rule needs grey,
-   grey-alpha, and RGB, and the transfer chunks want the png crate's
+2. The png encoder's contract fixes 8-bit RGBA; the sized-to-value rule needs
+   grey, grey-alpha, and RGB, and the transfer chunks want the png crate's
    `set_source_srgb` and `set_source_gamma`.
+
+## Closed
+
+The mesh crates and the paths through them landed ahead of the tracks above.
+Each entry states what stands and where the built thing bent from the design.
+
+### The meshdoc crate
+
+`projects/utilities/meshdoc` holds `MeshMain<T>`, the state with an ext, and
+its `MeshState` read side. The entities are hierarchy nodes forming a DAG with
+roots, objects of primitives, materials, textures, images, and files. A
+primitive holds positions, optional normals, tangents, and vertex colors, UV
+streams by id, further vertex attributes as name, width, and flattened
+components, and triangles of branded vertex ids. A material holds the
+metallic-roughness set, alpha mode and cutoff, double-sidedness, ior,
+transmission, and emissive strength as modeled fields, and named properties
+for the rest. An image keeps encoded bytes, its own or a file's, and never
+pixels. Every cross-reference is a branded id that the mutations check, and an
+in-use error lists the referencing ids. `validate` states what the mutations
+preserve, and `gc` compacts the pools and remaps the ext through `MeshExt`'s
+hooks. The `check` and `material` modules hold the check vocabulary and the
+property names with their defaults. The crate performs no side effects and
+carries no `Dependencies` trait.
+
+The design bent in two places. The document gained files: a `MeshFile` is a
+named loose file that an image reads through or a property points at, so a
+run lands its pngs and JSON in the document and meshconv writes them beside
+the mesh. And the material model is fixed fields plus typed properties in
+place of a slot list under a format vocabulary, so a bridge fills the common
+case without a translation table and a value the model does not place still
+has a typed home.
+
+### The gltf-meshdoc crate
+
+`projects/mesh-formats/gltf-meshdoc` converts between glTF 2.0 and the
+document over the `gltf` crate. `from_gltf_file` loads a `GltfFile`, the JSON
+root with its binary blob and loose files, into a `GltfMeshMain`, and
+`to_gltf_file` writes one back, exactly for a loaded file, with
+`GltfWriteOptions` choosing where the images go: as loaded, embedded, or
+loose. `to_gltf_mesh_main` synthesizes the ext for a bare document. `GltfExt`
+keeps what glTF has and the document lacks, keyed by entity id and following
+the state through the hooks: the asset block, scenes, cameras, skins,
+animations, morph targets, and the extras and extensions the model does not
+place. The `codec` module goes to and from `.gltf` and `.glb` bytes, lists the
+loose URIs a primary references, and frames GLB in the crate; the data URIs go
+through injected base64 codecs bound behind `impl`. Axes convert between Y-up
+and Z-up on both arrows. A material's or mesh's `extras.vxl.values` load as
+properties and write back from them, a primitive's `extras.vxl.name` as its
+name, and a property's file reference resolves against the loose files.
+
+### The meshconv crate
+
+`projects/utilities/meshconv` fronts the bridges. A `Format` marker per
+enabled feature, `ReadFormat` and `WriteFormat` with their visitors, and
+`read`, `write`, `load`, `save`, and `check_document_files` move a document
+through a format over the caller's `Dependencies`, with the bare-state path
+dropping the ext and the `ext` module's `_with_ext` pairs keeping it boxed. A
+document travels as `MeshDocumentFile`s, the primary at the empty path and
+each loose file at the relative path the primary references it by. A format
+lists the loose paths its primary references, so a read fetches them beside
+the primary and a write lands them beside the output. One format, `gltf`,
+covers both containers, with `GltfWriteFormat` pairing the container with the
+bridge's image storage. A new format adds a bridge crate and a feature here.
+
+### The command tail
+
+`vxl mesh` loads through voxconv, meshes into a document, and saves through
+meshconv, with `--to` picking the container and `--texture-storage` where the
+images go. vxl depends on meshconv and meshdoc and never on a bridge.
+
+### The retired maps listing
+
+Nothing emits `extras.vxl.maps` anymore. The writers that did went with the
+format code voxsmith no longer holds, and
+`--write-material-extra-image-value` is the deliberate replacement.
