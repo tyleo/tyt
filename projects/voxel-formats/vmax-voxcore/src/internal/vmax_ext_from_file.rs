@@ -7,7 +7,7 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxMain};
 /// The ext of a read of `serde` into `main`.
 ///
 /// 1. `node_ids`: the hierarchy node ids in scene order, groups then objects
-/// 2. `palettes`: each folded palette's provenance by palette id
+/// 2. `palettes`: each object palette's provenance by palette id
 /// 3. `object_data`: each object's contents filename by object id, or `None`
 ///    for an object with no contents file, which takes a synthesized editor
 ///    state

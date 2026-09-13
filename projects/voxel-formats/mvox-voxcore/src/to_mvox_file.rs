@@ -246,11 +246,20 @@ fn material_type_from_token(token: &str) -> MVoxMaterialType {
 /// the material it samples on the object's first layer. A material's index is
 /// its color index.
 ///
-/// Errors when a material index or a voxel coordinate does not fit the byte
-/// MagicaVoxel stores it in, since a wrapped index paints the voxel from the
-/// wrong palette entry and a wrapped coordinate moves it.
+/// Errors on a second layer, since a model reads one and a voxel's color
+/// would silently ignore the rest, and when a material index or a voxel
+/// coordinate does not fit the byte MagicaVoxel stores it in, since a wrapped
+/// index paints the voxel from the wrong palette entry and a wrapped
+/// coordinate moves it.
 fn model_from_object(object: &VoxObject) -> Result<MVoxModel> {
     let bounds = object.bounds();
+    let layer_count = object.layer_count();
+    if layer_count > 1 {
+        return Err(Error::Invalid(format!(
+            "object {} has {layer_count} layers but a MagicaVoxel model reads one",
+            object.name()
+        )));
+    }
     let layer_id = object.iter_layers().next().map(|(layer_id, _)| layer_id);
 
     let voxels = object
@@ -1207,6 +1216,22 @@ mod tests {
         main.retain_material(palette_id, vec![value_id]).unwrap();
 
         assert!(to_mvox_file(&main).is_err());
+    }
+
+    /// A model reads one layer, so an object given a second one errors rather
+    /// than writing colors that ignore it.
+    #[test]
+    fn a_second_layer_errors() {
+        let mut main = from_mvox_file(&placed_models_file()).unwrap();
+
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+
+        main.retain_layer(object(0), palette_id, material(0))
+            .unwrap();
+
+        let error = to_mvox_file(&main).unwrap_err();
+
+        assert!(error.to_string().contains("layers"), "{error}");
     }
 
     /// An ext material entry for a material the palette does not hold is out

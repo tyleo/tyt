@@ -179,20 +179,20 @@ mod tests {
         assert!(error.to_string().contains(BASE_COLOR), "{error}");
     }
 
-    /// A synthesized state whose folded palette needs more than 255 distinct
-    /// materials cannot be represented, since a voxel's material index is a
-    /// single 1-based byte (0 is the no-material cell), so the writer errors
-    /// rather than silently wrapping the index.
+    /// A synthesized state whose voxels draw more distinct materials than a
+    /// Voxel Max palette has slots cannot be represented, so the writer errors
+    /// rather than silently wrapping the slot. Only the materials voxels draw
+    /// count; a palette may list more.
     #[test]
-    fn errors_when_derived_materials_exceed_the_byte_budget() {
+    fn errors_when_the_voxels_draw_more_materials_than_slots() {
         let mut main = VoxMain::default();
         let color_value_pool_id = main
             .retain_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap());
-        // 256 distinct metallic values give 256 distinct material signatures,
-        // one past the byte budget; the color value pool stays a single
-        // in-range color.
-        let metallic_value_pool_id = main
-            .retain_value_pool(VoxValuePool::float((0..256u32).map(f64::from).collect()).unwrap());
+        // Nine distinct metallic values give nine distinct slot keys, one past
+        // the slots; the color value pool stays a single in-range color.
+        let metallic_value_pool_id = main.retain_value_pool(
+            VoxValuePool::float((0..9u32).map(|index| f64::from(index) / 10.0).collect()).unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette
             .retain_property(
@@ -208,18 +208,20 @@ mod tests {
                 U32Id::from_u32(0),
             )
             .unwrap();
-        for index in 0..256u32 {
+        for index in 0..9u32 {
             palette
                 .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
                 .unwrap();
         }
         let palette_id = main.retain_palette(palette).unwrap();
-        let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let mut object = VoxObject::new(String::new(), TyVector3U32::new(9, 1, 1)).unwrap();
         object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
-        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        object
-            .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(0)])
-            .unwrap();
+        for index in 0..9u32 {
+            let voxel_id = object.voxel_id(TyVector3U32::new(index, 0, 0)).unwrap();
+            object
+                .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(index)])
+                .unwrap();
+        }
         main.retain_object(object).unwrap();
         main.retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
@@ -227,13 +229,75 @@ mod tests {
             .unwrap();
         main.validate().unwrap();
 
-        assert!(
-            to_vmax_file(
-                &to_vmax_vox_main(main).unwrap(),
-                &VMaxWriteOptions::default()
+        let error = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("material slots"), "{error}");
+    }
+
+    /// An object layering a color palette under a material palette writes
+    /// through its effective palette: each voxel's cell comes from the color
+    /// layer and its slot from the material layer, with one derived material
+    /// per distinct sample on that layer.
+    #[test]
+    fn writes_a_two_layer_object_through_its_effective_palette() {
+        let mut main = VoxMain::default();
+        let color_palette_id =
+            retain_rgba_palette(&mut main, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
+        let metallic_value_pool_id =
+            main.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
+        let mut material_palette = VoxPalette::default();
+        material_palette
+            .retain_property(
+                "metallic".to_owned(),
+                metallic_value_pool_id,
+                U32Id::from_u32(0),
             )
-            .is_err()
-        );
+            .unwrap();
+        for index in 0..2u32 {
+            material_palette
+                .retain_material(vec![U32Id::from_u32(index)])
+                .unwrap();
+        }
+        let material_palette_id = main.retain_palette(material_palette).unwrap();
+
+        let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
+        let mut object = VoxObject::new(String::new(), TyVector3U32::new(3, 1, 1)).unwrap();
+        object.retain_layer(color_palette_id, material_id(0));
+        object.retain_layer(material_palette_id, material_id(0));
+        // Cells red, green, blue draw the matte, shiny, matte materials.
+        for (x, color, material) in [(0, 0, 0), (1, 1, 1), (2, 2, 0)] {
+            let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object
+                .retain_voxel(voxel_id, &[material_id(color), material_id(material)])
+                .unwrap();
+        }
+        main.retain_object(object).unwrap();
+        main.retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
+        main.validate().unwrap();
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+        let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
+        // Voxel Max's 0.1 to 0.9 slider: metallic 0 and 1 land at its ends.
+        let metallic: Vec<f64> = settings.materials.iter().take(2).map(|m| m.mc).collect();
+        assert_eq!(metallic, [f64::from(0.1f32), f64::from(0.9f32)]);
+        let mut voxels =
+            decode_vmax_snapshots(&file.contents_files.values().next().unwrap().snapshots).unwrap();
+        voxels.sort_by_key(|v| v.position);
+        let samples: Vec<(u8, u8)> = voxels
+            .iter()
+            .map(|v| (v.color_idx, v.material_idx))
+            .collect();
+        assert_eq!(samples, [(1, 0), (2, 1), (3, 0)]);
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green
@@ -1245,18 +1309,14 @@ mod tests {
         }
     }
 
-    /// Voxel Max glows in the voxel's base color at coefficient `sic`, so a glTF
-    /// emissive color derives to `emissiveStrength * lum(emissive) / lum(base)`,
-    /// read relative to the base color and left unbounded. A mid-gray base under
-    /// a white emissive at strength 2 lands well above the old `[0, 1]` clamp.
-    #[test]
-    fn derives_emissive_relative_to_the_base_color() {
+    /// A one-voxel state binding `baseColor`, `emissiveColor`, and
+    /// `emissiveStrength` on one material, for the emissive fold tests.
+    fn emissive_main(base: [f64; 4], emissive: [f64; 3], strength: f64) -> VoxMain<()> {
         let mut main = VoxMain::default();
-        let color = main
-            .retain_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#808080FF")]).unwrap());
+        let color = main.retain_value_pool(VoxValuePool::vec_4_float(vec![base]).unwrap());
         let emissive_color =
-            main.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 1.0, 1.0]]).unwrap());
-        let strength = main.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
+            main.retain_value_pool(VoxValuePool::vec_3_float(vec![emissive]).unwrap());
+        let strength = main.retain_value_pool(VoxValuePool::float(vec![strength]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .retain_property("baseColor".to_owned(), color, U32Id::from_u32(0))
@@ -1287,18 +1347,22 @@ mod tests {
         main.set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         main.validate().unwrap();
+        main
+    }
 
+    /// The `sic` the written document carries for `main`'s one material, read
+    /// back through from-vmax, which carries it as `emissiveStrength`.
+    fn written_sic(main: VoxMain<()>) -> f64 {
         let file = to_vmax_file(
             &to_vmax_vox_main(main).unwrap(),
             &options(VMaxColorFormat::All),
         )
         .unwrap();
-        // from-vmax carries Voxel Max's `sic` back as `emissiveStrength`.
         let reloaded = from_vmax_file(&file).unwrap();
         let (palette_id, material_palette) = reloaded
             .iter_palettes()
             .find(|(_, palette)| palette.property_id_by_name("emissiveStrength").is_some())
-            .expect("an emissive palette survives");
+            .expect("a material palette survives");
         let material_id = material_palette.iter_materials().next().unwrap();
         let property_id = material_palette
             .property_id_by_name("emissiveStrength")
@@ -1306,27 +1370,41 @@ mod tests {
         let (value_pool, value_id) = reloaded
             .material_value(palette_id, material_id, property_id)
             .unwrap();
-        let sic = match value_pool.value(value_id) {
+        match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             _ => panic!("emissiveStrength is a float value pool"),
-        };
+        }
+    }
 
-        // The gray is achromatic, so its linear luminance is one linearized
-        // channel; the white emissive's is 1. sic = 2 * 1 / lum(gray).
-        let linear = |c: f64| {
-            if c <= 0.04045 {
-                c / 12.92
-            } else {
-                ((c + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        let expected = 2.0 / linear(128.0 / 255.0);
-        assert!(
-            (sic - expected).abs() < 1e-3,
-            "sic {sic} vs expected {expected}"
-        );
-        // Unbounded: far above the old clamp ceiling of 1.0.
-        assert!(sic > 2.0, "sic {sic} should exceed the removed clamp");
+    /// Voxel Max glows in the voxel's base color at coefficient `sic`, so an
+    /// emissive color equal to the base color folds to the strength exactly,
+    /// left unbounded.
+    #[test]
+    fn derives_a_matching_emissive_as_the_strength() {
+        let base = color_floats("#808080FF");
+        let main = emissive_main(base, [base[0], base[1], base[2]], 2.0);
+        assert_eq!(written_sic(main), 2.0);
+    }
+
+    /// A black emissive is no glow whatever the strength, so it writes `sic` 0
+    /// without comparing colors.
+    #[test]
+    fn a_black_emissive_writes_no_glow() {
+        let main = emissive_main(color_floats("#808080FF"), [0.0; 3], 1.0);
+        assert_eq!(written_sic(main), 0.0);
+    }
+
+    /// A glowing emissive that differs from the base color cannot be written:
+    /// Voxel Max would glow in the base color, changing how the model looks.
+    #[test]
+    fn a_glowing_emissive_that_differs_from_the_base_color_errors() {
+        let main = emissive_main(color_floats("#808080FF"), [1.0; 3], 2.0);
+        let error = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &options(VMaxColorFormat::All),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("glows"), "{error}");
     }
 
     /// A 6-hex source color widens to opaque RGBA: the missing alpha defaults to

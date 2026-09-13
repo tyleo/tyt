@@ -41,7 +41,7 @@ pub fn synthesized_node(ext: &VMaxExt, node: &VoxHierarchyNode) -> VMaxExtNode {
     VMaxExtNode {
         id,
         index,
-        rotation: axis_angle(node.transform.rotation),
+        rotation: encode_axis_angle(node.transform.rotation),
         alignment: DEFAULT_ALIGNMENT.to_owned(),
         pivot_face: DEFAULT_PIVOT_FACE.to_owned(),
         pivot_align: DEFAULT_PIVOT_ALIGN.to_owned(),
@@ -50,9 +50,10 @@ pub fn synthesized_node(ext: &VMaxExt, node: &VoxHierarchyNode) -> VMaxExtNode {
 }
 
 /// The `[x, y, z, angle]` axis-angle that reproduces a quaternion rotation,
-/// the inverse of the writer's decode. Feeding the result back through the
-/// decode, and Voxel Max's, recovers the same rotation.
-pub fn axis_angle(rotation: TyQuaternionF64) -> [f64; 4] {
+/// the inverse of [`decode_axis_angle`](crate::decode_axis_angle). Feeding the
+/// result back through the decode, and Voxel Max's, recovers the same
+/// rotation.
+pub fn encode_axis_angle(rotation: TyQuaternionF64) -> [f64; 4] {
     let (axis, angle) = rotation.to_axis_angle();
     if angle == 0.0 {
         // No rotation: match Voxel Max's `[0, 0, 0, 0]` rather than emit a bare
