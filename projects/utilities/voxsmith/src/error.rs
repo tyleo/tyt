@@ -21,7 +21,7 @@ pub enum Error {
     Mesh(MeshError),
 
     /// A material atlas image could not be encoded as PNG.
-    #[cfg(feature = "mesh")]
+    #[cfg(feature = "mesh_old")]
     Png(String),
 
     /// An image of the mesh document could not be decoded.
@@ -49,7 +49,7 @@ impl Display for Error {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
             Error::Mesh(error) => error.fmt(f),
-            #[cfg(feature = "mesh")]
+            #[cfg(feature = "mesh_old")]
             Error::Png(message) => write!(f, "could not encode PNG: {message}"),
             #[cfg(feature = "voxelize")]
             Error::DecodeImage(message) => write!(f, "could not decode image: {message}"),
@@ -66,7 +66,7 @@ impl StdError for Error {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
             Error::Mesh(error) => Some(error),
-            #[cfg(feature = "mesh")]
+            #[cfg(feature = "mesh_old")]
             Error::Png(_) => None,
             #[cfg(feature = "voxelize")]
             Error::DecodeImage(_) => None,

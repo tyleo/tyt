@@ -2,7 +2,7 @@
 //! any. [`DependenciesImpl`], behind the `impl` feature, binds them over
 //! `png` and `zune-jpeg`.
 
-#[cfg(feature = "mesh")]
+#[cfg(feature = "mesh_old")]
 pub mod mesh;
 
 #[cfg(feature = "voxelize")]

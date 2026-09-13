@@ -6,8 +6,8 @@ pub mod hierarchy_show;
 #[cfg(feature = "info")]
 pub mod info;
 
-#[cfg(feature = "mesh")]
-pub mod mesh;
+#[cfg(feature = "mesh_old")]
+pub mod mesh_old;
 
 #[cfg(feature = "palette_list")]
 pub mod palette_list;

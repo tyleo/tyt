@@ -1,6 +1,6 @@
 use crate::{
     dependencies::{DependenciesImpl, mesh::EncodePng},
-    operations::mesh::AtlasImage,
+    operations::mesh_old::AtlasImage,
 };
 use png::{BitDepth, ColorType, Encoder};
 
@@ -24,7 +24,7 @@ impl EncodePng for DependenciesImpl {
 mod tests {
     use crate::{
         dependencies::{DependenciesImpl, mesh::EncodePng},
-        operations::mesh::AtlasImage,
+        operations::mesh_old::AtlasImage,
     };
     use png::Decoder;
     use std::io::Cursor;

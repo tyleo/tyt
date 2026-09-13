@@ -1,4 +1,4 @@
-use crate::operations::mesh::AtlasImage;
+use crate::operations::mesh_old::AtlasImage;
 
 /// Encodes PNGs, the form of the baked material atlas images.
 pub trait EncodePng {
