@@ -3,7 +3,7 @@ use crate::{
     float_value_pool, material_list, vm_coefficient_to_pbr_factor, vmax_ext_material,
 };
 use branded_id::U32Id;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use ty_math::TySrgbaU8;
 use vmax::{VMaxFile, VMaxObject, snapshots::VMaxVoxel};
 use voxcore::{
@@ -227,21 +227,10 @@ pub(crate) fn object_palette(
         combo_material_ids.insert(key, material_id);
     }
 
-    // The slot each material draws is its material byte.
-    let slots = if has_materials {
-        combo_material_ids
-            .iter()
-            .map(|(key, &material_id)| (material_id, key.1))
-            .collect()
-    } else {
-        BTreeMap::new()
-    };
-
     let palette_id = main.retain_palette(palette)?;
     let provenance = VMaxExtPalette {
         name,
         materials: materials.iter().map(vmax_ext_material).collect(),
-        slots,
     };
     Ok(ObjectPalette {
         palette_id,

@@ -2,7 +2,7 @@ use crate::PalettePlan;
 use std::collections::BTreeSet;
 
 /// The per-color material map for a palette's settings sidecar. For each color
-/// cell a sample draws, sets its slot's bit in `lc` (`1 << material_idx`),
+/// cell a material draws, sets its slot's bit in `lc` (`1 << material_idx`),
 /// lists the used cells in `indices`, and takes the first as `current`. Empty
 /// for a palette with no materials, which Voxel Max renders with its own
 /// defaults. Voxel Max reads a voxel's material from this map, not the
@@ -13,7 +13,7 @@ pub(crate) fn color_material_map(plan: &PalettePlan) -> (Vec<u8>, Vec<i64>, i64)
         return (lc, Vec::new(), 0);
     }
     let mut cells: BTreeSet<u32> = BTreeSet::new();
-    for indices in plan.samples.values() {
+    for indices in plan.indices.values() {
         let cell = u32::from(indices.color_idx) - 1;
         lc[cell as usize] |= 1 << indices.material_idx;
         cells.insert(cell);

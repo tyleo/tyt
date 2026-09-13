@@ -1,7 +1,7 @@
 use crate::{
-    PaletteAxes, PalettePlan, Result, VMaxVoxMain, VMaxWriteOptions, apply_scene_camera,
-    contents_editor_state, ext_entry, ext_placements, extend_palette_plan, group_from_node,
-    new_palette_plan, node_rotation, object_file_suffix, object_from_node, place_object,
+    PalettePlan, Result, VMaxVoxMain, VMaxWriteOptions, apply_scene_camera, colorless_plan,
+    contents_editor_state, ext_entry, ext_placements, group_from_node, new_palette_plan,
+    node_rotation, object_file_suffix, object_from_node, object_layer, place_object,
     reconstruct_voxels, secondary_object_ext, subtree_box_local, write_palette_files,
 };
 use branded_id::U32Id;
@@ -20,16 +20,19 @@ use voxcore::{BVoxObject, BVoxPalette};
 /// palette's, and object's provenance and the scene-level state. The scene
 /// supplies the rest: names, transforms, parents, and content boxes. Nodes
 /// write in listing order, children before parents when the listing has them
-/// so, as Voxel Max's documents do. Errors when an entity has no ext entry.
+/// so, as Voxel Max's documents do. Each object's one palette is read in
+/// Voxel Max's layout, the one the loader builds. Nothing is converted.
+/// Errors when an entity has no ext entry, when an object has other than one
+/// layer, or when a palette departs from the layout.
 pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
     let placements = ext_placements(main)?;
 
     let mut objects: Vec<VMaxObject> = Vec::new();
     let mut groups: Vec<VMaxGroup> = Vec::new();
-    // One palette plan per distinct ordered list of layer palettes, in
-    // first-seen order, and each list's position in it.
+    // One plan per palette in first-seen order, plus one shared by every
+    // layerless object, and each plan's position.
     let mut plans: Vec<PalettePlan> = Vec::new();
-    let mut plan_index_of: HashMap<Vec<U32Id<BVoxPalette>>, usize> = HashMap::new();
+    let mut plan_index_of: HashMap<Option<U32Id<BVoxPalette>>, usize> = HashMap::new();
     // Object id -> its `data` filename, shared by every node that places it.
     let mut contents_by_object: BTreeMap<U32Id<BVoxObject>, String> = BTreeMap::new();
 
@@ -69,19 +72,20 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         for (slot, object_id) in node.child_object_ids.iter().enumerate() {
             let object_id = *object_id;
             let object = main.object(object_id).expect("a valid node child object");
-            let axes = PaletteAxes::resolve(main, object)?;
-            let layer_palette_ids: Vec<_> = object.iter_layers().map(|(_, id)| id).collect();
-            let plan_index = match plan_index_of.get(&layer_palette_ids) {
+            let palette_id = object_layer(object)?.map(|(_, palette_id)| palette_id);
+            let plan_index = match plan_index_of.get(&palette_id) {
                 Some(&plan_index) => plan_index,
                 None => {
                     let colored_count = plans.iter().filter(|p| p.color_table.is_some()).count();
-                    plans.push(new_palette_plan(main, &axes, object, colored_count)?);
-                    plan_index_of.insert(layer_palette_ids, plans.len() - 1);
+                    plans.push(match palette_id {
+                        Some(palette_id) => new_palette_plan(main, palette_id, colored_count)?,
+                        None => colorless_plan(),
+                    });
+                    plan_index_of.insert(palette_id, plans.len() - 1);
                     plans.len() - 1
                 }
             };
-            let plan = &mut plans[plan_index];
-            extend_palette_plan(plan, &axes, object)?;
+            let plan = &plans[plan_index];
             let suffix = object_file_suffix(object_id);
             // The node's ext places its first object. An extra object gets a
             // per-object variant with a distinct id and index and its own
@@ -109,7 +113,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
             let data = match contents_by_object.get(&object_id) {
                 Some(data) => data.clone(),
                 None => {
-                    let voxels = reconstruct_voxels(&tight, plan, object_placement.box_min);
+                    let voxels = reconstruct_voxels(&tight, plan, object_placement.box_min)?;
                     let data = format!("contents{suffix}.vmaxb");
                     // Voxels re-encode into snapshots; serde-only state the
                     // decoded voxcore object does not model (`pal`) stays
@@ -183,7 +187,8 @@ mod tests {
     };
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue,
-        VoxHierarchyNode, VoxObject, material::BASE_COLOR,
+        VoxHierarchyNode, VoxObject,
+        material::{BASE_COLOR, EMISSIVE_COLOR, ROUGHNESS},
     };
 
     fn material(
@@ -598,31 +603,62 @@ mod tests {
         assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
     }
 
-    /// A material retained to a palette with an exact material list takes the
-    /// slot its material-axis value ids select, and the writer draws it. A
-    /// retain after the value pools were pruned refuses, because the pools no
-    /// longer index the list.
+    /// A material retained after the load draws the slot its material-axis
+    /// value ids share, and the writer puts its voxels there.
     #[test]
-    fn a_retained_material_takes_the_slot_its_values_select() {
+    fn a_retained_material_draws_the_slot_its_values_share() {
         let mut main = from_vmax_file(&sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
         // Color cell 0 in slot 1: every material-axis property takes value 1.
-        let palette = main.palette(palette_id).unwrap();
-        let value_ids: Vec<U32Id<BVoxValuePoolValue>> = palette
-            .iter_properties()
-            .map(|(_, property)| U32Id::from_u32(u32::from(property.name != BASE_COLOR)))
-            .collect();
-        let material_id = main.retain_material(palette_id, value_ids).unwrap();
-        assert_eq!(main.ext().palettes[&palette_id].slots[&material_id], 1);
-
-        main.prune_value_pools();
         let value_ids: Vec<U32Id<BVoxValuePoolValue>> = main
             .palette(palette_id)
             .unwrap()
             .iter_properties()
-            .map(|_| U32Id::from_u32(0))
+            .map(|(_, property)| {
+                U32Id::from_u32(u32::from(
+                    property.name != BASE_COLOR && property.name != EMISSIVE_COLOR,
+                ))
+            })
             .collect();
-        assert!(main.retain_material(palette_id, value_ids).is_err());
+        let material_id = main.retain_material(palette_id, value_ids).unwrap();
+        let voxel_id = main
+            .object(object_id)
+            .unwrap()
+            .voxel_id(TyVector3U32::splat(0))
+            .unwrap();
+        main.retain_voxel(object_id, voxel_id, &[material_id])
+            .unwrap();
+
+        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let voxels =
+            decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
+        assert!(
+            voxels
+                .iter()
+                .any(|voxel| voxel.color_idx == 1 && voxel.material_idx == 1)
+        );
+        let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
+        assert_eq!(settings.lc[0], 0b10);
+    }
+
+    /// A material whose material-axis properties draw different values is no
+    /// single Voxel Max slot, so the writer errors whether or not a voxel
+    /// draws it.
+    #[test]
+    fn a_material_drawing_two_slots_errors() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        let value_ids: Vec<U32Id<BVoxValuePoolValue>> = main
+            .palette(palette_id)
+            .unwrap()
+            .iter_properties()
+            .map(|(_, property)| U32Id::from_u32(u32::from(property.name == ROUGHNESS)))
+            .collect();
+        main.retain_material(palette_id, value_ids).unwrap();
+
+        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+        assert!(error.to_string().contains("single"), "{error}");
     }
 
     /// Voxel Max lists child groups before their parents in its own files:
@@ -675,17 +711,16 @@ mod tests {
     }
 
     /// A reduction repaints onto a survivor, releases the rest, prunes the
-    /// value pools, and compacts. The survivor's slot rides in the ext, so the
-    /// document still draws its exact material even though its value ids were
-    /// renumbered, and the reload records the one slot.
+    /// value pools, and compacts. The exact material list follows the pools,
+    /// so the survivor keeps its exact material at its compacted value's slot,
+    /// and the reload records the list padded back out.
     #[test]
-    fn a_reduction_keeps_the_survivors_material_slot_through_prune_and_gc() {
+    fn a_reduction_keeps_the_survivors_exact_material_through_prune_and_gc() {
         let mut main = from_vmax_file(&sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         // The palette's materials sort by color cell then slot: material 0 draws
         // cell 2 in slot 1 and material 1 draws cell 4 in slot 0. Keep material
-        // 0, whose slot the pools stop recording once slot 0's values are
-        // pruned away and its own renumber to 0.
+        // 0, whose slot's values renumber to 0 once slot 0's are pruned away.
         let doomed_id = U32Id::<BVoxMaterial>::from_u32(1);
         let survivor_id = U32Id::<BVoxMaterial>::from_u32(0);
         main.repaint_materials(palette_id, &HashMap::from([(doomed_id, survivor_id)]))
@@ -693,22 +728,19 @@ mod tests {
         main.release_material(palette_id, doomed_id).unwrap();
         main.prune_value_pools();
         main.gc().unwrap();
-        assert_eq!(
-            main.ext().palettes[&palette_id].slots,
-            BTreeMap::from([(survivor_id, 1)])
-        );
+        let exact = &main.ext().palettes[&palette_id].materials;
+        assert_eq!(exact.len(), 1);
+        assert_eq!(exact[0].emissive, 2.0);
 
         let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         let voxels =
             decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
-        assert!(voxels.iter().all(|voxel| voxel.material_idx == 1));
+        assert!(voxels.iter().all(|voxel| voxel.material_idx == 0));
         let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
-        assert_eq!(settings.materials[1], material("2", 0.5, 0.25, 2.0, false));
+        assert_eq!(settings.materials[0], material("1", 0.5, 0.25, 2.0, false));
 
         let reloaded = from_vmax_file(&file).unwrap();
-        let palette = &reloaded.ext().palettes[&palette_id];
-        assert_eq!(palette.slots, BTreeMap::from([(survivor_id, 1)]));
-        assert_eq!(palette.materials.len(), 8);
+        assert_eq!(reloaded.ext().palettes[&palette_id].materials.len(), 8);
     }
 
     /// An ext missing an entity's entry is malformed, so the writer errors
@@ -739,13 +771,12 @@ mod tests {
         assert_eq!(rebuilt, original);
     }
 
-    /// A document whose glowing material spans more colors than there are
-    /// material slots writes back through a bare state, where the materials
-    /// are derived rather than read from the ext. The emissive color rides the
-    /// color axis, one per cell, so it must not split the materials: two
-    /// derive, not one per color, and every voxel keeps its cell and slot.
+    /// A document written back through a bare state, its ext dropped, reads
+    /// its materials from the value pools the loader built, one per slot, so
+    /// the material list keeps its order and every voxel keeps its cell and
+    /// slot however many colors a glowing slot spans.
     #[test]
-    fn derives_materials_across_more_colors_than_slots() {
+    fn writes_back_from_its_pools_without_the_ext() {
         let mut original = sample();
         let voxels: Vec<VMaxVoxel> = (0..10u8)
             .map(|i| VMaxVoxel {

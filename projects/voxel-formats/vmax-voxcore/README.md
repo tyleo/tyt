@@ -12,7 +12,12 @@ state with no native voxcore home as its ext.
 - `from_vmax_file` / `to_vmax_file`: between a parsed `VMaxFile` and a
   `VMaxVoxMain`. Geometry, palettes, and hierarchy become native voxcore
   entities. Each object's snapshots are decoded on the fly and re-encoded on
-  write. A loaded document writes back exactly through its ext.
+  write. A loaded document writes back exactly through its ext. The writer
+  reads each object's one palette in Voxel Max's layout, the one the loader
+  builds. `baseColor` and `emissiveColor` hold one value per color cell.
+  Every other property holds one value per material slot. A material pairs
+  one cell with one slot. The writer converts nothing. An object with a
+  second layer, or a palette off the layout, errors where it departs.
 - `to_vmax_vox_main`: a bare `VoxMain<()>` to a `VMaxVoxMain` with a
   synthesized ext, which writes as a document synthesized from the scene.
   The hierarchy becomes a tree first. A node placed along several paths is
@@ -55,13 +60,12 @@ takes the entry `to_vmax_vox_main` would synthesize for it as it is retained:
 a fresh UUID, a fresh index triplet, and the default anchors or editor
 session.
 
-A material retained to a palette with an exact material list takes the slot
-its material-axis value ids select, and refuses when they disagree or when a
-pruned value pool no longer indexes the list. A release drops the entry.
-`gc` rekeys every entry to its compacted id. The writer errors on an entity
-with no entry, on a node with two parents, and on a root that is also a
-child, because Voxel Max holds a tree. voxconv carries the ext through a
-Voxel Json document's `ext` block.
+A release drops the entry. `gc` rekeys every entry to its compacted id. An
+exact material list follows its material pools' surviving values, so a pruned
+palette keeps the exact materials its slots still draw. The writer errors on
+an entity with no entry, on a node with two parents, and on a root that is
+also a child, because Voxel Max holds a tree. voxconv carries the ext through
+a Voxel Json document's `ext` block.
 
 The `serde` feature, on by default, derives serde for the ext types. A map
 keyed by id serializes under the bare ids.

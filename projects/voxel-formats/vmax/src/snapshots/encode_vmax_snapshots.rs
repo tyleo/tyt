@@ -60,16 +60,18 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
             let count = slots.len() as i64;
 
             let mut ds = vec![0u8; 2 * (max_morton - min_morton + 1) as usize];
-            // Layer-color usage mask: one byte per palette index, set for each
-            // color used in this chunk. Voxel Max indexes it at `color - 1` to
-            // flag in-use cells in the color picker.
+            // Layer-color usage mask: one byte per palette index, indexed at
+            // `color - 1`, with bit `material` set for each material the color
+            // is drawn with in this chunk. Voxel Max reads the mask, not `ds`,
+            // to show a color's material, so a bit that misses the voxel's
+            // material shows the wrong slot.
             let mut lc = vec![0u8; 256];
             for (morton, (material, color)) in slots {
                 let slot = (morton - min_morton) as usize;
                 ds[2 * slot] = material;
                 ds[2 * slot + 1] = color;
                 if color != 0 {
-                    lc[(color - 1) as usize] = 1;
+                    lc[(color - 1) as usize] |= 1 << material;
                 }
             }
 
@@ -151,5 +153,21 @@ mod tests {
         // corner slots (0 and 3) stay empty, the occupied slots (1 and 2) carry
         // color.
         assert_eq!(storage.ds, vec![0, 0, 0, 1, 0, 2, 0, 0]);
+    }
+
+    /// The usage mask flags each material a color is drawn with, one bit per
+    /// slot, at the color's 0-based cell. Voxel Max shows a color's material
+    /// from this mask, so a voxel on slot 2 must set bit 2, not bit 0.
+    #[test]
+    fn masks_each_material_a_color_draws() {
+        let mut on_slot_two = voxel(0, 0, 0, 5);
+        on_slot_two.material_idx = 2;
+        let mut on_slot_seven = voxel(1, 0, 0, 5);
+        on_slot_seven.material_idx = 7;
+        let snapshots = encode_vmax_snapshots(&[on_slot_two, on_slot_seven, voxel(2, 0, 0, 9)]);
+        let lc = &snapshots[0].s.lc;
+        assert_eq!(lc[4], 0b1000_0100);
+        assert_eq!(lc[8], 0b0000_0001);
+        assert_eq!(lc.iter().filter(|byte| **byte != 0).count(), 2);
     }
 }

@@ -1,39 +1,52 @@
 use crate::{
-    FALLBACK_PALETTE, PaletteAxes, PalettePlan, Result, VMaxVoxMain, color_palette_colors,
-    ext_entry, vmax_material,
+    Error, FALLBACK_PALETTE, PaletteLayout, PalettePlan, Result, VMaxVoxMain, check_emissive,
+    color_palette_colors, ext_entry, slot_materials, voxel_indices,
 };
-use std::collections::HashMap;
-use voxcore::VoxObject;
+use branded_id::U32Id;
+use std::collections::BTreeMap;
+use voxcore::{
+    BVoxPalette,
+    material::{BASE_COLOR, EMISSIVE_COLOR},
+};
 
-/// Starts the plan for `object`'s layers. A one-layer palette whose ext holds
-/// the exact Voxel Max material list writes that list and the slots its
-/// materials draw. Any other layering derives its materials from the samples.
-/// Voxel Max numbers palette files 1-based (`palette1`, `palette2`, ...), by
-/// `colored_count`, since an un-numbered `palette.png` breaks the plist color
-/// lookup when no image is written. Errors when a layer's palette has no ext
-/// entry.
+/// Plans the Voxel Max palette for `palette_id`. Voxel Max numbers palette
+/// files 1-based (`palette1`, `palette2`, ...), by `colored_count`, since an
+/// un-numbered `palette.png` breaks the plist color lookup when no image is
+/// written. Errors when the palette has no ext entry or departs from the
+/// [`PaletteLayout`]. A palette with materials but no `baseColor` errors
+/// because Voxel Max keeps a material list only in a color palette's sidecar.
+/// An `emissiveColor` with no material axis errors because its default
+/// strength glows where Voxel Max's default materials do not.
 pub(crate) fn new_palette_plan(
     main: &VMaxVoxMain,
-    axes: &PaletteAxes,
-    object: &VoxObject,
+    palette_id: U32Id<BVoxPalette>,
     colored_count: usize,
 ) -> Result<PalettePlan> {
-    let mut name = String::new();
-    for (_, palette_id) in object.iter_layers() {
-        let provenance = ext_entry(
-            main.ext().palettes.get(&palette_id),
-            "palette",
-            palette_id.to_u32(),
-        )?;
-        // The palette Voxel Max shows is the one the colors come from.
-        if axes.color.map(|color| axes.property(color).palette_id()) == Some(palette_id) {
-            name = provenance.name.clone();
-        }
-    }
-    let color_table = match axes.color {
-        Some(color) => Some(color_palette_colors(axes.property(color).value_pool())?),
+    let provenance = ext_entry(
+        main.ext().palettes.get(&palette_id),
+        "palette",
+        palette_id.to_u32(),
+    )?;
+    let layout = PaletteLayout::resolve(main, palette_id)?;
+
+    let color_table = match &layout.color {
+        Some(color) => Some(color_palette_colors(color.value_pool)?),
         None => None,
     };
+    if color_table.is_none() && !layout.material.is_empty() {
+        return Err(Error::invalid(format!(
+            "palette {} binds materials but no `{BASE_COLOR}`, and Voxel Max keeps a material \
+             list only in a color palette's sidecar",
+            palette_id.to_u32()
+        )));
+    }
+    if layout.material.is_empty() && layout.emissive_color.is_some() {
+        return Err(Error::invalid(format!(
+            "palette {} binds `{EMISSIVE_COLOR}` but no material property to carry its \
+             strength, which Voxel Max's default materials would not glow at",
+            palette_id.to_u32()
+        )));
+    }
     // An empty reference is one Voxel Max cannot resolve, so a colorless
     // palette borrows the default name and writes no file.
     let pal = match color_table {
@@ -41,31 +54,21 @@ pub(crate) fn new_palette_plan(
         None => FALLBACK_PALETTE.to_owned(),
     };
 
-    let mut exact_slots = None;
-    let mut materials = Vec::new();
-    let layer_palette_ids: Vec<_> = object.iter_layers().map(|(_, id)| id).collect();
-    if let [palette_id] = layer_palette_ids.as_slice()
-        && !axes.material.is_empty()
-    {
-        let provenance = &main.ext().palettes[palette_id];
-        if !provenance.materials.is_empty() {
-            exact_slots = Some(provenance.slots.clone());
-            materials = provenance
-                .materials
-                .iter()
-                .enumerate()
-                .map(|(slot, material)| vmax_material(slot, material))
-                .collect();
+    let materials = slot_materials(&layout, provenance)?;
+    let mut indices = BTreeMap::new();
+    for material_id in layout.palette.iter_materials() {
+        let entry = voxel_indices(&layout, material_id)?;
+        if let Some(material) = materials.get(usize::from(entry.material_idx)) {
+            check_emissive(&layout, material_id, material.sic)?;
         }
+        indices.insert(material_id, entry);
     }
 
     Ok(PalettePlan {
         pal,
-        name,
+        name: provenance.name.clone(),
         color_table,
-        exact_slots,
-        samples: HashMap::new(),
-        slot_index_of: HashMap::new(),
+        indices,
         materials,
     })
 }

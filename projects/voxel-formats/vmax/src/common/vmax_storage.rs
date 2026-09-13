@@ -17,7 +17,8 @@ pub struct VMaxStorage {
     #[cfg_attr(feature = "serde", serde(default))]
     pub st: VMaxStats,
 
-    /// Layer-color usage mask (256 bytes).
+    /// Layer-color usage mask (256 bytes): at each color's 0-based cell, one bit
+    /// per material slot the color is drawn with.
     #[cfg_attr(feature = "serde", serde(default, with = "serde_bytes"))]
     pub lc: Vec<u8>,
 

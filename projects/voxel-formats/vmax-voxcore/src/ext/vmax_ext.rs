@@ -1,18 +1,15 @@
 use crate::{
-    VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, synthesized_node, synthesized_object_state,
+    VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, synthesized_node,
+    synthesized_object_state,
 };
 use branded_id::U32Id;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, HashSet},
-    fmt::Display,
-    mem,
-};
+use std::{collections::BTreeMap, fmt::Display, mem};
 use vmax::VMaxSceneJsonFile;
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, Error as VoxError,
-    Result as VoxResult, VoxExt, VoxGcRemap, VoxState,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, Error as VoxError, Result as VoxResult, VoxExt,
+    VoxGcRemap, VoxState,
     material::{BASE_COLOR, EMISSIVE_COLOR},
 };
 
@@ -89,8 +86,8 @@ fn rekey<K: Copy + Display + Ord, V>(
 
 /// A retained node, object, or palette takes the entry
 /// [`to_vmax_vox_main`](crate::to_vmax_vox_main) would synthesize for it. A
-/// retained material in a palette with an exact material list takes the slot
-/// its material-axis value ids select.
+/// gc rekeys every entry. An exact material list follows its material pools'
+/// surviving values.
 impl VoxExt for VMaxExt {
     fn hierarchy_node_did_retain(
         &mut self,
@@ -151,47 +148,7 @@ impl VoxExt for VMaxExt {
         remove(&mut self.palettes, palette_id, "palette").map(|_| ())
     }
 
-    fn material_did_retain(
-        &mut self,
-        state: &VoxState,
-        palette_id: U32Id<BVoxPalette>,
-        material_id: U32Id<BVoxMaterial>,
-    ) -> VoxResult<()> {
-        let Some(provenance) = self.palettes.get_mut(&palette_id) else {
-            return Err(refuse(format!(
-                "vmax ext holds no entry for palette {}",
-                palette_id.to_u32()
-            )));
-        };
-        if provenance.materials.is_empty() {
-            return Ok(());
-        }
-        let slot = material_slot(state, palette_id, material_id, provenance.materials.len())?;
-        insert(&mut provenance.slots, material_id, slot, "material")
-    }
-
-    fn materials_will_release(
-        &mut self,
-        _state: &VoxState,
-        palette_id: U32Id<BVoxPalette>,
-        material_ids: &[U32Id<BVoxMaterial>],
-    ) -> VoxResult<()> {
-        let Some(provenance) = self.palettes.get_mut(&palette_id) else {
-            return Err(refuse(format!(
-                "vmax ext holds no entry for palette {}",
-                palette_id.to_u32()
-            )));
-        };
-        if provenance.materials.is_empty() {
-            return Ok(());
-        }
-        for &material_id in material_ids {
-            remove(&mut provenance.slots, material_id, "material")?;
-        }
-        Ok(())
-    }
-
-    fn did_gc(&mut self, _state: &VoxState, remap: &VoxGcRemap) -> VoxResult<()> {
+    fn did_gc(&mut self, state: &VoxState, remap: &VoxGcRemap) -> VoxResult<()> {
         let hierarchy_nodes = mem::take(&mut self.hierarchy_nodes);
         self.hierarchy_nodes = rekey(
             hierarchy_nodes,
@@ -210,62 +167,56 @@ impl VoxExt for VMaxExt {
                     old_id.to_u32()
                 )));
             };
-            let slots = mem::take(&mut provenance.slots);
-            provenance.slots = rekey(
-                slots,
-                |id| remap.materials[old_id.to_usize_id()].new_id(id),
-                "material",
-            )?;
+            if !provenance.materials.is_empty() {
+                let materials = mem::take(&mut provenance.materials);
+                provenance.materials = compacted_materials(state, remap, new_id, materials)?;
+            }
             self.palettes.insert(new_id, provenance);
         }
         Ok(())
     }
 }
 
-/// The Voxel Max material slot a folded material draws: the value id every
-/// material-axis property holds for it, which the loader set from the material
-/// byte. Refuses when the properties disagree or when a value pool no longer
-/// lists one value per exact material, because a pruned pool no longer indexes
-/// the list.
-fn material_slot(
+/// An exact material list after a gc of the material pools it indexes by
+/// slot: the surviving values' materials, in their compacted order. A palette
+/// binding no material axis keeps its list as it is. Refuses when a compacted
+/// value indexes no material.
+fn compacted_materials(
     state: &VoxState,
+    remap: &VoxGcRemap,
     palette_id: U32Id<BVoxPalette>,
-    material_id: U32Id<BVoxMaterial>,
-    slot_count: usize,
-) -> VoxResult<u8> {
+    materials: Vec<VMaxExtMaterial>,
+) -> VoxResult<Vec<VMaxExtMaterial>> {
     let palette = state.palette(palette_id).expect("a live palette");
-    let mut slots: HashSet<u32> = HashSet::new();
-    for (property_id, property) in palette.iter_properties() {
-        if property.name == BASE_COLOR || property.name == EMISSIVE_COLOR {
-            continue;
+    let Some(new_pool_id) = palette
+        .iter_properties()
+        .map(|(_, property)| property)
+        .find(|property| property.name != BASE_COLOR && property.name != EMISSIVE_COLOR)
+        .map(|property| property.value_pool_id)
+    else {
+        return Ok(materials);
+    };
+    // The value remap is keyed by the pool's old id.
+    let old_pool_id = (0..remap.value_pools.old_len())
+        .map(|old| U32Id::from_u32(old as u32))
+        .find(|&old| remap.value_pools.new_id(old) == Some(new_pool_id))
+        .expect("a live pool has an old id");
+    let values = &remap.value_pool_values[old_pool_id.to_usize_id()];
+    let mut compacted: Vec<Option<VMaxExtMaterial>> = (0..values.new_len()).map(|_| None).collect();
+    for (slot, material) in materials.into_iter().enumerate() {
+        if let Some(new_id) = values.new_id(U32Id::from_u32(slot as u32)) {
+            compacted[new_id.to_u32() as usize] = Some(material);
         }
-        let value_pool = state
-            .value_pool(property.value_pool_id)
-            .expect("a property names a live value pool");
-        if value_pool.len() != slot_count {
-            return Err(refuse(format!(
-                "`{}` lists {} values but the vmax ext lists {slot_count} exact materials, so \
-                 the value pools no longer index the material list",
-                property.name,
-                value_pool.len()
-            )));
-        }
-        let value_id = palette
-            .value_id(material_id, property_id)
-            .expect("a live material has a value id for every property");
-        slots.insert(value_id.to_u32());
     }
-    let mut slots: Vec<u32> = slots.into_iter().collect();
-    slots.sort_unstable();
-    match slots.as_slice() {
-        [slot] => Ok(*slot as u8),
-        [] => Err(refuse(
-            "the palette has no material property to read a Voxel Max material slot from",
-        )),
-        _ => Err(refuse(format!(
-            "material {} draws different material-axis values {slots:?}, so it selects no \
-             single Voxel Max material slot",
-            material_id.to_u32()
-        ))),
-    }
+    compacted
+        .into_iter()
+        .enumerate()
+        .map(|(slot, material)| {
+            material.ok_or_else(|| {
+                refuse(format!(
+                    "material pool value {slot} indexes no exact material in the vmax ext"
+                ))
+            })
+        })
+        .collect()
 }
