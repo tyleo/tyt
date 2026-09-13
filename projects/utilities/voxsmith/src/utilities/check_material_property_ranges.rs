@@ -1,24 +1,20 @@
-use crate::{
-    Result,
-    utilities::{COLOR_RANGE, GltfRange, scalar_range},
-};
-use voxcore::{VoxExt, VoxMain, VoxValuePoolValueRef, material::MaterialPropertyKind};
+use crate::{Result, utilities::check_material_range};
+use meshdoc::material::{COLOR_RANGE, MaterialPropertyKind, MaterialRange, scalar_range};
+use voxcore::{VoxExt, VoxMain, VoxValuePoolValueRef};
 
-/// Checks every palette property named by the glTF vocabulary against that
-/// name's glTF schema range, erroring on the first value a material draws
-/// outside it, `ior`'s union of exactly `0` and `[1, inf)` included.
+/// Checks every palette property in the material vocabulary against its
+/// range, erroring on the first value a material draws outside it.
 ///
-/// A range is a fact about the property name, not the format, so a value pool
-/// loads unchecked and the glTF boundaries run this one function instead of
-/// growing their own:
+/// A value pool loads unchecked because a range belongs to the property
+/// name. Both mesh boundaries run this one check:
 ///
-/// 1. the export before writing, so nothing out of range reaches a mesh file
-/// 2. the import on what it read, so a bad source errors at entry
+/// 1. the mesh export before building the document
+/// 2. the voxelize import on what it read
 ///
-/// A name outside the vocabulary has no checkable range and passes, as does a
-/// value of a shape the name does not read. The boundary that reads the value
-/// errors on its shape.
-pub fn check_gltf_property_ranges<T: VoxExt>(main: &VoxMain<T>) -> Result<()> {
+/// A name outside the vocabulary has no range and passes, as does a value of
+/// a shape the name does not read. The boundary that reads the value errors
+/// on its shape.
+pub fn check_material_property_ranges<T: VoxExt>(main: &VoxMain<T>) -> Result<()> {
     for (palette_id, palette) in main.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
             let name = &property.name;
@@ -52,8 +48,12 @@ pub fn check_gltf_property_ranges<T: VoxExt>(main: &VoxMain<T>) -> Result<()> {
                         _ => {}
                     },
                     MaterialPropertyKind::Scalar => match value {
-                        VoxValuePoolValueRef::Float(number) => range.check(name, number)?,
-                        VoxValuePoolValueRef::Int(number) => range.check(name, number as f64)?,
+                        VoxValuePoolValueRef::Float(number) => {
+                            check_material_range(name, number, range)?
+                        }
+                        VoxValuePoolValueRef::Int(number) => {
+                            check_material_range(name, number as f64, range)?
+                        }
                         _ => {}
                     },
                 }
@@ -64,16 +64,16 @@ pub fn check_gltf_property_ranges<T: VoxExt>(main: &VoxMain<T>) -> Result<()> {
 }
 
 /// Errors unless every component of a vocabulary color lies in `range`.
-fn check_components(name: &str, components: &[f64], range: GltfRange) -> Result<()> {
+fn check_components(name: &str, components: &[f64], range: MaterialRange) -> Result<()> {
     for &component in components {
-        range.check(name, component)?;
+        check_material_range(name, component, range)?;
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::utilities::check_gltf_property_ranges;
+    use crate::utilities::check_material_property_ranges;
     use branded_id::U32Id;
     use voxcore::{
         VoxMain, VoxPalette, VoxValuePool,
@@ -98,34 +98,38 @@ mod tests {
     #[test]
     fn passes_in_range_values_and_unranged_names() {
         let main = main_with(METALLIC, VoxValuePool::float(vec![1.0]).unwrap());
-        assert!(check_gltf_property_ranges(&main).is_ok());
+        assert!(check_material_property_ranges(&main).is_ok());
 
         // `emissiveStrength` is unbounded above.
         let main = main_with(EMISSIVE_STRENGTH, VoxValuePool::float(vec![7.0]).unwrap());
-        assert!(check_gltf_property_ranges(&main).is_ok());
+        assert!(check_material_property_ranges(&main).is_ok());
 
         // A custom name has no checkable range.
         let main = main_with("subsurface", VoxValuePool::float(vec![7.0]).unwrap());
-        assert!(check_gltf_property_ranges(&main).is_ok());
+        assert!(check_material_property_ranges(&main).is_ok());
     }
 
     #[test]
     fn errors_on_a_scalar_outside_its_range() {
         let main = main_with(METALLIC, VoxValuePool::float(vec![1.5]).unwrap());
-        let message = check_gltf_property_ranges(&main).unwrap_err().to_string();
+        let message = check_material_property_ranges(&main)
+            .unwrap_err()
+            .to_string();
         assert!(message.contains(METALLIC), "{message}");
         assert!(message.contains("1.5"), "{message}");
     }
 
     #[test]
-    fn spells_the_ior_union_exactly() {
+    fn holds_the_ior_union_exactly() {
         // Zero means "does not refract" and passes. A value between the
         // union's parts rejects.
         let main = main_with(IOR, VoxValuePool::float(vec![0.0, 1.5]).unwrap());
-        assert!(check_gltf_property_ranges(&main).is_ok());
+        assert!(check_material_property_ranges(&main).is_ok());
 
         let main = main_with(IOR, VoxValuePool::float(vec![0.5]).unwrap());
-        let message = check_gltf_property_ranges(&main).unwrap_err().to_string();
+        let message = check_material_property_ranges(&main)
+            .unwrap_err()
+            .to_string();
         assert!(message.contains(IOR), "{message}");
     }
 
@@ -135,15 +139,16 @@ mod tests {
             BASE_COLOR,
             VoxValuePool::vec_4_float(vec![[1.5, 0.0, 0.0, 1.0]]).unwrap(),
         );
-        let message = check_gltf_property_ranges(&main).unwrap_err().to_string();
+        let message = check_material_property_ranges(&main)
+            .unwrap_err()
+            .to_string();
         assert!(message.contains(BASE_COLOR), "{message}");
     }
 
     #[test]
     fn skips_a_value_no_material_draws() {
-        // The second value is out of range, and no material draws it: only
-        // drawn values reach a glTF factor, so it passes.
+        // No material draws the out-of-range second value, so it passes.
         let main = main_with(METALLIC, VoxValuePool::float(vec![1.0, 7.0]).unwrap());
-        assert!(check_gltf_property_ranges(&main).is_ok());
+        assert!(check_material_property_ranges(&main).is_ok());
     }
 }

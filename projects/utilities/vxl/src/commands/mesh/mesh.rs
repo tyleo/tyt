@@ -7,6 +7,11 @@ use crate::{
     require_file_name,
 };
 use clap::Parser;
+use meshconv::{
+    WriteFormat,
+    gltf::{GltfContainer, GltfImageStorage, GltfWriteFormat, GltfWriteOptions},
+    save,
+};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -15,9 +20,7 @@ use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
-    operations::mesh::{
-        AtlasShape, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod, ResourceStorage, mesh,
-    },
+    operations::mesh::{AtlasShape, MaterialMap, MaterialMeshRequest, MeshMethod, mesh},
 };
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
@@ -32,10 +35,10 @@ pub struct Mesh {
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
 
-    /// Target mesh format, glTF text (`.gltf`) or binary (`.glb`). Inferred from
-    /// the output extension when omitted, defaulting to `.glb`.
-    #[arg(value_name = "to", long, value_parser = cli_value_parser::<MeshFormat>())]
-    to: Option<MeshFormat>,
+    /// Target mesh container, glTF text (`.gltf`) or binary (`.glb`). Inferred
+    /// from the output extension when omitted, defaulting to `.glb`.
+    #[arg(value_name = "to", long, value_parser = cli_value_parser::<GltfContainer>())]
+    to: Option<GltfContainer>,
 
     /// Real-world edge length of one voxel in meters, applied as a uniform scale
     /// to every output vertex. The mesh twin of `voxelize`'s `--voxel-size`.
@@ -134,13 +137,13 @@ pub struct Mesh {
     define_property: Vec<String>,
 
     /// Where the baked images go. Defaults to `embedded` for `.glb` and
-    /// `external` for `.gltf`.
+    /// `loose` for `.gltf`.
     #[arg(
         value_name = "texture-storage",
         long,
-        value_parser = cli_value_parser::<ResourceStorage>()
+        value_parser = cli_value_parser::<GltfImageStorage>()
     )]
-    texture_storage: Option<ResourceStorage>,
+    texture_storage: Option<GltfImageStorage>,
 
     #[command(flatten)]
     selection: ObjectSelection,
@@ -148,17 +151,17 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let format = self
+        let container = self
             .to
             .or_else(|| {
                 let extension = self.output.as_deref()?.extension()?.to_str()?;
-                MeshFormat::from_extension(extension)
+                GltfContainer::from_extension(extension)
             })
-            .unwrap_or(MeshFormat::Glb);
+            .unwrap_or(GltfContainer::Glb);
 
         let output = self
             .input
-            .output_path(self.output.clone(), format.extension());
+            .output_path(self.output.clone(), container.extension());
 
         // The unwrap atlas, and the computed-occlusion maps only it can hold, are
         // a later pass; only the palette atlas bakes for now. This runs before
@@ -170,11 +173,9 @@ impl Mesh {
             ));
         }
 
-        // The image storage follows the target unless set: a `.glb` embeds, a
-        // `.gltf` writes loose files beside itself.
-        let storage = self.texture_storage.unwrap_or(match format {
-            MeshFormat::Glb => ResourceStorage::Embedded,
-            MeshFormat::Gltf => ResourceStorage::External,
+        let images = self.texture_storage.unwrap_or(match container {
+            GltfContainer::Glb => GltfImageStorage::Embedded,
+            GltfContainer::Gltf => GltfImageStorage::Loose,
         });
 
         let maps = self.resolve_maps(&output)?;
@@ -206,7 +207,6 @@ impl Mesh {
             method: self.method,
             scale: self.voxel_size.0,
             maps,
-            storage,
             shape: self.texture_shape,
         };
 
@@ -214,18 +214,14 @@ impl Mesh {
             .object(object_id)
             .expect("the selection resolved an id from the main's objects");
 
-        let files = mesh(&VoxsmithDependenciesImpl, &main, object, format, &request)?;
+        let document = mesh(&VoxsmithDependenciesImpl, &main, object, &request)?;
 
-        dependencies.write_file(&output, &files.mesh)?;
+        let format = WriteFormat::Gltf(GltfWriteFormat {
+            container,
+            options: GltfWriteOptions { images },
+        });
 
-        // Loose images go beside the mesh, named as the document references them.
-        let directory = output.parent().unwrap_or_else(|| Path::new("."));
-
-        for (name, bytes) in &files.sidecars {
-            dependencies.write_file(&directory.join(name), bytes)?;
-        }
-
-        Ok(())
+        Ok(save(&dependencies, &format, document, &output)?)
     }
 
     /// Resolves the `--texture` presets, then the `--texture-map` custom maps,

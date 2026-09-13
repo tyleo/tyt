@@ -1,8 +1,7 @@
-use crate::operations::mesh::{AtlasShape, MaterialMap, MeshMethod, ResourceStorage};
+use crate::operations::mesh::{AtlasShape, MaterialMap, MeshMethod};
 
 /// A request to mesh an object and bake its flattened layer materials into
-/// glTF textures: the meshing strategy and scale, the maps to bake, where
-/// their images go, and how the atlas canvas is shaped.
+/// textures.
 #[derive(Clone, Debug)]
 pub struct MaterialMeshRequest {
     /// The meshing strategy. Greedy merges only same-material faces, so each
@@ -14,9 +13,6 @@ pub struct MaterialMeshRequest {
 
     /// The maps to bake, each its own image, in order.
     pub maps: Vec<MaterialMap>,
-
-    /// Where the baked images go.
-    pub storage: ResourceStorage,
 
     /// How the atlas canvas is shaped around the material texels.
     pub shape: AtlasShape,

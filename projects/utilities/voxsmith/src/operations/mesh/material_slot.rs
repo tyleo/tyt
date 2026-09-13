@@ -1,6 +1,5 @@
-/// The glTF material slot a baked map fills. The caller picks the slot from the
-/// map's meaning; a map with no standard slot is referenced only through the
-/// material's `extras`, so a custom pipeline can still find it.
+/// The material texture slot a baked map fills, chosen by the caller from
+/// the map's meaning.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MaterialSlot {
     /// `pbrMetallicRoughness.baseColorTexture`.
@@ -21,7 +20,7 @@ pub enum MaterialSlot {
     /// shows.
     Emissive,
 
-    /// No standard glTF slot; the map is emitted and referenced only from the
-    /// material's `extras`.
+    /// No standard slot; the map rides as a texture property named after the
+    /// map, so a custom pipeline can still find it.
     None,
 }

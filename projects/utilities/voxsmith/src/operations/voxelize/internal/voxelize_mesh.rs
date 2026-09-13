@@ -1,12 +1,13 @@
 use crate::{
     Error, Result,
     operations::voxelize::{
-        FillMode, MaterialMode, Mesh, MeshMaterial, OutOfRangeProperty, SurfaceMode, VoxelGrid,
-        sample_material, voxelize_triangles,
+        FillMode, MaterialMode, MeshInput, MeshMaterial, OutOfRangeProperty, SurfaceMode,
+        VoxelGrid, sample_material, voxelize_triangles,
     },
-    utilities::{COLOR_RANGE, GltfRange, check_gltf_property_ranges, scalar_range},
+    utilities::{check_material_property_ranges, check_material_range},
 };
 use branded_id::U32Id;
+use meshdoc::material::{COLOR_RANGE, MaterialRange, scalar_range};
 use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
@@ -27,30 +28,27 @@ use voxcore::{
 /// arrives in. Decode it with [`lin_srgba_f64_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
-/// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
-/// node. Errors when the mesh has no triangle geometry or the grid exceeds
-/// voxcore's dense-grid limit.
+/// Voxelizes a [`MeshInput`] into a [`VoxMain`] of one object placed by one
+/// root node. Errors when the mesh has no triangle geometry or the grid
+/// exceeds voxcore's dense-grid limit.
 ///
 /// # Arguments
 /// * `mesh` - the mesh to rasterize, in Z-up world space.
-/// * `counts` - grid resolution in voxels per axis, sized by the caller from the
-///   mesh extent (see [`Mesh::extent`]).
-/// * `surface_mode` - center-inside occupancy or triangle-cover; see
-///   [`SurfaceMode`].
-/// * `fill_mode` - whether the interior is filled or the result is hollow.
-/// * `material_mode` - the color source: per-primitive flat factors, per-texel
-///   base-color sampling, `flat`, or `auto` (per-texel when the mesh is
-///   textured, else per-primitive).
-/// * `fill_color` - the color of voxels a mode cannot sample, or `None` for the
-///   `none` default.
+/// * `counts` - voxels per axis, sized by the caller from
+///   [`MeshInput::extent`].
+/// * `surface_mode` - how surface voxels are found; see [`SurfaceMode`].
+/// * `fill_mode` - how the interior is filled; see [`FillMode`].
+/// * `material_mode` - how voxels take materials; see [`MaterialMode`].
+/// * `fill_color` - the color of voxels a mode cannot sample, or `None` for
+///   the default.
 /// * `node_scale` - the placing node's uniform scale.
-/// * `name` - object-name override; `None` uses the mesh's own name.
+/// * `name` - object-name override; `None` uses the mesh's name.
 /// * `fallback_name` - the object name when neither `name` nor the mesh has one.
-/// * `out_of_range` - whether a material value outside its property's glTF
-///   range errors or clamps.
+/// * `out_of_range` - what an out-of-range material property does; see
+///   [`OutOfRangeProperty`].
 #[allow(clippy::too_many_arguments)]
 pub fn voxelize_mesh(
-    mesh: &Mesh,
+    mesh: &MeshInput,
     counts: TyVector3U32,
     surface_mode: SurfaceMode,
     fill_mode: FillMode,
@@ -65,8 +63,8 @@ pub fn voxelize_mesh(
         return Err(Error::invalid("mesh has no triangle geometry"));
     }
 
-    // Cap the grid before rasterizing, so an oversized resolution errors rather
-    // than overflowing or exhausting memory allocating the occupancy grid.
+    // Cap the grid before rasterizing. An oversized resolution errors before
+    // the occupancy grid allocation overflows or exhausts memory.
     let volume = counts.x as u64 * counts.y as u64 * counts.z as u64;
     if volume > VoxObject::MAX_GRID_CELLS {
         return Err(grid_too_large(counts));
@@ -88,8 +86,6 @@ pub fn voxelize_mesh(
 
     let palette_id = main.retain_palette(palette)?;
 
-    // The object name: an explicit override, else the mesh's own name, else the
-    // caller's fallback.
     let object_name = name
         .map(str::to_owned)
         .or(mesh.name.clone())
@@ -126,21 +122,16 @@ pub fn voxelize_mesh(
 
     main.push_root_hierarchy_node_id(node_id)?;
 
-    // The vocabulary range check the export also runs. The values were
-    // checked or clamped above, so this is the entry-side guarantee that
-    // nothing out of range leaves the import.
-    check_gltf_property_ranges(&main)?;
+    // The values were checked or clamped above. This run guarantees nothing
+    // out of range leaves the import.
+    check_material_property_ranges(&main)?;
 
     Ok(main)
 }
 
-/// The material of every filled cell, per the color mode: `flat` paints one fill
-/// color, `per-primitive` reads each covering material's flat factors,
-/// `per-texel` samples the covering material's maps per texel, and `auto` samples
-/// a textured mesh and reads factors otherwise. Under the surface modes a `solid`
-/// interior then takes the fill color or its nearest surface cell's material.
+/// The material of every filled cell under `material_mode`.
 fn resolve_materials(
-    mesh: &Mesh,
+    mesh: &MeshInput,
     grid: &VoxelGrid,
     counts: TyVector3U32,
     material_mode: MaterialMode,
@@ -186,7 +177,7 @@ fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshM
 
 /// Each surface cell takes its covering triangle's flat material; interior and
 /// empty cells are `None`.
-fn primitive_cells(mesh: &Mesh, grid: &VoxelGrid) -> Vec<Option<MeshMaterial>> {
+fn primitive_cells(mesh: &MeshInput, grid: &VoxelGrid) -> Vec<Option<MeshMaterial>> {
     grid.triangle
         .iter()
         .map(|&covering| {
@@ -199,7 +190,11 @@ fn primitive_cells(mesh: &Mesh, grid: &VoxelGrid) -> Vec<Option<MeshMaterial>> {
 
 /// Each surface cell takes its covering material with every present map sampled
 /// per texel over the cell footprint; interior and empty cells are `None`.
-fn sampled_cells(mesh: &Mesh, grid: &VoxelGrid, counts: TyVector3U32) -> Vec<Option<MeshMaterial>> {
+fn sampled_cells(
+    mesh: &MeshInput,
+    grid: &VoxelGrid,
+    counts: TyVector3U32,
+) -> Vec<Option<MeshMaterial>> {
     sample_material(
         &mesh.triangles,
         &mesh.materials,
@@ -210,11 +205,10 @@ fn sampled_cells(mesh: &Mesh, grid: &VoxelGrid, counts: TyVector3U32) -> Vec<Opt
     )
 }
 
-/// Paints every filled interior cell (a `solid` body's invented volume, carrying
-/// no surface material): the fill color when one is given, else the material of
-/// its nearest surface cell. The flood reaches a surface cell from every
-/// enclosed interior cell, but a per-texel sample can leave that cell without a
-/// material, and white stands in there.
+/// Paints every filled interior cell, the volume a `solid` fill invents with
+/// no surface material: the fill color when given, else its nearest surface
+/// cell's material. A per-texel sample can leave that surface cell without a
+/// material; white stands in there.
 fn fill_interior(
     grid: &VoxelGrid,
     counts: TyVector3U32,
@@ -262,19 +256,18 @@ type PaletteBuild = (
     U32Id<BVoxMaterial>,
 );
 
-/// Assembles a palette from a per-cell material list. Near-identical
-/// materials merge to one palette material, and each filled cell samples its
-/// cell's material. Every glTF property draws from a deduplicated value pool
-/// added to `main`: a property carrying one value id per material.
-/// The default material is the first built, or a lone white material for an
-/// all-empty grid, so the palette is never empty. A value outside its
-/// property's glTF range follows `out_of_range`.
+/// Assembles a palette from a per-cell material list. Identical materials
+/// merge to one palette material. Every vocabulary property draws from a
+/// deduplicated value pool added to `main`. The default material is the
+/// first built, or a lone white material for an all-empty grid, so the
+/// palette is never empty. A value outside its property's range follows
+/// `out_of_range`.
 fn build_palette(
     main: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
     out_of_range: OutOfRangeProperty,
 ) -> Result<PaletteBuild> {
-    // Merge near-identical materials into a distinct list, first seen in raster
+    // Merge identical materials into a distinct list, first seen in raster
     // order, remembering each filled cell's position in it.
     let mut distinct: Vec<MeshMaterial> = Vec::new();
     let mut lookup: HashMap<MaterialKey, usize> = HashMap::new();
@@ -299,7 +292,7 @@ fn build_palette(
 
     // The color properties follow the same policy as the scalars: every
     // component of `baseColor`, alpha included, and `emissiveColor` lies in
-    // the glTF `[0, 1]`.
+    // `[0, 1]`.
     for material in &mut distinct {
         material.base_color = property_color(material.base_color, BASE_COLOR, out_of_range)?;
         material.emissive_color =
@@ -488,15 +481,15 @@ fn value_pool_column<T, K: Eq + Hash>(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A float value pool over `values`, checked against the range the glTF spec
+/// A float value pool over `values`, checked against the range the vocabulary
 /// gives the property `key`. A value outside that range follows
-/// `out_of_range`. A NaN has no clamped value, so it errors either way.
+/// `out_of_range`.
 fn property_value_pool(
     values: Vec<f64>,
     key: &str,
     out_of_range: OutOfRangeProperty,
 ) -> Result<VoxValuePool> {
-    let range = scalar_range(key).expect("the voxelizer writes glTF scalar attributes");
+    let range = scalar_range(key).expect("the voxelizer writes vocabulary scalar attributes");
 
     let values = values
         .into_iter()
@@ -507,8 +500,7 @@ fn property_value_pool(
 }
 
 /// A color value with every component checked against [`COLOR_RANGE`]. A
-/// component outside it follows `out_of_range`. A NaN has no clamped value,
-/// so it errors either way.
+/// component outside it follows `out_of_range`.
 fn property_color(
     color: TyLinSrgbaF64,
     key: &str,
@@ -522,13 +514,13 @@ fn property_color(
 }
 
 /// One property value under the out-of-range policy: itself when it lies in
-/// `range`, else its clamp under [`OutOfRangeProperty::Clamp`] and the range
-/// error otherwise. An in-range value is its own clamp, which is what keeps
-/// the clamp off `ior`'s admitted zero, and a non-finite value has no clamp
-/// on the interval, so it errors under either policy.
+/// `range`, its clamp under [`OutOfRangeProperty::Clamp`], else the range
+/// error. An in-range value is its own clamp, which keeps the clamp off
+/// `ior`'s admitted zero. A non-finite value has no clamp on the interval
+/// and errors under either policy.
 fn property_value(
     value: f64,
-    range: GltfRange,
+    range: MaterialRange,
     key: &str,
     out_of_range: OutOfRangeProperty,
 ) -> Result<f64> {
@@ -538,7 +530,7 @@ fn property_value(
     if out_of_range == OutOfRangeProperty::Clamp && value.is_finite() {
         return Ok(range.clamp(value));
     }
-    range.check(key, value)?;
+    check_material_range(key, value, range)?;
     Ok(value)
 }
 
@@ -648,7 +640,7 @@ mod tests {
     use crate::{
         Result,
         operations::voxelize::{
-            FillMode, MaterialMode, Mesh, MeshMaterial, MeshTriangle, MeshTriangleUvs,
+            FillMode, MaterialMode, MeshInput, MeshMaterial, MeshTriangle, MeshTriangleUvs,
             OutOfRangeProperty, SurfaceMode, voxelize_mesh,
         },
     };
@@ -660,7 +652,7 @@ mod tests {
 
     /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
     /// cell, the left tagged material `0` and the right material `1`.
-    fn two_cell_mesh(materials: Vec<MeshMaterial>) -> Mesh {
+    fn two_cell_mesh(materials: Vec<MeshMaterial>) -> MeshInput {
         let triangle = |cell: f64, material_index: u32| MeshTriangle {
             points: [
                 TyVector3F64::new(cell + 0.2, 0.2, 0.5),
@@ -671,7 +663,7 @@ mod tests {
             material_index,
         };
 
-        Mesh {
+        MeshInput {
             triangles: vec![triangle(0.0, 0), triangle(1.0, 1)],
             maps: vec![Default::default(); materials.len()],
             materials,
@@ -779,7 +771,7 @@ mod tests {
     }
 
     /// The two-cell mesh's materials with the right one's `metallic` out
-    /// of the glTF range.
+    /// of its range.
     fn over_metallic() -> Vec<MeshMaterial> {
         let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
 
@@ -824,8 +816,7 @@ mod tests {
 
     #[test]
     fn an_ior_of_zero_passes_the_union_range() {
-        // `KHR_materials_ior` admits exactly 0 for "does not refract"
-        // alongside 1 and up.
+        // `ior` admits exactly 0 for "does not refract" alongside 1 and up.
         let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
         let mut hollow = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
         hollow.ior = 0.0;
@@ -834,7 +825,7 @@ mod tests {
     }
 
     /// The two-cell mesh's materials with the right one's `baseColor` red
-    /// outside the glTF `[0, 1]`.
+    /// outside `[0, 1]`.
     fn over_red() -> Vec<MeshMaterial> {
         let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
         let hot = MeshMaterial::flat(TyLinSrgbaF64::new(2.0, 0.0, 0.0, 1.0));
@@ -885,8 +876,8 @@ mod tests {
     #[test]
     fn an_infinite_scalar_errors_under_either_mode() {
         // `emissiveStrength` is unbounded above, but an unbounded top means
-        // arbitrarily large and finite: the wire spells an infinity and the
-        // glTF factor cannot, so it has no clamp on the interval either.
+        // arbitrarily large and finite. An infinity has no clamp on the
+        // interval either.
         let infinite_strength = || {
             let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
             let mut broken = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
@@ -900,9 +891,9 @@ mod tests {
 
     #[test]
     fn the_clamp_leaves_the_ior_union_zero_alone() {
-        // `ior` reads `{0} union [1, inf)`, and zero means "does not refract".
-        // It is in range, so the clamp policy has nothing to do to it; only a
-        // value between the union's parts lands on the interval's end.
+        // `ior` admits `{0} union [1, inf)`. Zero is in range, so the clamp
+        // leaves it alone. Only a value between the union's parts lands on
+        // the interval's end.
         let iors = || {
             let mut refracting = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
             refracting.ior = 0.0;

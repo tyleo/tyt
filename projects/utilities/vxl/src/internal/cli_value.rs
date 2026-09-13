@@ -1,4 +1,4 @@
-/// A voxsmith enum the command line takes by name. Each variant has the name a
+/// A library enum the command line takes by name. Each variant has the name a
 /// user types and the help line `--help` prints beside it;
 /// [`cli_value_parser`](crate::cli_value_parser) turns the set into a clap
 /// value parser.

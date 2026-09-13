@@ -1,18 +1,8 @@
 use crate::{
-    dependencies::{
-        DependenciesImpl,
-        mesh::{EncodeBase64, EncodePng},
-    },
+    dependencies::{DependenciesImpl, mesh::EncodePng},
     operations::mesh::AtlasImage,
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 use png::{BitDepth, ColorType, Encoder};
-
-impl EncodeBase64 for DependenciesImpl {
-    fn encode_base64(&self, bytes: &[u8]) -> String {
-        STANDARD.encode(bytes)
-    }
-}
 
 impl EncodePng for DependenciesImpl {
     fn encode_png(&self, image: &AtlasImage) -> Result<Vec<u8>, String> {
@@ -33,19 +23,11 @@ impl EncodePng for DependenciesImpl {
 #[cfg(test)]
 mod tests {
     use crate::{
-        dependencies::{
-            DependenciesImpl,
-            mesh::{EncodeBase64, EncodePng},
-        },
+        dependencies::{DependenciesImpl, mesh::EncodePng},
         operations::mesh::AtlasImage,
     };
     use png::Decoder;
     use std::io::Cursor;
-
-    #[test]
-    fn base64_pads() {
-        assert_eq!(DependenciesImpl.encode_base64(&[0xC0]), "wA==");
-    }
 
     #[test]
     fn png_round_trips_pixels() {

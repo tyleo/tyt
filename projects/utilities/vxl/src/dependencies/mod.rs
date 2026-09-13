@@ -14,4 +14,5 @@ pub use terminal_columns::*;
 pub use write_stdout::*;
 
 // Re-exported so a caller can name every trait `Dependencies` requires.
+// meshconv's same-named file traits are reached through `meshconv`.
 pub use voxconv::{DirectoryEntry, ListDir, ReadFile, WriteFile};

@@ -7,16 +7,8 @@ repository = "https://github.com/tyleo/tyt"
 description = "Utilities for working with voxels."
 
 [dependencies]
-base64 = { version = "0.22", optional = true }
 branded-id = "0.1.7"
-gltf = { version = "1.4.1", default-features = false, features = [
-    "import",
-    "names",
-    "utils",
-    "KHR_materials_emissive_strength",
-    "KHR_materials_ior",
-    "KHR_materials_transmission",
-], optional = true }
+meshdoc = "0.1.0"
 pathspec = "0.2.0"
 png = { version = "0.18.1", optional = true }
 serde_json = { version = "1", optional = true }
@@ -27,6 +19,7 @@ treegrid = { version = "0.2.0", features = [
 treeselect = { version = "0.1.1", optional = true }
 ty-math = "0.2.0"
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
+zune-jpeg = { version = "0.5", optional = true }
 
 [features]
 default = [
@@ -43,25 +36,16 @@ default = [
 
 hierarchy_show = ["_treegrid", "dep:treeselect"]
 info = ["_treegrid"]
-mesh = ["dep:serde_json"]
+mesh = []
 palette_list = ["_treegrid"]
 palette_show = ["_treegrid", "dep:serde_json"]
 to = []
 validate = ["_treegrid"]
-voxelize = ["dep:gltf"]
+voxelize = []
 
-impl = ["dep:base64", "dep:png"]
+impl = ["dep:png", "dep:zune-jpeg"]
 
 _treegrid = ["dep:treegrid"]
 
 [dev-dependencies]
-gltf = { version = "1.4.1", default-features = false, features = [
-    "import",
-    "names",
-    "utils",
-    "KHR_materials_emissive_strength",
-    "KHR_materials_ior",
-    "KHR_materials_transmission",
-] }
 png = "0.18"
-serde_json = "1"

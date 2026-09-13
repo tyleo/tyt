@@ -1,10 +1,10 @@
-//! The mesh bake's encoder.
+//! The voxelizer's decoder.
 
 // Public API
 
-mod encode_png;
+mod decode_image;
 
-pub use encode_png::*;
+pub use decode_image::*;
 
 // Optional API
 

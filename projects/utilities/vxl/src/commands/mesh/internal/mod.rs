@@ -1,12 +1,12 @@
 mod atlas;
 mod channel_packing;
 mod computed_occlusion_unsupported;
+mod gltf_image_storage;
 mod mesh_method;
 mod parse_atlas_shape;
 mod parse_material_channel;
 mod property_binding;
 mod resolve_material_channel;
-mod resource_storage;
 mod texture;
 mod texture_arg;
 mod texture_bundle;

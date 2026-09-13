@@ -1,5 +1,4 @@
-#[cfg(feature = "voxelize")]
-use gltf::Error as GltfError;
+use meshdoc::Error as MeshError;
 use pathspec::Error as PathSpecError;
 use std::{
     error::Error as StdError,
@@ -18,13 +17,16 @@ pub enum Error {
     /// A voxcore construction, mutation, or insertion was rejected.
     Vox(VoxError),
 
+    /// A meshdoc construction, mutation, or insertion was rejected.
+    Mesh(MeshError),
+
     /// A material atlas image could not be encoded as PNG.
     #[cfg(feature = "mesh")]
     Png(String),
 
-    /// Reading a glTF or GLB mesh failed.
+    /// An image of the mesh document could not be decoded.
     #[cfg(feature = "voxelize")]
-    Gltf(GltfError),
+    DecodeImage(String),
 
     /// A report layout rejected an option it does not consume.
     #[cfg(feature = "_treegrid")]
@@ -46,10 +48,11 @@ impl Display for Error {
         match self {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
+            Error::Mesh(error) => error.fmt(f),
             #[cfg(feature = "mesh")]
             Error::Png(message) => write!(f, "could not encode PNG: {message}"),
             #[cfg(feature = "voxelize")]
-            Error::Gltf(error) => error.fmt(f),
+            Error::DecodeImage(message) => write!(f, "could not decode image: {message}"),
             #[cfg(feature = "_treegrid")]
             Error::TreeGrid(error) => error.fmt(f),
             Error::PathSpec(error) => error.fmt(f),
@@ -62,10 +65,11 @@ impl StdError for Error {
         match self {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
+            Error::Mesh(error) => Some(error),
             #[cfg(feature = "mesh")]
             Error::Png(_) => None,
             #[cfg(feature = "voxelize")]
-            Error::Gltf(error) => Some(error),
+            Error::DecodeImage(_) => None,
             #[cfg(feature = "_treegrid")]
             Error::TreeGrid(error) => Some(error),
             Error::PathSpec(error) => Some(error),
@@ -79,10 +83,9 @@ impl From<VoxError> for Error {
     }
 }
 
-#[cfg(feature = "voxelize")]
-impl From<GltfError> for Error {
-    fn from(error: GltfError) -> Self {
-        Error::Gltf(error)
+impl From<MeshError> for Error {
+    fn from(error: MeshError) -> Self {
+        Error::Mesh(error)
     }
 }
 

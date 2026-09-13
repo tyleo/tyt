@@ -1,6 +1,11 @@
 use crate::{DirectoryEntry, ListDir, ReadFile, TerminalColumns, WriteFile, WriteStdout};
 #[cfg(unix)]
 use libc::{STDOUT_FILENO, TIOCGWINSZ, ioctl, winsize};
+use meshconv::{
+    DependenciesImpl as MeshconvDependenciesImpl, DirectoryEntry as MeshDirectoryEntry,
+    ForwardDependencies as ForwardMeshDependencies, ListDir as MeshListDir,
+    ReadFile as MeshReadFile, WriteFile as MeshWriteFile,
+};
 #[cfg(unix)]
 use std::mem;
 use std::{
@@ -11,7 +16,8 @@ use std::{
 use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ForwardDependencies};
 
 /// The dependencies over std's filesystem and standard output, with the
-/// format codecs forwarded to voxconv's impl.
+/// voxel codecs forwarded to voxconv's impl and the mesh codecs to
+/// meshconv's.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
@@ -20,6 +26,38 @@ impl ForwardDependencies for DependenciesImpl {
 
     fn target(&self) -> &VoxconvDependenciesImpl {
         &VoxconvDependenciesImpl
+    }
+}
+
+impl ForwardMeshDependencies for DependenciesImpl {
+    type Target = MeshconvDependenciesImpl;
+
+    fn target(&self) -> &MeshconvDependenciesImpl {
+        &MeshconvDependenciesImpl
+    }
+}
+
+impl MeshReadFile for DependenciesImpl {
+    fn read_file(&self, path: &Path) -> IOResult<Vec<u8>> {
+        ReadFile::read_file(self, path)
+    }
+}
+
+impl MeshListDir for DependenciesImpl {
+    fn list_dir(&self, path: &Path) -> IOResult<Vec<MeshDirectoryEntry>> {
+        Ok(ListDir::list_dir(self, path)?
+            .into_iter()
+            .map(|entry| MeshDirectoryEntry {
+                path: entry.path,
+                is_dir: entry.is_dir,
+            })
+            .collect())
+    }
+}
+
+impl MeshWriteFile for DependenciesImpl {
+    fn write_file(&self, path: &Path, bytes: &[u8]) -> IOResult<()> {
+        WriteFile::write_file(self, path, bytes)
     }
 }
 

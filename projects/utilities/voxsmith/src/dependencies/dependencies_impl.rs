@@ -1,3 +1,3 @@
-/// The dependencies over `base64` and `png`.
+/// The dependencies over `png` and `zune-jpeg`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;

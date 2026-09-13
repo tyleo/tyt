@@ -7,16 +7,18 @@
 //! main and encodes one back. `operations` holds a module per vxl command,
 //! each behind a feature of the same name. `info`, `validate`,
 //! `hierarchy_show`, `palette_list`, and `palette_show` render reports through
-//! treegrid. `mesh` writes one object to glTF. `to` prunes a main to a chosen
-//! set of objects for conversion. `voxelize` turns a glTF mesh into a main.
+//! treegrid. `mesh` triangulates one object into a meshdoc document. `to`
+//! prunes a main to a chosen set of objects for conversion. `voxelize` turns
+//! a meshdoc document into a main. Neither sees a mesh file format; meshconv
+//! decodes a mesh document into a `MeshMain` and encodes one back.
 //! `utilities` holds what the operations share: palette reduction, dithering,
-//! color spaces, the object, index, and vector selectors, the glTF property
-//! ranges, and a palette's property names.
-//! The mesh writer's PNG and base64 encoders come from the caller through
-//! [`EncodePng`](dependencies::mesh::EncodePng) and
-//! [`EncodeBase64`](dependencies::mesh::EncodeBase64).
+//! color spaces, the object, index, and vector selectors, the material
+//! property ranges, and a palette's property names.
+//! The mesh bake's PNG encoder comes from the caller through
+//! [`EncodePng`](dependencies::mesh::EncodePng), and the voxelizer's image
+//! decoder through [`DecodeImage`](dependencies::voxelize::DecodeImage).
 //! [`DependenciesImpl`](dependencies::DependenciesImpl), behind the `impl`
-//! feature, binds them over `png` and `base64`.
+//! feature, binds them over `png` and `zune-jpeg`.
 
 // Public API
 

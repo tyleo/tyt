@@ -1,25 +1,27 @@
 use crate::{
-    Dependencies, Error, NoneOr, Result, Rgba, VoxjEncodingOptions, cli_value_parser,
+    Dependencies, Error, MeshInput, NoneOr, Result, Rgba, VoxjEncodingOptions, cli_value_parser,
     commands::{GridResolutionOptions, QuantizeOptions},
 };
 use clap::Parser;
+use meshconv::load;
 use std::path::PathBuf;
 use voxconv::{
     WriteFormat, save,
     voxj::{EditStateMode, VoxjWriteFormat, VoxjWriteOptions},
 };
-use voxsmith::operations::voxelize::{
-    FillMode, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelizeOptions, from_gltf_bytes,
-    voxelize,
+use voxsmith::{
+    dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
+    operations::voxelize::{
+        FillMode, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelizeOptions, voxelize,
+    },
 };
 
 /// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "voxelize")]
 pub struct Voxelize {
-    /// The input glTF (`.gltf`) or GLB (`.glb`) mesh.
-    #[arg(value_name = "input")]
-    input: PathBuf,
+    #[command(flatten)]
+    input: MeshInput,
 
     /// The output `.voxj` or `.voxjz` document to write. Defaults to the input
     /// path with a `.voxj` extension, or `.voxjz` when `--format zip`.
@@ -66,14 +68,14 @@ pub struct Voxelize {
     #[arg(value_name = "fill-color", long, default_value = "none")]
     fill_color: NoneOr<Rgba>,
 
-    /// Name for the voxelized object. Defaults to the mesh's own name, else the
-    /// input file stem.
+    /// Name for the voxelized object. Defaults to the document's object name,
+    /// else the input file stem.
     #[arg(value_name = "name", long)]
     name: Option<String>,
 
-    /// What a source material value outside its property's glTF range does,
-    /// such as a `metallic` above `1`. `error` names the property and refuses
-    /// the mesh. `clamp` clamps onto the range and voxelizes on.
+    /// What a source material value outside its property's range does, such
+    /// as a `metallic` above `1`. `error` reports the property and refuses
+    /// the mesh. `clamp` clamps it onto the range and voxelizes on.
     #[arg(
         value_name = "out-of-range-property",
         long,
@@ -97,7 +99,7 @@ impl Voxelize {
 
         let (serialization, write_options, output) = self
             .encoding_options
-            .resolve_output(&self.input, self.output);
+            .resolve_output(&self.input.path, self.output);
 
         // A voxelized mesh has neither a source ext to carry nor an editor
         // build volume to record.
@@ -118,16 +120,20 @@ impl Voxelize {
             reduction: self.quantize_options.resolve(),
         };
 
-        let mesh = from_gltf_bytes(&dependencies.read_file(&self.input)?)?;
+        let from = self.input.resolve_format()?;
 
-        // The final fallback when neither `--name` nor the glTF names the object.
+        let document = load(&dependencies, from, &self.input.path)?;
+
+        // The final fallback when neither `--name` nor the document names the
+        // object.
         let stem = self
             .input
+            .path
             .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("voxelized");
 
-        let main = voxelize(&mesh, stem, &options)?;
+        let main = voxelize(&VoxsmithDependenciesImpl, &document, stem, &options)?;
 
         Ok(save(
             &dependencies,

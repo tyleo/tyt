@@ -5,7 +5,9 @@
 mod cli_value;
 mod cli_value_parser;
 mod file_name;
-mod mesh_format;
+mod gltf_container;
+mod mesh_input;
+mod mesh_read_format;
 mod none_or;
 mod object_selection;
 mod parse_index_range;
@@ -26,6 +28,7 @@ mod width;
 pub(crate) use cli_value::*;
 pub(crate) use cli_value_parser::*;
 pub(crate) use file_name::*;
+pub(crate) use mesh_input::*;
 pub(crate) use none_or::*;
 pub(crate) use object_selection::*;
 pub(crate) use parse_index_range::*;

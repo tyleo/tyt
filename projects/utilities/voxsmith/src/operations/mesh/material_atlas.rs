@@ -4,7 +4,7 @@ use crate::{
     operations::mesh::{
         AtlasShape, MaterialBake, atlas_dimensions, bake_atlas_image, resolve_used_materials,
     },
-    utilities::check_gltf_property_ranges,
+    utilities::check_material_property_ranges,
 };
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
@@ -30,7 +30,7 @@ pub struct MaterialAtlas {
 /// mesh writer, and the surface a bake-only material command builds on.
 /// `dependencies` encodes each image. Errors if a layer references a palette
 /// `main` does not hold, if a vocabulary property carries a value outside its
-/// glTF range, or if `shape` is too small to hold the materials.
+/// range, or if `shape` is too small to hold the materials.
 pub fn object_to_material_atlas<D: EncodePng, T: VoxExt>(
     dependencies: &D,
     main: &VoxMain<T>,
@@ -38,9 +38,9 @@ pub fn object_to_material_atlas<D: EncodePng, T: VoxExt>(
     bakes: &[MaterialBake],
     shape: AtlasShape,
 ) -> Result<MaterialAtlas> {
-    // The texels this bakes reach a glTF material, so the boundary runs the
-    // same vocabulary check the mesh export does rather than growing its own.
-    check_gltf_property_ranges(main)?;
+    // The texels this bakes reach a mesh material, so the boundary runs the
+    // vocabulary check the mesh export runs.
+    check_material_property_ranges(main)?;
 
     let used = resolve_used_materials(main, object)?;
 
@@ -141,8 +141,6 @@ mod tests {
 
     #[test]
     fn an_out_of_range_vocabulary_value_errors_before_the_bake() {
-        // The atlas is a glTF boundary, so it runs the vocabulary check its
-        // sibling mesh export runs rather than baking a lying texel.
         let mut main: VoxMain = VoxMain::default();
         let value_pool_id = main.retain_value_pool(VoxValuePool::float(vec![2.5]).unwrap());
 
