@@ -15,6 +15,7 @@ members = [
     "projects/tyt/tyt-oai",
     "projects/tyt/tyt-vmax",
 
+    "projects/utilities/meshdoc",
     "projects/utilities/pathspec",
     "projects/utilities/treegrid",
     "projects/utilities/treeselect",
@@ -61,6 +62,7 @@ tyt-meta = { path = "projects/tyt/tyt-meta" }
 tyt-oai = { path = "projects/tyt/tyt-oai" }
 tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 
+meshdoc = { path = "projects/utilities/meshdoc" }
 pathspec = { path = "projects/utilities/pathspec" }
 treegrid = { path = "projects/utilities/treegrid" }
 treeselect = { path = "projects/utilities/treeselect" }
