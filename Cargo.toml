@@ -27,6 +27,8 @@ members = [
     "projects/utilities/voxsmith",
     "projects/utilities/vxl",
 
+    "projects/mesh-formats/gltf-meshdoc",
+
     "projects/voxel-formats/goxl",
     "projects/voxel-formats/goxl-codec",
     "projects/voxel-formats/goxl-voxcore",
@@ -73,6 +75,8 @@ voxconv = { path = "projects/utilities/voxconv" }
 voxcore = { path = "projects/utilities/voxcore" }
 voxsmith = { path = "projects/utilities/voxsmith" }
 vxl = { path = "projects/utilities/vxl" }
+
+gltf-meshdoc = { path = "projects/mesh-formats/gltf-meshdoc" }
 
 goxl = { path = "projects/voxel-formats/goxl" }
 goxl-codec = { path = "projects/voxel-formats/goxl-codec" }

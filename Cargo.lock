@@ -721,6 +721,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gltf-meshdoc"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "branded-id",
+ "gltf",
+ "meshdoc",
+ "serde",
+ "serde_json",
+ "ty-math",
+]
+
+[[package]]
 name = "goxl"
 version = "0.1.1"
 
