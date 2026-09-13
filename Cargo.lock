@@ -2181,6 +2181,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vox-value-language"
+version = "0.1.0"
+
+[[package]]
 name = "voxconv"
 version = "0.1.0"
 dependencies = [
