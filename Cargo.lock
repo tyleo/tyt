@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -2238,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "voxsmith"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "branded-id",
  "meshdoc",
@@ -2254,7 +2254,7 @@ dependencies = [
 
 [[package]]
 name = "vxl"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "branded-id",
  "clap",
