@@ -1,3 +1,5 @@
+#[cfg(feature = "mesh")]
+use crate::operations::mesh::MeshElement;
 use meshdoc::Error as MeshError;
 use pathspec::Error as PathSpecError;
 use std::{
@@ -20,8 +22,18 @@ pub enum Error {
     /// A meshdoc construction, mutation, or insertion was rejected.
     Mesh(MeshError),
 
+    /// A mesh record element the run could not mesh.
+    #[cfg(feature = "mesh")]
+    MeshRecord {
+        /// The element the error rose from.
+        element: MeshElement,
+
+        /// What went wrong with it.
+        reason: String,
+    },
+
     /// A material atlas image could not be encoded as PNG.
-    #[cfg(feature = "mesh_old")]
+    #[cfg(feature = "mesh")]
     Png(String),
 
     /// An image of the mesh document could not be decoded.
@@ -41,6 +53,15 @@ impl Error {
     pub(crate) fn invalid(message: impl Display) -> Self {
         Error::Invalid(message.to_string())
     }
+
+    /// Builds an [`Error::MeshRecord`] from the element and its reason.
+    #[cfg(feature = "mesh")]
+    pub(crate) fn mesh_record(element: MeshElement, reason: impl Display) -> Self {
+        Error::MeshRecord {
+            element,
+            reason: reason.to_string(),
+        }
+    }
 }
 
 impl Display for Error {
@@ -49,7 +70,9 @@ impl Display for Error {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
             Error::Mesh(error) => error.fmt(f),
-            #[cfg(feature = "mesh_old")]
+            #[cfg(feature = "mesh")]
+            Error::MeshRecord { element, reason } => write!(f, "{element} {reason}"),
+            #[cfg(feature = "mesh")]
             Error::Png(message) => write!(f, "could not encode PNG: {message}"),
             #[cfg(feature = "voxelize")]
             Error::DecodeImage(message) => write!(f, "could not decode image: {message}"),
@@ -66,7 +89,9 @@ impl StdError for Error {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
             Error::Mesh(error) => Some(error),
-            #[cfg(feature = "mesh_old")]
+            #[cfg(feature = "mesh")]
+            Error::MeshRecord { .. } => None,
+            #[cfg(feature = "mesh")]
             Error::Png(_) => None,
             #[cfg(feature = "voxelize")]
             Error::DecodeImage(_) => None,

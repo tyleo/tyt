@@ -1,4 +1,4 @@
-use crate::operations::mesh_old::{MeshGeometry, MeshMethod};
+use crate::operations::mesh::{MeshGeometry, Method};
 use branded_id::U32Id;
 use ty_math::{TyVector3Ext, TyVector3F32, TyVector3U32};
 use voxcore::{BVoxVoxel, VoxObject};
@@ -11,7 +11,7 @@ use voxcore::{BVoxVoxel, VoxObject};
 /// a solid-empty boundary, and `greedy` merges coplanar boundary faces into the
 /// fewest quads. No hierarchy-node transform is applied; placement is the
 /// caller's to add.
-pub fn object_to_mesh_geometry(object: &VoxObject, method: MeshMethod) -> MeshGeometry {
+pub fn object_to_mesh_geometry(object: &VoxObject, method: Method) -> MeshGeometry {
     // A constant key merges every coplanar face regardless of material and
     // records no per-vertex material, the fewest-quads pure-geometry mesh.
     mesh_slices(object, method, &|_| 0, false)
@@ -23,16 +23,16 @@ pub fn object_to_mesh_geometry(object: &VoxObject, method: MeshMethod) -> MeshGe
 /// with a constant key and no material tracking.
 pub(crate) fn mesh_slices(
     object: &VoxObject,
-    method: MeshMethod,
+    method: Method,
     key: &dyn Fn(U32Id<BVoxVoxel>) -> u32,
     track_materials: bool,
 ) -> MeshGeometry {
     let bounds = object.bounds().to_array();
 
     let (cull, merge) = match method {
-        MeshMethod::Naive => (false, false),
-        MeshMethod::Culled => (true, false),
-        MeshMethod::Greedy => (true, true),
+        Method::Naive => (false, false),
+        Method::Culled => (true, false),
+        Method::Greedy => (true, true),
     };
 
     let mut geometry = MeshGeometry::default();
@@ -301,7 +301,7 @@ fn push_face(
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::mesh_old::{MeshMethod, mesh_slices, object_to_mesh_geometry};
+    use crate::operations::mesh::{Method, mesh_slices, object_to_mesh_geometry};
     use ty_math::{TyVector3Ext, TyVector3F32, TyVector3U32};
     use voxcore::VoxObject;
 
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn naive_emits_all_six_faces_per_voxel() {
         let object = object([1, 1, 1], &[[0, 0, 0]]);
-        let mesh = object_to_mesh_geometry(&object, MeshMethod::Naive);
+        let mesh = object_to_mesh_geometry(&object, Method::Naive);
         assert_eq!(mesh.quad_count(), 6);
         assert_eq!(mesh.triangle_count(), 12);
         assert_eq!(mesh.vertex_count(), 24);
@@ -333,11 +333,11 @@ mod tests {
         // Two adjacent voxels: 12 faces total, the shared pair is interior.
         let object = object([2, 1, 1], &[[0, 0, 0], [1, 0, 0]]);
         assert_eq!(
-            object_to_mesh_geometry(&object, MeshMethod::Naive).quad_count(),
+            object_to_mesh_geometry(&object, Method::Naive).quad_count(),
             12
         );
         assert_eq!(
-            object_to_mesh_geometry(&object, MeshMethod::Culled).quad_count(),
+            object_to_mesh_geometry(&object, Method::Culled).quad_count(),
             10
         );
     }
@@ -347,7 +347,7 @@ mod tests {
         // A 2x1x1 box exposes one rectangle per face.
         let object = object([2, 1, 1], &[[0, 0, 0], [1, 0, 0]]);
         assert_eq!(
-            object_to_mesh_geometry(&object, MeshMethod::Greedy).quad_count(),
+            object_to_mesh_geometry(&object, Method::Greedy).quad_count(),
             6
         );
     }
@@ -360,11 +360,11 @@ mod tests {
             .collect();
         let object = object([3, 3, 1], &live);
         assert_eq!(
-            object_to_mesh_geometry(&object, MeshMethod::Culled).quad_count(),
+            object_to_mesh_geometry(&object, Method::Culled).quad_count(),
             30
         );
         assert_eq!(
-            object_to_mesh_geometry(&object, MeshMethod::Greedy).quad_count(),
+            object_to_mesh_geometry(&object, Method::Greedy).quad_count(),
             6
         );
     }
@@ -375,19 +375,14 @@ mod tests {
 
         // A uniform key merges the bar into a box: six quads, no per-vertex
         // materials.
-        let pure = object_to_mesh_geometry(&object, MeshMethod::Greedy);
+        let pure = object_to_mesh_geometry(&object, Method::Greedy);
         assert_eq!(pure.quad_count(), 6);
         assert!(pure.material_indices.is_empty());
 
         // Two materials along x (voxel id 0 vs 1) split every face that spanned
         // both voxels: the two end caps stay, the four side faces each split in
         // two, for ten quads.
-        let keyed = mesh_slices(
-            &object,
-            MeshMethod::Greedy,
-            &|voxel_id| voxel_id.to_u32(),
-            true,
-        );
+        let keyed = mesh_slices(&object, Method::Greedy, &|voxel_id| voxel_id.to_u32(), true);
         assert_eq!(keyed.quad_count(), 10);
         assert_eq!(keyed.material_indices.len(), keyed.vertex_count());
         assert!(
@@ -403,7 +398,7 @@ mod tests {
         let object = object([2, 1, 1], &[[0, 0, 0], [1, 0, 0]]);
 
         // One material still merges into a box, but every vertex records it.
-        let keyed = mesh_slices(&object, MeshMethod::Greedy, &|_| 0, true);
+        let keyed = mesh_slices(&object, Method::Greedy, &|_| 0, true);
         assert_eq!(keyed.quad_count(), 6);
         assert_eq!(keyed.material_indices.len(), keyed.vertex_count());
         assert!(
@@ -417,7 +412,7 @@ mod tests {
     #[test]
     fn single_voxel_spans_the_unit_cube() {
         let object = object([1, 1, 1], &[[0, 0, 0]]);
-        let mesh = object_to_mesh_geometry(&object, MeshMethod::Culled);
+        let mesh = object_to_mesh_geometry(&object, Method::Culled);
         for point in &mesh.positions {
             assert!(
                 point.to_array().iter().all(|&c| c == 0.0 || c == 1.0),
@@ -433,7 +428,7 @@ mod tests {
             .flat_map(|x| (0..2).flat_map(move |y| (0..2).map(move |z| [x, y, z])))
             .collect();
         let object = object([2, 2, 2], &live);
-        let mesh = object_to_mesh_geometry(&object, MeshMethod::Greedy);
+        let mesh = object_to_mesh_geometry(&object, Method::Greedy);
         assert_eq!(mesh.quad_count(), 6);
 
         for triangle in mesh.indices.chunks_exact(3) {

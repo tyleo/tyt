@@ -1,10 +1,13 @@
 use crate::{
     Error, Result,
     dependencies::mesh::EncodePng,
-    operations::mesh_old::{
-        MaterialMeshRequest, MaterialSlot, MeshGeometry, atlas_dimensions, bake_atlas_image,
-        check_material_maps, material_scalar, max_emissive_strength, mesh_slices,
-        object_to_mesh_geometry, resolve_used_materials, texel_center,
+    operations::{
+        mesh::{MeshGeometry, Method, mesh_slices, object_to_mesh_geometry},
+        mesh_old::{
+            MaterialMeshRequest, MaterialSlot, MeshMethod, atlas_dimensions, bake_atlas_image,
+            check_material_maps, material_scalar, max_emissive_strength, resolve_used_materials,
+            texel_center,
+        },
     },
     utilities::check_material_property_ranges,
 };
@@ -39,7 +42,7 @@ pub fn mesh_old<D: EncodePng, T: VoxExt>(
     let mut document = MeshMain::default();
 
     if request.maps.is_empty() {
-        let geometry = object_to_mesh_geometry(object, request.method);
+        let geometry = object_to_mesh_geometry(object, method_of(request.method));
 
         let primitive = primitive_of(&geometry, request.scale, None)?;
 
@@ -58,7 +61,7 @@ pub fn mesh_old<D: EncodePng, T: VoxExt>(
 
     let geometry = mesh_slices(
         object,
-        request.method,
+        method_of(request.method),
         &|voxel_id| {
             used.material_index(voxel_id)
                 .expect("the sweep keys only the live voxels the used set indexed")
@@ -144,6 +147,15 @@ pub fn mesh_old<D: EncodePng, T: VoxExt>(
     primitive.set_material_id(Some(material_id));
 
     place(document, object.name(), primitive)
+}
+
+/// The strategy the sweep takes for `method`.
+fn method_of(method: MeshMethod) -> Method {
+    match method {
+        MeshMethod::Culled => Method::Culled,
+        MeshMethod::Greedy => Method::Greedy,
+        MeshMethod::Naive => Method::Naive,
+    }
 }
 
 /// The primitive of `geometry` scaled to `scale` meters per voxel, with its

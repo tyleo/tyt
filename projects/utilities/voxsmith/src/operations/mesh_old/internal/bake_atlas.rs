@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
+    dependencies::mesh::AtlasImage,
     operations::mesh_old::{
-        AtlasImage, ColorChannel, MaterialBake, MaterialChannel, UsedMaterials,
-        default_lin_srgba_f64_color,
+        ColorChannel, MaterialBake, MaterialChannel, UsedMaterials, default_lin_srgba_f64_color,
     },
 };
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaU8};

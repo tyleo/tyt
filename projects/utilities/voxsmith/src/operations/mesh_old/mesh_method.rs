@@ -1,5 +1,5 @@
 /// The strategy
-/// [`object_to_mesh_geometry`](crate::operations::mesh_old::object_to_mesh_geometry)
+/// [`object_to_mesh_geometry`](crate::operations::mesh::object_to_mesh_geometry)
 /// uses to turn a voxel grid into quads.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MeshMethod {
