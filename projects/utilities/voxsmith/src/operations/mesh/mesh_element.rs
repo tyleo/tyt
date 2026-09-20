@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// The element of a [`MeshRecord`](crate::operations::mesh::MeshRecord) an
 /// error rose from.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MeshElement {
     /// A computed binding, by its bound name.
     ComputedBinding {

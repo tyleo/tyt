@@ -1,3 +1,5 @@
+mod atlas_layout;
+mod atlases;
 mod checked_destination;
 mod compute_index;
 mod compute_occlusion;
@@ -13,8 +15,13 @@ mod program_run;
 mod property_value;
 mod provenance;
 mod run_program;
+mod slot_property;
+mod streams;
 mod swatches;
+mod table_index;
 
+pub(crate) use atlas_layout::*;
+pub(crate) use atlases::*;
 pub(crate) use checked_destination::*;
 pub(crate) use compute_index::*;
 pub(crate) use compute_occlusion::*;
@@ -30,4 +37,7 @@ pub(crate) use program_run::*;
 pub(crate) use property_value::*;
 pub(crate) use provenance::*;
 pub(crate) use run_program::*;
+pub(crate) use slot_property::*;
+pub(crate) use streams::*;
 pub(crate) use swatches::*;
+pub(crate) use table_index::*;

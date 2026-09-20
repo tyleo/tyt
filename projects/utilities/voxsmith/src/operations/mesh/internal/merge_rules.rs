@@ -2,7 +2,7 @@ use crate::{
     Error, Result,
     operations::mesh::{
         ArrayDomain, FaceSpan, Landing, MeshElement, MeshGeometry, MeshRecord, ProgramRun,
-        Provenance, Swatches,
+        Provenance, Streams, Swatches, table_index,
     },
 };
 use branded_id::{IdVec, U32Id};
@@ -31,16 +31,17 @@ pub(crate) struct MergeRules<'a> {
 }
 
 impl<'a> MergeRules<'a> {
-    /// Derives the rules from `record` and `run`, the program run over
-    /// `culled`. A value that follows the emitted faces cannot be read off
-    /// the culled pre-pass, so a lifted one keeps a span to one swatch or
-    /// one voxel instead of agreeing and a corner one caps merging.
+    /// Derives the rules from `record`, its `streams`, and `run`, the program
+    /// run over `culled`. A value that follows the emitted faces cannot be
+    /// read off the culled pre-pass, so a lifted one keeps a span to one
+    /// swatch or one voxel instead of agreeing and a corner one caps merging.
     pub(crate) fn derive(
         object: &'a VoxObject,
         record: &MeshRecord,
         swatches: &'a Swatches<'a>,
         culled: &'a MeshGeometry,
         run: &ProgramRun,
+        streams: &Streams,
     ) -> Result<Self> {
         let provenance = Provenance::of(&record.computed_bindings, &run.checked);
 
@@ -67,7 +68,7 @@ impl<'a> MergeRules<'a> {
                     gathered.lift(&checked.expression, &provenance, run, &destination.element)?;
                 }
 
-                Landing::Json | Landing::Texture => {}
+                Landing::Factor | Landing::Json | Landing::Texture => {}
             }
 
             match (destination.landing, domain) {
@@ -94,31 +95,38 @@ impl<'a> MergeRules<'a> {
                     }
                 }
 
-                (Landing::Texture, Domain::Swatch) => gathered.same_swatch = true,
+                (Landing::Texture, Domain::Swatch | Domain::Voxel) => {
+                    match streams.bake(&destination.element) {
+                        ArrayDomain::Swatch => gathered.same_swatch = true,
 
-                (Landing::Texture, Domain::Voxel) => gathered.capped = true,
+                        ArrayDomain::Voxel => gathered.capped = true,
+
+                        // A bake above the value's domain gives a span one
+                        // texel, which every voxel it covers has to agree on.
+                        ArrayDomain::Corner | ArrayDomain::Face => {
+                            gathered.lift(
+                                &checked.expression,
+                                &provenance,
+                                run,
+                                &destination.element,
+                            )?;
+                        }
+                    }
+                }
 
                 _ => {}
             }
         }
 
-        let declared = record
-            .materials
-            .iter()
-            .flat_map(|material| &material.uv_streams)
-            .chain(
-                record
-                    .primitives
-                    .iter()
-                    .flat_map(|primitive| &primitive.uv_streams),
-            )
-            .flatten();
-
-        for domain in declared {
-            match domain {
-                ArrayDomain::Corner | ArrayDomain::Face => {}
-                ArrayDomain::Swatch => gathered.same_swatch = true,
-                ArrayDomain::Voxel => gathered.capped = true,
+        // A written swatch stream seats a span on one texel, and a voxel
+        // stream on one voxel's.
+        for index in 0..record.primitives.len() {
+            for domain in streams.primitive_list(U32Id::from_u32(table_index(index))) {
+                match domain {
+                    ArrayDomain::Corner | ArrayDomain::Face => {}
+                    ArrayDomain::Swatch => gathered.same_swatch = true,
+                    ArrayDomain::Voxel => gathered.capped = true,
+                }
             }
         }
 
@@ -380,8 +388,8 @@ mod tests {
     use crate::operations::mesh::{
         ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource,
         ExtraWrite, FileForm, FileWrite, MaterialRecord, MergeRules, MeshGeometry, MeshRecord,
-        Method, PrimitiveRecord, ProgramRun, SlotSource, SlotWrite, Swatches, TextureShape,
-        Transfer, WrittenValue, mesh_slices,
+        Method, PrimitiveRecord, ProgramRun, SlotSource, SlotWrite, Streams, Swatches,
+        TextureShape, Transfer, WrittenValue, mesh_slices,
     };
     use branded_id::{IdVec, U32Id};
     use ty_math::TyVector3U32;
@@ -481,7 +489,9 @@ mod tests {
         let culled = mesh_slices(&object, Method::Culled, &|_| 0, &|_| true, false);
         let run = ProgramRun::over(&object, &swatches, record, &culled).unwrap();
 
-        let rules = MergeRules::derive(&object, record, &swatches, &culled, &run).unwrap();
+        let streams = Streams::derive(record, &run.destinations).unwrap();
+        let rules =
+            MergeRules::derive(&object, record, &swatches, &culled, &run, &streams).unwrap();
 
         let class = |x| rules.voxel_class(object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap());
         class(0) == class(1)
@@ -558,6 +568,8 @@ mod tests {
             uv_streams: Some(vec![ArrayDomain::Swatch]),
             ..Default::default()
         }]);
+        swatch_stream.primitives[U32Id::from_u32(0).to_usize_id()].material_id =
+            Some(U32Id::from_u32(0));
         assert!(!merges(&swatch_stream));
     }
 
@@ -595,7 +607,9 @@ mod tests {
 
         let culled = mesh_slices(&object, Method::Culled, &|_| 0, &|_| true, false);
         let run = ProgramRun::over(&object, &swatches, record, &culled).unwrap();
-        let rules = MergeRules::derive(&object, record, &swatches, &culled, &run).unwrap();
+        let streams = Streams::derive(record, &run.destinations).unwrap();
+        let rules =
+            MergeRules::derive(&object, record, &swatches, &culled, &run, &streams).unwrap();
 
         let geometry = mesh_slices(
             &object,

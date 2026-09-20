@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use vox_value_language::Domain;
 
 /// An array domain; the ladder runs bottom to top.
@@ -14,6 +15,30 @@ pub enum ArrayDomain {
 
     /// One entry per face corner.
     Corner,
+}
+
+impl ArrayDomain {
+    /// The array domain `domain` is, or `None` for the plain domain.
+    pub fn of(domain: Domain) -> Option<Self> {
+        match domain {
+            Domain::Corner => Some(ArrayDomain::Corner),
+            Domain::Face => Some(ArrayDomain::Face),
+            Domain::Plain => None,
+            Domain::Swatch => Some(ArrayDomain::Swatch),
+            Domain::Voxel => Some(ArrayDomain::Voxel),
+        }
+    }
+}
+
+impl Display for ArrayDomain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(match self {
+            ArrayDomain::Corner => "corner",
+            ArrayDomain::Face => "face",
+            ArrayDomain::Swatch => "swatch",
+            ArrayDomain::Voxel => "voxel",
+        })
+    }
 }
 
 impl From<ArrayDomain> for Domain {

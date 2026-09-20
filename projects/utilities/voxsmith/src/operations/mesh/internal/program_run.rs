@@ -29,7 +29,7 @@ impl ProgramRun {
 
         let (checked, evaluated) = run_program(&record.program, &environment)?;
 
-        let destinations = Destination::of_record(record)
+        let destinations = Destination::of_record(record)?
             .into_iter()
             .map(|destination| destination.check(&checked))
             .collect::<Result<_>>()?;

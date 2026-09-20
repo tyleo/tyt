@@ -4,12 +4,15 @@ pub(crate) enum Landing {
     /// A vertex attribute, read at the corners.
     Attribute,
 
+    /// A material factor, one plain value.
+    Factor,
+
     /// A JSON entry or an extras value, off the mesh.
     Json,
 
     /// A primitive select, read at the faces.
     Select,
 
-    /// A texture on the atlas of the value's domain, or a plain factor.
+    /// A texture on the atlas of the domain it bakes at.
     Texture,
 }

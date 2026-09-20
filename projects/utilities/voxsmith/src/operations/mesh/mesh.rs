@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     operations::mesh::{
-        MergeRules, MeshElement, MeshGeometry, MeshRecord, Method, PrimitiveRecord, ProgramRun,
-        Swatches, mesh_slices,
+        ArrayDomain, Atlases, MergeRules, MeshElement, MeshGeometry, MeshRecord, Method,
+        PrimitiveRecord, ProgramRun, Streams, Swatches, mesh_slices,
     },
 };
 use branded_id::U32Id;
@@ -10,15 +10,9 @@ use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive, MeshTriang
 use ty_math::TyVector3F64;
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
-/// Meshes `object` under `record` into a document of one object placed by
-/// one root node, both named as `object` is. Positions are in meters,
-/// `record.voxel_size` per voxel, on the grid's Z-up axes. Under `greedy`
-/// the run first meshes culled and evaluates the program over that, learns
-/// what the values let it merge, and meshes again. Errors if a layer
-/// references a palette `main` does not hold, if the voxel size is not
-/// positive, if a computed binding, the program, or a destination fails to
-/// bind, check, or evaluate, or if the record holds an element the run
-/// cannot mesh yet.
+/// Meshes `object` under `record` into a document of one object under one
+/// root node, both named as `object` is. Positions are in meters on the
+/// grid's Z-up axes. An error names the record element it rose from.
 pub fn mesh<T: VoxExt>(
     main: &VoxMain<T>,
     object: &VoxObject,
@@ -40,7 +34,9 @@ pub fn mesh<T: VoxExt>(
 
         let run = ProgramRun::over(object, &swatches, record, &culled)?;
 
-        let rules = MergeRules::derive(object, record, &swatches, &culled, &run)?;
+        let streams = Streams::derive(record, &run.destinations)?;
+
+        let rules = MergeRules::derive(object, record, &swatches, &culled, &run, &streams)?;
 
         mesh_slices(
             object,
@@ -53,9 +49,19 @@ pub fn mesh<T: VoxExt>(
         mesh_slices(object, record.method, &|_| 0, &|_| true, false)
     };
 
-    ProgramRun::over(object, &swatches, record, &geometry)?;
+    let run = ProgramRun::over(object, &swatches, record, &geometry)?;
 
-    let primitive = primitive_of(&geometry, record.voxel_size, primitive_record)?;
+    let streams = Streams::derive(record, &run.destinations)?;
+
+    let atlases = Atlases::new(record.texture_shape, &swatches, &geometry);
+
+    let primitive = primitive_of(
+        &geometry,
+        record.voxel_size,
+        primitive_record,
+        streams.primitive_list(U32Id::from_u32(0)),
+        &atlases,
+    )?;
 
     place(object.name(), primitive)
 }
@@ -104,10 +110,6 @@ fn check_meshed(record: &MeshRecord) -> Result<&PrimitiveRecord> {
         return Err(not_yet(MeshElement::PrimitiveMaterial { primitive_id }));
     }
 
-    if primitive_record.uv_streams.is_some() {
-        return Err(not_yet(MeshElement::PrimitiveUvStreams { primitive_id }));
-    }
-
     if let Some(attribute) = primitive_record.attributes.first() {
         return Err(not_yet(MeshElement::PrimitiveAttribute {
             primitive_id,
@@ -118,12 +120,13 @@ fn check_meshed(record: &MeshRecord) -> Result<&PrimitiveRecord> {
     Ok(primitive_record)
 }
 
-/// The primitive of `geometry` scaled to `voxel_size` meters per voxel,
-/// carrying what `primitive_record` asks of it.
+/// The primitive of `geometry` at `voxel_size` meters per voxel.
 fn primitive_of(
     geometry: &MeshGeometry,
     voxel_size: f64,
     primitive_record: &PrimitiveRecord,
+    stream_list: &[ArrayDomain],
+    atlases: &Atlases<'_>,
 ) -> Result<MeshPrimitive> {
     let positions = geometry
         .positions
@@ -157,6 +160,10 @@ fn primitive_of(
 
     if let Some(name) = &primitive_record.name {
         primitive.set_name(name.clone());
+    }
+
+    for &domain in stream_list {
+        primitive.push_uv_stream(atlases.uvs(domain)?)?;
     }
 
     Ok(primitive)
@@ -196,7 +203,7 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use meshdoc::MeshMain;
-    use ty_math::{TyVector3F64, TyVector3U32};
+    use ty_math::{TyVector2F64, TyVector3F64, TyVector3U32};
     use voxcore::{
         VoxMain, VoxObject, VoxPalette, VoxValuePool,
         material::{BASE_COLOR, METALLIC},
@@ -423,13 +430,6 @@ mod tests {
             }
         );
 
-        let mut with_streams = record(Method::Greedy);
-        with_streams.primitives[primitive_id.to_usize_id()].uv_streams = Some(Vec::new());
-        assert_eq!(
-            failing_element(&with_streams),
-            MeshElement::PrimitiveUvStreams { primitive_id }
-        );
-
         let mut with_attribute = record(Method::Greedy);
         with_attribute.primitives[primitive_id.to_usize_id()]
             .attributes
@@ -444,6 +444,63 @@ mod tests {
                 name: "_PALETTE".to_owned()
             }
         );
+    }
+
+    #[test]
+    fn the_primitive_writes_its_declared_streams_in_order_at_texel_centers() {
+        let mut record = record(Method::Greedy);
+        record.primitives[U32Id::from_u32(0).to_usize_id()].uv_streams =
+            Some(vec![ArrayDomain::Face, ArrayDomain::Swatch]);
+
+        let document = meshed(&record);
+        let (_, object) = document.iter_objects().next().unwrap();
+        let (_, primitive) = object.iter_primitives().next().unwrap();
+
+        assert_eq!(primitive.uv_stream_count(), 2);
+
+        // Six faces fill a 4x4 canvas in raster order, and the one swatch
+        // fills a 1x1.
+        let faces = primitive.uv_stream(U32Id::from_u32(0)).unwrap();
+        assert_eq!(faces.len(), 24);
+        assert_eq!(
+            faces[U32Id::from_u32(0).to_usize_id()],
+            TyVector2F64::new(0.125, 0.125)
+        );
+        assert_eq!(
+            faces[U32Id::from_u32(20).to_usize_id()],
+            TyVector2F64::new(0.375, 0.375)
+        );
+
+        let swatches = primitive.uv_stream(U32Id::from_u32(1)).unwrap();
+        assert!(swatches.iter().all(|&uv| uv == TyVector2F64::new(0.5, 0.5)));
+    }
+
+    #[test]
+    fn a_stream_list_naming_a_domain_twice_errors() {
+        let primitive_id = U32Id::from_u32(0);
+        let mut record = record(Method::Greedy);
+        record.primitives[primitive_id.to_usize_id()].uv_streams =
+            Some(vec![ArrayDomain::Face, ArrayDomain::Face]);
+
+        assert_eq!(
+            failing_element(&record),
+            MeshElement::PrimitiveUvStreams { primitive_id }
+        );
+    }
+
+    #[test]
+    fn an_exact_canvas_too_small_for_a_written_atlas_errors() {
+        let primitive_id = U32Id::from_u32(0);
+
+        let mut swatch = record(Method::Greedy);
+        swatch.texture_shape = TextureShape::Exact(1);
+        swatch.primitives[primitive_id.to_usize_id()].uv_streams = Some(vec![ArrayDomain::Swatch]);
+        meshed(&swatch);
+
+        let mut face = record(Method::Greedy);
+        face.texture_shape = TextureShape::Exact(1);
+        face.primitives[primitive_id.to_usize_id()].uv_streams = Some(vec![ArrayDomain::Face]);
+        assert_eq!(failing_element(&face), MeshElement::TextureShape);
     }
 
     #[test]

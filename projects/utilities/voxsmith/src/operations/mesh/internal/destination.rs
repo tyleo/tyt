@@ -2,7 +2,7 @@ use crate::{
     Error, Result,
     operations::mesh::{
         AttributeWrite, CheckedDestination, ExtraForm, ExtraSource, ExtraWrite, FileForm, Landing,
-        MeshElement, MeshRecord, SlotSource,
+        MeshElement, MeshRecord, SlotProperty, SlotSource, table_index,
     },
 };
 use branded_id::U32Id;
@@ -17,8 +17,9 @@ pub(crate) struct Destination {
 }
 
 impl Destination {
-    /// Every destination `record` holds, in table order.
-    pub(crate) fn of_record(record: &MeshRecord) -> Vec<Self> {
+    /// Every destination `record` holds, in table order. Errors if a slot
+    /// names a property the material model does not hold.
+    pub(crate) fn of_record(record: &MeshRecord) -> Result<Vec<Self>> {
         let mut destinations = Vec::new();
 
         let extras = |destinations: &mut Vec<Self>,
@@ -44,16 +45,29 @@ impl Destination {
             let material_id = U32Id::from_u32(table_index(index));
 
             for slot in &material.slots {
+                let element = MeshElement::Slot {
+                    material_id,
+                    property: slot.property.clone(),
+                };
+
+                let Some(property) = SlotProperty::parse(&slot.property) else {
+                    return Err(Error::mesh_record(
+                        element,
+                        "is not a material property the document models",
+                    ));
+                };
+
                 let SlotSource::Value(text) = &slot.source else {
                     continue;
                 };
 
                 destinations.push(Destination {
-                    element: MeshElement::Slot {
-                        material_id,
-                        property: slot.property.clone(),
+                    element,
+                    landing: if property.is_texture() {
+                        Landing::Texture
+                    } else {
+                        Landing::Factor
                     },
-                    landing: Landing::Texture,
                     text: text.clone(),
                 });
             }
@@ -111,7 +125,7 @@ impl Destination {
             }
         });
 
-        destinations
+        Ok(destinations)
     }
 
     /// Parses and checks the expression in the scope at `checked`'s end.
@@ -130,16 +144,15 @@ impl Destination {
     }
 }
 
-fn table_index(index: usize) -> u32 {
-    u32::try_from(index).expect("a record table is shorter than u32::MAX")
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::operations::mesh::{
-        AttributeWrite, Destination, ExtraForm, ExtraSource, ExtraWrite, FileForm, FileWrite,
-        Landing, MaterialRecord, MeshElement, MeshRecord, Method, PrimitiveRecord, SlotSource,
-        SlotWrite, TextureShape, Transfer, WrittenValue,
+    use crate::{
+        Error,
+        operations::mesh::{
+            AttributeWrite, Destination, ExtraForm, ExtraSource, ExtraWrite, FileForm, FileWrite,
+            Landing, MaterialRecord, MeshElement, MeshRecord, Method, PrimitiveRecord, SlotSource,
+            SlotWrite, TextureShape, Transfer, WrittenValue,
+        },
     };
     use branded_id::{IdVec, U32Id};
 
@@ -148,6 +161,52 @@ mod tests {
             expression: expression.to_owned(),
             transfer: Transfer::Linear,
         }
+    }
+
+    /// A record of one material with `slots` and the implicit primitive.
+    fn with_slots(slots: Vec<SlotWrite>) -> MeshRecord {
+        MeshRecord {
+            method: Method::Greedy,
+            texture_shape: TextureShape::Pot,
+            voxel_size: 1.0,
+            computed_bindings: Vec::new(),
+            program: String::new(),
+            materials: IdVec::from_vec(vec![MaterialRecord {
+                slots,
+                ..Default::default()
+            }]),
+            primitives: IdVec::from_vec(vec![PrimitiveRecord {
+                material_id: Some(U32Id::from_u32(0)),
+                select: "true".to_owned(),
+                name: None,
+                normal: true,
+                uv_streams: None,
+                attributes: Vec::new(),
+            }]),
+            files: Vec::new(),
+            mesh_extras: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_slot_outside_the_material_model_errors_and_names_itself() {
+        let record = with_slots(vec![SlotWrite {
+            property: "subsurface".to_owned(),
+            source: SlotSource::File("skin.png".to_owned()),
+        }]);
+
+        let error = Destination::of_record(&record).unwrap_err();
+
+        assert!(
+            matches!(
+                &error,
+                Error::MeshRecord {
+                    element: MeshElement::Slot { property, .. },
+                    ..
+                } if property == "subsurface"
+            ),
+            "{error}"
+        );
     }
 
     #[test]
@@ -169,6 +228,10 @@ mod tests {
                     SlotWrite {
                         property: "occlusionTexture".to_owned(),
                         source: SlotSource::File("ao.png".to_owned()),
+                    },
+                    SlotWrite {
+                        property: "emissiveStrength".to_owned(),
+                        source: SlotSource::Value("max(strength)".to_owned()),
                     },
                 ],
                 extras: vec![ExtraWrite {
@@ -222,7 +285,7 @@ mod tests {
             ],
         };
 
-        let destinations = Destination::of_record(&record);
+        let destinations = Destination::of_record(&record).unwrap();
 
         let material_id = U32Id::from_u32(0);
         let primitive_id = U32Id::from_u32(0);
@@ -246,6 +309,14 @@ mod tests {
                     },
                     Landing::Texture,
                     "albedo"
+                ),
+                (
+                    MeshElement::Slot {
+                        material_id,
+                        property: "emissiveStrength".to_owned()
+                    },
+                    Landing::Factor,
+                    "max(strength)"
                 ),
                 (
                     MeshElement::MaterialExtra {
