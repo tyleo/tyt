@@ -2183,6 +2183,9 @@ dependencies = [
 [[package]]
 name = "vox-value-language"
 version = "0.1.0"
+dependencies = [
+ "branded-id",
+]
 
 [[package]]
 name = "voxconv"

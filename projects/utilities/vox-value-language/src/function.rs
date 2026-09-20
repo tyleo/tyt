@@ -205,6 +205,7 @@ impl Function {
     pub(crate) fn argument_counts(self) -> &'static [usize] {
         match self {
             Function::Min | Function::Max => &[1, 2],
+
             Function::Rg
             | Function::Pow
             | Function::Mod
@@ -213,11 +214,13 @@ impl Function {
             | Function::Distance
             | Function::Cross
             | Function::Default => &[2],
+
             Function::Rgb
             | Function::Clamp
             | Function::Lerp
             | Function::Mix
             | Function::Smoothstep => &[3],
+
             Function::Rgba => &[4],
             _ => &[1],
         }

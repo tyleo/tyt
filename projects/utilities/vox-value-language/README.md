@@ -11,6 +11,48 @@ one-way pipeline over whole programs: `parse` takes the text to a syntax tree,
 value. The expression siblings `parse_expression`, `check_expression`, and
 `eval_expression` run one expression in a program's end scope.
 
+## Pipeline
+
+`parse` takes program text to an opaque `Program`, `check` takes the program
+and a `TypeEnvironment` to a `CheckedProgram` answering every binding's `Type`
+by name, and `eval` takes the checked program and a `ValueEnvironment` to an
+`EvaluatedProgram` answering every binding's `Value`. Each stage consumes the
+last, so every type settles once in `check` and evaluation reads the settled
+types. The expression siblings run one expression in the scope at a program's
+end, beside every name the environment supplies:
+
+```rust
+let program = parse("ao = faceAvg(occlusion); dark = ao < 0.7;")?;
+let checked = check(program, &types)?;
+let dark_type = checked.get("dark");
+
+let evaluated = eval(&checked, &values)?;
+let dark = evaluated.get("dark");
+
+let select = parse_expression("faceAvg(ao) < 0.7")?;
+let checked_select = check_expression(&select, &checked)?;
+let select_value = eval_expression(&checked_select, &evaluated)?;
+```
+
+A parse error carries the byte range it names, a check error names the binding
+and the rule it broke, and an eval error names the binding.
+
+## Environments
+
+The names a program reads but never defines come in through the environments.
+A `TypeEnvironment` maps each name to its `Type`: a `Domain`, a `Dimension`,
+and a `Scalar`. A `ValueEnvironment` maps each name to its `Value`, the entries
+flattened component by component in `Components`, and carries the `Groupings`
+the reductions and climbs walk: each voxel's swatch and each face's voxel
+pieces. The corners need no table because every face owns four, in face order.
+
+To the crate an array is a length, and the groupings fix the lengths: the voxel
+count is the voxel table's length, the face count the face table's, the corner
+count four times that, and the swatch count one past the largest swatch id a
+voxel names, zero with no voxels. Every array in the value environment has its
+domain's length, every face lists at least one voxel piece, and every piece
+names a voxel the table holds.
+
 ## Programs
 
 A program is a sequence of statements, each a binding `name = expr` terminated

@@ -61,40 +61,52 @@ impl Display for ParseFailure {
                 formatter,
                 "`{function}` takes {expected} argument(s), found {found}"
             ),
+
             ParseFailure::DetachedPostfix => write!(
                 formatter,
                 "a swizzle dot or index bracket must attach to its source"
             ),
+
             ParseFailure::EmptyName => write!(formatter, "a backtick-quoted name is empty"),
+
             ParseFailure::ExpectedBinding => {
                 write!(formatter, "a statement binds a name: `name = expr;`")
             }
+
             ParseFailure::MemberExpected => write!(formatter, "a swizzle dot needs its member"),
+
             ParseFailure::ReservedName { name } => {
                 write!(
                     formatter,
                     "`{name}` is reserved; backtick-quote it as a name"
                 )
             }
+
             ParseFailure::SuffixOnFraction { suffix } => write!(
                 formatter,
                 "the suffix `{suffix}` belongs to a whole number, not one with a decimal point"
             ),
+
             ParseFailure::Unexpected { found, expected } => {
                 write!(formatter, "expected {expected}, found {found}")
             }
+
             ParseFailure::UnexpectedCharacter { character } => {
                 write!(formatter, "unexpected character `{character}`")
             }
+
             ParseFailure::UnexpectedEnd { expected } => {
                 write!(formatter, "expected {expected}, found the end of the text")
             }
+
             ParseFailure::UnknownSuffix { suffix } => {
                 write!(formatter, "`{suffix}` is not a number suffix")
             }
+
             ParseFailure::UnterminatedName => {
                 write!(formatter, "a backtick-quoted name never closes")
             }
+
             ParseFailure::UnterminatedString => write!(formatter, "a string literal never closes"),
         }
     }

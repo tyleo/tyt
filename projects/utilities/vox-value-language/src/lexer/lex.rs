@@ -161,6 +161,7 @@ impl Lexer<'_> {
         let kind = match name {
             "true" => TokenKind::True,
             "false" => TokenKind::False,
+
             _ => match Function::from_name(name) {
                 Some(function) => TokenKind::Function(function),
                 None => TokenKind::Identifier(name.to_owned()),
@@ -243,6 +244,7 @@ impl Lexer<'_> {
             b'>' => (TokenKind::Greater, 1),
             b'&' if next == Some(b'&') => (TokenKind::And, 2),
             b'|' if next == Some(b'|') => (TokenKind::Or, 2),
+
             _ => {
                 let character = self.text[start..]
                     .chars()
@@ -307,6 +309,7 @@ mod tests {
     fn failure(text: &str) -> (Range<usize>, ParseFailure) {
         match lex(text).unwrap_err() {
             Error::Parse { range, failure } => (range, failure),
+            error => panic!("expected a parse error, found {error:?}"),
         }
     }
 

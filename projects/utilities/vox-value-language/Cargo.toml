@@ -7,3 +7,4 @@ repository = "https://github.com/tyleo/tyt"
 description = "A typed expression language over per-swatch, per-voxel, per-face, and per-corner values."
 
 [dependencies]
+branded-id = "0.1.10"
