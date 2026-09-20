@@ -20,10 +20,13 @@ use meshconv::{
 use std::path::{Path, PathBuf};
 use voxconv::load;
 use voxcore::VoxMain;
-use voxsmith::operations::mesh::{
-    ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource, ExtraWrite,
-    FileForm, FileWrite, MeshRecord, Method, PrimitiveRecord, SlotSource, SlotWrite, TextureShape,
-    Transfer, WrittenValue, mesh,
+use voxsmith::{
+    dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
+    operations::mesh::{
+        ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource,
+        ExtraWrite, FileForm, FileWrite, MeshRecord, Method, PrimitiveRecord, SlotSource,
+        SlotWrite, TextureShape, Transfer, WrittenValue, mesh,
+    },
 };
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, baking its
@@ -353,7 +356,7 @@ impl Mesh {
 
         let object = select_one_object(&main, &self.selection)?;
 
-        let document = mesh(&main, object, &record)?;
+        let document = mesh(&VoxsmithDependenciesImpl, &main, object, &record)?;
 
         let format = WriteFormat::Gltf(GltfWriteFormat {
             container,

@@ -1,18 +1,21 @@
 use crate::{
     Error, Result,
+    dependencies::mesh::EncodePng,
     operations::mesh::{
         Atlases, FacePartition, MergeRules, MeshElement, MeshRecord, Method, ProgramRun, Streams,
-        Swatches, mesh_slices, table_index, write_primitive,
+        Swatches, mesh_slices, table_index, write_files, write_primitive,
     },
 };
 use branded_id::U32Id;
-use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive};
+use meshdoc::{MeshFile, MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive};
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` under `record` into a document of one object under one
 /// root node, both named as `object` is. Positions are in meters on the
-/// grid's Z-up axes. An error names the record element it rose from.
-pub fn mesh<T: VoxExt>(
+/// grid's Z-up axes. `dependencies` encodes the pngs. An error names the
+/// record element it rose from.
+pub fn mesh<D: EncodePng, T: VoxExt>(
+    dependencies: &D,
     main: &VoxMain<T>,
     object: &VoxObject,
     record: &MeshRecord,
@@ -54,7 +57,7 @@ pub fn mesh<T: VoxExt>(
 
     let atlases = Atlases::new(record.texture_shape, &swatches, &geometry);
 
-    let partition = FacePartition::derive(record, &run, &swatches, &geometry)?;
+    let partition = FacePartition::derive(record, &run, &atlases)?;
 
     let primitives = record
         .primitives
@@ -74,7 +77,9 @@ pub fn mesh<T: VoxExt>(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    place(object.name(), primitives)
+    let files = write_files(dependencies, record, &run, &streams, &atlases)?;
+
+    place(object.name(), primitives, files)
 }
 
 /// Errors on the first record element the run cannot mesh yet.
@@ -83,12 +88,6 @@ fn check_meshed(record: &MeshRecord) -> Result<()> {
 
     if !record.materials.is_empty() {
         return Err(not_yet(MeshElement::Materials));
-    }
-
-    if let Some(file) = record.files.first() {
-        return Err(not_yet(MeshElement::File {
-            file: file.file.clone(),
-        }));
     }
 
     if let Some(extra) = record.mesh_extras.first() {
@@ -123,9 +122,13 @@ fn check_meshed(record: &MeshRecord) -> Result<()> {
 }
 
 /// A document holding `primitives` in one object named `name`, placed by one
-/// root node of the same name.
-fn place(name: &str, primitives: Vec<MeshPrimitive>) -> Result<MeshMain<()>> {
+/// root node of the same name, with `files` beside it.
+fn place(name: &str, primitives: Vec<MeshPrimitive>, files: Vec<MeshFile>) -> Result<MeshMain<()>> {
     let mut document = MeshMain::default();
+
+    for file in files {
+        document.retain_file(file)?;
+    }
 
     let mut object = MeshObject::new(name.to_owned());
 
@@ -150,6 +153,7 @@ fn place(name: &str, primitives: Vec<MeshPrimitive>) -> Result<MeshMain<()>> {
 mod tests {
     use crate::{
         Error,
+        dependencies::DependenciesImpl,
         operations::mesh::{
             ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource,
             ExtraWrite, FileForm, FileWrite, MaterialRecord, MeshElement, MeshRecord, Method,
@@ -158,6 +162,8 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use meshdoc::MeshMain;
+    use png::{ColorType, Decoder, Info};
+    use std::io::Cursor;
     use ty_math::{TyVector2F64, TyVector3F64, TyVector3U32};
     use voxcore::{
         VoxMain, VoxObject, VoxPalette, VoxValuePool,
@@ -241,7 +247,7 @@ mod tests {
     /// The bar meshed under `record`.
     fn meshed(record: &MeshRecord) -> MeshMain<()> {
         let main: VoxMain = VoxMain::default();
-        let document = mesh(&main, &bar(), record).unwrap();
+        let document = mesh(&DependenciesImpl, &main, &bar(), record).unwrap();
         document.validate().unwrap();
         document
     }
@@ -249,10 +255,44 @@ mod tests {
     /// The element the bar fails to mesh on under `record`.
     fn failing_element(record: &MeshRecord) -> MeshElement {
         let main: VoxMain = VoxMain::default();
-        match mesh(&main, &bar(), record).unwrap_err() {
+        match mesh(&DependenciesImpl, &main, &bar(), record).unwrap_err() {
             Error::MeshRecord { element, .. } => element,
             error => panic!("expected a record error, got {error}"),
         }
+    }
+
+    /// A write of `expression` into `file`, a png or the JSON entry `name`.
+    fn file_write(
+        file: &str,
+        name: Option<&str>,
+        expression: &str,
+        transfer: Transfer,
+    ) -> FileWrite {
+        FileWrite {
+            file: file.to_owned(),
+            value: WrittenValue {
+                expression: expression.to_owned(),
+                transfer,
+            },
+            form: match name {
+                Some(name) => FileForm::Json {
+                    name: name.to_owned(),
+                },
+                None => FileForm::Png,
+            },
+        }
+    }
+
+    /// The decoded samples and header of the png `document` holds as `name`.
+    fn decoded_png(document: &MeshMain<()>, name: &str) -> (Vec<u8>, Info<'static>) {
+        let (_, file) = document.file_by_name(name).unwrap();
+        let mut reader = Decoder::new(Cursor::new(file.bytes.clone()))
+            .read_info()
+            .unwrap();
+        let mut buffer = vec![0u8; reader.output_buffer_size().unwrap()];
+        let output = reader.next_frame(&mut buffer).unwrap();
+        buffer.truncate(output.buffer_size());
+        (buffer, reader.info().clone())
     }
 
     #[test]
@@ -332,7 +372,7 @@ mod tests {
             },
         ]);
 
-        let document = mesh(&main, &object, &record).unwrap();
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
         document.validate().unwrap();
         let (_, object) = document.iter_objects().next().unwrap();
         assert_eq!(object.primitive_count(), 2);
@@ -415,7 +455,7 @@ mod tests {
             },
         ]);
 
-        let document = mesh(&main, &object, &record).unwrap();
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
         let (_, object) = document.iter_objects().next().unwrap();
         let primitives: Vec<_> = object
             .iter_primitives()
@@ -485,19 +525,6 @@ mod tests {
         let mut with_material = record(Method::Greedy);
         with_material.materials = IdVec::from_vec(vec![MaterialRecord::default()]);
         assert_eq!(failing_element(&with_material), MeshElement::Materials);
-
-        let mut with_file = record(Method::Greedy);
-        with_file.files.push(FileWrite {
-            file: "bar-albedo.png".to_owned(),
-            value: written.clone(),
-            form: FileForm::Png,
-        });
-        assert_eq!(
-            failing_element(&with_file),
-            MeshElement::File {
-                file: "bar-albedo.png".to_owned()
-            }
-        );
 
         let mut with_extra = record(Method::Greedy);
         with_extra.mesh_extras.push(ExtraWrite {
@@ -593,7 +620,7 @@ mod tests {
         let mut object = bar();
         object.retain_layer(U32Id::from_u32(9), U32Id::from_u32(0));
 
-        assert!(mesh(&main, &object, &record(Method::Greedy)).is_err());
+        assert!(mesh(&DependenciesImpl, &main, &object, &record(Method::Greedy)).is_err());
     }
 
     #[test]
@@ -618,7 +645,10 @@ mod tests {
                           width = max(voxelPosition.x); open = min(ao);"
             .to_owned();
 
-        mesh(&main, &object, &record).unwrap().validate().unwrap();
+        mesh(&DependenciesImpl, &main, &object, &record)
+            .unwrap()
+            .validate()
+            .unwrap();
     }
 
     #[test]
@@ -632,7 +662,7 @@ mod tests {
                 computation: Computation::Occlusion,
             });
             record.program = program.to_owned();
-            let document = mesh(&main, &object, &record).unwrap();
+            let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
             let (_, object) = document.iter_objects().next().unwrap();
             let (_, primitive) = object.iter_primitives().next().unwrap();
             primitive.triangle_count() / 2
@@ -652,7 +682,7 @@ mod tests {
         let mut record = record(Method::Greedy);
         record.program = "x = nothing;".to_owned();
 
-        let error = mesh(&main, &object, &record).unwrap_err();
+        let error = mesh(&DependenciesImpl, &main, &object, &record).unwrap_err();
 
         assert!(matches!(
             error,
@@ -678,7 +708,7 @@ mod tests {
             name: METALLIC.to_owned(),
             computation: Computation::Occlusion,
         });
-        let error = mesh(&main, &object, &shadowing).unwrap_err();
+        let error = mesh(&DependenciesImpl, &main, &object, &shadowing).unwrap_err();
         assert!(error.to_string().contains("shadows"), "{error}");
 
         let mut twice = record(Method::Greedy);
@@ -692,7 +722,111 @@ mod tests {
                 computation: Computation::VoxelPosition,
             },
         ];
-        let error = mesh(&main, &object, &twice).unwrap_err();
+        let error = mesh(&DependenciesImpl, &main, &object, &twice).unwrap_err();
         assert!(error.to_string().contains("is bound twice"), "{error}");
+    }
+
+    #[test]
+    fn a_png_file_bakes_at_its_values_domain_under_its_transfer() {
+        let (main, object) = painted();
+        let mut record = record(Method::Greedy);
+        record.files = vec![
+            file_write("bar-metal.png", None, "metallic", Transfer::Linear),
+            file_write("bar-color.png", None, "baseColor", Transfer::Srgb),
+        ];
+
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
+        document.validate().unwrap();
+        assert_eq!(document.file_count(), 2);
+        assert_eq!(document.image_count(), 0);
+
+        // Two swatches fill the first row of a 2x2 canvas. The rest stays
+        // transparent black.
+        let (samples, info) = decoded_png(&document, "bar-metal.png");
+        assert_eq!(info.color_type, ColorType::Grayscale);
+        assert_eq!((info.width, info.height), (2, 2));
+        assert_eq!(samples, [255, 0, 0, 0]);
+        assert!(info.srgb.is_none());
+
+        let (samples, info) = decoded_png(&document, "bar-color.png");
+        assert_eq!(info.color_type, ColorType::Rgba);
+        assert_eq!(
+            samples,
+            [255, 0, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0]
+        );
+        assert!(info.srgb.is_some());
+    }
+
+    #[test]
+    fn a_corner_png_takes_the_block_layout() {
+        let mut record = record(Method::Greedy);
+        record.computed_bindings.push(ComputedBinding {
+            name: "ao".to_owned(),
+            computation: Computation::Occlusion,
+        });
+        record.files = vec![file_write("bar-ao.png", None, "ao", Transfer::Linear)];
+
+        let document = meshed(&record);
+
+        // Six faces take six 2x2 blocks on a 4x4-cell canvas. Every corner
+        // of the bar is open.
+        let (samples, info) = decoded_png(&document, "bar-ao.png");
+        assert_eq!((info.width, info.height), (8, 8));
+        assert_eq!(samples.iter().filter(|&&sample| sample == 255).count(), 24);
+        assert_eq!(samples.iter().filter(|&&sample| sample == 0).count(), 40);
+    }
+
+    #[test]
+    fn json_entries_on_one_path_merge_in_record_order() {
+        let (main, object) = painted();
+        let mut record = record(Method::Greedy);
+        record.files = vec![
+            file_write("bar.json", Some("metal"), "metallic", Transfer::Linear),
+            file_write("bar.json", Some("shiny"), "metallic > 0", Transfer::Linear),
+            file_write("bar.json", Some("count"), "2u32", Transfer::Linear),
+            file_write("bar.json", Some("grey"), "0.5", Transfer::Srgb),
+        ];
+
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
+        let (_, file) = document.file_by_name("bar.json").unwrap();
+        let text = String::from_utf8(file.bytes.clone()).unwrap();
+
+        assert!(
+            text.starts_with(
+                "{\n  \"metal\": [\n    1.0,\n    0.0\n  ],\n  \"shiny\": [\n    true,\n    \
+                 false\n  ],\n  \"count\": 2,\n  \"grey\": 0.73"
+            ),
+            "{text}"
+        );
+        assert!(text.ends_with("\n}\n"), "{text}");
+    }
+
+    #[test]
+    fn a_file_written_wrong_errors_and_names_the_file() {
+        let element = MeshElement::File {
+            file: "bar.png".to_owned(),
+        };
+
+        let mut hot = record(Method::Greedy);
+        hot.files = vec![file_write("bar.png", None, "face(1.5)", Transfer::Linear)];
+        assert_eq!(failing_element(&hot), element);
+
+        let mut counted = record(Method::Greedy);
+        counted.files = vec![file_write("bar.png", None, "face(1u32)", Transfer::Linear)];
+        assert_eq!(failing_element(&counted), element);
+
+        let mut twice = record(Method::Greedy);
+        twice.files = vec![
+            file_write("bar.png", Some("n"), "1", Transfer::Linear),
+            file_write("bar.png", Some("n"), "2", Transfer::Linear),
+        ];
+        assert_eq!(failing_element(&twice), element);
+
+        let mut mixed = record(Method::Greedy);
+        mixed.files = vec![
+            file_write("bar.png", Some("n"), "1", Transfer::Linear),
+            file_write("bar.png", None, "face(1)", Transfer::Linear),
+        ];
+        assert_eq!(failing_element(&mixed), element);
     }
 }

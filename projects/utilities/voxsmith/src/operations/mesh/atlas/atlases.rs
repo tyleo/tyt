@@ -2,7 +2,9 @@ use crate::{
     Result,
     operations::mesh::{ArrayDomain, AtlasLayout, MeshGeometry, Swatches, TextureShape},
 };
+use branded_id::UsizeId;
 use ty_math::TyVector2F64;
+use vox_value_language::Domain;
 
 /// The atlases over one geometry, each laid out on demand, and each face's
 /// cell on them.
@@ -25,51 +27,90 @@ impl<'a> Atlases<'a> {
         }
     }
 
-    /// The `domain` atlas's layout.
-    pub(crate) fn layout(&self, domain: ArrayDomain) -> Result<AtlasLayout> {
-        let count = match domain {
+    /// The cells on the `domain` atlas.
+    pub(crate) fn cell_count(&self, domain: ArrayDomain) -> usize {
+        match domain {
             ArrayDomain::Corner | ArrayDomain::Face => self.geometry.quad_count(),
             ArrayDomain::Swatch => self.swatches.count(),
             ArrayDomain::Voxel => self.swatches.voxel_swatch_ids().len(),
+        }
+    }
+
+    /// The `domain` atlas's layout.
+    pub(crate) fn layout(&self, domain: ArrayDomain) -> Result<AtlasLayout> {
+        AtlasLayout::shape(domain, self.cell_count(domain), self.shape)
+    }
+
+    /// The entries of a `value_domain` value that `cell` of the `domain` atlas
+    /// reads, one per voxel piece where a face climbs a lower value in. A
+    /// corner value reads by texel.
+    pub(crate) fn cell_entries(
+        &self,
+        domain: ArrayDomain,
+        value_domain: Domain,
+        cell: usize,
+    ) -> Vec<usize> {
+        let swatch_of = |voxel_entry: usize| {
+            self.swatches.voxel_swatch_ids()[UsizeId::from_usize(voxel_entry)]
+                .to_usize_id()
+                .to_usize()
         };
 
-        AtlasLayout::shape(domain, count, self.shape)
+        match (value_domain, domain) {
+            (Domain::Plain, _) => vec![0],
+
+            (Domain::Swatch, ArrayDomain::Swatch)
+            | (Domain::Voxel, ArrayDomain::Voxel)
+            | (Domain::Face, ArrayDomain::Corner | ArrayDomain::Face) => vec![cell],
+
+            (Domain::Swatch, ArrayDomain::Voxel) => vec![swatch_of(cell)],
+
+            (Domain::Swatch | Domain::Voxel, ArrayDomain::Corner | ArrayDomain::Face) => {
+                self.geometry.face_voxel_ids[cell]
+                    .iter()
+                    .map(|&voxel_id| {
+                        let voxel_entry = self
+                            .swatches
+                            .voxel_entry_id(voxel_id)
+                            .to_usize_id()
+                            .to_usize();
+
+                        match value_domain {
+                            Domain::Swatch => swatch_of(voxel_entry),
+                            _ => voxel_entry,
+                        }
+                    })
+                    .collect()
+            }
+
+            (Domain::Corner, _)
+            | (Domain::Face, ArrayDomain::Swatch | ArrayDomain::Voxel)
+            | (Domain::Voxel, ArrayDomain::Swatch) => {
+                unreachable!("a cell reads a value at or below its atlas")
+            }
+        }
     }
 
     /// The cell face `face` occupies on the `domain` atlas. The merge rules
     /// keep a face on the swatch atlas to one swatch and a face on the voxel
     /// atlas to one voxel.
     fn cell(&self, domain: ArrayDomain, face: usize) -> usize {
-        let voxel_ids = &self.geometry.face_voxel_ids[face];
-
         match domain {
             ArrayDomain::Corner | ArrayDomain::Face => face,
 
-            ArrayDomain::Swatch => {
-                let mut swatch_ids = voxel_ids.iter().map(|&voxel_id| {
-                    self.swatches.voxel_swatch_ids()
-                        [self.swatches.voxel_entry_id(voxel_id).to_usize_id()]
-                });
+            ArrayDomain::Swatch | ArrayDomain::Voxel => {
+                let mut cells = self
+                    .cell_entries(ArrayDomain::Face, domain.into(), face)
+                    .into_iter();
 
-                let swatch_id = swatch_ids.next().expect("a face covers a voxel");
+                let cell = cells.next().expect("a face covers a voxel");
 
                 assert!(
-                    swatch_ids.all(|other| other == swatch_id),
-                    "a face on the swatch atlas covers one swatch"
+                    cells.all(|other| other == cell),
+                    "a face on the {domain} atlas covers one {domain}"
                 );
 
-                swatch_id.to_usize_id().to_usize()
-            }
-
-            ArrayDomain::Voxel => {
-                let [voxel_id] = voxel_ids.as_slice() else {
-                    unreachable!("a face on the voxel atlas covers one voxel");
-                };
-
-                self.swatches
-                    .voxel_entry_id(*voxel_id)
-                    .to_usize_id()
-                    .to_usize()
+                cell
             }
         }
     }

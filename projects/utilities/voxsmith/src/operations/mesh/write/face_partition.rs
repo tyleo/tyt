@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    operations::mesh::{Landing, MeshElement, MeshGeometry, MeshRecord, ProgramRun, Swatches},
+    operations::mesh::{ArrayDomain, Atlases, Landing, MeshElement, MeshRecord, ProgramRun},
 };
 use branded_id::{IdVec, U32Id};
 use meshdoc::BMeshPrimitive;
@@ -18,13 +18,13 @@ impl FacePartition {
     pub(crate) fn derive(
         record: &MeshRecord,
         run: &ProgramRun,
-        swatches: &Swatches<'_>,
-        geometry: &MeshGeometry,
+        atlases: &Atlases<'_>,
     ) -> Result<Self> {
         let mut faces: IdVec<BMeshPrimitive, Vec<usize>> =
             IdVec::from_vec(vec![Vec::new(); record.primitives.len()]);
 
-        let mut takers: Vec<Option<U32Id<BMeshPrimitive>>> = vec![None; geometry.quad_count()];
+        let mut takers: Vec<Option<U32Id<BMeshPrimitive>>> =
+            vec![None; atlases.cell_count(ArrayDomain::Face)];
 
         for checked in &run.destinations {
             let destination = &checked.destination;
@@ -61,7 +61,7 @@ impl FacePartition {
             };
 
             for (face, taker) in takers.iter_mut().enumerate() {
-                if !face_answer(entries, value.domain(), swatches, geometry, face) {
+                if !face_answer(entries, value.domain(), atlases, face) {
                     continue;
                 }
 
@@ -99,44 +99,24 @@ impl FacePartition {
 /// Whether the select with `entries` at `domain` takes `face`. A merged
 /// face's voxels agree because the merge rules keep a select to one answer
 /// across a span.
-fn face_answer(
-    entries: &[bool],
-    domain: Domain,
-    swatches: &Swatches<'_>,
-    geometry: &MeshGeometry,
-    face: usize,
-) -> bool {
-    match domain {
-        Domain::Corner => unreachable!("a corner select errors before it routes"),
-
-        Domain::Face => entries[face],
-
-        Domain::Plain => entries[0],
-
-        Domain::Swatch | Domain::Voxel => {
-            let mut answers = geometry.face_voxel_ids[face].iter().map(|&voxel_id| {
-                let voxel_entry_id = swatches.voxel_entry_id(voxel_id);
-
-                let entry = match domain {
-                    Domain::Swatch => swatches.voxel_swatch_ids()[voxel_entry_id.to_usize_id()]
-                        .to_usize_id()
-                        .to_usize(),
-                    _ => voxel_entry_id.to_usize_id().to_usize(),
-                };
-
-                entries[entry]
-            });
-
-            let answer = answers.next().expect("a face covers a voxel");
-
-            assert!(
-                answers.all(|other| other == answer),
-                "a face's voxels agree on a select"
-            );
-
-            answer
-        }
+fn face_answer(entries: &[bool], domain: Domain, atlases: &Atlases<'_>, face: usize) -> bool {
+    if domain == Domain::Corner {
+        unreachable!("a corner select errors before it routes");
     }
+
+    let mut answers = atlases
+        .cell_entries(ArrayDomain::Face, domain, face)
+        .into_iter()
+        .map(|entry| entries[entry]);
+
+    let answer = answers.next().expect("a face covers a voxel");
+
+    assert!(
+        answers.all(|other| other == answer),
+        "a face's voxels agree on a select"
+    );
+
+    answer
 }
 
 #[cfg(test)]
@@ -144,8 +124,9 @@ mod tests {
     use crate::{
         Error,
         operations::mesh::{
-            ArrayDomain, Computation, ComputedBinding, FacePartition, MeshElement, MeshRecord,
-            Method, PrimitiveRecord, ProgramRun, Swatches, TextureShape, object_to_mesh_geometry,
+            ArrayDomain, Atlases, Computation, ComputedBinding, FacePartition, MeshElement,
+            MeshRecord, Method, PrimitiveRecord, ProgramRun, Swatches, TextureShape,
+            object_to_mesh_geometry,
         },
     };
     use branded_id::{IdVec, U32Id};
@@ -216,8 +197,9 @@ mod tests {
             mesh_extras: Vec::new(),
         };
         let run = ProgramRun::over(&object, &swatches, &record, &culled).unwrap();
+        let atlases = Atlases::new(TextureShape::Pot, &swatches, &culled);
 
-        match FacePartition::derive(&record, &run, &swatches, &culled) {
+        match FacePartition::derive(&record, &run, &atlases) {
             Ok(partition) => Ok((0..selects.len())
                 .map(|index| partition.faces(U32Id::from_u32(index as u32)).to_vec())
                 .collect()),
