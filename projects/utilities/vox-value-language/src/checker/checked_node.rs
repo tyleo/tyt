@@ -68,7 +68,7 @@ impl CheckedNode {
                 bound,
                 fallback,
             } => {
-                let marker = if *bound { "" } else { "?" };
+                let marker = if bound.is_some() { "" } else { "?" };
 
                 format!("(default `{name}`{marker} {})", fallback.render())
             }

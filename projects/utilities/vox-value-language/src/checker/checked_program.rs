@@ -1,4 +1,4 @@
-use crate::{Type, TypeEnvironment, checker::CheckedBinding};
+use crate::{CheckedExpression, Type, TypeEnvironment, checker::CheckedBinding};
 use std::collections::HashMap;
 
 /// A program with every binding's type settled, the input to `eval`.
@@ -10,6 +10,18 @@ pub struct CheckedProgram {
 }
 
 impl CheckedProgram {
+    /// The bindings in order, each name with its expression.
+    pub fn bindings(&self) -> impl Iterator<Item = (&str, CheckedExpression)> {
+        self.bindings.iter().map(|binding| {
+            (
+                binding.name.as_str(),
+                CheckedExpression {
+                    root: binding.expression.clone(),
+                },
+            )
+        })
+    }
+
     /// The type a name holds at the program's end: its last binding's, or
     /// the environment's where no binding redefines it.
     pub fn get(&self, name: &str) -> Option<&Type> {

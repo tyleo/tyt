@@ -70,7 +70,7 @@ impl Evaluator<'_> {
                 bound,
                 fallback,
             } => {
-                if *bound {
+                if bound.is_some() {
                     self.lift(self.named(name), output)
                 } else {
                     self.lifted(fallback, output)

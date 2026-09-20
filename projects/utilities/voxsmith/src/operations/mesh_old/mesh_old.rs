@@ -66,6 +66,7 @@ pub fn mesh_old<D: EncodePng, T: VoxExt>(
             used.material_index(voxel_id)
                 .expect("the sweep keys only the live voxels the used set indexed")
         },
+        &|_| true,
         true,
     );
 

@@ -1,5 +1,5 @@
 use crate::{
-    Domain, Scalar,
+    Domain, Scalar, Type,
     checker::{CheckedNode, ElementwiseFunction, Fold, NumberValue, Reduction, Rounding},
     parser::{BinaryOperator, ComparisonOperator, LogicalOperator, UnaryOperator},
 };
@@ -39,7 +39,10 @@ pub(crate) enum CheckedKind {
 
     Default {
         name: String,
-        bound: bool,
+
+        /// The name's type where the scope binds it.
+        bound: Option<Type>,
+
         fallback: Box<CheckedNode>,
     },
 

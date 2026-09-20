@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     operations::mesh::{
-        MeshElement, MeshEnvironment, MeshGeometry, MeshRecord, PrimitiveRecord, Swatches,
-        mesh_slices, run_program,
+        MergeRules, MeshElement, MeshGeometry, MeshRecord, Method, PrimitiveRecord, ProgramRun,
+        Swatches, mesh_slices,
     },
 };
 use branded_id::U32Id;
@@ -12,10 +12,13 @@ use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` under `record` into a document of one object placed by
 /// one root node, both named as `object` is. Positions are in meters,
-/// `record.voxel_size` per voxel, on the grid's Z-up axes. Errors if a layer
+/// `record.voxel_size` per voxel, on the grid's Z-up axes. Under `greedy`
+/// the run first meshes culled and evaluates the program over that, learns
+/// what the values let it merge, and meshes again. Errors if a layer
 /// references a palette `main` does not hold, if the voxel size is not
-/// positive, if a computed binding or the program fails to bind, check, or
-/// evaluate, or if the record holds an element the run cannot mesh yet.
+/// positive, if a computed binding, the program, or a destination fails to
+/// bind, check, or evaluate, or if the record holds an element the run
+/// cannot mesh yet.
 pub fn mesh<T: VoxExt>(
     main: &VoxMain<T>,
     object: &VoxObject,
@@ -32,12 +35,25 @@ pub fn mesh<T: VoxExt>(
 
     let primitive_record = check_meshed(record)?;
 
-    let geometry = mesh_slices(object, record.method, &|_| 0, false);
+    let geometry = if record.method == Method::Greedy {
+        let culled = mesh_slices(object, Method::Culled, &|_| 0, &|_| true, false);
 
-    let environment =
-        MeshEnvironment::bind(object, &swatches, &geometry, &record.computed_bindings)?;
+        let run = ProgramRun::over(object, &swatches, record, &culled)?;
 
-    run_program(&record.program, &environment)?;
+        let rules = MergeRules::derive(object, record, &swatches, &culled, &run)?;
+
+        mesh_slices(
+            object,
+            Method::Greedy,
+            &|voxel_id| rules.voxel_class(voxel_id),
+            &|span| rules.span_fits(span),
+            false,
+        )
+    } else {
+        mesh_slices(object, record.method, &|_| 0, &|_| true, false)
+    };
+
+    ProgramRun::over(object, &swatches, record, &geometry)?;
 
     let primitive = primitive_of(&geometry, record.voxel_size, primitive_record)?;
 
@@ -462,6 +478,31 @@ mod tests {
             .to_owned();
 
         mesh(&main, &object, &record).unwrap().validate().unwrap();
+    }
+
+    #[test]
+    fn greedy_splits_where_a_climbed_value_differs_and_nowhere_else() {
+        let (main, object) = painted();
+
+        let quads = |program: &str| {
+            let mut record = record(Method::Greedy);
+            record.computed_bindings.push(ComputedBinding {
+                name: "ao".to_owned(),
+                computation: Computation::Occlusion,
+            });
+            record.program = program.to_owned();
+            let document = mesh(&main, &object, &record).unwrap();
+            let (_, object) = document.iter_objects().next().unwrap();
+            let (_, primitive) = object.iter_primitives().next().unwrap();
+            primitive.triangle_count() / 2
+        };
+
+        // The bar's two materials differ in metallic and share an alpha of
+        // one. A computed occlusion the program never reads changes nothing.
+        assert_eq!(quads(""), 6);
+        assert_eq!(quads("x = face(baseColor.a);"), 6);
+        assert_eq!(quads("x = swatchAvg(faceAvg(ao)) * metallic;"), 6);
+        assert_eq!(quads("x = face(metallic);"), 10);
     }
 
     #[test]

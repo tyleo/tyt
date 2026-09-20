@@ -307,7 +307,7 @@ impl Checker<'_> {
             return Ok(Checked::Typed(CheckedNode {
                 kind: CheckedKind::Default {
                     name: name.to_owned(),
-                    bound: false,
+                    bound: None,
                     fallback: Box::new(fallback),
                 },
                 output,
@@ -339,7 +339,7 @@ impl Checker<'_> {
         Ok(Checked::Typed(CheckedNode {
             kind: CheckedKind::Default {
                 name: name.to_owned(),
-                bound: true,
+                bound: Some(existing),
                 fallback: Box::new(fallback),
             },
             output,
