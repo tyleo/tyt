@@ -1,4 +1,4 @@
-use crate::operations::mesh::{MeshGeometry, Method};
+use crate::operations::mesh::{MeshGeometry, Method, is_solid};
 use branded_id::U32Id;
 use ty_math::{TyVector3Ext, TyVector3F32, TyVector3U32};
 use voxcore::{BVoxVoxel, VoxObject};
@@ -93,7 +93,7 @@ fn sweep(
                 position[u] = uu as i64;
                 position[v] = vv as i64;
 
-                if !live_at(object, position, bounds) {
+                if !is_solid(object, position) {
                     continue;
                 }
 
@@ -101,7 +101,7 @@ fn sweep(
                     let mut neighbor = position;
                     neighbor[d] = s as i64 + sign as i64;
 
-                    if live_at(object, neighbor, bounds) {
+                    if is_solid(object, neighbor) {
                         continue;
                     }
                 }
@@ -121,6 +121,7 @@ fn sweep(
         if merge {
             for (u0, u1, v0, v1, material) in merge_rects(&mask, w, h) {
                 push_face(
+                    object,
                     geometry,
                     d,
                     u,
@@ -140,6 +141,7 @@ fn sweep(
                 for uu in 0..w {
                     if let Some(material) = mask[vv * w + uu] {
                         push_face(
+                            object,
                             geometry,
                             d,
                             u,
@@ -158,26 +160,6 @@ fn sweep(
             }
         }
     }
-}
-
-/// Whether the grid cell at `position` is a live voxel; out-of-bounds cells and
-/// empty cells are both `false`, so a boundary face is exposed.
-fn live_at(object: &VoxObject, position: [i64; 3], bounds: [u32; 3]) -> bool {
-    if position
-        .iter()
-        .zip(bounds)
-        .any(|(&position_component, bounds_component)| {
-            position_component < 0 || position_component >= bounds_component as i64
-        })
-    {
-        return false;
-    }
-
-    let position = TyVector3U32::new(position[0] as u32, position[1] as u32, position[2] as u32);
-
-    object
-        .voxel_id(position)
-        .is_some_and(|voxel_id| object.is_live(voxel_id))
 }
 
 /// Greedily fuses a slice `mask` (width `w`, height `h`) into maximal
@@ -234,10 +216,12 @@ fn merge_rects(mask: &[Option<u32>], w: usize, h: usize) -> Vec<(usize, usize, u
 }
 
 /// Appends the quad on axis `d`'s `sign` face of slice `s`, spanning `u` in
-/// `[u0, u1]` and `v` in `[v0, v1]`, wound counter-clockwise outward. When
-/// `track_materials` is set, every vertex records `material`.
+/// `[u0, u1]` and `v` in `[v0, v1]`, wound counter-clockwise outward, and
+/// records the voxels it covers. When `track_materials` is set, every vertex
+/// records `material`.
 #[allow(clippy::too_many_arguments)]
 fn push_face(
+    object: &VoxObject,
     geometry: &mut MeshGeometry,
     d: usize,
     u: usize,
@@ -251,6 +235,25 @@ fn push_face(
     material: u32,
     track_materials: bool,
 ) {
+    let mut voxel_ids = Vec::with_capacity((u1 - u0) * (v1 - v0));
+
+    for vv in v0..v1 {
+        for uu in u0..u1 {
+            let mut position = [0u32; 3];
+            position[d] = s;
+            position[u] = uu as u32;
+            position[v] = vv as u32;
+
+            voxel_ids.push(
+                object
+                    .voxel_id(TyVector3U32::from_array(position))
+                    .expect("a quad covers cells within the grid"),
+            );
+        }
+    }
+
+    geometry.face_voxel_ids.push(voxel_ids);
+
     // The +side face sits one unit past the slice along `d`, the -side on it.
     let plane = s as f32 + if sign > 0 { 1.0 } else { 0.0 };
 

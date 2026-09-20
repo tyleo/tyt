@@ -1,4 +1,6 @@
+use branded_id::U32Id;
 use ty_math::TyVector3F32;
+use voxcore::BVoxVoxel;
 
 /// Triangulated voxel geometry in voxel-grid space: a live voxel at grid
 /// position `(x, y, z)` fills the unit cube `[x, x+1] x [y, y+1] x [z, z+1]`,
@@ -25,6 +27,9 @@ pub struct MeshGeometry {
     /// for the pure-geometry mesh. Every vertex of a quad shares one index,
     /// since material-keyed meshing merges only same-material faces.
     pub material_indices: Vec<u32>,
+
+    /// The voxels each quad covers, one entry per quad in emission order.
+    pub face_voxel_ids: Vec<Vec<U32Id<BVoxVoxel>>>,
 }
 
 impl MeshGeometry {

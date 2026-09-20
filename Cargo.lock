@@ -2255,6 +2255,7 @@ dependencies = [
  "treegrid",
  "treeselect",
  "ty-math",
+ "vox-value-language",
  "voxcore",
  "zune-jpeg",
 ]

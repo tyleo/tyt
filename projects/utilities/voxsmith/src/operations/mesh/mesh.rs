@@ -1,6 +1,9 @@
 use crate::{
     Error, Result,
-    operations::mesh::{MeshElement, MeshGeometry, MeshRecord, PrimitiveRecord, mesh_slices},
+    operations::mesh::{
+        MeshElement, MeshEnvironment, MeshGeometry, MeshRecord, PrimitiveRecord, Swatches,
+        mesh_slices, run_program,
+    },
 };
 use branded_id::U32Id;
 use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive, MeshTriangle};
@@ -11,7 +14,8 @@ use voxcore::{VoxExt, VoxMain, VoxObject};
 /// one root node, both named as `object` is. Positions are in meters,
 /// `record.voxel_size` per voxel, on the grid's Z-up axes. Errors if a layer
 /// references a palette `main` does not hold, if the voxel size is not
-/// positive, or if the record holds an element the run cannot mesh yet.
+/// positive, if a computed binding or the program fails to bind, check, or
+/// evaluate, or if the record holds an element the run cannot mesh yet.
 pub fn mesh<T: VoxExt>(
     main: &VoxMain<T>,
     object: &VoxObject,
@@ -24,11 +28,16 @@ pub fn mesh<T: VoxExt>(
         ));
     }
 
-    main.effective_palette(object)?;
+    let swatches = Swatches::resolve(main, object)?;
 
     let primitive_record = check_meshed(record)?;
 
     let geometry = mesh_slices(object, record.method, &|_| 0, false);
+
+    let environment =
+        MeshEnvironment::bind(object, &swatches, &geometry, &record.computed_bindings)?;
+
+    run_program(&record.program, &environment)?;
 
     let primitive = primitive_of(&geometry, record.voxel_size, primitive_record)?;
 
@@ -39,16 +48,6 @@ pub fn mesh<T: VoxExt>(
 /// yet.
 fn check_meshed(record: &MeshRecord) -> Result<&PrimitiveRecord> {
     let not_yet = |element: MeshElement| Error::mesh_record(element, "is not meshed yet");
-
-    if let Some(binding) = record.computed_bindings.first() {
-        return Err(not_yet(MeshElement::ComputedBinding {
-            name: binding.name.clone(),
-        }));
-    }
-
-    if !record.program.trim().is_empty() {
-        return Err(not_yet(MeshElement::Program));
-    }
 
     if !record.materials.is_empty() {
         return Err(not_yet(MeshElement::Materials));
@@ -174,15 +173,18 @@ mod tests {
     use crate::{
         Error,
         operations::mesh::{
-            AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource, ExtraWrite,
-            FileForm, FileWrite, MaterialRecord, MeshElement, MeshRecord, Method, PrimitiveRecord,
-            TextureShape, Transfer, WrittenValue, mesh,
+            ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource,
+            ExtraWrite, FileForm, FileWrite, MaterialRecord, MeshElement, MeshRecord, Method,
+            PrimitiveRecord, TextureShape, Transfer, WrittenValue, mesh,
         },
     };
     use branded_id::{IdVec, U32Id};
     use meshdoc::MeshMain;
     use ty_math::{TyVector3F64, TyVector3U32};
-    use voxcore::{VoxMain, VoxObject};
+    use voxcore::{
+        VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        material::{BASE_COLOR, METALLIC},
+    };
 
     /// A 2x1x1 bar of two live voxels with no layers.
     fn bar() -> VoxObject {
@@ -192,6 +194,43 @@ mod tests {
             object.retain_voxel(voxel_id, &[]).unwrap();
         }
         object
+    }
+
+    /// A main whose one palette carries `baseColor` and `metallic`, and the
+    /// bar painted with its two materials.
+    fn painted() -> (VoxMain, VoxObject) {
+        let mut main: VoxMain = VoxMain::default();
+        let colors = main.retain_value_pool(
+            VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+        );
+        let metals = main.retain_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
+
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), colors, U32Id::from_u32(0))
+            .unwrap();
+        palette
+            .retain_property(METALLIC.to_owned(), metals, U32Id::from_u32(0))
+            .unwrap();
+        palette
+            .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(0)])
+            .unwrap();
+        palette
+            .retain_material(vec![U32Id::from_u32(1), U32Id::from_u32(1)])
+            .unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
+
+        let mut object = bar();
+        object.retain_layer(palette_id, U32Id::from_u32(0));
+        for x in 0..2 {
+            let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object.release_voxel(voxel_id).unwrap();
+            object
+                .retain_voxel(voxel_id, &[U32Id::from_u32(x)])
+                .unwrap();
+        }
+
+        (main, object)
     }
 
     /// The implicit primitive, taking every face with no material.
@@ -320,22 +359,6 @@ mod tests {
             transfer: Transfer::Linear,
         };
 
-        let mut with_binding = record(Method::Greedy);
-        with_binding.computed_bindings.push(ComputedBinding {
-            name: "ao".to_owned(),
-            computation: Computation::Occlusion,
-        });
-        assert_eq!(
-            failing_element(&with_binding),
-            MeshElement::ComputedBinding {
-                name: "ao".to_owned()
-            }
-        );
-
-        let mut with_program = record(Method::Greedy);
-        with_program.program = "albedo = baseColorFactor;".to_owned();
-        assert_eq!(failing_element(&with_program), MeshElement::Program);
-
         let mut with_material = record(Method::Greedy);
         with_material.materials = IdVec::from_vec(vec![MaterialRecord::default()]);
         assert_eq!(failing_element(&with_material), MeshElement::Materials);
@@ -414,5 +437,80 @@ mod tests {
         object.retain_layer(U32Id::from_u32(9), U32Id::from_u32(0));
 
         assert!(mesh(&main, &object, &record(Method::Greedy)).is_err());
+    }
+
+    #[test]
+    fn the_program_reads_the_palette_and_the_computed_values() {
+        let (main, object) = painted();
+        let mut record = record(Method::Greedy);
+        record.computed_bindings = vec![
+            ComputedBinding {
+                name: "swatchIndex".to_owned(),
+                computation: Computation::Index(ArrayDomain::Swatch),
+            },
+            ComputedBinding {
+                name: "ao".to_owned(),
+                computation: Computation::Occlusion,
+            },
+            ComputedBinding {
+                name: "voxelPosition".to_owned(),
+                computation: Computation::VoxelPosition,
+            },
+        ];
+        record.program = "tint = baseColor.rgb * metallic; last = max(swatchIndex); \
+                          width = max(voxelPosition.x); open = min(ao);"
+            .to_owned();
+
+        mesh(&main, &object, &record).unwrap().validate().unwrap();
+    }
+
+    #[test]
+    fn a_program_error_names_the_program() {
+        let (main, object) = painted();
+        let mut record = record(Method::Greedy);
+        record.program = "x = nothing;".to_owned();
+
+        let error = mesh(&main, &object, &record).unwrap_err();
+
+        assert!(matches!(
+            error,
+            Error::MeshRecord {
+                element: MeshElement::Program,
+                ..
+            }
+        ));
+        assert!(
+            error
+                .to_string()
+                .contains("`nothing` has no value in scope"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_computed_binding_shadowing_a_property_or_bound_twice_errors() {
+        let (main, object) = painted();
+
+        let mut shadowing = record(Method::Greedy);
+        shadowing.computed_bindings.push(ComputedBinding {
+            name: METALLIC.to_owned(),
+            computation: Computation::Occlusion,
+        });
+        let error = mesh(&main, &object, &shadowing).unwrap_err();
+        assert!(error.to_string().contains("shadows"), "{error}");
+
+        let mut twice = record(Method::Greedy);
+        twice.computed_bindings = vec![
+            ComputedBinding {
+                name: "ao".to_owned(),
+                computation: Computation::Occlusion,
+            },
+            ComputedBinding {
+                name: "ao".to_owned(),
+                computation: Computation::VoxelPosition,
+            },
+        ];
+        let error = mesh(&main, &object, &twice).unwrap_err();
+        assert!(error.to_string().contains("is bound twice"), "{error}");
     }
 }

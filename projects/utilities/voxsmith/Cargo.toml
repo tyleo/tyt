@@ -18,6 +18,7 @@ treegrid = { version = "0.2.0", features = [
 ], optional = true }
 treeselect = { version = "0.1.1", optional = true }
 ty-math = "0.2.0"
+vox-value-language = { version = "0.1.0", optional = true }
 voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 zune-jpeg = { version = "0.5", optional = true }
 
@@ -37,7 +38,7 @@ default = [
 
 hierarchy_show = ["_treegrid", "dep:treeselect"]
 info = ["_treegrid"]
-mesh = []
+mesh = ["dep:vox-value-language"]
 mesh_old = ["mesh"]
 palette_list = ["_treegrid"]
 palette_show = ["_treegrid", "dep:serde_json"]

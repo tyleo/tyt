@@ -46,3 +46,8 @@ pub use slot_write::*;
 pub use texture_shape::*;
 pub use transfer::*;
 pub use written_value::*;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;
