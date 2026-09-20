@@ -3,6 +3,7 @@
 //! A typed expression language over per-swatch, per-voxel, per-face, and
 //! per-corner values.
 
+mod checker;
 mod environment;
 mod error;
 mod function;
@@ -10,6 +11,7 @@ mod lexer;
 mod parser;
 mod result;
 
+pub use checker::*;
 pub use environment::*;
 pub use error::*;
 pub use parser::*;

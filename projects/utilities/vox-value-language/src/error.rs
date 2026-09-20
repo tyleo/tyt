@@ -1,4 +1,4 @@
-use crate::{Dimension, Domain, ParseFailure, Scalar};
+use crate::{CheckFailure, Dimension, Domain, ParseFailure, Scalar};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -8,6 +8,13 @@ use std::{
 /// An error from the language pipeline.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
+    /// An expression broke a checking rule, inside the binding or on its
+    /// own.
+    Check {
+        binding: Option<String>,
+        failure: CheckFailure,
+    },
+
     /// A value's component count disagrees with its domain and dimension.
     ComponentCount {
         domain: Domain,
@@ -31,6 +38,16 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Error::Check {
+                binding: Some(binding),
+                failure,
+            } => write!(formatter, "in `{binding}`: {failure}"),
+
+            Error::Check {
+                binding: None,
+                failure,
+            } => write!(formatter, "{failure}"),
+
             Error::ComponentCount {
                 domain,
                 dimension,

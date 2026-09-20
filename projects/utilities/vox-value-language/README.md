@@ -34,8 +34,13 @@ let checked_select = check_expression(&select, &checked)?;
 let select_value = eval_expression(&checked_select, &evaluated)?;
 ```
 
-A parse error carries the byte range it names, a check error names the binding
-and the rule it broke, and an eval error names the binding.
+`check` answers the type a name holds at the program's end: its last binding's,
+or the environment's where no binding redefines it. A checked expression
+answers its type through `to_type`.
+
+A parse error carries the byte range it covers, a check error carries the
+binding and the rule it broke, and an eval error carries the binding. An
+expression checked or evaluated on its own carries no binding.
 
 ## Environments
 
@@ -113,8 +118,9 @@ A literal names its type or takes it from context. A decimal point makes an
 number takes the type of the operands beside it, so `mod(position.y, 2)` reads
 `2` as `u32`. The functions that take `f32` alone type their bare literals as
 `f32`, so `rgb(1, 1, 1)` is an `f32` triple. A bare index literal reads as
-`u32`. A literal nothing types errors, and a suffix fixes it: `x = 1` errors
-where `x = 1u32` does not.
+`u32`. A bare literal filling an unbound `default` reads as `f32`. A literal
+nothing types errors, and a suffix fixes it: `x = 1` errors where `x = 1u32`
+does not.
 
 The conversions are explicit and componentwise:
 
@@ -274,7 +280,9 @@ values, the result an array when any argument is.
 18. `f32(e)`, `u8(e)`, `u16(e)`, `u32(e)`, and `ceil_u8` through `round_u32`:
     the conversions, componentwise, under the rules in [Numbers](#numbers).
 19. `mix(x, y, cond)`: `x` where the bool is false and `y` where it is true.
-    The branches share a dimension or are both strings.
+    The branches share a dimension and a type, any number, bool, or string,
+    and the result takes it. A numeric pair keeps the type it is given:
+    `mix(0f32, 1, glowing)` pins one branch to type the other.
 20. `any(c)`, `all(c)`: fold a comparison's component answers into one bool
     per entry, `any` with or and `all` with and. The argument is a comparison
     written in place.
@@ -287,8 +295,11 @@ values, the result an array when any argument is.
 24. `swatch(e)`, `voxel(e)`, `face(e)`, `corner(e)`: the explicit climbs, any
     type carried.
 25. `default(name, fallback)`: `name` where it has a value and `fallback` where
-    the name is unbound. `name` is bare or backtick-quoted, and `fallback` is
-    any `f32` or string expression of the same dimension.
+    the name is unbound. `name` is bare or backtick-quoted. Where the name is
+    bound, `fallback` shares its dimension and type, any number, bool, or
+    string. A bare literal takes the name's numeric type. Where the name is
+    unbound, the fallback's type is the result. A bare literal there reads as
+    `f32`.
 
 The function set stays small: `sqrt(x)` is `pow(x, 0.5)`, `fract(x)` is
 `mod(x, 1)`, and a signed remap is `n * 0.5 + 0.5`.
