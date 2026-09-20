@@ -1,5 +1,6 @@
 mod hierarchy;
 mod info;
+mod mesh;
 mod mesh_old;
 mod palette;
 mod to;
@@ -8,6 +9,7 @@ mod voxelize;
 
 pub use hierarchy::*;
 pub use info::*;
+pub use mesh::*;
 pub use mesh_old::*;
 pub use palette::*;
 pub use to::*;
