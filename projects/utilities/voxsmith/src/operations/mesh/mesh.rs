@@ -70,7 +70,7 @@ fn check_meshed(record: &MeshRecord) -> Result<&PrimitiveRecord> {
         if record.primitives.is_empty() {
             return Err(Error::mesh_record(
                 MeshElement::Primitives,
-                "hold no primitive, and the table holds at least one",
+                "holds no primitive, and a run needs at least one",
             ));
         }
 

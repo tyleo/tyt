@@ -1,5 +1,26 @@
+mod array_domain;
+mod check_image_sources;
+mod flag_occurrences;
+mod material_table;
+mod method;
+mod parse_flag_index;
+mod parse_flag_value;
+mod parse_texture_shape;
+mod primitive_table;
+mod push_file_write;
+mod push_unique;
 mod resolve_gltf_container;
 mod select_one_object;
+mod transfer;
 
+pub(crate) use check_image_sources::*;
+pub(crate) use flag_occurrences::*;
+pub(crate) use material_table::*;
+pub(crate) use parse_flag_index::*;
+pub(crate) use parse_flag_value::*;
+pub(crate) use parse_texture_shape::*;
+pub(crate) use primitive_table::*;
+pub(crate) use push_file_write::*;
+pub(crate) use push_unique::*;
 pub(crate) use resolve_gltf_container::*;
 pub(crate) use select_one_object::*;
