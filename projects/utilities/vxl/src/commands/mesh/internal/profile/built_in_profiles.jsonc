@@ -1,0 +1,77 @@
+{
+  // The glTF spec defaults, a mixin every profile builds on. Each
+  // entry shadows its property with a defaulted copy.
+  "defaults": {
+    "values": [
+      "baseColorFactor = swatch(default(baseColorFactor, rgba(1, 1, 1, 1)))",
+      "occlusionStrength = swatch(default(occlusionStrength, 1))",
+      "roughnessFactor = swatch(default(roughnessFactor, 1))",
+      "metallicFactor = swatch(default(metallicFactor, 1))",
+      "emissiveFactor = swatch(default(emissiveFactor, rgb(0, 0, 0)))",
+      "emissiveStrength = swatch(default(emissiveStrength, 1))",
+    ],
+  },
+
+  "albedo": {
+    "valuesFrom": ["defaults"],
+    "values": ["albedo = baseColorFactor"],
+    "materials": [
+      {
+        "slots": {
+          "baseColorTexture": { "kind": "value", "value": "albedo" },
+        },
+      },
+    ],
+  },
+
+  // One value may fill several slots.
+  "orm": {
+    "valuesFrom": ["defaults"],
+    "values": ["orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)"],
+    "materials": [
+      {
+        "slots": {
+          "occlusionTexture": { "kind": "value", "value": "orm" },
+          "metallicRoughnessTexture": { "kind": "value", "value": "orm" },
+        },
+      },
+    ],
+  },
+
+  // white pins emissiveFactor against glTF's black default.
+  "emissive": {
+    "valuesFrom": ["defaults"],
+    "values": [
+      "maxStrength = max(emissiveStrength)",
+      "emissive = emissiveFactor * emissiveStrength / max(maxStrength, 0.001)",
+      "white = rgb(1, 1, 1)",
+    ],
+    "materials": [
+      {
+        "slots": {
+          "emissiveTexture": { "kind": "value", "value": "emissive" },
+          "emissiveFactor": { "kind": "value", "value": "white" },
+          "emissiveStrength": { "kind": "value", "value": "maxStrength" },
+        },
+      },
+    ],
+  },
+
+  // Writers never travel with valuesFrom, so pbr is no bundle: it
+  // imports the three profiles' values and writes the whole material itself.
+  "pbr": {
+    "valuesFrom": ["albedo", "orm", "emissive"],
+    "materials": [
+      {
+        "slots": {
+          "baseColorTexture": { "kind": "value", "value": "albedo" },
+          "occlusionTexture": { "kind": "value", "value": "orm" },
+          "metallicRoughnessTexture": { "kind": "value", "value": "orm" },
+          "emissiveTexture": { "kind": "value", "value": "emissive" },
+          "emissiveFactor": { "kind": "value", "value": "white" },
+          "emissiveStrength": { "kind": "value", "value": "maxStrength" },
+        },
+      },
+    ],
+  },
+}

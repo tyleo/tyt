@@ -1,12 +1,14 @@
 use crate::{
-    CliValue, Dependencies, Error, NoneOr, ObjectSelection, PositiveF64, Result, VoxelInput,
+    Dependencies, Error, NoneOr, ObjectSelection, PositiveF64, Result, VoxelInput,
     cli_value_parser,
     commands::{
-        MaterialTable, PrimitiveTable, check_image_sources, flag_occurrences, parse_flag_index,
-        parse_flag_value, parse_texture_shape, push_file_write, push_unique,
-        resolve_gltf_container, select_one_object,
+        MaterialTable, PrimitiveTable, Profile, ProfileSet, ProgramBuilder, ProgramFlag,
+        ProgramFlags, apply_profile_files, apply_profile_materials, apply_profile_mesh_extras,
+        apply_profile_primitives, check_expression, check_image_sources,
+        declare_profile_primitives, flag_occurrences, parse_flag_index, parse_flag_value,
+        parse_texture_shape, push_file_write, push_unique, push_uv_stream, resolve_gltf_container,
+        select_one_object, written_file_name,
     },
-    require_file_name,
 };
 use branded_id::U32Id;
 use clap::{ArgAction, Parser};
@@ -15,7 +17,7 @@ use meshconv::{
     gltf::{GltfContainer, GltfImageStorage, GltfWriteFormat, GltfWriteOptions},
     save,
 };
-use std::{collections::HashSet, path::PathBuf};
+use std::path::{Path, PathBuf};
 use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::operations::mesh::{
@@ -42,18 +44,13 @@ pub struct Mesh {
     #[arg(value_name = "to", long, value_parser = cli_value_parser::<GltfContainer>())]
     to: Option<GltfContainer>,
 
-    /// The meshing strategy. Stable per-voxel topology needs `culled` or
-    /// `naive`.
-    #[arg(
-        value_name = "method",
-        long,
-        default_value = "greedy",
-        value_parser = cli_value_parser::<Method>()
-    )]
-    method: Method,
+    /// The meshing strategy, defaulting to `greedy`. Stable per-voxel topology
+    /// needs `culled` or `naive`.
+    #[arg(value_name = "method", long, value_parser = cli_value_parser::<Method>())]
+    method: Option<Method>,
 
-    /// The atlas canvas, counted in cells. Unused cells are transparent black
-    /// the mesh never samples.
+    /// The atlas canvas, counted in cells, defaulting to `pot`. Unused cells
+    /// are transparent black the mesh never samples.
     ///
     /// 1. `fit`: the near-square packing.
     /// 2. `line`: a single row of cells.
@@ -63,16 +60,15 @@ pub struct Mesh {
     #[arg(
         value_name = "texture-shape",
         long,
-        default_value = "pot",
         value_parser = parse_texture_shape,
         verbatim_doc_comment
     )]
-    texture_shape: TextureShape,
+    texture_shape: Option<TextureShape>,
 
-    /// The real-world edge length of one voxel in meters, applied as a uniform
-    /// scale to every vertex position.
-    #[arg(value_name = "voxel-size", long, default_value = "1.0")]
-    voxel_size: PositiveF64,
+    /// The real-world edge length of one voxel in meters, defaulting to `1.0`
+    /// and applied as a uniform scale to every vertex position.
+    #[arg(value_name = "voxel-size", long)]
+    voxel_size: Option<PositiveF64>,
 
     /// How many materials the mesh carries, numbered from `0`. Derived from
     /// use when omitted, as the highest mentioned index plus one, and a skipped
@@ -146,12 +142,22 @@ pub struct Mesh {
     #[arg(value_name = "dst-name", long, action = ArgAction::Append)]
     compute_voxel_position: Vec<String>,
 
-    /// One or more statements of the value language defining values the
-    /// writers and slots can reference. Every property of the effective
-    /// palette enters the program as a name. Every occurrence joins the
-    /// program in order. Repeatable.
-    #[arg(value_name = "bindings", long, action = ArgAction::Append)]
-    value: Vec<String>,
+    /// Replaces `{file-stem}` in profile file templates. Defaults to the
+    /// output mesh's stem, so an output of `turret.glb` fills
+    /// `{file-stem}-mse.png` as `turret-mse.png`.
+    #[arg(value_name = "file-stem", long)]
+    file_stem: Option<String>,
+
+    /// Applies a profile whole, expanding it into its flags with the
+    /// `valuesFrom` values first. Wherever the flag sits, the profile's values
+    /// join the program ahead of every `--value` and `--values-from` binding,
+    /// so a hand binding can read or redefine a profile value. An explicit
+    /// flag replaces the profile element it collides with.
+    #[arg(value_name = "profile", long)]
+    profile: Option<String>,
+
+    #[command(flatten)]
+    program_flags: ProgramFlags,
 
     #[command(flatten)]
     selection: ObjectSelection,
@@ -329,13 +335,9 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let container = resolve_gltf_container(self.to, self.output.as_deref());
+        let (container, output) = self.resolve_output();
 
-        let output = self
-            .input
-            .output_path(self.output.clone(), container.extension());
-
-        let record = self.record()?;
+        let record = self.record(&output)?;
 
         let from = self.input.resolve_format()?;
 
@@ -355,16 +357,83 @@ impl Mesh {
         Ok(save(&dependencies, &format, document, &output)?)
     }
 
-    /// The record the flags lower into, checked for what the flags alone
-    /// decide: the material and primitive counts, an element written twice,
-    /// the attribute naming rules, and every image reference pointing at a
-    /// written PNG.
-    fn record(&self) -> Result<MeshRecord> {
-        let mut materials = MaterialTable::new(self.material_count);
+    /// The output container and path, from the flags or the input.
+    fn resolve_output(&self) -> (GltfContainer, PathBuf) {
+        let container = resolve_gltf_container(self.to, self.output.as_deref());
+
+        let output = self
+            .input
+            .output_path(self.output.clone(), container.extension());
+
+        (container, output)
+    }
+
+    /// The stem `{file-stem}` fills with: `--file-stem`, else `output`'s.
+    fn file_stem(&self, output: &Path) -> String {
+        match &self.file_stem {
+            Some(stem) => stem.clone(),
+
+            None => output
+                .file_stem()
+                .expect("the output path carries a file name")
+                .to_string_lossy()
+                .into_owned(),
+        }
+    }
+
+    /// Whether any flag reads a profile.
+    fn uses_profiles(&self) -> bool {
+        self.profile.is_some() || self.program_flags.uses_profiles()
+    }
+
+    /// The record the flags and the profile lower into, checked for what they
+    /// alone decide: the material and primitive counts, an element written
+    /// twice, the attribute naming rules, every expression parsing, and every
+    /// image reference pointing at a written PNG. A flag's element stands at
+    /// its destination, and the profile fills the rest.
+    fn record(&self, output: &Path) -> Result<MeshRecord> {
+        let file_stem = self.file_stem(output);
+
+        let profiles = self.uses_profiles().then(ProfileSet::built_in);
+
+        let profile = match &self.profile {
+            Some(name) => {
+                let profile = profiles
+                    .as_ref()
+                    .expect("--profile loads the profiles")
+                    .get("--profile", name)?;
+
+                Some((format!("the profile `{name}`"), profile))
+            }
+
+            None => None,
+        };
+
+        let mut materials = match (self.material_count, &profile) {
+            (Some(count), _) => MaterialTable::declared(count, format!("--material-count {count}")),
+
+            (None, Some((origin, profile))) => {
+                MaterialTable::declared(profile.materials.len() as u32, origin.clone())
+            }
+
+            (None, None) => MaterialTable::derived(),
+        };
 
         self.lower_materials(&mut materials)?;
 
-        let declared = self.lower_declared_primitives(&mut materials)?;
+        let mut declared = self.lower_declared_primitives(&mut materials)?;
+
+        // The profile's primitive list is one element, so any --primitive
+        // replaces it whole.
+        let profile_primitives_stand = declared.is_empty() && profile.is_some();
+
+        if let Some((origin, profile)) = &profile {
+            if profile_primitives_stand {
+                declared = declare_profile_primitives(&mut materials, profile, origin)?;
+            }
+
+            apply_profile_materials(&mut materials, profile, origin, &file_stem)?;
+        }
 
         let materials = materials.finish()?;
 
@@ -372,16 +441,65 @@ impl Mesh {
 
         self.lower_primitives(&mut primitives)?;
 
+        if let Some((origin, profile)) = &profile
+            && profile_primitives_stand
+        {
+            apply_profile_primitives(&mut primitives, profile, origin)?;
+        }
+
+        let mut files = self.files()?;
+
+        let mut mesh_extras = self.mesh_extras()?;
+
+        if let Some((origin, profile)) = &profile {
+            apply_profile_files(&mut files, profile, origin, &file_stem)?;
+            apply_profile_mesh_extras(&mut mesh_extras, profile, origin, &file_stem)?;
+        }
+
+        let mut builder = ProgramBuilder::new(profiles.as_ref(), self.computed_bindings()?);
+
+        if let Some(name) = &self.profile {
+            builder.land_profile("--profile", name)?;
+        }
+
+        for flag in &self.program_flags.entries {
+            match flag {
+                ProgramFlag::Value(text) => builder.push_value(text)?,
+                ProgramFlag::ValuesFrom(name) => builder.land_profile("--values-from", name)?,
+            }
+        }
+
+        let (program, computed_bindings) = builder.finish();
+
+        let profile_voxel_size = match &profile {
+            Some((origin, profile)) => profile_voxel_size(origin, profile)?,
+            None => None,
+        };
+
         let record = MeshRecord {
-            method: self.method,
-            texture_shape: self.texture_shape,
-            voxel_size: self.voxel_size.0,
-            computed_bindings: self.computed_bindings()?,
-            program: self.value.join("\n"),
+            method: self
+                .method
+                .or(profile
+                    .as_ref()
+                    .and_then(|(_, profile)| profile.method.map(|method| method.0)))
+                .unwrap_or(Method::Greedy),
+            texture_shape: self
+                .texture_shape
+                .or(profile
+                    .as_ref()
+                    .and_then(|(_, profile)| profile.texture_shape.map(|shape| shape.0)))
+                .unwrap_or(TextureShape::Pot),
+            voxel_size: self
+                .voxel_size
+                .map(|size| size.0)
+                .or(profile_voxel_size)
+                .unwrap_or(1.0),
+            computed_bindings,
+            program,
             materials,
             primitives: primitives.finish(),
-            files: self.files()?,
-            mesh_extras: self.mesh_extras()?,
+            files,
+            mesh_extras,
         };
 
         check_image_sources(&record)?;
@@ -430,6 +548,9 @@ impl Mesh {
         {
             let flag = "--write-material-slot-value";
             let index = parse_flag_index(flag, index)?;
+
+            check_expression(flag, expression)?;
+
             let slot = SlotWrite {
                 property: property.clone(),
                 source: SlotSource::Value(expression.clone()),
@@ -502,6 +623,8 @@ impl Mesh {
                     }
                 };
 
+                check_expression(flag, select)?;
+
                 Ok(PrimitiveRecord {
                     material_id,
                     select: select.clone(),
@@ -543,6 +666,8 @@ impl Mesh {
                 )));
             }
 
+            check_expression(flag, expression)?;
+
             let write = AttributeWrite::Builtin {
                 attribute: attribute.clone(),
                 expression: expression.clone(),
@@ -580,7 +705,6 @@ impl Mesh {
             )?;
         }
 
-        let mut normals_set = HashSet::new();
         for [index, normal] in flag_occurrences::<2>(&self.write_primitive_normal) {
             let flag = "--write-primitive-normal";
             let index = parse_flag_index(flag, index)?;
@@ -597,11 +721,7 @@ impl Mesh {
                 }
             };
 
-            if !normals_set.insert(index) {
-                return Err(Error::usage(format!("{flag} sets primitive {index} twice")));
-            }
-
-            primitives.primitive(flag, index)?.normal = normal;
+            primitives.set_normal(flag, index, normal)?;
         }
 
         for [index, domain] in flag_occurrences::<2>(&self.write_primitive_uv) {
@@ -664,23 +784,23 @@ impl Mesh {
         {
             let flag = "--write-file-json-value";
             let write = FileWrite {
-                file: file_name(flag, file)?,
+                file: written_file_name(flag, file)?,
                 value: written_value(flag, expression, transfer)?,
                 form: FileForm::Json { name: name.clone() },
             };
 
-            push_file_write(&mut files, write)?;
+            push_file_write(&mut files, write, flag)?;
         }
 
         for [file, expression, transfer] in flag_occurrences::<3>(&self.write_file_png_value) {
             let flag = "--write-file-png-value";
             let write = FileWrite {
-                file: file_name(flag, file)?,
+                file: written_file_name(flag, file)?,
                 value: written_value(flag, expression, transfer)?,
                 form: FileForm::Png,
             };
 
-            push_file_write(&mut files, write)?;
+            push_file_write(&mut files, write, flag)?;
         }
 
         Ok(files)
@@ -732,17 +852,30 @@ impl Mesh {
     }
 }
 
-/// A written value of `flag`, its transfer parsed.
+/// The voxel size `profile`, which `origin` applies, sets, checked positive.
+fn profile_voxel_size(origin: &str, profile: &Profile) -> Result<Option<f64>> {
+    let Some(size) = profile.voxel_size else {
+        return Ok(None);
+    };
+
+    if size <= 0.0 || !size.is_finite() {
+        return Err(Error::usage(format!(
+            "{origin}'s voxelSize is {size}, and a voxel size must be positive"
+        )));
+    }
+
+    Ok(Some(size))
+}
+
+/// A written value of `flag`, its expression checked and its transfer
+/// parsed.
 fn written_value(flag: &str, expression: &str, transfer: &str) -> Result<WrittenValue> {
+    check_expression(flag, expression)?;
+
     Ok(WrittenValue {
         expression: expression.to_owned(),
         transfer: parse_flag_value::<Transfer>(flag, transfer)?,
     })
-}
-
-/// A bare file name `flag` writes beside the mesh.
-fn file_name(flag: &str, file: &str) -> Result<String> {
-    require_file_name(file).map_err(|reason| Error::usage(format!("{flag}: {reason}")))
 }
 
 /// An extras entry referencing `file`.
@@ -767,21 +900,6 @@ fn extra_value(
         form,
         source: ExtraSource::Value(written_value(flag, expression, transfer)?),
     })
-}
-
-/// Pushes `domain` onto a stream list. A domain listed twice errors with a
-/// message `lists` opens.
-fn push_uv_stream(
-    streams: &mut Vec<ArrayDomain>,
-    domain: ArrayDomain,
-    lists: impl FnOnce() -> String,
-) -> Result<()> {
-    push_unique(
-        streams,
-        domain,
-        |domain| *domain,
-        |domain| format!("{} `{}` twice", lists(), domain.name()),
-    )
 }
 
 /// Pushes `slot` onto material `index`'s slots. A property written twice
@@ -834,12 +952,13 @@ fn push_attribute(
 #[cfg(test)]
 mod tests {
     use super::Mesh;
+    use crate::Result;
     use branded_id::U32Id;
     use clap::Parser;
     use meshconv::gltf::GltfContainer;
     use voxsmith::operations::mesh::{
         ArrayDomain, AttributeWrite, Computation, ExtraForm, ExtraSource, FileForm, MeshRecord,
-        Method, SlotSource, TextureShape, Transfer,
+        Method, SlotSource, TextureShape, Transfer, WrittenValue,
     };
 
     /// The command parsed from `args` after the input.
@@ -849,15 +968,45 @@ mod tests {
         Mesh::try_parse_from(argv).unwrap()
     }
 
+    /// The record `args` lower into, or the error they raise.
+    fn try_record(args: &[&str]) -> Result<MeshRecord> {
+        let mesh = parse(args);
+        let (_, output) = mesh.resolve_output();
+        mesh.record(&output)
+    }
+
     /// The record `args` lower into.
     fn record(args: &[&str]) -> MeshRecord {
-        parse(args).record().unwrap()
+        try_record(args).unwrap()
     }
 
     /// Whether `args` lower into a record or error.
     fn lowers(args: &[&str]) -> bool {
-        parse(args).record().is_ok()
+        try_record(args).is_ok()
     }
+
+    /// The error `args` raise.
+    fn error_of(args: &[&str]) -> String {
+        try_record(args).unwrap_err().to_string()
+    }
+
+    /// The names the program binds, in order.
+    fn bound_names(record: &MeshRecord) -> Vec<&str> {
+        record
+            .program
+            .lines()
+            .map(|line| line.split(" = ").next().unwrap())
+            .collect()
+    }
+
+    const DEFAULTS: [&str; 6] = [
+        "baseColorFactor",
+        "occlusionStrength",
+        "roughnessFactor",
+        "metallicFactor",
+        "emissiveFactor",
+        "emissiveStrength",
+    ];
 
     #[test]
     fn the_output_and_container_default_from_the_input() {
@@ -897,15 +1046,15 @@ mod tests {
             "--voxel-size",
             "0.5",
             "--value",
-            "let a = 1",
+            "a = 1",
             "--value",
-            "let b = a",
+            "b = a",
         ]);
 
         assert_eq!(record.method, Method::Naive);
         assert_eq!(record.texture_shape, TextureShape::Exact(64));
         assert_eq!(record.voxel_size, 0.5);
-        assert_eq!(record.program, "let a = 1\nlet b = a");
+        assert_eq!(record.program, "a = 1;\nb = a;");
     }
 
     #[test]
@@ -1020,7 +1169,7 @@ mod tests {
                 },
                 AttributeWrite::Custom {
                     name: "_HEAT".to_owned(),
-                    value: voxsmith::operations::mesh::WrittenValue {
+                    value: WrittenValue {
                         expression: "heat".to_owned(),
                         transfer: Transfer::Linear,
                     },
@@ -1237,7 +1386,7 @@ mod tests {
     }
 
     #[test]
-    fn an_image_reference_names_a_written_png() {
+    fn an_image_reference_points_at_a_written_png() {
         assert!(!lowers(&[
             "--write-material-slot-file",
             "0",
@@ -1279,16 +1428,196 @@ mod tests {
 
     #[test]
     fn a_bad_token_names_its_flag() {
-        let error = parse(&["--material-uv", "x", "face"])
-            .record()
-            .unwrap_err()
-            .to_string();
+        let error = error_of(&["--material-uv", "x", "face"]);
         assert!(error.contains("--material-uv"), "{error}");
 
-        let error = parse(&["--write-file-png-value", "a.png", "c", "gamma"])
-            .record()
-            .unwrap_err()
-            .to_string();
+        let error = error_of(&["--write-file-png-value", "a.png", "c", "gamma"]);
         assert!(error.contains("--write-file-png-value"), "{error}");
+    }
+
+    #[test]
+    fn a_broken_binding_or_expression_errors_at_its_flag() {
+        assert!(error_of(&["--value", "a ="]).contains("--value"));
+        assert!(error_of(&["--value", " "]).contains("--value"));
+        assert!(error_of(&["--primitive", "none", "1 +"]).contains("--primitive"));
+        assert!(
+            error_of(&["--write-material-slot-value", "0", "ior", "1 +"])
+                .contains("--write-material-slot-value")
+        );
+    }
+
+    #[test]
+    fn a_profile_expands_with_its_values_ahead_of_the_flags() {
+        let record = record(&["--value", "x = orm", "--profile", "orm"]);
+
+        let mut expected = DEFAULTS.to_vec();
+        expected.extend(["orm", "x"]);
+        assert_eq!(bound_names(&record), expected);
+
+        let [material] = record.materials.as_slice() else {
+            panic!("one material");
+        };
+        let slots: Vec<_> = material
+            .slots
+            .iter()
+            .map(|slot| (slot.property.as_str(), &slot.source))
+            .collect();
+        let orm = SlotSource::Value("orm".to_owned());
+        assert_eq!(
+            slots,
+            [
+                ("metallicRoughnessTexture", &orm),
+                ("occlusionTexture", &orm)
+            ]
+        );
+
+        assert_eq!(
+            record.primitives.as_slice()[0].material_id,
+            Some(U32Id::from_u32(0))
+        );
+    }
+
+    #[test]
+    fn values_from_appends_at_its_position_and_leaves_the_writers_behind() {
+        let record = record(&[
+            "--value",
+            "a = 1",
+            "--values-from",
+            "emissive",
+            "--value",
+            "b = a",
+            "--values-from",
+            "orm",
+        ]);
+
+        let mut expected = vec!["a"];
+        expected.extend(DEFAULTS);
+        expected.extend(["maxStrength", "emissive", "white", "b", "orm"]);
+        assert_eq!(bound_names(&record), expected);
+
+        assert!(record.materials.is_empty());
+        assert_eq!(record.primitives.as_slice()[0].material_id, None);
+    }
+
+    #[test]
+    fn pbr_imports_its_three_maps_and_writes_six_slots() {
+        let record = record(&["--profile", "pbr"]);
+
+        let mut expected = DEFAULTS.to_vec();
+        expected.extend(["albedo", "orm", "maxStrength", "emissive", "white"]);
+        assert_eq!(bound_names(&record), expected);
+
+        assert_eq!(record.materials.as_slice()[0].slots.len(), 6);
+    }
+
+    #[test]
+    fn a_flag_replaces_the_profile_element_at_its_destination() {
+        let record = record(&[
+            "--profile",
+            "orm",
+            "--method",
+            "culled",
+            "--material-name",
+            "0",
+            "body",
+            "--write-material-slot-value",
+            "0",
+            "occlusionTexture",
+            "ao",
+        ]);
+
+        assert_eq!(record.method, Method::Culled);
+
+        let [material] = record.materials.as_slice() else {
+            panic!("one material");
+        };
+        assert_eq!(material.name.as_deref(), Some("body"));
+
+        let slots: Vec<_> = material
+            .slots
+            .iter()
+            .map(|slot| (slot.property.as_str(), &slot.source))
+            .collect();
+        assert_eq!(
+            slots,
+            [
+                ("occlusionTexture", &SlotSource::Value("ao".to_owned())),
+                (
+                    "metallicRoughnessTexture",
+                    &SlotSource::Value("orm".to_owned())
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn two_flags_still_collide_under_a_profile() {
+        assert!(!lowers(&[
+            "--profile",
+            "orm",
+            "--write-material-slot-value",
+            "0",
+            "occlusionTexture",
+            "a",
+            "--write-material-slot-file",
+            "0",
+            "occlusionTexture",
+            "a.png",
+        ]));
+    }
+
+    #[test]
+    fn a_profile_declares_the_material_count() {
+        let error = error_of(&["--profile", "orm", "--material-name", "1", "glow"]);
+        assert!(
+            error.contains("the profile `orm` declares material 0 alone"),
+            "{error}"
+        );
+
+        assert!(!lowers(&[
+            "--profile",
+            "defaults",
+            "--write-material-slot-value",
+            "0",
+            "ior",
+            "1.5",
+        ]));
+        assert!(lowers(&[
+            "--profile",
+            "defaults",
+            "--material-count",
+            "1",
+            "--write-material-slot-value",
+            "0",
+            "ior",
+            "1.5",
+        ]));
+
+        let error = error_of(&["--profile", "orm", "--material-count", "0"]);
+        assert!(
+            error.contains("--material-count 0 declares no materials"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn the_file_stem_defaults_to_the_output_stem() {
+        let mesh = parse(&[]);
+        let (_, output) = mesh.resolve_output();
+        assert_eq!(mesh.file_stem(&output), "model");
+
+        let mesh = parse(&["out/turret.gltf"]);
+        let (_, output) = mesh.resolve_output();
+        assert_eq!(mesh.file_stem(&output), "turret");
+
+        let mesh = parse(&["--file-stem", "lamp"]);
+        let (_, output) = mesh.resolve_output();
+        assert_eq!(mesh.file_stem(&output), "lamp");
+    }
+
+    #[test]
+    fn an_undefined_profile_errors_at_its_flag() {
+        assert!(error_of(&["--profile", "metal"]).contains("--profile"));
+        assert!(error_of(&["--values-from", "metal"]).contains("--values-from"));
     }
 }

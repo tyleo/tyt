@@ -1,15 +1,19 @@
 use crate::{Error, Result};
 use voxsmith::operations::mesh::{FileForm, FileWrite};
 
-/// Pushes `write` onto `files`. A PNG written twice errors, as does a JSON
-/// entry named twice in one file or a path holding both forms. JSON entries
-/// under different names merge into one file.
-pub(crate) fn push_file_write(files: &mut Vec<FileWrite>, write: FileWrite) -> Result<()> {
+/// Pushes `write`, which `origin` holds, onto `files`. A PNG written twice
+/// errors, as does a JSON entry named twice in one file or a path holding
+/// both forms. JSON entries under different names merge into one file.
+pub(crate) fn push_file_write(
+    files: &mut Vec<FileWrite>,
+    write: FileWrite,
+    origin: &str,
+) -> Result<()> {
     for existing in files.iter().filter(|existing| existing.file == write.file) {
         match (&existing.form, &write.form) {
             (FileForm::Json { name: existing }, FileForm::Json { name }) if existing == name => {
                 return Err(Error::usage(format!(
-                    "--write-file-json-value writes `{name}` into `{}` twice",
+                    "{origin} writes `{name}` into `{}` twice",
                     write.file
                 )));
             }
@@ -18,7 +22,7 @@ pub(crate) fn push_file_write(files: &mut Vec<FileWrite>, write: FileWrite) -> R
 
             (FileForm::Png, FileForm::Png) => {
                 return Err(Error::usage(format!(
-                    "--write-file-png-value writes `{}` twice",
+                    "{origin} writes `{}` twice",
                     write.file
                 )));
             }
@@ -64,15 +68,18 @@ mod tests {
     #[test]
     fn json_entries_merge_by_name_and_pngs_never_repeat() {
         let mut files = Vec::new();
+        let origin = "--write-file-json-value";
 
-        assert!(push_file_write(&mut files, write("v.json", json("a"))).is_ok());
-        assert!(push_file_write(&mut files, write("v.json", json("b"))).is_ok());
-        assert!(push_file_write(&mut files, write("v.json", json("a"))).is_err());
+        assert!(push_file_write(&mut files, write("v.json", json("a")), origin).is_ok());
+        assert!(push_file_write(&mut files, write("v.json", json("b")), origin).is_ok());
+        assert!(push_file_write(&mut files, write("v.json", json("a")), origin).is_err());
 
-        assert!(push_file_write(&mut files, write("m.png", FileForm::Png)).is_ok());
-        assert!(push_file_write(&mut files, write("m.png", FileForm::Png)).is_err());
-        assert!(push_file_write(&mut files, write("m.png", json("a"))).is_err());
-        assert!(push_file_write(&mut files, write("v.json", FileForm::Png)).is_err());
+        let origin = "--write-file-png-value";
+
+        assert!(push_file_write(&mut files, write("m.png", FileForm::Png), origin).is_ok());
+        assert!(push_file_write(&mut files, write("m.png", FileForm::Png), origin).is_err());
+        assert!(push_file_write(&mut files, write("m.png", json("a")), origin).is_err());
+        assert!(push_file_write(&mut files, write("v.json", FileForm::Png), origin).is_err());
 
         assert_eq!(files.len(), 3);
     }
