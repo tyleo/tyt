@@ -39,7 +39,7 @@ impl<'a> Atlases<'a> {
     /// The cell face `face` occupies on the `domain` atlas. The merge rules
     /// keep a face on the swatch atlas to one swatch and a face on the voxel
     /// atlas to one voxel.
-    pub(crate) fn cell(&self, domain: ArrayDomain, face: usize) -> usize {
+    fn cell(&self, domain: ArrayDomain, face: usize) -> usize {
         let voxel_ids = &self.geometry.face_voxel_ids[face];
 
         match domain {
@@ -74,12 +74,13 @@ impl<'a> Atlases<'a> {
         }
     }
 
-    /// One UV per vertex on the `domain` atlas.
-    pub(crate) fn uvs(&self, domain: ArrayDomain) -> Result<Vec<TyVector2F64>> {
+    /// One UV per vertex of `faces` on the `domain` atlas.
+    pub(crate) fn uvs(&self, domain: ArrayDomain, faces: &[usize]) -> Result<Vec<TyVector2F64>> {
         let layout = self.layout(domain)?;
 
-        Ok((0..self.geometry.quad_count())
-            .flat_map(|face| {
+        Ok(faces
+            .iter()
+            .flat_map(|&face| {
                 let cell = self.cell(domain, face);
                 (0..4).map(move |corner| layout.uv(cell, corner))
             })
@@ -112,6 +113,7 @@ mod tests {
         let swatches = Swatches::resolve(&main, &object).unwrap();
         let culled = object_to_mesh_geometry(&object, Method::Culled);
         let atlases = Atlases::new(TextureShape::Pot, &swatches, &culled);
+        let faces: Vec<usize> = (0..culled.quad_count()).collect();
 
         // One swatch, two voxels, ten faces, and ten corner blocks.
         for (domain, width, height) in [
@@ -126,13 +128,13 @@ mod tests {
                 (width, height),
                 "{domain}"
             );
-            assert_eq!(atlases.uvs(domain).unwrap().len(), 40, "{domain}");
+            assert_eq!(atlases.uvs(domain, &faces).unwrap().len(), 40, "{domain}");
         }
 
         // Every face of the one swatch reads its one texel.
         assert!(
             atlases
-                .uvs(ArrayDomain::Swatch)
+                .uvs(ArrayDomain::Swatch, &faces)
                 .unwrap()
                 .iter()
                 .all(|&uv| uv == TyVector2F64::new(0.5, 0.5))
@@ -141,11 +143,11 @@ mod tests {
         // The last face sits at cell 9 of the face atlas, and its corners
         // go around cell 9's block on the corner atlas.
         assert_eq!(
-            atlases.uvs(ArrayDomain::Face).unwrap()[36],
+            atlases.uvs(ArrayDomain::Face, &faces).unwrap()[36],
             TyVector2F64::new(0.375, 0.625)
         );
         assert_eq!(
-            &atlases.uvs(ArrayDomain::Corner).unwrap()[36..],
+            &atlases.uvs(ArrayDomain::Corner, &faces).unwrap()[36..],
             [
                 TyVector2F64::new(2.5 / 8.0, 4.5 / 8.0),
                 TyVector2F64::new(3.5 / 8.0, 4.5 / 8.0),
@@ -162,8 +164,9 @@ mod tests {
         let swatches = Swatches::resolve(&main, &object).unwrap();
         let culled = object_to_mesh_geometry(&object, Method::Culled);
         let atlases = Atlases::new(TextureShape::Line, &swatches, &culled);
+        let faces: Vec<usize> = (0..culled.quad_count()).collect();
 
-        let uvs = atlases.uvs(ArrayDomain::Voxel).unwrap();
+        let uvs = atlases.uvs(ArrayDomain::Voxel, &faces).unwrap();
 
         let mut cells: Vec<f64> = uvs.iter().map(|uv| uv.x).collect();
         cells.sort_by(f64::total_cmp);

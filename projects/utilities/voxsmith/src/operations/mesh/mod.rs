@@ -6,6 +6,7 @@ mod geometry;
 mod mesh;
 mod program;
 mod record;
+mod write;
 
 pub use geometry::*;
 pub use mesh::*;
@@ -15,3 +16,4 @@ pub use record::*;
 
 pub(crate) use atlas::*;
 pub(crate) use program::*;
+pub(crate) use write::*;

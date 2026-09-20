@@ -1,13 +1,12 @@
 use crate::{
     Error, Result,
     operations::mesh::{
-        ArrayDomain, Atlases, MergeRules, MeshElement, MeshGeometry, MeshRecord, Method,
-        PrimitiveRecord, ProgramRun, Streams, Swatches, mesh_slices,
+        Atlases, FacePartition, MergeRules, MeshElement, MeshRecord, Method, ProgramRun, Streams,
+        Swatches, mesh_slices, table_index, write_primitive,
     },
 };
 use branded_id::U32Id;
-use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive, MeshTriangle};
-use ty_math::TyVector3F64;
+use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive};
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` under `record` into a document of one object under one
@@ -27,7 +26,7 @@ pub fn mesh<T: VoxExt>(
 
     let swatches = Swatches::resolve(main, object)?;
 
-    let primitive_record = check_meshed(record)?;
+    check_meshed(record)?;
 
     let geometry = if record.method == Method::Greedy {
         let culled = mesh_slices(object, Method::Culled, &|_| 0, &|_| true, false);
@@ -55,20 +54,31 @@ pub fn mesh<T: VoxExt>(
 
     let atlases = Atlases::new(record.texture_shape, &swatches, &geometry);
 
-    let primitive = primitive_of(
-        &geometry,
-        record.voxel_size,
-        primitive_record,
-        streams.primitive_list(U32Id::from_u32(0)),
-        &atlases,
-    )?;
+    let partition = FacePartition::derive(record, &run, &swatches, &geometry)?;
 
-    place(object.name(), primitive)
+    let primitives = record
+        .primitives
+        .iter()
+        .enumerate()
+        .map(|(index, primitive_record)| {
+            let primitive_id = U32Id::from_u32(table_index(index));
+
+            write_primitive(
+                &geometry,
+                partition.faces(primitive_id),
+                record.voxel_size,
+                primitive_record,
+                streams.primitive_list(primitive_id),
+                &atlases,
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    place(object.name(), primitives)
 }
 
-/// The one primitive the run meshes, or the first element it cannot mesh
-/// yet.
-fn check_meshed(record: &MeshRecord) -> Result<&PrimitiveRecord> {
+/// Errors on the first record element the run cannot mesh yet.
+fn check_meshed(record: &MeshRecord) -> Result<()> {
     let not_yet = |element: MeshElement| Error::mesh_record(element, "is not meshed yet");
 
     if !record.materials.is_empty() {
@@ -87,96 +97,41 @@ fn check_meshed(record: &MeshRecord) -> Result<&PrimitiveRecord> {
         }));
     }
 
-    let [primitive_record] = record.primitives.as_slice() else {
-        if record.primitives.is_empty() {
-            return Err(Error::mesh_record(
-                MeshElement::Primitives,
-                "holds no primitive, and a run needs at least one",
-            ));
+    if record.primitives.is_empty() {
+        return Err(Error::mesh_record(
+            MeshElement::Primitives,
+            "holds no primitive, and a run needs at least one",
+        ));
+    }
+
+    for (index, primitive_record) in record.primitives.iter().enumerate() {
+        let primitive_id = U32Id::from_u32(table_index(index));
+
+        if primitive_record.material_id.is_some() {
+            return Err(not_yet(MeshElement::PrimitiveMaterial { primitive_id }));
         }
 
-        return Err(not_yet(MeshElement::PrimitiveSelect {
-            primitive_id: U32Id::from_u32(1),
-        }));
-    };
-
-    let primitive_id = U32Id::from_u32(0);
-
-    if primitive_record.select != "true" {
-        return Err(not_yet(MeshElement::PrimitiveSelect { primitive_id }));
+        if let Some(attribute) = primitive_record.attributes.first() {
+            return Err(not_yet(MeshElement::PrimitiveAttribute {
+                primitive_id,
+                name: attribute.name().to_owned(),
+            }));
+        }
     }
 
-    if primitive_record.material_id.is_some() {
-        return Err(not_yet(MeshElement::PrimitiveMaterial { primitive_id }));
-    }
-
-    if let Some(attribute) = primitive_record.attributes.first() {
-        return Err(not_yet(MeshElement::PrimitiveAttribute {
-            primitive_id,
-            name: attribute.name().to_owned(),
-        }));
-    }
-
-    Ok(primitive_record)
+    Ok(())
 }
 
-/// The primitive of `geometry` at `voxel_size` meters per voxel.
-fn primitive_of(
-    geometry: &MeshGeometry,
-    voxel_size: f64,
-    primitive_record: &PrimitiveRecord,
-    stream_list: &[ArrayDomain],
-    atlases: &Atlases<'_>,
-) -> Result<MeshPrimitive> {
-    let positions = geometry
-        .positions
-        .iter()
-        .map(|position| TyVector3F64::from(position.as_dvec3() * voxel_size))
-        .collect();
-
-    let triangles = geometry
-        .indices
-        .chunks_exact(3)
-        .map(|corners| MeshTriangle {
-            vertex_ids: [
-                U32Id::from_u32(corners[0]),
-                U32Id::from_u32(corners[1]),
-                U32Id::from_u32(corners[2]),
-            ],
-        })
-        .collect();
-
-    let mut primitive = MeshPrimitive::new(positions, triangles)?;
-
-    if primitive_record.normal {
-        primitive.set_normals(Some(
-            geometry
-                .normals
-                .iter()
-                .map(|normal| normal.as_dvec3())
-                .collect(),
-        ))?;
-    }
-
-    if let Some(name) = &primitive_record.name {
-        primitive.set_name(name.clone());
-    }
-
-    for &domain in stream_list {
-        primitive.push_uv_stream(atlases.uvs(domain)?)?;
-    }
-
-    Ok(primitive)
-}
-
-/// A document holding `primitive` in one object named `name`, placed by one
+/// A document holding `primitives` in one object named `name`, placed by one
 /// root node of the same name.
-fn place(name: &str, primitive: MeshPrimitive) -> Result<MeshMain<()>> {
+fn place(name: &str, primitives: Vec<MeshPrimitive>) -> Result<MeshMain<()>> {
     let mut document = MeshMain::default();
 
     let mut object = MeshObject::new(name.to_owned());
 
-    object.retain_primitive(primitive);
+    for primitive in primitives {
+        object.retain_primitive(primitive);
+    }
 
     let object_id = document.retain_object(object)?;
 
@@ -360,6 +315,151 @@ mod tests {
     }
 
     #[test]
+    fn the_selects_split_the_faces_into_primitives_with_their_own_streams() {
+        let (main, object) = painted();
+        let mut record = record(Method::Greedy);
+        record.program = "shiny = metallic > 0; dull = !shiny;".to_owned();
+        record.primitives = IdVec::from_vec(vec![
+            PrimitiveRecord {
+                select: "shiny".to_owned(),
+                name: Some("shiny".to_owned()),
+                uv_streams: Some(vec![ArrayDomain::Face]),
+                ..implicit_primitive()
+            },
+            PrimitiveRecord {
+                select: "dull".to_owned(),
+                ..implicit_primitive()
+            },
+        ]);
+
+        let document = mesh(&main, &object, &record).unwrap();
+        document.validate().unwrap();
+        let (_, object) = document.iter_objects().next().unwrap();
+        assert_eq!(object.primitive_count(), 2);
+
+        // The select splits the greedy bar at the material seam, five faces
+        // a side.
+        let primitives: Vec<_> = object
+            .iter_primitives()
+            .map(|(_, primitive)| primitive)
+            .collect();
+        assert_eq!(primitives[0].name(), "shiny");
+        assert_eq!(primitives[0].triangle_count(), 10);
+        assert_eq!(primitives[0].uv_stream_count(), 1);
+        assert_eq!(
+            primitives[0].uv_stream(U32Id::from_u32(0)).unwrap().len(),
+            20
+        );
+        assert_eq!(primitives[1].name(), "");
+        assert_eq!(primitives[1].triangle_count(), 10);
+        assert_eq!(primitives[1].uv_stream_count(), 0);
+        for primitive in &primitives {
+            for triangle in primitive.triangles().iter() {
+                assert!(
+                    triangle
+                        .vertex_ids
+                        .iter()
+                        .all(|vertex_id| vertex_id.to_usize_id().to_usize() < 20)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_select_routes_a_face_merged_across_swatches_that_agree() {
+        // Greedy merges the faces of the last two swatches because they
+        // share `metallic`, and the select reads one answer off each merged
+        // face.
+        let mut main: VoxMain = VoxMain::default();
+        let colors = main.retain_value_pool(
+            VoxValuePool::vec_4_float(vec![
+                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0, 1.0],
+            ])
+            .unwrap(),
+        );
+        let metals = main.retain_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), colors, U32Id::from_u32(0))
+            .unwrap();
+        palette
+            .retain_property(METALLIC.to_owned(), metals, U32Id::from_u32(0))
+            .unwrap();
+        for (color, metal) in [(0, 0), (1, 1), (2, 1)] {
+            palette
+                .retain_material(vec![U32Id::from_u32(color), U32Id::from_u32(metal)])
+                .unwrap();
+        }
+        let palette_id = main.retain_palette(palette).unwrap();
+        let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
+        object.retain_layer(palette_id, U32Id::from_u32(0));
+        for x in 0..3 {
+            let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object
+                .retain_voxel(voxel_id, &[U32Id::from_u32(x)])
+                .unwrap();
+        }
+
+        let mut record = record(Method::Greedy);
+        record.program = "shiny = metallic > 0; dull = !shiny;".to_owned();
+        record.primitives = IdVec::from_vec(vec![
+            PrimitiveRecord {
+                select: "shiny".to_owned(),
+                ..implicit_primitive()
+            },
+            PrimitiveRecord {
+                select: "dull".to_owned(),
+                ..implicit_primitive()
+            },
+        ]);
+
+        let document = mesh(&main, &object, &record).unwrap();
+        let (_, object) = document.iter_objects().next().unwrap();
+        let primitives: Vec<_> = object
+            .iter_primitives()
+            .map(|(_, primitive)| primitive)
+            .collect();
+        assert_eq!(primitives[0].triangle_count(), 10);
+        assert_eq!(primitives[1].triangle_count(), 10);
+    }
+
+    #[test]
+    fn a_false_select_writes_an_empty_primitive() {
+        let mut record = record(Method::Greedy);
+        record.primitives.push(PrimitiveRecord {
+            select: "false".to_owned(),
+            ..implicit_primitive()
+        });
+
+        let document = meshed(&record);
+        let (_, object) = document.iter_objects().next().unwrap();
+        let primitives: Vec<_> = object
+            .iter_primitives()
+            .map(|(_, primitive)| primitive)
+            .collect();
+        assert_eq!(primitives[0].triangle_count(), 12);
+        assert_eq!(primitives[1].vertex_count(), 0);
+    }
+
+    #[test]
+    fn a_face_no_select_takes_or_two_selects_take_errors() {
+        let mut unclaimed = record(Method::Greedy);
+        unclaimed.primitives[U32Id::from_u32(0).to_usize_id()].select = "false".to_owned();
+        assert_eq!(failing_element(&unclaimed), MeshElement::Primitives);
+
+        let mut twice = record(Method::Greedy);
+        twice.primitives.push(implicit_primitive());
+        assert_eq!(
+            failing_element(&twice),
+            MeshElement::PrimitiveSelect {
+                primitive_id: U32Id::from_u32(1)
+            }
+        );
+    }
+
+    #[test]
     fn a_non_positive_voxel_size_errors() {
         for voxel_size in [0.0, -1.0, f64::NAN, f64::INFINITY] {
             let mut record = record(Method::Greedy);
@@ -413,22 +513,6 @@ mod tests {
         );
 
         let primitive_id = U32Id::from_u32(0);
-
-        let mut with_select = record(Method::Greedy);
-        with_select.primitives[primitive_id.to_usize_id()].select = "solid".to_owned();
-        assert_eq!(
-            failing_element(&with_select),
-            MeshElement::PrimitiveSelect { primitive_id }
-        );
-
-        let mut with_two = record(Method::Greedy);
-        with_two.primitives.push(implicit_primitive());
-        assert_eq!(
-            failing_element(&with_two),
-            MeshElement::PrimitiveSelect {
-                primitive_id: U32Id::from_u32(1)
-            }
-        );
 
         let mut with_attribute = record(Method::Greedy);
         with_attribute.primitives[primitive_id.to_usize_id()]
