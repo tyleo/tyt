@@ -32,7 +32,7 @@ pub enum Error {
         reason: String,
     },
 
-    /// A material atlas image could not be encoded as PNG.
+    /// An image could not be encoded as PNG.
     #[cfg(feature = "mesh")]
     Png(String),
 

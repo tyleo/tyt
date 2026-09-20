@@ -1,6 +1,7 @@
 use crate::{
     Error, Result,
-    dependencies::mesh::AtlasImage,
+    dependencies::mesh::{PngChannels, PngImage},
+    operations::mesh::Transfer,
     operations::mesh_old::{
         ColorChannel, MaterialBake, MaterialChannel, UsedMaterials, default_lin_srgba_f64_color,
     },
@@ -12,8 +13,8 @@ use voxcore::{
     material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, default_scalar},
 };
 
-/// Bakes `bake` over every material in `used` into a `width` x `height`
-/// [`AtlasImage`], one texel per material placed row-major from the top-left.
+/// Bakes `bake` over every material in `used` into a `width` x `height` RGBA
+/// [`PngImage`], one texel per material placed row-major from the top-left.
 /// Trailing texels past the material count stay transparent black. The
 /// image's layout matches
 /// [`atlas_dimensions`](crate::operations::mesh_old::atlas_dimensions) over
@@ -23,7 +24,7 @@ pub(crate) fn bake_atlas_image(
     bake: &MaterialBake,
     width: u32,
     height: u32,
-) -> Result<AtlasImage> {
+) -> Result<PngImage> {
     let mut pixels = vec![[0u8; 4]; width as usize * height as usize];
 
     // Only the emissive bake normalizes each texel by the mesh's greatest
@@ -37,10 +38,17 @@ pub(crate) fn bake_atlas_image(
         *pixel = bake_texel(used, bake, index, max_strength)?;
     }
 
-    Ok(AtlasImage {
+    let transfer = match bake {
+        MaterialBake::EmissiveColor | MaterialBake::RgbaColor => Transfer::Srgb,
+        MaterialBake::Packing(_) => Transfer::Linear,
+    };
+
+    Ok(PngImage {
         width,
         height,
-        pixels,
+        channels: PngChannels::Rgba,
+        transfer,
+        samples: pixels.into_iter().flatten().collect(),
     })
 }
 
@@ -249,6 +257,7 @@ pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> 
 mod tests {
     use crate::{
         Result,
+        dependencies::mesh::PngImage,
         operations::mesh_old::{
             AtlasShape, ColorChannel, MaterialBake, MaterialChannel, atlas_dimensions,
             bake_atlas_image, resolve_used_materials,
@@ -262,6 +271,15 @@ mod tests {
             BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS,
         },
     };
+
+    /// The RGBA cells of `image`.
+    fn cells_of(image: PngImage) -> Vec<[u8; 4]> {
+        image
+            .samples
+            .chunks(4)
+            .map(|cell| <[u8; 4]>::try_from(cell).unwrap())
+            .collect()
+    }
 
     /// The branded value id `index`.
     fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
@@ -348,9 +366,8 @@ mod tests {
         assert_eq!(used.len(), 3);
 
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
-        let pixels = bake_atlas_image(&used, &MaterialBake::RgbaColor, width, height)
-            .unwrap()
-            .pixels;
+        let pixels =
+            cells_of(bake_atlas_image(&used, &MaterialBake::RgbaColor, width, height).unwrap());
 
         // Materials 0 and 1 both take the red base; material 2 is blue. The
         // fourth texel is padding.
@@ -367,9 +384,7 @@ mod tests {
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let metallic = MaterialBake::Packing(vec![scalar(METALLIC, false)]);
-        let pixels = bake_atlas_image(&used, &metallic, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &metallic, width, height).unwrap());
         // Only material 0 is metallic (1.0); the rest are matte (0.0).
         assert_eq!(pixels[0][0], 255);
         assert_eq!(pixels[1][0], 0);
@@ -401,9 +416,7 @@ mod tests {
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let mask = MaterialBake::Packing(vec![scalar("flag", false)]);
-        let pixels = bake_atlas_image(&used, &mask, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &mask, width, height).unwrap());
         // A true voxel bakes 255, a false voxel bakes 0.
         assert_eq!(pixels[0][0], 255);
         assert_eq!(pixels[1][0], 0);
@@ -455,9 +468,7 @@ mod tests {
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![scalar(EMISSIVE_STRENGTH, false)]);
-        let pixels = bake_atlas_image(&used, &bake, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &bake, width, height).unwrap());
         // 0.5 scales to the unorm byte 128 in both texels.
         assert_eq!(pixels[0][0], 128);
         assert_eq!(pixels[1][0], 128);
@@ -470,9 +481,7 @@ mod tests {
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let smoothness = MaterialBake::Packing(vec![scalar(ROUGHNESS, true)]);
-        let pixels = bake_atlas_image(&used, &smoothness, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &smoothness, width, height).unwrap());
         // Material 0 is roughness 0.0 -> smoothness 1.0; material 1 is roughness
         // 1.0 -> smoothness 0.0.
         assert_eq!(pixels[0][0], 255);
@@ -487,9 +496,7 @@ mod tests {
 
         // The palette carries no `occlusionStrength`, whose spec default is 1.
         let occlusion = MaterialBake::Packing(vec![scalar(OCCLUSION_STRENGTH, false)]);
-        let pixels = bake_atlas_image(&used, &occlusion, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &occlusion, width, height).unwrap());
         assert_eq!(pixels[0][0], 255);
         assert_eq!(pixels[1][0], 255);
         assert_eq!(pixels[2][0], 255);
@@ -506,7 +513,7 @@ mod tests {
             component: Some(ColorChannel::R),
             invert: false,
         }]);
-        let pixels = bake_atlas_image(&used, &red, width, height).unwrap().pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &red, width, height).unwrap());
         assert_eq!(pixels[0][0], 255); // material 0 is red
         assert_eq!(pixels[2][0], 0); // material 2 is blue
     }
@@ -601,9 +608,8 @@ mod tests {
 
         let used = resolve_used_materials(&main, main.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
-        let pixels = bake_atlas_image(&used, &MaterialBake::EmissiveColor, width, height)
-            .unwrap()
-            .pixels;
+        let pixels =
+            cells_of(bake_atlas_image(&used, &MaterialBake::EmissiveColor, width, height).unwrap());
 
         // Blue at the max strength stays full blue.
         assert_eq!(pixels[0], [0, 0, 255, 255]);
@@ -637,7 +643,7 @@ mod tests {
         let used = resolve_used_materials(&main, main.object(object_id).unwrap())?;
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit)?;
 
-        bake_atlas_image(&used, bake, width, height).map(|image| image.pixels)
+        bake_atlas_image(&used, bake, width, height).map(cells_of)
     }
 
     /// A `float` value pool holding `value`, the shape `emissiveStrength`
@@ -711,9 +717,7 @@ mod tests {
             component: Some(ColorChannel::R),
             invert: false,
         }]);
-        let pixels = bake_atlas_image(&used, &bake, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &bake, width, height).unwrap());
         assert_eq!(pixels[0][0], 0);
 
         // Unbound, `baseColor` would take white. This palette binds it red.
@@ -722,9 +726,7 @@ mod tests {
             component: Some(ColorChannel::R),
             invert: false,
         }]);
-        let pixels = bake_atlas_image(&used, &bake, width, height)
-            .unwrap()
-            .pixels;
+        let pixels = cells_of(bake_atlas_image(&used, &bake, width, height).unwrap());
         assert_eq!(pixels[0][0], 255);
     }
 }
