@@ -55,6 +55,8 @@ pub(crate) fn write_primitive(
         primitive.set_name(name.clone());
     }
 
+    primitive.set_material_id(primitive_record.material_id);
+
     for &domain in stream_list {
         primitive.push_uv_stream(atlases.uvs(domain, faces)?)?;
     }

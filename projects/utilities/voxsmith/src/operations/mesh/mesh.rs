@@ -2,12 +2,13 @@ use crate::{
     Error, Result,
     dependencies::mesh::EncodePng,
     operations::mesh::{
-        Atlases, FacePartition, MergeRules, MeshElement, MeshRecord, Method, ProgramRun, Streams,
-        Swatches, mesh_slices, table_index, write_files, write_primitive,
+        Atlases, FacePartition, Images, MergeRules, MeshElement, MeshRecord, Method, ProgramRun,
+        Streams, Swatches, mesh_slices, table_index, write_files, write_materials, write_primitive,
     },
 };
 use branded_id::U32Id;
-use meshdoc::{MeshFile, MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive};
+use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive};
+use std::collections::HashMap;
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
 /// Meshes `object` under `record` into a document of one object under one
@@ -59,6 +60,31 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
 
     let partition = FacePartition::derive(record, &run, &atlases)?;
 
+    let files = write_files(dependencies, record, &run, &streams, &atlases)?;
+
+    let mut document = MeshMain::default();
+
+    let file_ids = files
+        .into_iter()
+        .map(|file| {
+            let name = file.name.clone();
+            Ok((name, document.retain_file(file)?))
+        })
+        .collect::<Result<HashMap<_, _>>>()?;
+
+    let mut images = Images::default();
+
+    write_materials(
+        dependencies,
+        &mut document,
+        record,
+        &run,
+        &streams,
+        &atlases,
+        &file_ids,
+        &mut images,
+    )?;
+
     let primitives = record
         .primitives
         .iter()
@@ -77,17 +103,20 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let files = write_files(dependencies, record, &run, &streams, &atlases)?;
-
-    place(object.name(), primitives, files)
+    place(document, object.name(), primitives)
 }
 
 /// Errors on the first record element the run cannot mesh yet.
 fn check_meshed(record: &MeshRecord) -> Result<()> {
     let not_yet = |element: MeshElement| Error::mesh_record(element, "is not meshed yet");
 
-    if !record.materials.is_empty() {
-        return Err(not_yet(MeshElement::Materials));
+    for (index, material) in record.materials.iter().enumerate() {
+        if let Some(extra) = material.extras.first() {
+            return Err(not_yet(MeshElement::MaterialExtra {
+                material_id: U32Id::from_u32(table_index(index)),
+                name: extra.name.clone(),
+            }));
+        }
     }
 
     if let Some(extra) = record.mesh_extras.first() {
@@ -106,10 +135,6 @@ fn check_meshed(record: &MeshRecord) -> Result<()> {
     for (index, primitive_record) in record.primitives.iter().enumerate() {
         let primitive_id = U32Id::from_u32(table_index(index));
 
-        if primitive_record.material_id.is_some() {
-            return Err(not_yet(MeshElement::PrimitiveMaterial { primitive_id }));
-        }
-
         if let Some(attribute) = primitive_record.attributes.first() {
             return Err(not_yet(MeshElement::PrimitiveAttribute {
                 primitive_id,
@@ -121,15 +146,13 @@ fn check_meshed(record: &MeshRecord) -> Result<()> {
     Ok(())
 }
 
-/// A document holding `primitives` in one object named `name`, placed by one
-/// root node of the same name, with `files` beside it.
-fn place(name: &str, primitives: Vec<MeshPrimitive>, files: Vec<MeshFile>) -> Result<MeshMain<()>> {
-    let mut document = MeshMain::default();
-
-    for file in files {
-        document.retain_file(file)?;
-    }
-
+/// `document` with `primitives` in one object named `name`, placed by one
+/// root node of the same name.
+fn place(
+    mut document: MeshMain<()>,
+    name: &str,
+    primitives: Vec<MeshPrimitive>,
+) -> Result<MeshMain<()>> {
     let mut object = MeshObject::new(name.to_owned());
 
     for primitive in primitives {
@@ -152,19 +175,21 @@ fn place(name: &str, primitives: Vec<MeshPrimitive>, files: Vec<MeshFile>) -> Re
 #[cfg(test)]
 mod tests {
     use crate::{
-        Error,
+        Error, Result,
         dependencies::DependenciesImpl,
         operations::mesh::{
             ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource,
             ExtraWrite, FileForm, FileWrite, MaterialRecord, MeshElement, MeshRecord, Method,
-            PrimitiveRecord, TextureShape, Transfer, WrittenValue, mesh,
+            PrimitiveRecord, SlotSource, SlotWrite, TextureShape, Transfer, WrittenValue, mesh,
         },
     };
     use branded_id::{IdVec, U32Id};
-    use meshdoc::MeshMain;
+    use meshdoc::{
+        BMeshMaterial, MeshAlphaMode, MeshImageSource, MeshMagFilter, MeshMain, MeshWrap,
+    };
     use png::{ColorType, Decoder, Info};
     use std::io::Cursor;
-    use ty_math::{TyVector2F64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyLinSrgbF64, TyVector2F64, TyVector3F64, TyVector3U32};
     use voxcore::{
         VoxMain, VoxObject, VoxPalette, VoxValuePool,
         material::{BASE_COLOR, METALLIC},
@@ -255,10 +280,42 @@ mod tests {
     /// The element the bar fails to mesh on under `record`.
     fn failing_element(record: &MeshRecord) -> MeshElement {
         let main: VoxMain = VoxMain::default();
-        match mesh(&DependenciesImpl, &main, &bar(), record).unwrap_err() {
+        record_error(mesh(&DependenciesImpl, &main, &bar(), record))
+    }
+
+    /// The element the painted bar fails to mesh on under `record`.
+    fn failing_painted_element(record: &MeshRecord) -> MeshElement {
+        let (main, object) = painted();
+        record_error(mesh(&DependenciesImpl, &main, &object, record))
+    }
+
+    /// The element `result`'s record error rose from.
+    fn record_error(result: Result<MeshMain<()>>) -> MeshElement {
+        match result.unwrap_err() {
             Error::MeshRecord { element, .. } => element,
             error => panic!("expected a record error, got {error}"),
         }
+    }
+
+    /// A slot write of `property` from `source`.
+    fn slot(property: &str, source: SlotSource) -> SlotWrite {
+        SlotWrite {
+            property: property.to_owned(),
+            source,
+        }
+    }
+
+    /// A slot write of `property` from the value `expression`.
+    fn value_slot(property: &str, expression: &str) -> SlotWrite {
+        slot(property, SlotSource::Value(expression.to_owned()))
+    }
+
+    /// One material of `slots` in the table.
+    fn materials(slots: Vec<SlotWrite>) -> IdVec<BMeshMaterial, MaterialRecord> {
+        IdVec::from_vec(vec![MaterialRecord {
+            slots,
+            ..MaterialRecord::default()
+        }])
     }
 
     /// A write of `expression` into `file`, a png or the JSON entry `name`.
@@ -286,7 +343,12 @@ mod tests {
     /// The decoded samples and header of the png `document` holds as `name`.
     fn decoded_png(document: &MeshMain<()>, name: &str) -> (Vec<u8>, Info<'static>) {
         let (_, file) = document.file_by_name(name).unwrap();
-        let mut reader = Decoder::new(Cursor::new(file.bytes.clone()))
+        decoded(&file.bytes)
+    }
+
+    /// The decoded samples and header of the png `bytes`.
+    fn decoded(bytes: &[u8]) -> (Vec<u8>, Info<'static>) {
+        let mut reader = Decoder::new(Cursor::new(bytes.to_vec()))
             .read_info()
             .unwrap();
         let mut buffer = vec![0u8; reader.output_buffer_size().unwrap()];
@@ -522,9 +584,22 @@ mod tests {
             transfer: Transfer::Linear,
         };
 
-        let mut with_material = record(Method::Greedy);
-        with_material.materials = IdVec::from_vec(vec![MaterialRecord::default()]);
-        assert_eq!(failing_element(&with_material), MeshElement::Materials);
+        let mut with_material_extra = record(Method::Greedy);
+        with_material_extra.materials = IdVec::from_vec(vec![MaterialRecord {
+            extras: vec![ExtraWrite {
+                name: "albedo".to_owned(),
+                form: ExtraForm::Json,
+                source: ExtraSource::Value(written.clone()),
+            }],
+            ..MaterialRecord::default()
+        }]);
+        assert_eq!(
+            failing_element(&with_material_extra),
+            MeshElement::MaterialExtra {
+                material_id: U32Id::from_u32(0),
+                name: "albedo".to_owned()
+            }
+        );
 
         let mut with_extra = record(Method::Greedy);
         with_extra.mesh_extras.push(ExtraWrite {
@@ -828,5 +903,160 @@ mod tests {
             file_write("bar.png", None, "face(1)", Transfer::Linear),
         ];
         assert_eq!(failing_element(&mixed), element);
+    }
+
+    #[test]
+    fn a_slot_value_fills_its_factor_or_embeds_its_texture() {
+        let (main, object) = painted();
+        let primitive_id = U32Id::from_u32(0);
+        let material_id = U32Id::from_u32(0);
+        let mut record = record(Method::Greedy);
+        record.materials = materials(vec![
+            value_slot("baseColorTexture", "baseColor"),
+            value_slot("metallicFactor", "max(metallic)"),
+            value_slot("emissiveFactor", "rgb(1, 0.5, 0)"),
+            value_slot("doubleSided", "true"),
+            value_slot("alphaMode", "\"MASK\""),
+            value_slot("alphaCutoff", "0.25"),
+            value_slot("ior", "0.0"),
+        ]);
+        record.primitives[primitive_id.to_usize_id()].material_id = Some(material_id);
+
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
+        document.validate().unwrap();
+
+        let material = document.material(material_id).unwrap();
+        assert_eq!(material.metallic_factor, 1.0);
+        assert_eq!(material.emissive_factor, TyLinSrgbF64::new(1.0, 0.5, 0.0));
+        assert!(material.double_sided);
+        assert_eq!(material.alpha_mode, MeshAlphaMode::Mask);
+        assert_eq!(material.alpha_cutoff, 0.25);
+        assert_eq!(material.ior, 0.0);
+
+        // The texture samples the swatch atlas through the one stream,
+        // nearest and clamped. Its image carries the sRGB chunk.
+        let texture_ref = material.base_color_texture.unwrap();
+        assert_eq!(texture_ref.uv_stream_id, U32Id::from_u32(0));
+        let texture = document.texture(texture_ref.texture_id).unwrap();
+        assert_eq!(texture.mag_filter, Some(MeshMagFilter::Nearest));
+        assert_eq!(texture.wrap_s, MeshWrap::ClampToEdge);
+        assert_eq!(document.image_count(), 1);
+        let (samples, info) = decoded(document.image_bytes(texture.image_id).unwrap());
+        assert!(info.srgb.is_some());
+        assert_eq!(&samples[..8], [255, 0, 0, 255, 0, 0, 255, 255]);
+
+        let (_, object) = document.iter_objects().next().unwrap();
+        let (_, primitive) = object.iter_primitives().next().unwrap();
+        assert_eq!(primitive.material_id(), Some(material_id));
+        assert_eq!(primitive.uv_stream_count(), 1);
+    }
+
+    #[test]
+    fn two_slots_naming_one_value_share_its_image_and_a_file_slot_references_its_file() {
+        let (main, object) = painted();
+        let material_id = U32Id::from_u32(0);
+        let mut record = record(Method::Greedy);
+        record.program = "orm = rgb(1, 0.5, metallic);".to_owned();
+        record.files = vec![file_write(
+            "bar-albedo.png",
+            None,
+            "baseColor",
+            Transfer::Srgb,
+        )];
+        record.materials = materials(vec![
+            value_slot("occlusionTexture", "orm"),
+            value_slot("metallicRoughnessTexture", "orm"),
+            slot(
+                "baseColorTexture",
+                SlotSource::File("bar-albedo.png".to_owned()),
+            ),
+        ]);
+        record.primitives[U32Id::from_u32(0).to_usize_id()].material_id = Some(material_id);
+
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
+        document.validate().unwrap();
+
+        let material = document.material(material_id).unwrap();
+        assert_eq!(
+            material.occlusion_texture,
+            material.metallic_roughness_texture
+        );
+        assert_eq!(document.image_count(), 2);
+
+        let (file_id, _) = document.file_by_name("bar-albedo.png").unwrap();
+        let texture_ref = material.base_color_texture.unwrap();
+        let texture = document.texture(texture_ref.texture_id).unwrap();
+        let image = document.image(texture.image_id).unwrap();
+        assert_eq!(image.source, MeshImageSource::File(file_id));
+    }
+
+    #[test]
+    fn a_declared_material_no_primitive_draws_emits_unused() {
+        let mut record = record(Method::Greedy);
+        record.materials = materials(Vec::new());
+
+        let document = meshed(&record);
+
+        assert_eq!(document.material_count(), 1);
+        let (_, object) = document.iter_objects().next().unwrap();
+        let (_, primitive) = object.iter_primitives().next().unwrap();
+        assert_eq!(primitive.material_id(), None);
+    }
+
+    #[test]
+    fn a_slot_written_wrong_errors_and_names_the_slot() {
+        let slot_element = |property: &str| MeshElement::Slot {
+            material_id: U32Id::from_u32(0),
+            property: property.to_owned(),
+        };
+
+        let failing = |slots: Vec<SlotWrite>, files: Vec<FileWrite>| {
+            let mut record = record(Method::Greedy);
+            record.materials = materials(slots);
+            record.files = files;
+            failing_painted_element(&record)
+        };
+
+        assert_eq!(
+            failing(vec![value_slot("metallicFactor", "metallic")], vec![]),
+            slot_element("metallicFactor")
+        );
+        assert_eq!(
+            failing(vec![value_slot("metallicFactor", "2")], vec![]),
+            slot_element("metallicFactor")
+        );
+        assert_eq!(
+            failing(vec![value_slot("doubleSided", "1")], vec![]),
+            slot_element("doubleSided")
+        );
+        assert_eq!(
+            failing(vec![value_slot("alphaMode", "\"GLOW\"")], vec![]),
+            slot_element("alphaMode")
+        );
+        assert_eq!(
+            failing(
+                vec![slot(
+                    "baseColorTexture",
+                    SlotSource::File("bar-rough.png".to_owned())
+                )],
+                vec![file_write(
+                    "bar-rough.png",
+                    None,
+                    "baseColor",
+                    Transfer::Linear
+                )]
+            ),
+            slot_element("baseColorTexture")
+        );
+        assert_eq!(
+            failing(
+                vec![
+                    value_slot("baseColorTexture", "baseColor"),
+                    value_slot("occlusionTexture", "baseColor"),
+                ],
+                vec![]
+            ),
+            slot_element("occlusionTexture")
+        );
     }
 }

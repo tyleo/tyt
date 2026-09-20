@@ -6,8 +6,8 @@ use crate::{
     },
 };
 use branded_id::{IdVec, U32Id};
-use meshdoc::{BMeshMaterial, BMeshPrimitive};
-use std::collections::{BTreeSet, HashMap};
+use meshdoc::{BMeshMaterial, BMeshPrimitive, BMeshUvStream};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Every primitive's stream list and the domain each texture bakes at.
 #[derive(Debug)]
@@ -17,6 +17,9 @@ pub(crate) struct Streams {
     /// Each texture element's bake domain; a written png and an image of the
     /// object bake where their values sit.
     bakes: HashMap<MeshElement, ArrayDomain>,
+
+    /// The stream each material's textures sample a bake domain through.
+    stream_ids: IdVec<BMeshMaterial, BTreeMap<ArrayDomain, U32Id<BMeshUvStream>>>,
 }
 
 impl Streams {
@@ -234,6 +237,9 @@ impl Streams {
             primitives.push(list);
         }
 
+        let mut stream_ids: IdVec<BMeshMaterial, BTreeMap<ArrayDomain, U32Id<BMeshUvStream>>> =
+            IdVec::from_vec(vec![BTreeMap::new(); materials.len()]);
+
         for (index, list) in materials.iter().enumerate() {
             let material_id: U32Id<BMeshMaterial> = U32Id::from_u32(table_index(index));
 
@@ -283,10 +289,17 @@ impl Streams {
                         Some(_) => {}
                     }
                 }
+
+                stream_ids[material_id.to_usize_id()]
+                    .insert(bake, U32Id::from_u32(table_index(position)));
             }
         }
 
-        Ok(Streams { primitives, bakes })
+        Ok(Streams {
+            primitives,
+            bakes,
+            stream_ids,
+        })
     }
 
     /// The streams primitive `primitive_id` writes, in stream order.
@@ -300,6 +313,18 @@ impl Streams {
             .bakes
             .get(element)
             .expect("every texture destination bakes somewhere")
+    }
+
+    /// The stream material `material_id`'s textures baked at `bake` sample
+    /// through.
+    pub(crate) fn stream_id(
+        &self,
+        material_id: U32Id<BMeshMaterial>,
+        bake: ArrayDomain,
+    ) -> U32Id<BMeshUvStream> {
+        *self.stream_ids[material_id.to_usize_id()]
+            .get(&bake)
+            .expect("a material's textures bake on its listed streams")
     }
 }
 

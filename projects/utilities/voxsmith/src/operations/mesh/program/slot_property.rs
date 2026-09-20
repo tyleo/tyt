@@ -1,3 +1,5 @@
+use crate::operations::mesh::Transfer;
+
 /// A modeled material field a slot write fills, under the property names of
 /// the document's material model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -87,11 +89,25 @@ impl SlotProperty {
                 | SlotProperty::TransmissionTexture
         )
     }
+
+    /// The encoding a texture property fixes for its image.
+    pub(crate) fn transfer(self) -> Transfer {
+        match self {
+            SlotProperty::BaseColorTexture | SlotProperty::EmissiveTexture => Transfer::Srgb,
+
+            SlotProperty::MetallicRoughnessTexture
+            | SlotProperty::NormalTexture
+            | SlotProperty::OcclusionTexture
+            | SlotProperty::TransmissionTexture => Transfer::Linear,
+
+            _ => unreachable!("a factor fixes no image encoding"),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::mesh::SlotProperty;
+    use crate::operations::mesh::{SlotProperty, Transfer};
 
     #[test]
     fn every_property_parses_from_its_name_and_the_textures_take_images() {
@@ -105,5 +121,16 @@ mod tests {
         }
 
         assert_eq!(SlotProperty::parse("subsurface"), None);
+    }
+
+    #[test]
+    fn the_color_textures_are_srgb_and_the_data_textures_linear() {
+        assert_eq!(SlotProperty::BaseColorTexture.transfer(), Transfer::Srgb);
+        assert_eq!(SlotProperty::EmissiveTexture.transfer(), Transfer::Srgb);
+        assert_eq!(
+            SlotProperty::MetallicRoughnessTexture.transfer(),
+            Transfer::Linear
+        );
+        assert_eq!(SlotProperty::OcclusionTexture.transfer(), Transfer::Linear);
     }
 }

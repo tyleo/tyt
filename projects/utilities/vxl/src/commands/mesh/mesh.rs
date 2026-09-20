@@ -361,7 +361,7 @@ impl Mesh {
         let format = WriteFormat::Gltf(GltfWriteFormat {
             container,
             options: GltfWriteOptions {
-                images: GltfImageStorage::Embedded,
+                images: GltfImageStorage::AsLoaded,
             },
         });
 
