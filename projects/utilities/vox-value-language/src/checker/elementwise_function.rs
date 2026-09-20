@@ -64,7 +64,6 @@ impl ElementwiseFunction {
     }
 
     /// The function this one names.
-    #[cfg(test)]
     pub(crate) fn to_function(self) -> Function {
         match self {
             ElementwiseFunction::Abs => Function::Abs,

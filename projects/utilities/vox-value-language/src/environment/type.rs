@@ -14,6 +14,13 @@ pub struct Type {
     pub scalar: Scalar,
 }
 
+impl Type {
+    /// The same type over another domain.
+    pub fn with_domain(self, domain: Domain) -> Type {
+        Type { domain, ..self }
+    }
+}
+
 impl Display for Type {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(

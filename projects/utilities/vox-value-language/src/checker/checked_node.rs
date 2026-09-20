@@ -14,10 +14,7 @@ pub(crate) struct CheckedNode {
 impl CheckedNode {
     /// The tree as a prefix form with every literal typed, for the tests.
     pub(crate) fn render(&self) -> String {
-        use crate::{
-            Domain,
-            checker::{Fold, NumberValue, Reduction, Rounding},
-        };
+        use crate::checker::{Fold, NumberValue, Rounding};
 
         match &self.kind {
             CheckedKind::Binary {
@@ -124,24 +121,7 @@ impl CheckedNode {
                 reduction,
                 target,
                 operand,
-            } => {
-                let reduction = match reduction {
-                    Reduction::Avg => "avg",
-                    Reduction::Max => "max",
-                    Reduction::Min => "min",
-                    Reduction::Sum => "sum",
-                };
-                let name = match target {
-                    Domain::Plain => reduction.to_owned(),
-                    target => {
-                        let (head, tail) = reduction.split_at(1);
-
-                        format!("{target}{}{tail}", head.to_ascii_uppercase())
-                    }
-                };
-
-                format!("({name} {})", operand.render())
-            }
+            } => format!("({} {})", reduction.name(*target), operand.render()),
 
             CheckedKind::StringLiteral(text) => format!("\"{text}\""),
 

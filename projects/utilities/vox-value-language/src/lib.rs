@@ -6,6 +6,7 @@
 mod checker;
 mod environment;
 mod error;
+mod evaluator;
 mod function;
 mod lexer;
 mod parser;
@@ -14,5 +15,6 @@ mod result;
 pub use checker::*;
 pub use environment::*;
 pub use error::*;
+pub use evaluator::*;
 pub use parser::*;
 pub use result::*;

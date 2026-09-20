@@ -54,9 +54,15 @@ pieces. The corners need no table because every face owns four, in face order.
 To the crate an array is a length, and the groupings fix the lengths: the voxel
 count is the voxel table's length, the face count the face table's, the corner
 count four times that, and the swatch count one past the largest swatch id a
-voxel names, zero with no voxels. Every array in the value environment has its
-domain's length, every face lists at least one voxel piece, and every piece
-names a voxel the table holds.
+voxel names, zero with no voxels. `eval` checks the value environment before
+computing anything:
+
+1. Every name the type environment holds has a value of that type, and no
+   other name has one
+2. Every array holds its domain's length
+3. Every `f32` input is finite
+4. Every face lists at least one voxel piece
+5. Every piece points into the voxel table
 
 ## Programs
 
@@ -194,6 +200,8 @@ components read best through the position alphabet, `lab.x` rather than
 `oklchFromRgb(c)` and `rgbFromOklch(l)` visit Oklch, Oklab's polar form: `.x`
 holds the same lightness, `.y` chroma, 0 at gray, and `.z` hue as a turn in
 `[0, 1]`. A gray has no hue, so `oklchFromRgb` answers hue 0 at zero chroma.
+A chroma below one millionth reads as zero because the rounded matrices leave
+that much noise on a gray.
 `rgbFromOklch` errors on a hue outside `[0, 1]`, leaving the wrap to the
 author's `mod(h, 1)`, and on a negative chroma. A converted-back color can leave
 the gamut, and no conversion clamps.
