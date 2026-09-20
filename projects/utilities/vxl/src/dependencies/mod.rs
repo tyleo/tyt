@@ -5,11 +5,13 @@
 #[allow(clippy::module_inception)]
 mod dependencies;
 mod dependencies_impl;
+mod resolve_prefs_paths;
 mod terminal_columns;
 mod write_stdout;
 
 pub use dependencies::*;
 pub use dependencies_impl::*;
+pub use resolve_prefs_paths::*;
 pub use terminal_columns::*;
 pub use write_stdout::*;
 

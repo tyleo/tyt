@@ -5,9 +5,9 @@ use crate::{
         MaterialTable, PrimitiveTable, Profile, ProfileSet, ProgramBuilder, ProgramFlag,
         ProgramFlags, apply_profile_files, apply_profile_materials, apply_profile_mesh_extras,
         apply_profile_primitives, check_expression, check_image_sources,
-        declare_profile_primitives, flag_occurrences, parse_flag_index, parse_flag_value,
-        parse_texture_shape, push_file_write, push_unique, push_uv_stream, resolve_gltf_container,
-        select_one_object, written_file_name,
+        declare_profile_primitives, flag_occurrences, load_profile_set, parse_flag_index,
+        parse_flag_value, parse_texture_shape, push_file_write, push_unique, push_uv_stream,
+        resolve_gltf_container, select_one_object, written_file_name,
     },
 };
 use branded_id::U32Id;
@@ -152,7 +152,10 @@ pub struct Mesh {
     /// `valuesFrom` values first. Wherever the flag sits, the profile's values
     /// join the program ahead of every `--value` and `--values-from` binding,
     /// so a hand binding can read or redefine a profile value. An explicit
-    /// flag replaces the profile element it collides with.
+    /// flag replaces the profile element it collides with. The profiles are
+    /// the built-ins under every `.vxlconfig`'s `mesh.profiles`, the user's
+    /// `~/.vxlconfig` first and then each directory from the git root down to
+    /// the working directory, a name reading from the last file supplying it.
     #[arg(value_name = "profile", long)]
     profile: Option<String>,
 
@@ -337,7 +340,12 @@ impl Mesh {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let (container, output) = self.resolve_output();
 
-        let record = self.record(&output)?;
+        let profiles = self
+            .uses_profiles()
+            .then(|| load_profile_set(&dependencies))
+            .transpose()?;
+
+        let record = self.record(&output, profiles.as_ref())?;
 
         let from = self.input.resolve_format()?;
 
@@ -390,16 +398,14 @@ impl Mesh {
     /// alone decide: the material and primitive counts, an element written
     /// twice, the attribute naming rules, every expression parsing, and every
     /// image reference pointing at a written PNG. A flag's element stands at
-    /// its destination, and the profile fills the rest.
-    fn record(&self, output: &Path) -> Result<MeshRecord> {
+    /// its destination, and the profile fills the rest. `profiles` holds the
+    /// loaded set when any flag reads a profile.
+    fn record(&self, output: &Path, profiles: Option<&ProfileSet>) -> Result<MeshRecord> {
         let file_stem = self.file_stem(output);
-
-        let profiles = self.uses_profiles().then(ProfileSet::built_in);
 
         let profile = match &self.profile {
             Some(name) => {
                 let profile = profiles
-                    .as_ref()
                     .expect("--profile loads the profiles")
                     .get("--profile", name)?;
 
@@ -456,7 +462,7 @@ impl Mesh {
             apply_profile_mesh_extras(&mut mesh_extras, profile, origin, &file_stem)?;
         }
 
-        let mut builder = ProgramBuilder::new(profiles.as_ref(), self.computed_bindings()?);
+        let mut builder = ProgramBuilder::new(profiles, self.computed_bindings()?);
 
         if let Some(name) = &self.profile {
             builder.land_profile("--profile", name)?;
@@ -952,10 +958,15 @@ fn push_attribute(
 #[cfg(test)]
 mod tests {
     use super::Mesh;
-    use crate::Result;
+    use crate::{
+        Result,
+        commands::{MeshConfig, Profile, ProfileSet},
+    };
     use branded_id::U32Id;
     use clap::Parser;
     use meshconv::gltf::GltfContainer;
+    use std::collections::BTreeMap;
+    use ty_preferences::{DeserializePrefs, JsoncCodec};
     use voxsmith::operations::mesh::{
         ArrayDomain, AttributeWrite, Computation, ExtraForm, ExtraSource, FileForm, MeshRecord,
         Method, SlotSource, TextureShape, Transfer, WrittenValue,
@@ -968,11 +979,30 @@ mod tests {
         Mesh::try_parse_from(argv).unwrap()
     }
 
-    /// The record `args` lower into, or the error they raise.
-    fn try_record(args: &[&str]) -> Result<MeshRecord> {
+    /// The record `args` lower into over the built-ins under `layers`, or the
+    /// error they raise.
+    fn try_record_over(
+        layers: Vec<BTreeMap<String, Profile>>,
+        args: &[&str],
+    ) -> Result<MeshRecord> {
         let mesh = parse(args);
         let (_, output) = mesh.resolve_output();
-        mesh.record(&output)
+        let profiles = mesh.uses_profiles().then(|| ProfileSet::layered(layers));
+        mesh.record(&output, profiles.as_ref())
+    }
+
+    /// The record `args` lower into over the built-ins, or the error they
+    /// raise.
+    fn try_record(args: &[&str]) -> Result<MeshRecord> {
+        try_record_over(Vec::new(), args)
+    }
+
+    /// The profiles the `.vxlconfig` text supplies.
+    fn config_layer(text: &str) -> BTreeMap<String, Profile> {
+        let config: Option<MeshConfig> = JsoncCodec
+            .deserialize_prefs(text.as_bytes(), "mesh")
+            .unwrap();
+        config.expect("the text holds a mesh section").profiles
     }
 
     /// The record `args` lower into.
@@ -1619,5 +1649,165 @@ mod tests {
     fn an_undefined_profile_errors_at_its_flag() {
         assert!(error_of(&["--profile", "metal"]).contains("--profile"));
         assert!(error_of(&["--values-from", "metal"]).contains("--values-from"));
+    }
+
+    #[test]
+    fn a_config_layer_overriding_defaults_changes_the_profiles_built_on_it() {
+        let layer = config_layer(
+            r#"{ "mesh": { "profiles": {
+                "defaults": {
+                    "values": ["baseColorFactor = swatch(default(baseColorFactor, rgba(0, 0, 0, 1)))"],
+                },
+            } } }"#,
+        );
+
+        let record = try_record_over(vec![layer], &["--profile", "albedo"]).unwrap();
+
+        assert_eq!(bound_names(&record), ["baseColorFactor", "albedo"]);
+    }
+
+    #[test]
+    fn a_later_layer_replaces_a_profile_wholesale() {
+        let outer = config_layer(
+            r#"{ "mesh": { "profiles": { "orm": {
+                "values": ["orm = 1"],
+                "materials": [
+                    { "slots": { "occlusionTexture": { "kind": "value", "value": "orm" } } },
+                ],
+            } } } }"#,
+        );
+        let inner =
+            config_layer(r#"{ "mesh": { "profiles": { "orm": { "values": ["orm = 2"] } } } }"#);
+
+        let record = try_record_over(vec![outer, inner], &["--profile", "orm"]).unwrap();
+
+        assert_eq!(record.program, "orm = 2;");
+        assert!(record.materials.is_empty());
+    }
+
+    #[test]
+    fn a_config_profile_lands_its_primitives_files_and_mesh_extras() {
+        let layer = config_layer(
+            r#"{
+  "mesh": {
+    "profiles": {
+      "split": {
+        "valuesFrom": ["defaults"],
+        "values": ["albedo = baseColorFactor", "heat = emissiveStrength"],
+        "materials": [
+          {
+            "name": "body",
+            "slots": { "baseColorTexture": { "kind": "value", "value": "albedo" } },
+          },
+          {
+            "name": "glow",
+            "slots": { "emissiveTexture": { "kind": "file", "file": "{file-stem}-heat.png" } },
+          },
+        ],
+        "primitives": [
+          { "name": "body", "select": "heat == 0", "material": 0 },
+          {
+            "name": "glow",
+            "select": "heat > 0",
+            "material": 1,
+            "normal": false,
+            "uvs": ["swatch"],
+            "builtins": { "COLOR_0": "albedo" },
+            "customs": { "_heat": { "transfer": "linear", "value": "heat" } },
+          },
+        ],
+        "files": {
+          "json": {
+            "{file-stem}-palette.json": { "rows": { "transfer": "linear", "value": "albedo" } },
+          },
+          "png": { "{file-stem}-heat.png": { "transfer": "linear", "value": "heat" } },
+        },
+        "meshExtras": {
+          "heat": { "kind": "image-file", "file": "{file-stem}-heat.png" },
+          "meta": { "kind": "json-value", "transfer": "linear", "value": "1" },
+        },
+      },
+    },
+  },
+}"#,
+        );
+
+        let record = try_record_over(vec![layer], &["--profile", "split", "turret.glb"]).unwrap();
+
+        let mut expected = DEFAULTS.to_vec();
+        expected.extend(["albedo", "heat"]);
+        assert_eq!(bound_names(&record), expected);
+
+        let [body, glow] = record.materials.as_slice() else {
+            panic!("two materials");
+        };
+        assert_eq!(body.name.as_deref(), Some("body"));
+        assert_eq!(glow.name.as_deref(), Some("glow"));
+        assert_eq!(
+            glow.slots[0].source,
+            SlotSource::File("turret-heat.png".to_owned())
+        );
+
+        let [first, second] = record.primitives.as_slice() else {
+            panic!("two primitives");
+        };
+        assert_eq!(first.name.as_deref(), Some("body"));
+        assert_eq!(first.select, "heat == 0");
+        assert_eq!(first.material_id, Some(U32Id::from_u32(0)));
+        assert!(first.normal);
+        assert_eq!(second.material_id, Some(U32Id::from_u32(1)));
+        assert!(!second.normal);
+        assert_eq!(second.uv_streams, Some(vec![ArrayDomain::Swatch]));
+        assert_eq!(
+            second.attributes,
+            [
+                AttributeWrite::Builtin {
+                    attribute: "COLOR_0".to_owned(),
+                    expression: "albedo".to_owned(),
+                },
+                AttributeWrite::Custom {
+                    name: "_heat".to_owned(),
+                    value: WrittenValue {
+                        expression: "heat".to_owned(),
+                        transfer: Transfer::Linear,
+                    },
+                },
+            ]
+        );
+
+        let files: Vec<_> = record
+            .files
+            .iter()
+            .map(|write| (write.file.as_str(), &write.form))
+            .collect();
+        assert_eq!(
+            files,
+            [
+                (
+                    "turret-palette.json",
+                    &FileForm::Json {
+                        name: "rows".to_owned()
+                    }
+                ),
+                ("turret-heat.png", &FileForm::Png),
+            ]
+        );
+
+        let extras: Vec<_> = record
+            .mesh_extras
+            .iter()
+            .map(|write| (write.name.as_str(), write.form, &write.source))
+            .collect();
+        assert_eq!(extras.len(), 2);
+        assert_eq!(
+            extras[0],
+            (
+                "heat",
+                ExtraForm::Image,
+                &ExtraSource::File("turret-heat.png".to_owned())
+            )
+        );
+        assert_eq!(extras[1].0, "meta");
+        assert_eq!(extras[1].1, ExtraForm::Json);
     }
 }

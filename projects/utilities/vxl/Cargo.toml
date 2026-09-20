@@ -20,6 +20,7 @@ jsonc-parser = { version = "0.33.1", features = ["serde"] }
 meshconv = "0.1.0"
 meshdoc = "0.1.0"
 serde = { version = "1", features = ["derive"] }
+ty-preferences = "0.3.0"
 vox-value-language = "0.1.0"
 voxconv = "0.1.0"
 voxcore = { version = "0.2.1", default-features = false }

@@ -1,4 +1,6 @@
-use crate::{DirectoryEntry, ListDir, ReadFile, TerminalColumns, WriteFile, WriteStdout};
+use crate::{
+    DirectoryEntry, ListDir, ReadFile, ResolvePrefsPaths, TerminalColumns, WriteFile, WriteStdout,
+};
 #[cfg(unix)]
 use libc::{STDOUT_FILENO, TIOCGWINSZ, ioctl, winsize};
 use meshconv::{
@@ -13,11 +15,15 @@ use std::{
     io::{self, Result as IOResult, Write},
     path::Path,
 };
+use ty_preferences::{
+    Dependencies as PreferencesDependencies, DependenciesImpl as PreferencesDependenciesImpl,
+    PrefsPaths, resolve_prefs_paths,
+};
 use voxconv::{DependenciesImpl as VoxconvDependenciesImpl, ForwardDependencies};
 
 /// The dependencies over std's filesystem and standard output, with the
-/// voxel codecs forwarded to voxconv's impl and the mesh codecs to
-/// meshconv's.
+/// voxel codecs forwarded to voxconv's impl, the mesh codecs to meshconv's,
+/// and the config reads to ty-preferences'.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
@@ -58,6 +64,22 @@ impl MeshListDir for DependenciesImpl {
 impl MeshWriteFile for DependenciesImpl {
     fn write_file(&self, path: &Path, bytes: &[u8]) -> IOResult<()> {
         WriteFile::write_file(self, path, bytes)
+    }
+}
+
+impl PreferencesDependencies for DependenciesImpl {
+    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
+        PreferencesDependenciesImpl.read_file(path)
+    }
+
+    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
+        PreferencesDependenciesImpl.write_file(path, contents)
+    }
+}
+
+impl ResolvePrefsPaths for DependenciesImpl {
+    fn resolve_prefs_paths(&self) -> IOResult<PrefsPaths> {
+        resolve_prefs_paths()
     }
 }
 

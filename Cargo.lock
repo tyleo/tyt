@@ -2272,6 +2272,7 @@ dependencies = [
  "meshdoc",
  "serde",
  "serde_json",
+ "ty-preferences",
  "vox-value-language",
  "voxconv",
  "voxcore",
