@@ -3,8 +3,8 @@ use crate::{
     dependencies::mesh::EncodePng,
     operations::mesh::{
         Atlases, FacePartition, Images, MergeRules, MeshElement, MeshRecord, Method, ProgramRun,
-        Streams, Swatches, WriteContext, mesh_slices, table_index, write_attributes, write_extras,
-        write_files, write_materials, write_primitive,
+        Streams, Swatches, WriteContext, mesh_slices, object_to_mesh_geometry, table_index,
+        write_attributes, write_extras, write_files, write_materials, write_primitive,
     },
 };
 use branded_id::U32Id;
@@ -39,7 +39,7 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
     }
 
     let geometry = if record.method == Method::Greedy {
-        let culled = mesh_slices(object, Method::Culled, &|_| 0, &|_| true, false);
+        let culled = object_to_mesh_geometry(object, Method::Culled);
 
         let run = ProgramRun::over(object, &swatches, record, &culled)?;
 
@@ -55,7 +55,7 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
             false,
         )
     } else {
-        mesh_slices(object, record.method, &|_| 0, &|_| true, false)
+        object_to_mesh_geometry(object, record.method)
     };
 
     let run = ProgramRun::over(object, &swatches, record, &geometry)?;

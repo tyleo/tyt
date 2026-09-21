@@ -11,7 +11,7 @@ use voxcore::{BVoxVoxel, VoxObject};
 /// a solid-empty boundary, and `greedy` merges coplanar boundary faces into the
 /// fewest quads. No hierarchy-node transform is applied; placement is the
 /// caller's to add.
-pub fn object_to_mesh_geometry(object: &VoxObject, method: Method) -> MeshGeometry {
+pub(crate) fn object_to_mesh_geometry(object: &VoxObject, method: Method) -> MeshGeometry {
     // A constant key merges every coplanar face regardless of material and
     // records no per-vertex material, the fewest-quads pure-geometry mesh.
     mesh_slices(object, method, &|_| 0, &|_| true, false)
@@ -300,8 +300,8 @@ mod tests {
         let object = object([1, 1, 1], &[[0, 0, 0]]);
         let mesh = object_to_mesh_geometry(&object, Method::Naive);
         assert_eq!(mesh.quad_count(), 6);
-        assert_eq!(mesh.triangle_count(), 12);
-        assert_eq!(mesh.vertex_count(), 24);
+        assert_eq!(mesh.indices.len(), 36);
+        assert_eq!(mesh.positions.len(), 24);
     }
 
     #[test]
@@ -366,7 +366,7 @@ mod tests {
             true,
         );
         assert_eq!(keyed.quad_count(), 10);
-        assert_eq!(keyed.material_indices.len(), keyed.vertex_count());
+        assert_eq!(keyed.material_indices.len(), keyed.positions.len());
         assert!(
             keyed
                 .material_indices
@@ -404,7 +404,7 @@ mod tests {
         // One material still merges into a box, but every vertex records it.
         let keyed = mesh_slices(&object, Method::Greedy, &|_| 0, &|_| true, true);
         assert_eq!(keyed.quad_count(), 6);
-        assert_eq!(keyed.material_indices.len(), keyed.vertex_count());
+        assert_eq!(keyed.material_indices.len(), keyed.positions.len());
         assert!(
             keyed
                 .material_indices

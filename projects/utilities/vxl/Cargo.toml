@@ -29,7 +29,6 @@ voxsmith = { version = "0.3.0", default-features = false, features = [
     "impl",
     "info",
     "mesh",
-    "mesh_old",
     "palette_list",
     "palette_show",
     "to",

@@ -8,12 +8,12 @@ mod program;
 mod record;
 mod write;
 
-pub use geometry::*;
 pub use mesh::*;
 pub use record::*;
 
 // Internal API
 
 pub(crate) use atlas::*;
+pub(crate) use geometry::*;
 pub(crate) use program::*;
 pub(crate) use write::*;

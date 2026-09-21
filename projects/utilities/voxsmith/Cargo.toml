@@ -28,7 +28,6 @@ default = [
     "impl",
     "info",
     "mesh",
-    "mesh_old",
     "palette_list",
     "palette_show",
     "to",
@@ -39,7 +38,6 @@ default = [
 hierarchy_show = ["_treegrid", "dep:treeselect"]
 info = ["_treegrid"]
 mesh = ["dep:serde_json", "dep:vox-value-language"]
-mesh_old = ["mesh"]
 palette_list = ["_treegrid"]
 palette_show = ["_treegrid", "dep:serde_json"]
 to = []

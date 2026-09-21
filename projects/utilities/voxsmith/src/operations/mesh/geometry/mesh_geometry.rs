@@ -11,7 +11,7 @@ use voxcore::BVoxVoxel;
 /// never share vertices and shading stays flat. Triangles wind
 /// counter-clockwise seen from outside, glTF's front face.
 #[derive(Clone, Debug, Default)]
-pub struct MeshGeometry {
+pub(crate) struct MeshGeometry {
     /// One position per vertex, in voxel-grid units.
     pub positions: Vec<TyVector3F32>,
 
@@ -33,18 +33,8 @@ pub struct MeshGeometry {
 }
 
 impl MeshGeometry {
-    /// Number of vertices.
-    pub fn vertex_count(&self) -> usize {
-        self.positions.len()
-    }
-
-    /// Number of triangles.
-    pub fn triangle_count(&self) -> usize {
-        self.indices.len() / 3
-    }
-
     /// Number of quads, two triangles each.
-    pub fn quad_count(&self) -> usize {
+    pub(crate) fn quad_count(&self) -> usize {
         self.indices.len() / 6
     }
 }
