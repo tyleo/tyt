@@ -3,8 +3,8 @@ use crate::{
     dependencies::mesh::EncodePng,
     operations::mesh::{
         Atlases, FacePartition, Images, MergeRules, MeshElement, MeshRecord, Method, ProgramRun,
-        Streams, Swatches, WriteContext, mesh_slices, table_index, write_extras, write_files,
-        write_materials, write_primitive,
+        Streams, Swatches, WriteContext, mesh_slices, table_index, write_attributes, write_extras,
+        write_files, write_materials, write_primitive,
     },
 };
 use branded_id::U32Id;
@@ -31,7 +31,12 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
 
     let swatches = Swatches::resolve(main, object)?;
 
-    check_meshed(record)?;
+    if record.primitives.is_empty() {
+        return Err(Error::mesh_record(
+            MeshElement::Primitives,
+            "holds no primitive, and a run needs at least one",
+        ));
+    }
 
     let geometry = if record.method == Method::Greedy {
         let culled = mesh_slices(object, Method::Culled, &|_| 0, &|_| true, false);
@@ -103,44 +108,31 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
         .enumerate()
         .map(|(index, primitive_record)| {
             let primitive_id = U32Id::from_u32(table_index(index));
+            let faces = partition.faces(primitive_id);
 
-            write_primitive(
+            let mut primitive = write_primitive(
                 &geometry,
-                partition.faces(primitive_id),
+                faces,
                 record.voxel_size,
                 primitive_record,
                 streams.primitive_list(primitive_id),
                 &atlases,
-            )
+            )?;
+
+            write_attributes(
+                &mut primitive,
+                primitive_id,
+                &primitive_record.attributes,
+                faces,
+                &run,
+                &atlases,
+            )?;
+
+            Ok(primitive)
         })
         .collect::<Result<Vec<_>>>()?;
 
     place(document, object.name(), primitives, properties)
-}
-
-/// Errors on the first record element the run cannot mesh yet.
-fn check_meshed(record: &MeshRecord) -> Result<()> {
-    let not_yet = |element: MeshElement| Error::mesh_record(element, "is not meshed yet");
-
-    if record.primitives.is_empty() {
-        return Err(Error::mesh_record(
-            MeshElement::Primitives,
-            "holds no primitive, and a run needs at least one",
-        ));
-    }
-
-    for (index, primitive_record) in record.primitives.iter().enumerate() {
-        let primitive_id = U32Id::from_u32(table_index(index));
-
-        if let Some(attribute) = primitive_record.attributes.first() {
-            return Err(not_yet(MeshElement::PrimitiveAttribute {
-                primitive_id,
-                name: attribute.name().to_owned(),
-            }));
-        }
-    }
-
-    Ok(())
 }
 
 /// `document` with `primitives` and `properties` in one object named
@@ -185,12 +177,12 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use meshdoc::{
-        BMeshMaterial, MeshAlphaMode, MeshImageSource, MeshMagFilter, MeshMain, MeshPropertyValue,
-        MeshWrap,
+        BMeshMaterial, MeshAlphaMode, MeshAttributeComponents, MeshImageSource, MeshMagFilter,
+        MeshMain, MeshPropertyValue, MeshWrap,
     };
     use png::{ColorType, Decoder, Info};
     use std::io::Cursor;
-    use ty_math::{TyLinSrgbF64, TyVector2F64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TyVector2F64, TyVector3F64, TyVector3U32};
     use voxcore::{
         VoxMain, VoxObject, VoxPalette, VoxValuePool,
         material::{BASE_COLOR, METALLIC},
@@ -344,6 +336,26 @@ mod tests {
                 transfer,
             }),
         )
+    }
+
+    /// A write of `expression` to the modeled `attribute`.
+    fn builtin(attribute: &str, expression: &str) -> AttributeWrite {
+        AttributeWrite::Builtin {
+            attribute: attribute.to_owned(),
+            expression: expression.to_owned(),
+        }
+    }
+
+    /// A write of `expression` to the custom attribute `name` under
+    /// `transfer`.
+    fn custom(name: &str, expression: &str, transfer: Transfer) -> AttributeWrite {
+        AttributeWrite::Custom {
+            name: name.to_owned(),
+            value: WrittenValue {
+                expression: expression.to_owned(),
+                transfer,
+            },
+        }
     }
 
     /// A write of `expression` into `file`, a png or the JSON entry `name`.
@@ -606,28 +618,144 @@ mod tests {
     }
 
     #[test]
-    fn an_element_not_meshed_yet_errors_and_names_itself() {
-        let written = WrittenValue {
-            expression: "albedo".to_owned(),
-            transfer: Transfer::Linear,
+    fn an_attribute_lands_at_the_corners_with_lower_domains_climbing_in() {
+        let (main, object) = painted();
+        let mut record = record(Method::Greedy);
+        record.computed_bindings = vec![
+            ComputedBinding {
+                name: "cornerIndex".to_owned(),
+                computation: Computation::Index(ArrayDomain::Corner),
+            },
+            ComputedBinding {
+                name: "swatchIndex".to_owned(),
+                computation: Computation::Index(ArrayDomain::Swatch),
+            },
+        ];
+        record.program = "half = metallic * 0.5;".to_owned();
+        record.primitives = IdVec::from_vec(vec![
+            PrimitiveRecord {
+                select: "metallic > 0".to_owned(),
+                attributes: vec![
+                    builtin("COLOR_0", "baseColor"),
+                    custom("_CORNER", "u16(cornerIndex)", Transfer::Linear),
+                    custom("_HALF", "half", Transfer::Srgb),
+                    custom("_METAL", "metallic", Transfer::Linear),
+                    custom("_PALETTE", "u8(swatchIndex)", Transfer::Linear),
+                ],
+                ..implicit_primitive()
+            },
+            PrimitiveRecord {
+                select: "metallic == 0".to_owned(),
+                attributes: vec![builtin("COLOR_0", "baseColor.rgb")],
+                ..implicit_primitive()
+            },
+        ]);
+
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
+        document.validate().unwrap();
+        let (_, object) = document.iter_objects().next().unwrap();
+        let primitives: Vec<_> = object
+            .iter_primitives()
+            .map(|(_, primitive)| primitive)
+            .collect();
+
+        let attribute = |name: &str| {
+            primitives[0]
+                .iter_vertex_attributes()
+                .find(|(_, attribute)| attribute.name == name)
+                .map(|(_, attribute)| attribute)
+                .unwrap()
         };
 
+        // Each voxel's five faces draw in one primitive. The metallic red
+        // voxel draws first.
+        assert_eq!(primitives[0].vertex_count(), 20);
+        assert!(
+            primitives[0]
+                .colors()
+                .unwrap()
+                .iter()
+                .all(|&color| color == TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0))
+        );
+        assert_eq!(primitives[0].vertex_attribute_count(), 4);
+
+        // A corner value lands each corner exactly, so a face's corners run
+        // in a block of four.
+        let corners = attribute("_CORNER");
+        assert_eq!(corners.width, 1);
+        let MeshAttributeComponents::U16(indices) = &corners.components else {
+            panic!("a u16 value lands as u16");
+        };
+        assert_eq!(indices.len(), 20);
+        assert!(indices.chunks_exact(4).all(|block| {
+            block[0] % 4 == 0 && block == [block[0], block[0] + 1, block[0] + 2, block[0] + 3]
+        }));
+        assert!(indices.windows(2).all(|pair| pair[0] < pair[1]));
+
+        let half = attribute("_HALF");
+        let MeshAttributeComponents::F64(halves) = &half.components else {
+            panic!("an f32 value lands as f64");
+        };
+        assert!(
+            halves
+                .iter()
+                .all(|&component| (component - 0.735_356_983_052_449_5).abs() < 1e-9)
+        );
+
+        assert_eq!(
+            attribute("_METAL").components,
+            MeshAttributeComponents::F64(vec![1.0; 20])
+        );
+
+        assert_eq!(
+            attribute("_PALETTE").components,
+            MeshAttributeComponents::U8(vec![0; 20])
+        );
+
+        // A vec3 color takes an alpha of one.
+        assert_eq!(primitives[1].vertex_count(), 20);
+        assert!(
+            primitives[1]
+                .colors()
+                .unwrap()
+                .iter()
+                .all(|&color| color == TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0))
+        );
+    }
+
+    #[test]
+    fn an_attribute_written_wrong_errors_and_names_the_attribute() {
         let primitive_id = U32Id::from_u32(0);
 
-        let mut with_attribute = record(Method::Greedy);
-        with_attribute.primitives[primitive_id.to_usize_id()]
-            .attributes
-            .push(AttributeWrite::Custom {
-                name: "_PALETTE".to_owned(),
-                value: written,
+        for attribute in [
+            builtin("COLOR_0", "baseColor * 2.0"),
+            builtin("COLOR_0", "metallic"),
+            builtin("TANGENT", "baseColor"),
+            custom("_INDEX", "swatchIndex", Transfer::Linear),
+            custom("_PALETTE", "u8(swatchIndex)", Transfer::Srgb),
+            custom("_SHINY", "metallic > 0", Transfer::Linear),
+            custom("_TINT", "metallic * 2.0", Transfer::Srgb),
+        ] {
+            let name = attribute.name().to_owned();
+
+            let mut record = record(Method::Greedy);
+            record.computed_bindings.push(ComputedBinding {
+                name: "swatchIndex".to_owned(),
+                computation: Computation::Index(ArrayDomain::Swatch),
             });
-        assert_eq!(
-            failing_element(&with_attribute),
-            MeshElement::PrimitiveAttribute {
-                primitive_id,
-                name: "_PALETTE".to_owned()
-            }
-        );
+            record.primitives[primitive_id.to_usize_id()]
+                .attributes
+                .push(attribute);
+
+            assert_eq!(
+                failing_painted_element(&record),
+                MeshElement::PrimitiveAttribute {
+                    primitive_id,
+                    name: name.clone()
+                },
+                "{name}"
+            );
+        }
     }
 
     #[test]

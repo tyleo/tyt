@@ -587,7 +587,7 @@ where
             }
             Semantic::Joints(set) => joint_sets.push(set),
             Semantic::Weights(set) => weight_sets.push(set),
-            Semantic::Extras(name) => extra_attributes.push((name, accessor)),
+            Semantic::Extras(name) => extra_attributes.push((format!("_{name}"), accessor)),
             Semantic::Positions | Semantic::Normals | Semantic::Tangents => {}
         }
     }

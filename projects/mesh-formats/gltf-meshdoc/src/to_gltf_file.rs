@@ -428,8 +428,18 @@ pub fn to_gltf_file<D: EncodeBase64>(
                         ComponentType::U16,
                     ),
                 };
+                // The semantic prints the underscore glTF requires of a custom
+                // attribute, so the name sheds it here.
+                let Some(semantic) = attribute.name.strip_prefix('_') else {
+                    return Err(Error::invalid(format!(
+                        "vertex attribute \"{}\" has no leading underscore, which glTF \
+                         requires of a custom attribute",
+                        attribute.name
+                    )));
+                };
+
                 attributes.insert(
-                    Checked::Valid(Semantic::Extras(attribute.name.clone())),
+                    Checked::Valid(Semantic::Extras(semantic.to_owned())),
                     push_accessor(
                         &mut root,
                         &mut blob,
@@ -1123,6 +1133,11 @@ mod tests {
         );
         assert_eq!(after.ext.materials[&U32Id::from_u32(0)].extras, None);
         assert_eq!(after.ext.meshes[&U32Id::from_u32(0)].extras, None);
+
+        // A custom attribute keeps its one underscore.
+        let root = serde_json::to_string(&file.root).unwrap();
+        assert!(root.contains("\"_CELL\""));
+        assert!(!root.contains("\"__CELL\""));
 
         // The integer attributes kept their accessor types.
         let component_types: Vec<u32> = file
