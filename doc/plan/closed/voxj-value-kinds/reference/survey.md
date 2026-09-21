@@ -333,7 +333,7 @@ against the wire rule. What remains, and why it stays:
    wire contexts (`voxelize.md`'s and `checklist.md`'s per-primitive
    factor reads) and the vxl-commands decisions log, whose header note
    declares the entries a historical record and carries the rename as a
-   reading key. The `doc/plan/open/mesh` pages (`value-language.md`,
+   reading key. The `doc/plan/closed/mesh` pages (`value-language.md`,
    `profile-language.md`) still spell the pre-rename property vocabulary
    throughout: that plan postdates the gate rule, its pages are unswept
    design drafts, and the sweep belongs to the mesh plan's own execution,
