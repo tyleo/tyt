@@ -5,13 +5,13 @@ use ty_math::TyVector3F32;
 /// the axes after `d`, cyclically.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct FaceSpan {
-    pub(crate) d: usize,
-    pub(crate) sign: i32,
-    pub(crate) s: u32,
-    pub(crate) u0: usize,
-    pub(crate) u1: usize,
-    pub(crate) v0: usize,
-    pub(crate) v1: usize,
+    pub d: usize,
+    pub sign: i32,
+    pub s: u32,
+    pub u0: usize,
+    pub u1: usize,
+    pub v0: usize,
+    pub v1: usize,
 }
 
 impl FaceSpan {

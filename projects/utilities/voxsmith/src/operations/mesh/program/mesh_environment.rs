@@ -13,8 +13,8 @@ use voxcore::VoxObject;
 /// The names a run's program reads but never defines: the effective palette's
 /// properties, one swatch array each, and the computed bindings.
 pub(crate) struct MeshEnvironment {
-    pub(crate) types: TypeEnvironment,
-    pub(crate) values: ValueEnvironment,
+    pub types: TypeEnvironment,
+    pub values: ValueEnvironment,
 }
 
 impl MeshEnvironment {

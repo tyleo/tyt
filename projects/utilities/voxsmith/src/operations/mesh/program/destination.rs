@@ -11,9 +11,9 @@ use vox_value_language::{CheckedProgram, check_expression, parse_expression};
 /// A record element holding an expression the run writes somewhere.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Destination {
-    pub(crate) element: MeshElement,
-    pub(crate) landing: Landing,
-    pub(crate) text: String,
+    pub element: MeshElement,
+    pub landing: Landing,
+    pub text: String,
 }
 
 impl Destination {

@@ -11,9 +11,9 @@ use voxcore::VoxObject;
 /// The program run over one geometry, with every destination checked in
 /// its end scope.
 pub(crate) struct ProgramRun {
-    pub(crate) checked: CheckedProgram,
-    pub(crate) evaluated: EvaluatedProgram,
-    pub(crate) destinations: Vec<CheckedDestination>,
+    pub checked: CheckedProgram,
+    pub evaluated: EvaluatedProgram,
+    pub destinations: Vec<CheckedDestination>,
 }
 
 impl ProgramRun {
