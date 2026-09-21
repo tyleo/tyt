@@ -20,6 +20,9 @@ pub(crate) struct Streams {
 
     /// The stream each material's textures sample a bake domain through.
     stream_ids: IdVec<BMeshMaterial, BTreeMap<ArrayDomain, U32Id<BMeshUvStream>>>,
+
+    /// The stream an image of the object samples a bake domain through.
+    mesh_stream_ids: BTreeMap<ArrayDomain, U32Id<BMeshUvStream>>,
 }
 
 impl Streams {
@@ -295,10 +298,63 @@ impl Streams {
             }
         }
 
+        let mut mesh_stream_ids = BTreeMap::new();
+
+        for extra in &record.mesh_extras {
+            if !matches!(extra.form, ExtraForm::Image) {
+                continue;
+            }
+
+            let element = MeshElement::MeshExtra {
+                name: extra.name.clone(),
+            };
+
+            let bake = bakes[&element];
+
+            let mut writer: Option<(U32Id<BMeshPrimitive>, usize)> = None;
+
+            for (index, list) in primitives.iter().enumerate() {
+                let primitive_id = U32Id::from_u32(table_index(index));
+
+                let Some(at) = list.iter().position(|&domain| domain == bake) else {
+                    continue;
+                };
+
+                match writer {
+                    None => writer = Some((primitive_id, at)),
+
+                    Some((first_primitive_id, position)) if at != position => {
+                        return Err(Error::mesh_record(
+                            element,
+                            format!(
+                                "bakes at `{bake}`, which primitive {} writes as stream {at}, \
+                                 where primitive {} writes it as stream {position}, so the \
+                                 image cannot name one stream",
+                                primitive_id.to_u32(),
+                                first_primitive_id.to_u32()
+                            ),
+                        ));
+                    }
+
+                    Some(_) => {}
+                }
+            }
+
+            let Some((_, position)) = writer else {
+                return Err(Error::mesh_record(
+                    element,
+                    format!("bakes at `{bake}`, and no primitive writes a `{bake}` stream"),
+                ));
+            };
+
+            mesh_stream_ids.insert(bake, U32Id::from_u32(table_index(position)));
+        }
+
         Ok(Streams {
             primitives,
             bakes,
             stream_ids,
+            mesh_stream_ids,
         })
     }
 
@@ -325,6 +381,14 @@ impl Streams {
         *self.stream_ids[material_id.to_usize_id()]
             .get(&bake)
             .expect("a material's textures bake on its listed streams")
+    }
+
+    /// The stream an image of the object baked at `bake` samples through.
+    pub(crate) fn mesh_stream_id(&self, bake: ArrayDomain) -> U32Id<BMeshUvStream> {
+        *self
+            .mesh_stream_ids
+            .get(&bake)
+            .expect("an image of the object samples through a stream a primitive writes")
     }
 }
 
@@ -462,6 +526,47 @@ mod tests {
             material_id: U32Id::from_u32(material),
             property: property.to_owned(),
         }
+    }
+
+    #[test]
+    fn a_mesh_image_samples_through_the_stream_the_primitives_agree_on() {
+        let image = |expression: &str| ExtraWrite {
+            name: "glow".to_owned(),
+            form: ExtraForm::Image,
+            source: ExtraSource::Value(written(expression)),
+        };
+
+        let element = MeshElement::MeshExtra {
+            name: "glow".to_owned(),
+        };
+
+        let mut agreed = record(
+            Vec::new(),
+            vec![
+                primitive(None, Some(vec![ArrayDomain::Swatch, ArrayDomain::Face])),
+                primitive(None, Some(vec![ArrayDomain::Voxel, ArrayDomain::Face])),
+                primitive(None, None),
+            ],
+        );
+        agreed.mesh_extras.push(image("flat"));
+        assert_eq!(
+            derive(&agreed).unwrap().mesh_stream_id(ArrayDomain::Face),
+            U32Id::from_u32(1)
+        );
+
+        let mut split = record(
+            Vec::new(),
+            vec![
+                primitive(None, Some(vec![ArrayDomain::Face])),
+                primitive(None, Some(vec![ArrayDomain::Swatch, ArrayDomain::Face])),
+            ],
+        );
+        split.mesh_extras.push(image("flat"));
+        assert_eq!(failing_element(&split), element);
+
+        let mut unwritten = record(Vec::new(), vec![primitive(None, None)]);
+        unwritten.mesh_extras.push(image("flat"));
+        assert_eq!(failing_element(&unwritten), element);
     }
 
     #[test]

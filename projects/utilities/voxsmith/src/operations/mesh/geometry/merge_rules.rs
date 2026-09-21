@@ -551,6 +551,8 @@ mod tests {
     #[test]
     fn a_voxel_texture_or_stream_caps_merging_at_the_voxel() {
         let mut texture = record("");
+        texture.primitives[U32Id::from_u32(0).to_usize_id()].uv_streams =
+            Some(vec![ArrayDomain::Voxel]);
         texture.mesh_extras.push(ExtraWrite {
             name: "glow".to_owned(),
             form: ExtraForm::Image,

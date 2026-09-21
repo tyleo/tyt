@@ -3,11 +3,12 @@ use crate::{
     dependencies::mesh::EncodePng,
     operations::mesh::{
         Atlases, FacePartition, Images, MergeRules, MeshElement, MeshRecord, Method, ProgramRun,
-        Streams, Swatches, mesh_slices, table_index, write_files, write_materials, write_primitive,
+        Streams, Swatches, WriteContext, mesh_slices, table_index, write_extras, write_files,
+        write_materials, write_primitive,
     },
 };
 use branded_id::U32Id;
-use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive};
+use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive, MeshProperty};
 use std::collections::HashMap;
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
@@ -74,15 +75,26 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
 
     let mut images = Images::default();
 
-    write_materials(
+    let context = WriteContext {
         dependencies,
-        &mut document,
         record,
-        &run,
-        &streams,
-        &atlases,
-        &file_ids,
+        run: &run,
+        streams: &streams,
+        atlases: &atlases,
+        file_ids: &file_ids,
+    };
+
+    write_materials(&context, &mut document, &mut images)?;
+
+    let properties = write_extras(
+        &context,
+        &mut document,
         &mut images,
+        &record.mesh_extras,
+        |name| MeshElement::MeshExtra {
+            name: name.to_owned(),
+        },
+        |bake| streams.mesh_stream_id(bake),
     )?;
 
     let primitives = record
@@ -103,27 +115,12 @@ pub fn mesh<D: EncodePng, T: VoxExt>(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    place(document, object.name(), primitives)
+    place(document, object.name(), primitives, properties)
 }
 
 /// Errors on the first record element the run cannot mesh yet.
 fn check_meshed(record: &MeshRecord) -> Result<()> {
     let not_yet = |element: MeshElement| Error::mesh_record(element, "is not meshed yet");
-
-    for (index, material) in record.materials.iter().enumerate() {
-        if let Some(extra) = material.extras.first() {
-            return Err(not_yet(MeshElement::MaterialExtra {
-                material_id: U32Id::from_u32(table_index(index)),
-                name: extra.name.clone(),
-            }));
-        }
-    }
-
-    if let Some(extra) = record.mesh_extras.first() {
-        return Err(not_yet(MeshElement::MeshExtra {
-            name: extra.name.clone(),
-        }));
-    }
 
     if record.primitives.is_empty() {
         return Err(Error::mesh_record(
@@ -146,18 +143,21 @@ fn check_meshed(record: &MeshRecord) -> Result<()> {
     Ok(())
 }
 
-/// `document` with `primitives` in one object named `name`, placed by one
-/// root node of the same name.
+/// `document` with `primitives` and `properties` in one object named
+/// `name`, placed by one root node of the same name.
 fn place(
     mut document: MeshMain<()>,
     name: &str,
     primitives: Vec<MeshPrimitive>,
+    properties: Vec<MeshProperty>,
 ) -> Result<MeshMain<()>> {
     let mut object = MeshObject::new(name.to_owned());
 
     for primitive in primitives {
         object.retain_primitive(primitive);
     }
+
+    object.set_properties(properties);
 
     let object_id = document.retain_object(object)?;
 
@@ -185,7 +185,8 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use meshdoc::{
-        BMeshMaterial, MeshAlphaMode, MeshImageSource, MeshMagFilter, MeshMain, MeshWrap,
+        BMeshMaterial, MeshAlphaMode, MeshImageSource, MeshMagFilter, MeshMain, MeshPropertyValue,
+        MeshWrap,
     };
     use png::{ColorType, Decoder, Info};
     use std::io::Cursor;
@@ -316,6 +317,33 @@ mod tests {
             slots,
             ..MaterialRecord::default()
         }])
+    }
+
+    /// An extras entry `name` of `form` from `source`.
+    fn extra(name: &str, form: ExtraForm, source: ExtraSource) -> ExtraWrite {
+        ExtraWrite {
+            name: name.to_owned(),
+            form,
+            source,
+        }
+    }
+
+    /// An extras entry `name` of `form` from the value `expression` under
+    /// `transfer`.
+    fn value_extra(
+        name: &str,
+        form: ExtraForm,
+        expression: &str,
+        transfer: Transfer,
+    ) -> ExtraWrite {
+        extra(
+            name,
+            form,
+            ExtraSource::Value(WrittenValue {
+                expression: expression.to_owned(),
+                transfer,
+            }),
+        )
     }
 
     /// A write of `expression` into `file`, a png or the JSON entry `name`.
@@ -583,36 +611,6 @@ mod tests {
             expression: "albedo".to_owned(),
             transfer: Transfer::Linear,
         };
-
-        let mut with_material_extra = record(Method::Greedy);
-        with_material_extra.materials = IdVec::from_vec(vec![MaterialRecord {
-            extras: vec![ExtraWrite {
-                name: "albedo".to_owned(),
-                form: ExtraForm::Json,
-                source: ExtraSource::Value(written.clone()),
-            }],
-            ..MaterialRecord::default()
-        }]);
-        assert_eq!(
-            failing_element(&with_material_extra),
-            MeshElement::MaterialExtra {
-                material_id: U32Id::from_u32(0),
-                name: "albedo".to_owned()
-            }
-        );
-
-        let mut with_extra = record(Method::Greedy);
-        with_extra.mesh_extras.push(ExtraWrite {
-            name: "albedo".to_owned(),
-            form: ExtraForm::Json,
-            source: ExtraSource::Value(written.clone()),
-        });
-        assert_eq!(
-            failing_element(&with_extra),
-            MeshElement::MeshExtra {
-                name: "albedo".to_owned()
-            }
-        );
 
         let primitive_id = U32Id::from_u32(0);
 
@@ -1057,6 +1055,182 @@ mod tests {
                 vec![]
             ),
             slot_element("occlusionTexture")
+        );
+    }
+
+    #[test]
+    fn an_extra_lands_typed_and_an_image_extra_samples_through_its_stream() {
+        let (main, object) = painted();
+        let material_id = U32Id::from_u32(0);
+        let mut record = record(Method::Greedy);
+        record.files = vec![
+            file_write("bar-color.png", None, "baseColor", Transfer::Srgb),
+            file_write("bar.json", Some("metal"), "metallic", Transfer::Linear),
+        ];
+        record.materials = materials(vec![value_slot("baseColorTexture", "baseColor")]);
+        record.materials[material_id.to_usize_id()].extras = vec![
+            value_extra("metal", ExtraForm::Json, "metallic", Transfer::Linear),
+            value_extra("colors", ExtraForm::Json, "baseColor", Transfer::Linear),
+            value_extra("shiny", ExtraForm::Json, "metallic > 0", Transfer::Linear),
+            value_extra("count", ExtraForm::Json, "2u32", Transfer::Linear),
+            value_extra("tag", ExtraForm::Json, "\"steel\"", Transfer::Linear),
+            value_extra("albedo", ExtraForm::Image, "baseColor", Transfer::Srgb),
+        ];
+        record.primitives[U32Id::from_u32(0).to_usize_id()].material_id = Some(material_id);
+        record.mesh_extras = vec![
+            value_extra("peak", ExtraForm::Json, "max(metallic)", Transfer::Linear),
+            value_extra("metalMap", ExtraForm::Image, "metallic", Transfer::Linear),
+            extra(
+                "rows",
+                ExtraForm::Json,
+                ExtraSource::File("bar.json".to_owned()),
+            ),
+            extra(
+                "colorMap",
+                ExtraForm::Image,
+                ExtraSource::File("bar-color.png".to_owned()),
+            ),
+        ];
+
+        let document = mesh(&DependenciesImpl, &main, &object, &record).unwrap();
+        document.validate().unwrap();
+
+        let material = document.material(material_id).unwrap();
+        let property = |name: &str| material.property(name).unwrap().value.clone();
+        assert_eq!(property("metal"), MeshPropertyValue::Floats(vec![1.0, 0.0]));
+        assert_eq!(
+            property("colors"),
+            MeshPropertyValue::FloatRows(vec![vec![1.0, 0.0, 0.0, 1.0], vec![0.0, 0.0, 1.0, 1.0]])
+        );
+        assert_eq!(
+            property("shiny"),
+            MeshPropertyValue::Bools(vec![true, false])
+        );
+        assert_eq!(property("count"), MeshPropertyValue::Int(2));
+        assert_eq!(property("tag"), MeshPropertyValue::Text("steel".to_owned()));
+
+        // The image extra shares the slot's texture. The other two images
+        // are the mesh's metallic map and the referenced file.
+        assert_eq!(
+            property("albedo"),
+            MeshPropertyValue::Texture(material.base_color_texture.unwrap())
+        );
+        assert_eq!(document.image_count(), 3);
+
+        let (_, object) = document.iter_objects().next().unwrap();
+        let property = |name: &str| object.property(name).unwrap().value.clone();
+        assert_eq!(property("peak"), MeshPropertyValue::Float(1.0));
+
+        let (file_id, _) = document.file_by_name("bar.json").unwrap();
+        assert_eq!(property("rows"), MeshPropertyValue::File(file_id));
+
+        let MeshPropertyValue::Texture(metal_map) = property("metalMap") else {
+            panic!("an image extra lands as a texture");
+        };
+        assert_eq!(metal_map.uv_stream_id, U32Id::from_u32(0));
+        let texture = document.texture(metal_map.texture_id).unwrap();
+        let (samples, info) = decoded(document.image_bytes(texture.image_id).unwrap());
+        assert!(info.srgb.is_none());
+        assert_eq!(&samples[..2], [255, 0]);
+
+        let MeshPropertyValue::Texture(color_map) = property("colorMap") else {
+            panic!("an image extra lands as a texture");
+        };
+        let (png_id, _) = document.file_by_name("bar-color.png").unwrap();
+        let texture = document.texture(color_map.texture_id).unwrap();
+        assert_eq!(
+            document.image(texture.image_id).unwrap().source,
+            MeshImageSource::File(png_id)
+        );
+    }
+
+    #[test]
+    fn an_extra_written_wrong_errors_and_names_the_extra() {
+        let mesh_element = |name: &str| MeshElement::MeshExtra {
+            name: name.to_owned(),
+        };
+
+        let failing = |extras: Vec<ExtraWrite>, files: Vec<FileWrite>| {
+            let mut record = record(Method::Greedy);
+            record.mesh_extras = extras;
+            record.files = files;
+            failing_painted_element(&record)
+        };
+
+        assert_eq!(
+            failing(
+                vec![value_extra(
+                    "pairs",
+                    ExtraForm::Json,
+                    "u8(baseColor * 255)",
+                    Transfer::Linear
+                )],
+                vec![]
+            ),
+            mesh_element("pairs")
+        );
+        assert_eq!(
+            failing(
+                vec![value_extra(
+                    "count",
+                    ExtraForm::Json,
+                    "2u32",
+                    Transfer::Srgb
+                )],
+                vec![]
+            ),
+            mesh_element("count")
+        );
+        assert_eq!(
+            failing(
+                vec![extra(
+                    "rows",
+                    ExtraForm::Json,
+                    ExtraSource::File("bar.png".to_owned())
+                )],
+                vec![file_write("bar.png", None, "metallic", Transfer::Linear)]
+            ),
+            mesh_element("rows")
+        );
+        assert_eq!(
+            failing(
+                vec![extra(
+                    "rows",
+                    ExtraForm::Json,
+                    ExtraSource::File("missing.json".to_owned())
+                )],
+                vec![]
+            ),
+            mesh_element("rows")
+        );
+        assert_eq!(
+            failing(
+                vec![
+                    value_extra("peak", ExtraForm::Json, "1.0", Transfer::Linear),
+                    value_extra("peak", ExtraForm::Json, "2.0", Transfer::Linear),
+                ],
+                vec![]
+            ),
+            mesh_element("peak")
+        );
+
+        // The slot embeds `metallic` linear where the extra asks for it sRGB.
+        let material_id = U32Id::from_u32(0);
+        let mut twice = record(Method::Greedy);
+        twice.materials = materials(vec![value_slot("occlusionTexture", "metallic")]);
+        twice.materials[material_id.to_usize_id()].extras = vec![value_extra(
+            "metalMap",
+            ExtraForm::Image,
+            "metallic",
+            Transfer::Srgb,
+        )];
+        twice.primitives[U32Id::from_u32(0).to_usize_id()].material_id = Some(material_id);
+        assert_eq!(
+            failing_painted_element(&twice),
+            MeshElement::MaterialExtra {
+                material_id,
+                name: "metalMap".to_owned()
+            }
         );
     }
 }

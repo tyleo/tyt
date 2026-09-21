@@ -2,35 +2,37 @@ use crate::{
     Error, Result,
     dependencies::mesh::EncodePng,
     operations::mesh::{
-        Atlases, FileForm, Images, MeshElement, MeshRecord, ProgramRun, SlotProperty, SlotSource,
-        Streams, table_index,
+        FileForm, Images, MeshElement, SlotProperty, SlotSource, WriteContext, table_index,
+        write_extras,
     },
 };
 use branded_id::U32Id;
 use meshdoc::{
-    BMeshFile, MeshAlphaMode, MeshMain, MeshMaterial, MeshTextureRef,
+    MeshAlphaMode, MeshMain, MeshMaterial, MeshTextureRef,
     material::{
         ALPHA_CUTOFF, COLOR_RANGE, EMISSIVE_STRENGTH, IOR, METALLIC, NORMAL_SCALE,
         OCCLUSION_STRENGTH, ROUGHNESS, TRANSMISSION, scalar_range,
     },
 };
-use std::collections::HashMap;
 use ty_math::{TyLinSrgbF64, TyLinSrgbaF64};
 use vox_value_language::{Components, Dimension, Domain, Value, eval_expression};
 
-/// Retains `record`'s materials into `document` in table order, each slot
-/// filling its modeled field.
-#[expect(clippy::too_many_arguments, reason = "a slot reads the whole run")]
+/// Retains the record's materials into `document` in table order, each slot
+/// filling its modeled field and each extra a named property.
 pub(crate) fn write_materials<D: EncodePng>(
-    dependencies: &D,
+    context: &WriteContext<'_, D>,
     document: &mut MeshMain<()>,
-    record: &MeshRecord,
-    run: &ProgramRun,
-    streams: &Streams,
-    atlases: &Atlases<'_>,
-    file_ids: &HashMap<String, U32Id<BMeshFile>>,
     images: &mut Images,
 ) -> Result<()> {
+    let WriteContext {
+        dependencies,
+        record,
+        run,
+        streams,
+        atlases,
+        file_ids,
+    } = *context;
+
     for (index, material_record) in record.materials.iter().enumerate() {
         let material_id = U32Id::from_u32(table_index(index));
 
@@ -113,6 +115,18 @@ pub(crate) fn write_materials<D: EncodePng>(
                 }
             }
         }
+
+        material.properties = write_extras(
+            context,
+            document,
+            images,
+            &material_record.extras,
+            |name| MeshElement::MaterialExtra {
+                material_id,
+                name: name.to_owned(),
+            },
+            |bake| streams.stream_id(material_id, bake),
+        )?;
 
         let retained_id = document.retain_material(material)?;
 
