@@ -6,9 +6,10 @@ use branded_id::U32Id;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use ty_math::TyVector3F64;
 use voxcore::{
     BVoxHierarchyNode, BVoxObject, Error as VoxError, Result as VoxResult, VoxExt, VoxGcRemap,
-    VoxState,
+    VoxObject, VoxState,
 };
 
 /// The `goxl` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
@@ -76,6 +77,14 @@ pub struct GoxlExt {
     pub unknown_chunks: Vec<GoxlExtUnknownChunk>,
 }
 
+/// Where `object`'s box lands on Goxel's Z-up axes under a node at
+/// `node_position`, as the writer turns the object.
+fn stamp_position(node_position: TyVector3F64, object: &VoxObject) -> [i32; 3] {
+    let corner = node_position.round().as_ivec3() + object.origin();
+    let depth = object.bounds().z as i32;
+    [corner.x, -(corner.z + depth), corner.y]
+}
+
 /// A node another entry clones refuses its release, because the clone's
 /// `base_id` would dangle.
 impl VoxExt for GoxlExt {
@@ -87,13 +96,15 @@ impl VoxExt for GoxlExt {
         let node = state
             .hierarchy_node(node_id)
             .expect("a retained node is live");
-        let position = node.transform.position.round().as_ivec3().to_array();
         let placements = node
             .child_object_ids
             .iter()
             .map(|&object_id| GoxlExtPlacement {
                 object_id,
-                position,
+                position: stamp_position(
+                    node.transform.position,
+                    state.object(object_id).expect("a placed object is live"),
+                ),
             })
             .collect();
         let layer = synthesized_layer(next_layer_id(&self.layers), placements);

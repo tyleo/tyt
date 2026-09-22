@@ -27,25 +27,22 @@ use meshdoc::{
 };
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashSet, btree_map::Entry};
-use ty_math::{
-    TyLinSrgbF64, TyLinSrgbaF64, TyVector2F64, TyVector3Ext, TyVector3F64, TyVector4F64,
-};
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TyVector2F64, TyVector3F64, TyVector4F64};
 
 /// Loads a glTF [`GltfFile`] into a [`GltfMeshMain`], the inverse of
 /// [`to_gltf_file`](crate::to_gltf_file). The images become images, the
 /// textures textures, the materials materials, the meshes objects of one
 /// primitive per glTF primitive, and the nodes hierarchy nodes, with every
-/// scene's nodes and every parentless node as the roots. The loose files
-/// the images and the `extras.vxl.values` entries reference become the
-/// document's files, in name order, because glTF has no file listing and
-/// the writer lands them in that order. An image at a relative URI becomes
-/// an image over its file. A material's or mesh's `extras.vxl.values`
-/// become its properties and a primitive's `extras.vxl.name` its name.
-/// Properties and further vertex attributes load in name order because
-/// glTF keys both by name. Positions, normals, tangents, and node
-/// transforms rotate from glTF's Y-up to meshdoc's Z-up. The rest of the
-/// file goes to the ext, the skinning streams and morph targets in glTF's
-/// axes. `dependencies` decodes the data URIs.
+/// scene's nodes and every parentless node as the roots. The loose files the
+/// images and the `extras.vxl.values` entries reference become the document's
+/// files, in name order, because glTF has no file listing and the writer lands
+/// them in that order. An image at a relative URI becomes an image over its
+/// file. A material's or mesh's `extras.vxl.values` become its properties and a
+/// primitive's `extras.vxl.name` its name. Properties and further vertex
+/// attributes load in name order because glTF keys both by name. Positions,
+/// normals, tangents, and node transforms copy straight because meshdoc shares
+/// glTF's frame. The rest of the file goes to the ext. `dependencies` decodes
+/// the data URIs.
 ///
 /// Errors on:
 ///
@@ -531,7 +528,7 @@ where
     let positions: Vec<TyVector3F64> = reader
         .read_positions()
         .ok_or_else(|| Error::invalid("a primitive has no positions"))?
-        .map(|position| TyVector3F64::from_array(position.map(f64::from)).yup_to_zup())
+        .map(|position| TyVector3F64::from_array(position.map(f64::from)))
         .collect();
 
     let vertex_count = positions.len();
@@ -548,7 +545,7 @@ where
     if let Some(normals) = reader.read_normals() {
         mesh_primitive.set_normals(Some(
             normals
-                .map(|normal| TyVector3F64::from_array(normal.map(f64::from)).yup_to_zup())
+                .map(|normal| TyVector3F64::from_array(normal.map(f64::from)))
                 .collect(),
         ))?;
     }
@@ -556,15 +553,7 @@ where
     if let Some(tangents) = reader.read_tangents() {
         mesh_primitive.set_tangents(Some(
             tangents
-                .map(|tangent| {
-                    let xyz = TyVector3F64::new(
-                        f64::from(tangent[0]),
-                        f64::from(tangent[1]),
-                        f64::from(tangent[2]),
-                    )
-                    .yup_to_zup();
-                    TyVector4F64::new(xyz.x, xyz.y, xyz.z, f64::from(tangent[3]))
-                })
+                .map(|tangent| TyVector4F64::from_array(tangent.map(f64::from)))
                 .collect(),
         ))?;
     }

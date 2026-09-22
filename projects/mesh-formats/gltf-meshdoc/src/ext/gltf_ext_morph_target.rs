@@ -1,8 +1,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A morph target preserved in the `gltf` ext: its displacement streams in
-/// glTF's Y-up axes, one entry per vertex where present.
+/// A morph target preserved in the `gltf` ext: its displacement streams,
+/// one entry per vertex where present.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct GltfExtMorphTarget {

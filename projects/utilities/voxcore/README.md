@@ -54,8 +54,9 @@ let red_id = main.retain_material(palette_id, vec![red_value_id])?;
 
 ## Objects
 
-A `VoxObject` is a dense grid with a build volume and an origin. Each layer
-references a palette. Each live voxel samples one material per layer. Layers
+A `VoxObject` is a dense grid with a build volume and an origin, on glTF's
+frame: Y-up, right-handed, with +Z toward the viewer. Each layer references a
+palette. Each live voxel samples one material per layer. Layers
 override back to front: a property reads through the last layer whose palette
 supplies it. Every cell has a voxel id, which `voxel_id` looks up from a
 position.

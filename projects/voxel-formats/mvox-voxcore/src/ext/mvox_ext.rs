@@ -348,7 +348,8 @@ mod tests {
 
         assert_eq!(*layer, -1);
 
-        assert_eq!(frames[0].translation, [1, -3, 0]);
+        // The translation turns to MagicaVoxel's Z-up axes before rounding.
+        assert_eq!(frames[0].translation, [1, 0, -3]);
 
         assert_eq!(ext.scene_nodes[&transform_id].id, 1);
 

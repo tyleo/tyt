@@ -12,7 +12,8 @@ use voxcore::{
 /// [`to_goxl_file`](crate::to_goxl_file). The shared `BL16` voxel blocks
 /// become objects sharing one `baseColor` palette, and the `LAYR` layers
 /// become root hierarchy nodes with no transform, each placing the blocks it
-/// stamps. The rest of the file, the placements included, goes to the ext.
+/// stamps. Goxel is Z-up, so every block turns onto voxcore's Y-up axes. The
+/// rest of the file, the placements included, goes to the ext.
 ///
 /// Errors on a layer placement that references a block outside the block list,
 /// or on a cross-reference the checked insertions reject.
@@ -24,8 +25,9 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxlVoxMain> {
 
     for block in &file.blocks {
         // A Goxel block is a fixed 16-cube; it becomes the object's build
-        // volume directly, with its live voxels wherever they sit inside it.
-        main.retain_object(build_object(block, palette_id, &material_ids))?;
+        // volume, turned to Y-up, with its live voxels wherever they sit
+        // inside it.
+        main.retain_object(build_object(block, palette_id, &material_ids).zup_to_yup())?;
     }
 
     // Every layer node is a root, in stored order.
@@ -163,7 +165,42 @@ fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHier
 #[cfg(test)]
 mod tests {
     use crate::from_goxl_file;
-    use goxl::{GoxlFile, GoxlLayer, GoxlLayerBlock};
+    use goxl::{GoxlBlock, GoxlFile, GoxlLayer, GoxlLayerBlock, GoxlVoxel};
+    use ty_math::{TyVector3I32, TyVector3U32};
+
+    /// A block turns onto Y-up axes: Goxel's `+y` becomes `-z`, and the
+    /// block's box re-seats below its node.
+    #[test]
+    fn turns_blocks_onto_y_up() {
+        let size = GoxlBlock::SIZE as usize;
+        let mut voxels = vec![GoxlVoxel::default(); size * size * size];
+        // The cell at `(0, 1, 2)` in storage order.
+        voxels[size + 2 * size * size] = GoxlVoxel {
+            r: 1,
+            g: 2,
+            b: 3,
+            a: 255,
+        };
+        let file = GoxlFile {
+            blocks: vec![GoxlBlock { voxels }],
+            ..Default::default()
+        };
+
+        let main = from_goxl_file(&file).unwrap();
+
+        let (_, object) = main.iter_objects().next().unwrap();
+
+        assert_eq!(object.bounds(), TyVector3U32::splat(GoxlBlock::SIZE));
+
+        assert_eq!(object.origin(), TyVector3I32::new(0, 0, -16));
+
+        let voxel_id = object.iter_live().next().unwrap();
+
+        assert_eq!(
+            object.voxel_position(voxel_id),
+            Some(TyVector3U32::new(0, 2, 14))
+        );
+    }
 
     #[test]
     fn rejects_a_dangling_layer_block_placement() {

@@ -67,7 +67,7 @@ The runtime scene lives under `main.runtimeState`: value pools, palettes, object
 
 ## Coordinate System
 
-The coordinate system is Z-up, right-handed. Voxel coordinates are unsigned integers and one unit = one voxel. A voxel at integer coordinate `(x, y, z)` occupies the unit cube whose minimum corner is that coordinate, spanning `[x, x + 1)` on each axis. An object carries no transform of its own beyond its grid `origin`; the hierarchy node that references it supplies rotation, scale, and placement. Seating the grid with `origin` near `-bounds / 2` makes the node's position the object's pivot, so rotating or scaling the node turns the object about its center rather than its min corner.
+The axes are glTF's: Y is up, the frame is right-handed, and +Z points toward the viewer. Voxel coordinates are unsigned integers, one unit per voxel. A voxel at `(x, y, z)` fills the unit cube with that minimum corner, `[x, x + 1)` on each axis. An object has no transform beyond its grid `origin`. Rotation, scale, and placement come from the hierarchy node that references it. An `origin` near `-bounds / 2` puts the node's position at the object's center, so the node rotates and scales the object about its center.
 
 ## Objects
 

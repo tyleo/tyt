@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// An animation preserved in the `gltf` ext, in stored order, its channels
-/// targeting nodes by id and its keyframes in glTF's Y-up axes.
+/// targeting nodes by id.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct GltfExtAnimation {

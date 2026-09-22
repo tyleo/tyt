@@ -366,11 +366,10 @@ mod tests {
         main
     }
 
-    /// An axis-aligned box spanning `[0, sx]`, `[0, sy]`, `[0, sz]` on the
-    /// Z-up axes, indexed triangles. When `material` is
-    /// `Some((base_color, metallic, roughness))` the primitive draws that
-    /// material; otherwise it draws the default. A `node_name` names the
-    /// placing node.
+    /// An axis-aligned box spanning `[0, sx]`, `[0, sy]`, `[0, sz]`, indexed
+    /// triangles. When `material` is `Some((base_color, metallic, roughness))`
+    /// the primitive draws that material; otherwise it draws the default. A
+    /// `node_name` names the placing node.
     fn box_main(
         sx: f64,
         sy: f64,
@@ -507,7 +506,7 @@ mod tests {
         }
     }
 
-    /// A unit quad in the Z-up XZ plane at `y = 0` carrying two UV streams,
+    /// A unit quad in the XZ plane at `y = 0` carrying two UV streams,
     /// `uv0` and `uv1`, and the given PBR maps. Each map is its own image and
     /// texture, so a map samples the stream it declares; a voxel spanning
     /// the quad averages the texels under it.

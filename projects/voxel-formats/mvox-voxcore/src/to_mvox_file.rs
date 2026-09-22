@@ -23,12 +23,12 @@ const PALETTE_COLORS: u32 = 256;
 /// before the two count as disagreeing.
 const TRANSFORM_TOLERANCE: f64 = 1e-6;
 
-/// Writes a [`MVoxVoxMain`] to a decoded MagicaVoxel [`MVoxFile`], the
-/// inverse of [`from_mvox_file`](crate::from_mvox_file). Each object emits one
-/// model. Each hierarchy node emits one scene node of the kind its ext entry
-/// says, with its name and child links from the node and the rest from the
-/// entry, so a loaded file rebuilds exactly and a state
-/// [`to_mvox_vox_main`](crate::to_mvox_vox_main) gave its ext writes as a
+/// Writes a [`MVoxVoxMain`] to a decoded MagicaVoxel [`MVoxFile`], the inverse
+/// of [`from_mvox_file`](crate::from_mvox_file). Each object emits one model,
+/// turned back to MagicaVoxel's Z-up axes. Each hierarchy node emits one scene
+/// node of the kind its ext entry says, with its name and child links from the
+/// node and the rest from the entry, so a loaded file rebuilds exactly and a
+/// state [`to_mvox_vox_main`](crate::to_mvox_vox_main) gave its ext writes as a
 /// file synthesized from the scene. A model lists its voxels in ascending
 /// raster order, which need not match their original stored order. `MATL`
 /// chunks write in material order.
@@ -55,10 +55,10 @@ pub fn to_mvox_file(main: &MVoxVoxMain) -> Result<MVoxFile> {
 
     let materials = build_materials(state, palette_id, ext)?;
     // Each object is the author's build volume, so the written model keeps
-    // its dimensions and voxel positions directly.
+    // its dimensions and voxel positions once turned back to Z-up.
     let models = state
         .iter_objects()
-        .map(|(_, object)| model_from_object(object))
+        .map(|(_, object)| model_from_object(&object.yup_to_zup()))
         .collect::<Result<Vec<_>>>()?;
     let scene_nodes = build_scene_nodes(state, ext)?;
 

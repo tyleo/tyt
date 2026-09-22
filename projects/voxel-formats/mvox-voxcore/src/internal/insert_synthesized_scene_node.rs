@@ -2,16 +2,17 @@ use crate::{MVoxExtFrame, MVoxExtNode, MVoxExtNodeBody, MVoxExtShapeModel, Scene
 use branded_id::U32Id;
 use mvox::MVoxRotation;
 use std::collections::BTreeMap;
+use ty_math::TyVector3Ext;
 use voxcore::{BVoxHierarchyNode, VoxHierarchyNode};
 
 /// Inserts the entry a synthesized scene node of `kind` takes for hierarchy
 /// node `node_id`, which is `node`, into `entries`. The scene-node id is one
 /// past the largest in `entries`, counting up in insertion order. A transform
-/// takes one identity-rotation frame at the node's translation rounded to
-/// whole voxels, which drops any rotation or scale on the node. A shape draws
-/// each placed object on its first frame. The synthesizer and the retain hook
-/// both build entries here, which keeps a node retained after the load equal
-/// to what synthesis would give it.
+/// takes one identity-rotation frame at the node's translation turned to
+/// MagicaVoxel's Z-up axes and rounded to whole voxels, which drops any
+/// rotation or scale on the node. A shape draws each placed object on its first
+/// frame. The synthesizer and the retain hook both build entries here, which
+/// keeps a node retained after the load equal to what synthesis would give it.
 pub fn insert_synthesized_scene_node(
     entries: &mut BTreeMap<U32Id<BVoxHierarchyNode>, MVoxExtNode>,
     node_id: U32Id<BVoxHierarchyNode>,
@@ -28,7 +29,13 @@ pub fn insert_synthesized_scene_node(
             layer: -1,
             frames: vec![MVoxExtFrame {
                 rotation: MVoxRotation::IDENTITY.0,
-                translation: node.transform.position.round().as_ivec3().to_array(),
+                translation: node
+                    .transform
+                    .position
+                    .yup_to_zup()
+                    .round()
+                    .as_ivec3()
+                    .to_array(),
                 frame_index: None,
                 extra: Vec::new(),
             }],

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// A skin preserved in the `gltf` ext, in stored order, its joints and
-/// skeleton by node id and its inverse bind matrices in glTF's Y-up axes.
+/// skeleton by node id.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct GltfExtSkin {

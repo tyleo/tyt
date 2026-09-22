@@ -13,6 +13,10 @@ use ty_math::{TyVector3I32, TyVector3U32};
 /// override back to front: each property takes its value from the last layer
 /// that supplies it.
 ///
+/// The grid sits on glTF's frame: Y-up, right-handed, with +Z toward the
+/// viewer. A live voxel at `(x, y, z)` fills the unit cube whose min corner
+/// is that position, in voxel units.
+///
 /// Every grid cell has a voxel id equal to its raster index `x*Y*Z + y*Z + z`,
 /// so [`voxel_id`](Self::voxel_id) and [`voxel_position`](Self::voxel_position)
 /// interconvert. [`is_live`](Self::is_live) says which cells are filled.
@@ -406,6 +410,76 @@ impl VoxObject {
             raster % self.bounds.z,
         ))
     }
+
+    /// This object turned from Z-up to Y-up axes, `+z` to `+y` and `+y` to
+    /// `-z`. The origin moves with the box, so the object keeps its place
+    /// under its node.
+    pub fn zup_to_yup(&self) -> Self {
+        let TyVector3U32 { x, y, z } = self.bounds;
+        self.permuted(
+            TyVector3U32::new(x, z, y),
+            TyVector3I32::new(self.origin.x, self.origin.z, -(self.origin.y + y as i32)),
+            |cell| TyVector3U32::new(cell.x, cell.z, y - 1 - cell.y),
+        )
+    }
+
+    /// This object turned from Y-up to Z-up axes, the inverse of
+    /// [`zup_to_yup`](Self::zup_to_yup).
+    pub fn yup_to_zup(&self) -> Self {
+        let TyVector3U32 { x, y, z } = self.bounds;
+        self.permuted(
+            TyVector3U32::new(x, z, y),
+            TyVector3I32::new(self.origin.x, -(self.origin.z + z as i32), self.origin.y),
+            |cell| TyVector3U32::new(cell.x, z - 1 - cell.z, cell.y),
+        )
+    }
+
+    /// A copy on the grid `bounds` at `origin`, each cell moved where `cell`
+    /// sends it. `cell` maps this grid onto the new one, one to one.
+    fn permuted(
+        &self,
+        bounds: TyVector3U32,
+        origin: TyVector3I32,
+        cell: impl Fn(TyVector3U32) -> TyVector3U32,
+    ) -> Self {
+        let mut copy = Self::new(self.name.clone(), bounds).expect("the grid keeps its cell count");
+        copy.origin = origin;
+        copy.layer_ids = self.layer_ids.clone();
+        copy.layer_palette_ids = self.layer_palette_ids.clone();
+
+        // Per cell of the new grid, the cell of this grid that moves there.
+        let volume = self.liveness.len();
+        let voxel_ids = (0..volume).map(|raster| U32Id::<BVoxVoxel>::from_u32(raster as u32));
+        let mut source: IdVec<BVoxVoxel, U32Id<BVoxVoxel>> =
+            IdVec::from_vec(vec![U32Id::from_u32(0); volume]);
+        for voxel_id in voxel_ids.clone() {
+            let position = self
+                .voxel_position(voxel_id)
+                .expect("a raster index is within the grid");
+            let moved_id = copy
+                .voxel_id(cell(position))
+                .expect("the cell map lands inside the new grid");
+            source[moved_id.to_usize_id()] = voxel_id;
+        }
+
+        for moved_id in voxel_ids.clone() {
+            if self.liveness.is_live(source[moved_id.to_usize_id()]) {
+                copy.liveness.set_live(moved_id, true);
+            }
+        }
+
+        for layer_id in self.layer_ids.iter() {
+            // Safety: retained layer ids have a sample column.
+            let column = unsafe { self.samples.get(layer_id) };
+            let moved: Vec<_> = voxel_ids
+                .clone()
+                .map(|moved_id| column[source[moved_id.to_usize_id()].to_usize_id()])
+                .collect();
+            copy.samples.retain(layer_id, IdVec::from_vec(moved));
+        }
+
+        copy
+    }
 }
 
 impl Drop for VoxObject {
@@ -422,10 +496,83 @@ impl Drop for VoxObject {
 mod tests {
     use crate::{BVoxMaterial, BVoxPalette, Error, VoxObject};
     use branded_id::U32Id;
-    use ty_math::TyVector3U32;
+    use ty_math::{TyVector3I32, TyVector3U32};
 
     fn material_id(index: u32) -> U32Id<BVoxMaterial> {
         U32Id::from_u32(index)
+    }
+
+    /// A `1 x 2 x 3` grid seated at `(5, 6, 7)` with two layers, live at
+    /// `(0, 1, 0)` sampling materials 3 and 4 and at `(0, 0, 2)` sampling 5
+    /// and 6.
+    fn seated_object() -> VoxObject {
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 2, 3)).unwrap();
+        object.set_origin(TyVector3I32::new(5, 6, 7));
+        object.retain_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
+        object.retain_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(1));
+        let first_id = object.voxel_id(TyVector3U32::new(0, 1, 0)).unwrap();
+        object
+            .retain_voxel(first_id, &[material_id(3), material_id(4)])
+            .unwrap();
+        let second_id = object.voxel_id(TyVector3U32::new(0, 0, 2)).unwrap();
+        object
+            .retain_voxel(second_id, &[material_id(5), material_id(6)])
+            .unwrap();
+        object
+    }
+
+    /// The `(position, samples)` of every live voxel, in raster order.
+    fn live_cells(object: &VoxObject) -> Vec<(TyVector3U32, Vec<U32Id<BVoxMaterial>>)> {
+        let layer_ids: Vec<_> = object.iter_layers().map(|(layer_id, _)| layer_id).collect();
+        object
+            .iter_live()
+            .map(|voxel_id| {
+                let samples = layer_ids
+                    .iter()
+                    .map(|&layer_id| object.voxel_material(voxel_id, layer_id).unwrap())
+                    .collect();
+                (object.voxel_position(voxel_id).unwrap(), samples)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn zup_to_yup_turns_the_grid_about_x() {
+        let object = seated_object();
+        let turned = object.zup_to_yup();
+
+        assert_eq!(turned.name(), "o");
+        assert_eq!(turned.bounds(), TyVector3U32::new(1, 3, 2));
+        // The box `[6, 8)` on the old `y` lands on `[-8, -6)` on the new `z`.
+        assert_eq!(turned.origin(), TyVector3I32::new(5, 7, -8));
+        let layers: Vec<_> = turned.iter_layers().collect();
+        assert_eq!(layers, object.iter_layers().collect::<Vec<_>>());
+        assert_eq!(
+            live_cells(&turned),
+            vec![
+                (
+                    TyVector3U32::new(0, 0, 0),
+                    vec![material_id(3), material_id(4)]
+                ),
+                (
+                    TyVector3U32::new(0, 2, 1),
+                    vec![material_id(5), material_id(6)]
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_axis_turns_are_inverses() {
+        let object = seated_object();
+        for restored in [
+            object.zup_to_yup().yup_to_zup(),
+            object.yup_to_zup().zup_to_yup(),
+        ] {
+            assert_eq!(restored.bounds(), object.bounds());
+            assert_eq!(restored.origin(), object.origin());
+            assert_eq!(live_cells(&restored), live_cells(&object));
+        }
     }
 
     #[test]

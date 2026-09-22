@@ -32,7 +32,6 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::Path,
 };
-use ty_math::{TyVector3Ext, TyVector3F64};
 
 /// The extension the writer declares for a material's emissive strength.
 const EMISSIVE_STRENGTH_EXTENSION: &str = "KHR_materials_emissive_strength";
@@ -44,16 +43,15 @@ const IOR_EXTENSION: &str = "KHR_materials_ior";
 const TRANSMISSION_EXTENSION: &str = "KHR_materials_transmission";
 
 /// Writes a [`GltfMeshMain`] to a glTF [`GltfFile`], the inverse of
-/// [`from_gltf_file`](crate::from_gltf_file). A loaded file writes back
-/// exactly through its ext. A state
-/// [`to_gltf_mesh_main`](crate::to_gltf_mesh_main) gave its ext writes as a
-/// file synthesized from the document. Every entity writes at its listing
-/// index. The geometry packs into one buffer, one view per stream. Positions,
-/// normals, tangents, and node transforms rotate from meshdoc's Z-up to
-/// glTF's Y-up. Each root in no scene joins the default scene, so a node
-/// retained after the load is reachable. The document's files land as the
-/// loose files under their names. A material's and an object's properties
-/// land in its `extras.vxl.values`, and a primitive's name in its
+/// [`from_gltf_file`](crate::from_gltf_file). A loaded file writes back exactly
+/// through its ext. A state [`to_gltf_mesh_main`](crate::to_gltf_mesh_main)
+/// gave its ext writes as a file synthesized from the document. Every entity
+/// writes at its listing index. The geometry packs into one buffer, one view
+/// per stream. Positions, normals, tangents, and node transforms copy straight
+/// because meshdoc shares glTF's frame. Each root in no scene joins the default
+/// scene, so a node retained after the load is reachable. The document's files
+/// land as the loose files under their names. A material's and an object's
+/// properties land in its `extras.vxl.values`, and a primitive's name in its
 /// `extras.vxl.name`. `options` picks where the images go. `dependencies`
 /// encodes the data URIs of the images that go there.
 ///
@@ -358,10 +356,11 @@ pub fn to_gltf_file<D: EncodeBase64>(
             );
 
             if let Some(normals) = primitive.normals() {
-                let data =
-                    f32_bytes(normals.iter().flat_map(|normal| {
-                        normal.zup_to_yup().to_array().map(|value| value as f32)
-                    }));
+                let data = f32_bytes(
+                    normals
+                        .iter()
+                        .flat_map(|normal| normal.to_array().map(|value| value as f32)),
+                );
                 attributes.insert(
                     Checked::Valid(Semantic::Normals),
                     push_f32(&mut root, &mut blob, &data, normals.len(), Type::Vec3),
@@ -369,10 +368,11 @@ pub fn to_gltf_file<D: EncodeBase64>(
             }
 
             if let Some(tangents) = primitive.tangents() {
-                let data = f32_bytes(tangents.iter().flat_map(|tangent| {
-                    let xyz = TyVector3F64::new(tangent.x, tangent.y, tangent.z).zup_to_yup();
-                    [xyz.x as f32, xyz.y as f32, xyz.z as f32, tangent.w as f32]
-                }));
+                let data = f32_bytes(
+                    tangents
+                        .iter()
+                        .flat_map(|tangent| tangent.to_array().map(|value| value as f32)),
+                );
                 attributes.insert(
                     Checked::Valid(Semantic::Tangents),
                     push_f32(&mut root, &mut blob, &data, tangents.len(), Type::Vec4),
@@ -987,8 +987,7 @@ fn vxl_extras(
     VxlExtras { values, name }.merge_into(extras)
 }
 
-/// Appends a primitive's positions, rotated to Y-up, with the min and max
-/// the spec requires.
+/// Appends a primitive's positions with the min and max the spec requires.
 fn push_positions(
     root: &mut Root,
     blob: &mut GltfBlob,
@@ -997,7 +996,7 @@ fn push_positions(
     let positions: Vec<[f32; 3]> = primitive
         .positions()
         .iter()
-        .map(|position| position.zup_to_yup().to_array().map(|value| value as f32))
+        .map(|position| position.to_array().map(|value| value as f32))
         .collect();
 
     let mut min = [f32::INFINITY; 3];
@@ -1154,9 +1153,9 @@ mod tests {
         assert_eq!(snapshot(&again), after);
     }
 
-    /// Node transforms survive the frame change within float precision.
+    /// Node transforms survive the write's `f32` narrowing.
     #[test]
-    fn node_transforms_round_trip_through_the_frame_change() {
+    fn node_transforms_round_trip_within_float_precision() {
         let main = to_gltf_mesh_main(test_main());
         let loaded = round_trip(&main, &GltfWriteOptions::default());
 

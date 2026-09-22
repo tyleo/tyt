@@ -10,11 +10,12 @@ use voxcore::{BVoxObject, BVoxPalette, VoxMain};
 
 /// Loads a Voxel Max document into a [`VMaxVoxMain`], the inverse of
 /// [`to_vmax_file`](crate::to_vmax_file). Geometry, palettes, and hierarchy
-/// become native voxcore entities. The rest of the Voxel Max state becomes
-/// the ext. Voxel snapshots are decoded to voxels on the fly and palette
-/// color tables unpacked as needed. Color indices are 1-based in Voxel Max,
-/// so a voxel's color cell is `color_idx - 1`. The material byte is 0-based
-/// and used directly.
+/// become native voxcore entities. Voxel Max shares voxcore's Y-up right-handed
+/// axes, so geometry and transforms copy straight. The rest of the Voxel Max
+/// state becomes the ext. Voxel snapshots are decoded to voxels on the fly and
+/// palette color tables unpacked as needed. Color indices are 1-based in Voxel
+/// Max, so a voxel's color cell is `color_idx - 1`. The material byte is
+/// 0-based and used directly.
 ///
 /// Errors on malformed geometry or on a cross-reference the checked insertions
 /// reject.

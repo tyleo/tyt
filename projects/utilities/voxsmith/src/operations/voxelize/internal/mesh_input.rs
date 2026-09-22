@@ -1,9 +1,9 @@
 use crate::operations::voxelize::{MeshMaterial, MeshMaterialMaps, MeshTexture, MeshTriangle};
 use ty_math::{TyBoundsF64, TyVector3F64};
 
-/// A triangle mesh in world space on voxcore's Z-up axes, flattened from a
-/// mesh document with every node transform applied, the one shape
-/// [`voxelize_mesh`] rasterizes.
+/// A triangle mesh in world space, flattened from a mesh document with every
+/// node transform applied, the one shape [`voxelize_mesh`] rasterizes. The
+/// document's axes are the grid's, so a mesh `+y` is a voxel `+y`.
 ///
 /// [`voxelize_mesh`]: crate::operations::voxelize::voxelize_mesh
 pub struct MeshInput {
@@ -33,9 +33,9 @@ impl MeshInput {
         self.maps.iter().any(MeshMaterialMaps::any)
     }
 
-    /// The size of the mesh's bounding box in meters on the Z-up axes, which
-    /// a caller divides to choose a grid resolution. Zero on every axis when
-    /// the mesh has no triangles.
+    /// The size of the mesh's bounding box in meters, which a caller divides to
+    /// choose a grid resolution. Zero on every axis when the mesh has no
+    /// triangles.
     pub fn extent(&self) -> TyVector3F64 {
         let points = self.triangles.iter().flat_map(|triangle| triangle.points);
 

@@ -180,10 +180,9 @@ fn push_placements(
     }
 }
 
-/// Cuts `object` into `16 x 16 x 16` tiles on the world grid with the object
-/// at `world`, each with the world position of its lower corner, in position
-/// order. A tile keeps the object's layers, and each of its voxels samples
-/// what the source voxel did. A tile holding no live voxel is not cut.
+/// Cuts `object`, placed at `world`, into `16 x 16 x 16` tiles on Goxel's
+/// Z-up world grid, each with its lower corner. A tile with no live voxel is
+/// not cut.
 fn tiles(object: &VoxObject, world: TyVector3I32) -> Result<Vec<([i32; 3], VoxObject)>> {
     let layers: Vec<_> = object.iter_layers().collect();
     let edge = GoxlBlock::SIZE as i32;
@@ -193,7 +192,10 @@ fn tiles(object: &VoxObject, world: TyVector3I32) -> Result<Vec<([i32; 3], VoxOb
         let position = object
             .voxel_position(voxel_id)
             .expect("a live voxel is within the grid");
-        let world_position = (world + position.as_ivec3()).to_array();
+        // The voxel's cube, turned to Z-up, has its lower corner one past
+        // the negated `z`.
+        let cube = world + object.origin() + position.as_ivec3();
+        let world_position = [cube.x, -cube.z - 1, cube.y];
         let origin = [
             world_position[0].div_euclid(edge) * edge,
             world_position[1].div_euclid(edge) * edge,
@@ -238,7 +240,9 @@ fn tiles(object: &VoxObject, world: TyVector3I32) -> Result<Vec<([i32; 3], VoxOb
                 tile.retain_voxel(voxel_id, &cell.samples)?;
             }
 
-            Ok((origin, tile))
+            // The tile is cut on Goxel's axes because the writer turns every
+            // object back to them.
+            Ok((origin, tile.zup_to_yup()))
         })
         .collect()
 }
@@ -362,7 +366,9 @@ mod tests {
         main
     }
 
-    /// A solid voxel in world space: `x`, `y`, `z`, and an `rgba` color.
+    /// A solid voxel in Goxel's world space, on its Z-up axes: `x`, `y`,
+    /// `z`, and an `rgba` color. A main's cube at `(x, y, z)` lands at
+    /// `(x, -z - 1, y)`.
     type WorldVoxel = (i32, i32, i32, (u8, u8, u8, u8));
 
     /// The world voxels a file places: each layer block's solid cells decoded
@@ -415,10 +421,11 @@ mod tests {
         let green = (0, 0xFF, 0, 0xFF);
         let blue = (0, 0, 0xFF, 0xFF);
 
-        // Object 0 is placed at +5x under a group, object 1 at +3y.
+        // Object 0 is placed at +5x under a group, object 1 at +3y, which
+        // is Goxel's +3z.
         assert_eq!(
             world_voxels(&file),
-            BTreeSet::from([(5, 0, 0, red), (6, 0, 0, green), (0, 3, 0, blue)])
+            BTreeSet::from([(5, -1, 0, red), (6, -1, 0, green), (0, -1, 3, blue)])
         );
 
         assert_eq!(file.layers.len(), 2);
@@ -456,13 +463,13 @@ mod tests {
 
         assert_eq!(wide.id, 1);
 
-        assert_eq!(wide.placements, vec![placement(2, [0, 0, 0])]);
+        assert_eq!(wide.placements, vec![placement(2, [0, -16, 0])]);
 
         let unit = &ext.layers[&U32Id::from_u32(4)];
 
         assert_eq!(unit.id, 2);
 
-        assert_eq!(unit.placements, vec![placement(3, [0, 0, 0])]);
+        assert_eq!(unit.placements, vec![placement(3, [0, -16, 0])]);
 
         let node = main.hierarchy_node(U32Id::from_u32(3)).unwrap();
 
@@ -501,13 +508,15 @@ mod tests {
 
         assert_eq!(later.id, 3);
 
+        // The tile's box sits below its node, so the stamp lands on the
+        // node's ground with the tile's top cell at +15y.
         assert_eq!(later.placements, vec![placement(3, [16, 0, 0])]);
 
         let file = to_goxl_file(&main).unwrap();
 
         assert_eq!(file.layers[2].name, "later");
 
-        assert!(world_voxels(&file).contains(&(16, 3, 0, (0, 0, 0xFF, 0xFF))));
+        assert!(world_voxels(&file).contains(&(16, 15, 3, (0, 0, 0xFF, 0xFF))));
     }
 
     /// An object wider than a block is cut into tiles on the world grid. The
@@ -566,7 +575,7 @@ mod tests {
 
         assert_eq!(
             layer.placements,
-            vec![placement(1, [0, 0, 0]), placement(2, [16, 0, 0])]
+            vec![placement(1, [0, -16, 0]), placement(2, [16, -16, 0])]
         );
 
         for (tile_id, x) in [(1u32, 10u32), (2, 13)] {
@@ -590,7 +599,7 @@ mod tests {
 
         assert_eq!(
             world_voxels(&file),
-            BTreeSet::from([(10, 0, 0, red), (29, 0, 0, red)])
+            BTreeSet::from([(10, -1, 0, red), (29, -1, 0, red)])
         );
 
         assert_eq!(file.blocks.len(), 2);
@@ -643,11 +652,11 @@ mod tests {
 
         let again = &main.ext().layers[&U32Id::from_u32(6)];
 
-        assert_eq!(again.placements, vec![placement(5, [0, 0, 16])]);
+        assert_eq!(again.placements, vec![placement(5, [0, -32, 0])]);
 
         let loose = &main.ext().layers[&U32Id::from_u32(7)];
 
-        assert_eq!(loose.placements, vec![placement(6, [0, 0, 0])]);
+        assert_eq!(loose.placements, vec![placement(6, [0, -16, 0])]);
 
         let file = to_goxl_file(&main).unwrap();
 
@@ -655,8 +664,8 @@ mod tests {
 
         let blue = (0, 0, 0xFF, 0xFF);
 
-        assert!(world_voxels(&file).contains(&(0, 0, 20, blue)));
+        assert!(world_voxels(&file).contains(&(0, -21, 0, blue)));
 
-        assert!(world_voxels(&file).contains(&(0, 0, 0, green)));
+        assert!(world_voxels(&file).contains(&(0, -1, 0, green)));
     }
 }

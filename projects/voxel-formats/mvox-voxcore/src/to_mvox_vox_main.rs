@@ -4,11 +4,12 @@ use crate::{
 use branded_id::U32Id;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::{
-    TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+    TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3Ext, TyVector3F64, TyVector3I32,
+    TyVector3U32,
 };
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMain, VoxPalette,
-    VoxValuePool,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMain, VoxObject,
+    VoxPalette, VoxValuePool,
     color::{lin_srgba_f64_from_srgba_u8, resolve_cell_color, resolve_cell_color_or_transparent},
     material::BASE_COLOR,
 };
@@ -26,14 +27,15 @@ const MODEL_AXIS_LIMIT: u32 = 256;
 type ObjectSlots = (U32Id<BVoxObject>, Vec<(U32Id<BVoxVoxel>, u32)>);
 
 /// Gives a bare state a synthesized [`MVoxExt`], the state
-/// [`to_mvox_file`](crate::to_mvox_file) writes as a file synthesized from
-/// the scene. The state takes MagicaVoxel's shape first. Every palette merges
-/// into one 256-color table, each object sampling the slot of its color on
-/// one layer. The hierarchy rebuilds with one node per scene node: every node
-/// becomes a transform node carrying its translation over a group of its
-/// child nodes and one transform-over-shape placement per object, all under
-/// one synthetic root. Each node then takes its entry, and the ext takes the
-/// synthesized version and no materials, layers, cameras, or notes.
+/// [`to_mvox_file`](crate::to_mvox_file) writes as a file synthesized from the
+/// scene. The state takes MagicaVoxel's shape first. Every palette merges into
+/// one 256-color table, each object sampling the slot of its color on one
+/// layer. The hierarchy rebuilds with one node per scene node: every node
+/// becomes a transform node carrying its translation over a group of its child
+/// nodes and one transform-over-shape placement per object, all under one
+/// synthetic root. Translations turn onto MagicaVoxel's Z-up axes. Each node
+/// then takes its entry, and the ext takes the synthesized version and no
+/// materials, layers, cameras, or notes.
 ///
 /// Lossy where MagicaVoxel cannot represent the source. Node rotation and
 /// scale drop because a scene transform carries only translation. A node's
@@ -214,10 +216,10 @@ fn rebuild_hierarchy(
         .main
         .iter_objects()
         .filter(|(object_id, _)| !builder.placed.contains(object_id))
-        .map(|(object_id, object)| (object_id, object.bounds()))
+        .map(|(object_id, _)| object_id)
         .collect();
-    for (object_id, bounds) in unplaced {
-        children.push(builder.emit_object(object_id, bounds)?);
+    for object_id in unplaced {
+        children.push(builder.emit_object(object_id)?);
     }
     builder.link(root_group, children)?;
     let entries = builder.entries;
@@ -296,12 +298,7 @@ impl<'a> Builder<'a> {
             children.push(self.emit_node(child_id)?);
         }
         for &object_id in &node.child_object_ids {
-            let bounds = self
-                .main
-                .object(object_id)
-                .expect("a placed object is listed")
-                .bounds();
-            children.push(self.emit_object(object_id, bounds)?);
+            children.push(self.emit_object(object_id)?);
         }
 
         self.link(group, children)?;
@@ -309,21 +306,17 @@ impl<'a> Builder<'a> {
     }
 
     /// Emits the transform over shape placing one object, offsetting the
-    /// transform by the model's pivot so MagicaVoxel centers it where
-    /// voxcore's min corner sits.
-    fn emit_object(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        bounds: TyVector3U32,
-    ) -> Result<U32Id<BVoxHierarchyNode>> {
+    /// transform by the model's pivot so MagicaVoxel centers the written
+    /// model where the object's grid sits under its node.
+    fn emit_object(&mut self, object_id: U32Id<BVoxObject>) -> Result<U32Id<BVoxHierarchyNode>> {
         self.placed.insert(object_id);
-        let pivot = (bounds / 2).as_ivec3().to_array();
-        let name = self
+        let object = self
             .main
             .object(object_id)
-            .expect("a placed object is listed")
-            .name()
-            .to_owned();
+            .expect("a placed object is listed");
+        let name = object.name().to_owned();
+        let (bounds, origin) = model_box(object);
+        let pivot = (origin + (bounds / 2).as_ivec3()).to_array();
         let transform = self.emit(SceneNodeKind::Transform, transform_vox_node(pivot, &name))?;
         let shape = self.emit(
             SceneNodeKind::Shape,
@@ -342,7 +335,9 @@ fn transform_vox_node(translation: [i32; 3], name: &str) -> VoxHierarchyNode {
     VoxHierarchyNode {
         name: name.to_owned(),
         transform: TyTransformF64::new(
-            TyVector3I32::from_array(translation).as_dvec3(),
+            TyVector3I32::from_array(translation)
+                .as_dvec3()
+                .zup_to_yup(),
             TyQuaternionF64::IDENTITY,
             TyVector3F64::ONE,
         ),
@@ -350,9 +345,20 @@ fn transform_vox_node(translation: [i32; 3], name: &str) -> VoxHierarchyNode {
     }
 }
 
-/// One scene-frame translation rounded from a node's local position.
+/// One scene-frame translation, on MagicaVoxel's Z-up axes, rounded from a
+/// node's local position.
 fn translation_of(position: &TyVector3F64) -> [i32; 3] {
-    position.round().as_ivec3().to_array()
+    position.yup_to_zup().round().as_ivec3().to_array()
+}
+
+/// The `(bounds, origin)` of `object`'s grid on MagicaVoxel's Z-up axes.
+fn model_box(object: &VoxObject) -> (TyVector3U32, TyVector3I32) {
+    let bounds = object.bounds();
+    let origin = object.origin();
+    (
+        TyVector3U32::new(bounds.x, bounds.z, bounds.y),
+        TyVector3I32::new(origin.x, -(origin.z + bounds.z as i32), origin.y),
+    )
 }
 
 #[cfg(test)]
@@ -578,7 +584,8 @@ mod tests {
 
         assert_eq!(nodes[1].1.child_node_ids, [nodes[2].0, nodes[8].0]);
 
-        // Node "wide" at +5x places object 0, whose pivot is +1x.
+        // Node "wide" at +5x places object 0, whose pivot is +1x and, turned
+        // to MagicaVoxel's Z-up axes, one below the ground.
         let MVoxExtNodeBody::Transform { frames, .. } = &entry(4).body else {
             panic!("a transform entry");
         };
@@ -589,7 +596,7 @@ mod tests {
             panic!("a transform entry");
         };
 
-        assert_eq!(frames[0].translation, [1, 0, 0]);
+        assert_eq!(frames[0].translation, [1, -1, 0]);
 
         let MVoxExtNodeBody::Shape { models } = &entry(7).body else {
             panic!("a shape entry");

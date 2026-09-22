@@ -5,8 +5,9 @@ use voxcore::{BVoxVoxel, VoxObject};
 
 /// Triangulates `object`'s live voxels into a [`MeshGeometry`] using `method`.
 ///
-/// The mesh spans the object's build volume in grid units, Z-up: a live voxel
-/// at grid `(x, y, z)` fills the unit cube `[x, x+1] x [y, y+1] x [z, z+1]`.
+/// The mesh spans the object's build volume in grid units on the grid's axes:
+/// a live voxel at grid `(x, y, z)` fills the unit cube
+/// `[x, x+1] x [y, y+1] x [z, z+1]`.
 /// `naive` emits all six faces of every live voxel, `culled` only the faces on
 /// a solid-empty boundary, and `greedy` merges coplanar boundary faces into the
 /// fewest quads. No hierarchy-node transform is applied; placement is the

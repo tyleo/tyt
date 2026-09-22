@@ -25,9 +25,8 @@ references by relative URI.
   per entity. glTF holds everything meshdoc does, so the document is not
   reshaped. `take_ext` on the state takes the ext back off.
 
-Axes convert between glTF's Y-up and meshdoc's Z-up on both arrows.
-Positions, normals, tangents, and node transforms rotate; nothing bakes into
-positions. Units are meters on both sides.
+Geometry and node transforms copy straight because meshdoc shares glTF's
+frame. Units are meters on both sides.
 
 ## The `vxl` extras
 
@@ -76,7 +75,7 @@ texture, and image, keyed by the entity's id, each with its `extras`, its
 unmodeled extensions, and what meshdoc lacks: a node's camera, skin, and
 weights; a primitive's skinning streams and morph targets; a texture's name
 and sampler identity; whether an embedded image came from a buffer view or
-a data URI. Skinning and animation data stay in glTF's Y-up axes.
+a data URI.
 
 The ext follows the state through meshdoc's `MeshExt` hooks, which see the
 `MeshState`. An entity retained after the load gets the entry the

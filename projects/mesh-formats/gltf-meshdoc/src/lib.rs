@@ -2,21 +2,21 @@
 
 //! Converts between glTF files and the meshdoc state.
 //!
-//! The state is a [`GltfMeshMain`], a [`MeshMain`](meshdoc::MeshMain)
-//! carrying a [`GltfExt`] with the glTF state that has no native meshdoc
-//! home. [`from_gltf_file`] loads a [`GltfFile`] into one. [`to_gltf_file`]
-//! writes one back, exactly for a loaded file, with [`GltfWriteOptions`]
-//! picking where the images go. [`to_gltf_mesh_main`] gives a bare
-//! `MeshMain<()>` a synthesized ext, and `take_ext` takes the ext back off.
-//! The ext keys an entry per entity by id and follows the state through
-//! meshdoc's [`MeshExt`](meshdoc::MeshExt) hooks, so a state mutated after
-//! the load still writes back with a complete ext. Axes convert between
-//! glTF's Y-up and meshdoc's Z-up on both arrows. Node transforms stay on
-//! the nodes. The `codec` module, behind the default `codec` feature, goes
-//! straight to and from `.gltf` and `.glb` bytes. The data URIs of both go
-//! through the caller's [`DecodeBase64`] and [`EncodeBase64`], which
-//! `DependenciesImpl` supplies behind the `impl` feature. The `serde`
-//! feature, on by default, derives serde for the ext types.
+//! The state is a [`GltfMeshMain`], a [`MeshMain`](meshdoc::MeshMain) carrying
+//! a [`GltfExt`] with the glTF state that has no native meshdoc home.
+//! [`from_gltf_file`] loads a [`GltfFile`] into one. [`to_gltf_file`] writes
+//! one back, exactly for a loaded file, with [`GltfWriteOptions`] picking where
+//! the images go. [`to_gltf_mesh_main`] gives a bare `MeshMain<()>` a
+//! synthesized ext, and `take_ext` takes the ext back off. The ext keys an
+//! entry per entity by id and follows the state through meshdoc's
+//! [`MeshExt`](meshdoc::MeshExt) hooks, so a state mutated after the load still
+//! writes back with a complete ext. Geometry and node transforms copy straight
+//! because meshdoc shares glTF's frame. The `codec` module, behind the default
+//! `codec` feature, goes straight to and from `.gltf` and `.glb` bytes. The
+//! data URIs of both go through the caller's [`DecodeBase64`] and
+//! [`EncodeBase64`], which `DependenciesImpl` supplies behind the `impl`
+//! feature. The `serde` feature, on by default, derives serde for the ext
+//! types.
 
 // Public API
 

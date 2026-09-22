@@ -1,4 +1,4 @@
-use crate::{TyPoseF64, TyUniformTrsF64};
+use crate::{TyPoseF64, TyUniformTrsF64, TyVector3Ext};
 use glam::{DQuat, DVec3};
 
 /// A node transform with `f64` components, composing as
@@ -69,6 +69,36 @@ impl TyTransformF64 {
     pub fn to_uniform_trs(&self) -> TyUniformTrsF64 {
         TyUniformTrsF64::new(self.position, self.rotation, self.scale.x)
     }
+
+    /// This transform turned from Z-up to Y-up axes. The result maps turned
+    /// points as this transform maps the originals.
+    pub fn zup_to_yup(&self) -> Self {
+        Self {
+            position: self.position.zup_to_yup(),
+            rotation: DQuat::from_xyzw(
+                self.rotation.x,
+                self.rotation.z,
+                -self.rotation.y,
+                self.rotation.w,
+            ),
+            scale: DVec3::new(self.scale.x, self.scale.z, self.scale.y),
+        }
+    }
+
+    /// This transform turned from Y-up to Z-up axes, the inverse of
+    /// [`zup_to_yup`](Self::zup_to_yup).
+    pub fn yup_to_zup(&self) -> Self {
+        Self {
+            position: self.position.yup_to_zup(),
+            rotation: DQuat::from_xyzw(
+                self.rotation.x,
+                -self.rotation.z,
+                self.rotation.y,
+                self.rotation.w,
+            ),
+            scale: DVec3::new(self.scale.x, self.scale.z, self.scale.y),
+        }
+    }
 }
 
 impl Default for TyTransformF64 {
@@ -79,11 +109,45 @@ impl Default for TyTransformF64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TyQuaternionF64, TyTransformF64, TyVector3F64};
+    use crate::{TyQuaternionF64, TyTransformF64, TyVector3Ext, TyVector3F64};
     use std::f64::consts::PI;
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9
+    }
+
+    /// A transform with a rotation about the up axis, per-axis scale, and an
+    /// offset on every axis.
+    fn skewed() -> TyTransformF64 {
+        TyTransformF64::new(
+            TyVector3F64::new(1.0, 2.0, 3.0),
+            TyQuaternionF64::from_axis_angle(TyVector3F64::Z, 0.5),
+            TyVector3F64::new(2.0, 3.0, 4.0),
+        )
+    }
+
+    #[test]
+    fn zup_to_yup_turns_the_transform_with_its_points() {
+        let transform = skewed();
+        let turned = transform.zup_to_yup();
+
+        // The up axis of the rotation follows the turn.
+        let axis = TyQuaternionF64::from_axis_angle(TyVector3F64::Y, 0.5);
+        assert!(turned.rotation.abs_diff_eq(axis, 1e-12));
+        assert_eq!(turned.position, TyVector3F64::new(1.0, 3.0, -2.0));
+        assert_eq!(turned.scale, TyVector3F64::new(2.0, 4.0, 3.0));
+
+        let point = TyVector3F64::new(0.5, -1.5, 2.5);
+        let expected = transform.transform_point(point).zup_to_yup();
+        let actual = turned.transform_point(point.zup_to_yup());
+        assert!(expected.abs_diff_eq(actual, 1e-12));
+    }
+
+    #[test]
+    fn the_axis_turns_are_inverses() {
+        let transform = skewed();
+        assert_eq!(transform.zup_to_yup().yup_to_zup(), transform);
+        assert_eq!(transform.yup_to_zup().zup_to_yup(), transform);
     }
 
     #[test]

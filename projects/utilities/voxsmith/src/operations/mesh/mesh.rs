@@ -12,10 +12,10 @@ use meshdoc::{MeshHierarchyNode, MeshMain, MeshObject, MeshPrimitive, MeshProper
 use std::collections::HashMap;
 use voxcore::{VoxExt, VoxMain, VoxObject};
 
-/// Meshes `object` under `record` into a document of one object under one
-/// root node, both named as `object` is. Positions are in meters on the
-/// grid's Z-up axes. `dependencies` encodes the pngs. An error names the
-/// record element it rose from.
+/// Meshes `object` under `record` into a document of one object under one root
+/// node, both named as `object` is. Positions are in meters on the grid's axes,
+/// which the document shares. `dependencies` encodes the pngs. An error names
+/// the record element it rose from.
 pub fn mesh<D: EncodePng, T: VoxExt>(
     dependencies: &D,
     main: &VoxMain<T>,
@@ -417,7 +417,7 @@ mod tests {
         assert!(primitive.normals().is_some());
 
         // Greedy merges the bar into a box: six faces of four vertices and
-        // two triangles, scaled to two meters per voxel and kept Z-up.
+        // two triangles, scaled to two meters per voxel on the grid's axes.
         assert_eq!(primitive.vertex_count(), 24);
         assert_eq!(primitive.triangle_count(), 12);
         let max = primitive

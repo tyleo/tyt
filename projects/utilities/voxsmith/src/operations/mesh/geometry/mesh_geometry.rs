@@ -3,9 +3,9 @@ use ty_math::TyVector3F32;
 use voxcore::BVoxVoxel;
 
 /// Triangulated voxel geometry in voxel-grid space: a live voxel at grid
-/// position `(x, y, z)` fills the unit cube `[x, x+1] x [y, y+1] x [z, z+1]`,
-/// Z-up as the voxel-json format is. A glTF writer applies the real-world scale
-/// and the Z-up-to-Y-up conversion; the mesher itself stays in grid units.
+/// position `(x, y, z)` fills the unit cube `[x, x+1] x [y, y+1] x [z, z+1]`
+/// on the grid's axes, which are glTF's. The `mesh` operation applies the
+/// voxel size; the mesher itself stays in grid units.
 ///
 /// Every quad carries four of its own vertices with the face normal, so faces
 /// never share vertices and shading stays flat. Triangles wind

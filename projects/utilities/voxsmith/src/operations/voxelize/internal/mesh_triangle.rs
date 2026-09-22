@@ -1,7 +1,7 @@
 use crate::operations::voxelize::MeshTriangleUvs;
 use ty_math::TyVector3F64;
 
-/// One mesh triangle in world space (Z-up), tagged with the material it was
+/// One mesh triangle in world space, tagged with the material it was
 /// drawn with. The tag is an index into the
 /// [`Mesh`](crate::operations::voxelize::Mesh) material table, so the
 /// rasterizer can attribute each surface voxel to a material.

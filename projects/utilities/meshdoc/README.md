@@ -23,8 +23,8 @@ could break, a state reached through the public API never violates a
 referential rule. `validate` checks a whole state at once.
 
 The model is shaped by what the popular mesh formats carry, glTF 2.0 first.
-Positions are in meters, Z-up. Triangles wind counter-clockwise seen from
-outside. Node transforms stay on the nodes; nothing bakes into positions.
+Positions are in meters on glTF's frame: Y-up, right-handed, with +Z toward
+the viewer. Triangles wind counter-clockwise seen from outside. Node transforms stay on the nodes; nothing bakes into positions.
 
 The sections below build one document up from an image and read it back.
 

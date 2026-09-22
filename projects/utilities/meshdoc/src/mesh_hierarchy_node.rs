@@ -13,7 +13,8 @@ pub struct MeshHierarchyNode {
     /// Display name.
     pub name: String,
 
-    /// Transform applied to this node and its subtree, in meters, Z-up.
+    /// Transform applied to this node and its subtree, in meters on the
+    /// document's frame.
     pub transform: TyTransformF64,
 
     /// Child nodes.

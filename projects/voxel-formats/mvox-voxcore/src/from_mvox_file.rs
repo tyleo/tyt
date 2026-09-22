@@ -22,11 +22,12 @@ const DEFAULT_MATERIAL_TYPE: &str = "_diffuse";
 /// Reads one scalar material field, for the per-attribute value-pool build.
 type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 
-/// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`MVoxVoxMain`], the
-/// inverse of [`to_mvox_file`](crate::to_mvox_file). Models become objects,
-/// the 256-color palette plus the `MATL` materials become one shared palette
-/// of value pools, and the `nTRN` / `nGRP` / `nSHP` scene graph becomes the
-/// hierarchy nodes, one per scene node. The rest of the MagicaVoxel state,
+/// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`MVoxVoxMain`], the inverse
+/// of [`to_mvox_file`](crate::to_mvox_file). Models become objects, the
+/// 256-color palette plus the `MATL` materials become one shared palette of
+/// value pools, and the `nTRN` / `nGRP` / `nSHP` scene graph becomes the
+/// hierarchy nodes, one per scene node. MagicaVoxel is Z-up, so every grid and
+/// transform turns onto voxcore's Y-up axes. The rest of the MagicaVoxel state,
 /// such as layers, cameras, render settings, the exact per-node frames, and
 /// each material's exact optional fields, becomes the ext.
 ///
@@ -44,9 +45,9 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<MVoxVoxMain> {
     let palette_id = main.retain_palette(palette)?;
 
     for model in &file.models {
-        // The model grid becomes the object's build volume directly; it may
-        // carry empty margin around the live voxels.
-        main.retain_object(build_object(model, palette_id)?)?;
+        // The model grid becomes the object's build volume, turned to Y-up;
+        // it may carry empty margin around the live voxels.
+        main.retain_object(build_object(model, palette_id)?.zup_to_yup())?;
     }
 
     // The scene graph lands as one batch: a transform node lists its child by
@@ -323,9 +324,76 @@ fn resolve(position_of_id: &HashMap<i32, usize>, id: i32) -> Result<usize> {
 mod tests {
     use crate::from_mvox_file;
     use mvox::{
-        MVoxFile, MVoxFrame, MVoxMaterial, MVoxModel, MVoxNodeAttributes, MVoxSceneNode,
-        MVoxSceneNodeBody, MVoxTransformNode, MVoxVoxel,
+        MVoxDict, MVoxFile, MVoxFrame, MVoxMaterial, MVoxModel, MVoxNodeAttributes, MVoxRotation,
+        MVoxSceneNode, MVoxSceneNodeBody, MVoxShapeModel, MVoxShapeNode, MVoxTransformNode,
+        MVoxVoxel,
     };
+    use ty_math::{TyVector3F64, TyVector3I32, TyVector3U32};
+
+    /// A model and a transform turn onto Y-up axes: MagicaVoxel's `+y`
+    /// becomes `-z`, the grid re-seats below its node, and a translation
+    /// turns with the grid.
+    #[test]
+    fn turns_models_and_transforms_onto_y_up() {
+        let file = MVoxFile {
+            models: vec![MVoxModel {
+                size: [1, 2, 3],
+                voxels: vec![MVoxVoxel {
+                    x: 0,
+                    y: 1,
+                    z: 2,
+                    color_index: 1,
+                }],
+            }],
+            scene_nodes: vec![
+                MVoxSceneNode {
+                    id: 0,
+                    attributes: MVoxNodeAttributes::default(),
+                    body: MVoxSceneNodeBody::Transform(MVoxTransformNode {
+                        child: 1,
+                        layer: -1,
+                        frames: vec![MVoxFrame {
+                            rotation: MVoxRotation::IDENTITY,
+                            translation: [1, 2, 3],
+                            frame_index: None,
+                            extra: MVoxDict::default(),
+                        }],
+                    }),
+                },
+                MVoxSceneNode {
+                    id: 1,
+                    attributes: MVoxNodeAttributes::default(),
+                    body: MVoxSceneNodeBody::Shape(MVoxShapeNode {
+                        models: vec![MVoxShapeModel {
+                            model: 0,
+                            frame_index: None,
+                            extra: MVoxDict::default(),
+                        }],
+                    }),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let main = from_mvox_file(&file).unwrap();
+
+        let (_, object) = main.iter_objects().next().unwrap();
+
+        assert_eq!(object.bounds(), TyVector3U32::new(1, 3, 2));
+
+        assert_eq!(object.origin(), TyVector3I32::new(0, 0, -2));
+
+        let voxel_id = object.iter_live().next().unwrap();
+
+        assert_eq!(
+            object.voxel_position(voxel_id),
+            Some(TyVector3U32::new(0, 2, 0))
+        );
+
+        let (_, node) = main.iter_hierarchy_nodes().next().unwrap();
+
+        assert_eq!(node.transform.position, TyVector3F64::new(1.0, 3.0, -2.0));
+    }
 
     #[test]
     fn rejects_a_material_id_outside_the_palette_range() {

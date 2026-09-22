@@ -33,7 +33,7 @@ const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 /// exceeds voxcore's dense-grid limit.
 ///
 /// # Arguments
-/// * `mesh` - the mesh to rasterize, in Z-up world space.
+/// * `mesh` - the mesh to rasterize, in world space.
 /// * `counts` - voxels per axis, sized by the caller from
 ///   [`MeshInput::extent`].
 /// * `surface_mode` - how surface voxels are found; see [`SurfaceMode`].

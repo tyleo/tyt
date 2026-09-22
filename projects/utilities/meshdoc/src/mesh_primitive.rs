@@ -5,15 +5,9 @@ use crate::{
 use branded_id::{IdSlice, IdVec, U32Id};
 use ty_math::{TyLinSrgbaF64, TyVector2F64, TyVector3F64, TyVector4F64};
 
-/// One drawable piece of a [`MeshObject`](crate::MeshObject).
-///
-/// Positions are in meters, Z-up. Triangles wind counter-clockwise seen from
-/// outside. Every mutation that takes a stream checks it holds one entry per
-/// vertex and every value is finite, so a primitive is always consistent.
-/// A vertex id is its position in the streams, a triangle id its position
-/// in the triangle list, and a UV stream id its position in the stream list.
-/// The material id references a [`MeshMain`](crate::MeshMain) and is
-/// meaningful only within it.
+/// One drawable piece of a [`MeshObject`](crate::MeshObject), in meters on
+/// glTF's axes. Every mutation checks its streams, so a primitive is always
+/// consistent.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MeshPrimitive {
     /// Display name, empty for an unnamed primitive.

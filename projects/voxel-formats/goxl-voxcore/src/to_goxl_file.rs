@@ -32,12 +32,12 @@ pub fn to_goxl_file(main: &GoxlVoxMain) -> Result<GoxlFile> {
     let layers = build_layers(main)?;
 
     // Each object is the author's build volume, a fixed Goxel 16-cube, so a
-    // block is written from it directly at the original positions, its
-    // voxel colors read through the object's `baseColor` layer.
+    // block is written from it at the original positions once turned back
+    // to Z-up, its voxel colors read through the object's `baseColor` layer.
     let blocks = main
         .iter_objects()
         .enumerate()
-        .map(|(index, (_, object))| block_from_object(main, index, object))
+        .map(|(index, (_, object))| block_from_object(main, index, &object.yup_to_zup()))
         .collect::<Result<_>>()?;
 
     Ok(GoxlFile {
@@ -594,7 +594,7 @@ mod tests {
 
     /// A node retained after the load gets a synthesized entry on the spot:
     /// a fresh layer id, stamping the node's objects at its translation
-    /// rounded to whole voxels.
+    /// rounded to whole voxels and turned to Goxel's Z-up axes.
     #[test]
     fn a_node_retained_after_the_load_gets_a_synthesized_entry() {
         let file = placed_blocks_file();
@@ -615,9 +615,11 @@ mod tests {
 
         main.push_root_hierarchy_node_id(node_id).unwrap();
 
+        // The loaded block's box spans `[-16, 0)` on `z` under its node, so
+        // the stamp lands at the node's `-y` on Goxel's axes.
         assert_eq!(
             main.ext().layers[&node_id],
-            synthesized_layer(4, vec![placement(2, [3, -3, 16])])
+            synthesized_layer(4, vec![placement(2, [3, -16, -3])])
         );
 
         let rebuilt = to_goxl_file(&main).unwrap();
@@ -625,7 +627,7 @@ mod tests {
         let mut want = file;
 
         want.layers
-            .push(stamping_layer("added", 4, &[(2, [3, -3, 16])]));
+            .push(stamping_layer("added", 4, &[(2, [3, -16, -3])]));
 
         assert_eq!(rebuilt, want);
     }

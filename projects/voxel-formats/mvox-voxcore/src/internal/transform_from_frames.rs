@@ -3,20 +3,21 @@ use ty_math::{
     TyMatrix4x4F64, TyQuaternionExt, TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32,
 };
 
-/// The transform projecting a transform node's first frame, or the identity
-/// when it has none. The exact frames ride in the ext. The loader sets a node's
-/// transform from this and the writer checks that it still holds.
+/// The transform projecting a transform node's first frame onto voxcore's
+/// Y-up axes, or the identity when it has none. The exact frames ride in the
+/// ext. The loader sets a node's transform from this and the writer checks
+/// that it still holds.
 pub fn transform_from_frames(frames: &[MVoxFrame]) -> TyTransformF64 {
     match frames.first() {
-        Some(frame) => transform_from_frame(frame),
+        Some(frame) => transform_from_frame(frame).zup_to_yup(),
         None => TyTransformF64::default(),
     }
 }
 
-/// Projects one keyframe to a [`TyTransformF64`]. The rotation is the frame's
-/// signed-permutation matrix. An improper one, a mirror, splits into a proper
-/// rotation and a negative x scale, which keeps voxcore's unit-quaternion
-/// invariant.
+/// Projects one keyframe to a [`TyTransformF64`] on MagicaVoxel's Z-up axes.
+/// The rotation is the frame's signed-permutation matrix. An improper one, a
+/// mirror, splits into a proper rotation and a negative x scale, which keeps
+/// voxcore's unit-quaternion invariant.
 fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
     let position = TyVector3I32::from_array(frame.translation).as_dvec3();
 
