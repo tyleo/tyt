@@ -1,9 +1,9 @@
 use crate::{BMeshFile, MeshTextureRef};
 use branded_id::U32Id;
 
-/// The value of a [`MeshProperty`](crate::MeshProperty). A list variant holds
-/// one entry per element of whatever the owner counts over, such as a row per
-/// palette entry.
+/// The value of a [`MeshProperty`](crate::MeshProperty). A list or rows
+/// variant holds one entry per element of whatever the owner counts over,
+/// such as a row per palette entry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MeshPropertyValue {
     /// A boolean.
@@ -12,11 +12,17 @@ pub enum MeshPropertyValue {
     /// A list of booleans.
     Bools(Vec<bool>),
 
+    /// A list of boolean rows, such as a mask per entry.
+    BoolRows(Vec<Vec<bool>>),
+
     /// An integer.
     Int(i64),
 
     /// A list of integers.
     Ints(Vec<i64>),
+
+    /// A list of integer rows.
+    IntRows(Vec<Vec<i64>>),
 
     /// A finite float.
     Float(f64),
@@ -32,6 +38,9 @@ pub enum MeshPropertyValue {
 
     /// A list of strings.
     Texts(Vec<String>),
+
+    /// A list of string rows.
+    TextRows(Vec<Vec<String>>),
 
     /// A texture reference.
     Texture(MeshTextureRef),

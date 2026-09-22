@@ -99,12 +99,20 @@ pub fn test_main() -> MeshMain<()> {
                     value: MeshPropertyValue::Bools(vec![true, false]),
                 },
                 MeshProperty {
+                    name: "flagRows".to_owned(),
+                    value: MeshPropertyValue::BoolRows(vec![vec![true, false], vec![false, true]]),
+                },
+                MeshProperty {
                     name: "group".to_owned(),
                     value: MeshPropertyValue::Int(3),
                 },
                 MeshProperty {
                     name: "groups".to_owned(),
                     value: MeshPropertyValue::Ints(vec![1, 2]),
+                },
+                MeshProperty {
+                    name: "groupRows".to_owned(),
+                    value: MeshPropertyValue::IntRows(vec![vec![1, 2], vec![3, 4]]),
                 },
                 MeshProperty {
                     name: "heat".to_owned(),
@@ -117,6 +125,13 @@ pub fn test_main() -> MeshMain<()> {
                 MeshProperty {
                     name: "labels".to_owned(),
                     value: MeshPropertyValue::Texts(vec!["a".to_owned(), "b".to_owned()]),
+                },
+                MeshProperty {
+                    name: "labelRows".to_owned(),
+                    value: MeshPropertyValue::TextRows(vec![
+                        vec!["a".to_owned(), "b".to_owned()],
+                        vec!["c".to_owned()],
+                    ]),
                 },
                 MeshProperty {
                     name: "subsurface".to_owned(),

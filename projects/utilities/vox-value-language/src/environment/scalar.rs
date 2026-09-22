@@ -15,7 +15,7 @@ pub enum Scalar {
     /// An unsigned 32-bit integer.
     U32,
 
-    /// A boolean, vec1 only.
+    /// A boolean.
     Bool,
 
     /// A string, vec1 only.

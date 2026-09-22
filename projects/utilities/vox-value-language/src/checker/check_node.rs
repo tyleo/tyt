@@ -130,6 +130,22 @@ impl Checker<'_> {
                 let dimension =
                     Dimension::from_width(dimensions.len()).expect("the parser checks arity");
 
+                // Bool parts pack into a bool because a constructor only
+                // assembles components.
+                if checked
+                    .iter()
+                    .all(|part| part.scalar() == Some(Scalar::Bool))
+                {
+                    return Ok(bool_node(
+                        CheckedKind::Call {
+                            function: elementwise(function),
+                            arguments: checked.into_iter().map(typed).collect(),
+                        },
+                        domain,
+                        dimension,
+                    ));
+                }
+
                 f32_call(function, checked, domain, dimension)
             }
 
@@ -284,7 +300,7 @@ impl Checker<'_> {
         let left = self.node(left)?;
         let right = self.node(right)?;
         let domain = left.domain().max(right.domain());
-        let (left, right) = compare(operator, left, right, false)?;
+        let (left, right, dimension) = compare(operator, left, right)?;
 
         Ok(bool_node(
             CheckedKind::Comparison {
@@ -293,6 +309,7 @@ impl Checker<'_> {
                 right: Box::new(right),
             },
             domain,
+            dimension,
         ))
     }
 
@@ -347,29 +364,16 @@ impl Checker<'_> {
     }
 
     fn fold(&self, fold: Fold, operation: &str, argument: &SyntaxNode) -> CheckResult<Checked> {
-        let SyntaxNode::Comparison {
-            operator,
-            left,
-            right,
-        } = argument
-        else {
-            return Err(CheckFailure::FoldNeedsComparison {
-                operation: operation.to_owned(),
-            });
-        };
-        let left = self.node(left)?;
-        let right = self.node(right)?;
-        let domain = left.domain().max(right.domain());
-        let (left, right) = compare(*operator, left, right, true)?;
+        let operand = bool_operand(operation, self.node(argument)?)?;
+        let domain = operand.output.domain;
 
         Ok(bool_node(
             CheckedKind::Fold {
                 fold,
-                operator: *operator,
-                left: Box::new(left),
-                right: Box::new(right),
+                operand: Box::new(operand),
             },
             domain,
+            Dimension::Vec1,
         ))
     }
 
@@ -424,6 +428,9 @@ impl Checker<'_> {
         let left = bool_operand(&operation, self.node(left)?)?;
         let right = bool_operand(&operation, self.node(right)?)?;
         let domain = left.output.domain.max(right.output.domain);
+        let dimensions = [left.output.dimension, right.output.dimension];
+        let dimension = either_vec1(dimensions[0], dimensions[1])
+            .ok_or_else(|| mismatch(&operation, &dimensions))?;
 
         Ok(bool_node(
             CheckedKind::Logical {
@@ -432,6 +439,7 @@ impl Checker<'_> {
                 right: Box::new(right),
             },
             domain,
+            dimension,
         ))
     }
 
@@ -456,6 +464,18 @@ impl Checker<'_> {
         let dimension = Dimension::from_width(components.len())
             .expect("a swizzle holds one to four components");
         let domain = source.domain();
+
+        // A bool swizzles because a swizzle only moves components.
+        if source.scalar() == Some(Scalar::Bool) {
+            return Ok(bool_node(
+                CheckedKind::Swizzle {
+                    source: Box::new(typed(source)),
+                    components,
+                },
+                domain,
+                dimension,
+            ));
+        }
 
         keep(&operation, vec![source], domain, dimension, move |nodes| {
             CheckedKind::Swizzle {
@@ -667,51 +687,50 @@ fn bool_operand(operation: &str, operand: Checked) -> CheckResult<CheckedNode> {
     }
 }
 
-/// Checks a comparison's sides: two strings under `==` or `!=`, or two
-/// numbers at vec1. Wider sides broadcast inside a fold alone.
+/// Checks a comparison's sides, answering the result's dimension. Bools and
+/// strings take `==` and `!=` alone.
 fn compare(
     operator: ComparisonOperator,
     left: Checked,
     right: Checked,
-    folded: bool,
-) -> CheckResult<(CheckedNode, CheckedNode)> {
+) -> CheckResult<(CheckedNode, CheckedNode, Dimension)> {
     let operation = operator.to_string();
+    let dimensions = [left.dimension(), right.dimension()];
+    let dimension = either_vec1(dimensions[0], dimensions[1])
+        .ok_or_else(|| mismatch(&operation, &dimensions))?;
 
-    if left.scalar() == Some(Scalar::String) && right.scalar() == Some(Scalar::String) {
+    if let Some(found) = left.scalar()
+        && right.scalar() == Some(found)
+        && !found.is_numeric()
+    {
         if !operator.is_equality() {
-            return Err(CheckFailure::StringOrder { operation });
+            return Err(CheckFailure::EqualityOnly { operation, found });
         }
 
-        return Ok((typed(left), typed(right)));
-    }
-
-    let dimensions = [left.dimension(), right.dimension()];
-
-    if folded {
-        either_vec1(dimensions[0], dimensions[1])
-            .ok_or_else(|| mismatch(&operation, &dimensions))?;
-    } else if let Some(found) = dimensions
-        .into_iter()
-        .find(|dimension| *dimension != Dimension::Vec1)
-    {
-        return Err(CheckFailure::WideComparison { operation, found });
+        return Ok((typed(left), typed(right), dimension));
     }
 
     let (_, nodes) = settled(&operation, vec![left, right])?;
     let [left, right] = fixed(nodes);
 
-    Ok((left, right))
+    Ok((left, right, dimension))
 }
 
-/// Checks `mix`: a bool choosing between two branches of one type. A
-/// numeric pair keeps the type it is given.
+/// Checks `mix`: a bool choosing between two branches of one type, per
+/// component at the branches' dimension or per entry at vec1. A numeric pair
+/// keeps the type it is given.
 fn mix(arguments: Vec<Checked>, domain: Domain) -> CheckResult<Checked> {
     let operation = "mix";
     let [first, second, chooser] = fixed(arguments);
     let chooser = bool_operand(operation, chooser)?;
-    let dimensions = [first.dimension(), second.dimension()];
-    let dimension =
-        same(dimensions[0], dimensions[1]).ok_or_else(|| mismatch(operation, &dimensions))?;
+    let dimensions = [
+        first.dimension(),
+        second.dimension(),
+        chooser.output.dimension,
+    ];
+    let dimension = same(dimensions[0], dimensions[1])
+        .and_then(|dimension| bounds(dimension, dimensions[2]))
+        .ok_or_else(|| mismatch(operation, &dimensions))?;
 
     match (first.scalar(), second.scalar()) {
         (Some(scalar), Some(other)) if scalar == other && !scalar.is_numeric() => {
@@ -999,12 +1018,12 @@ fn plain(kind: CheckedKind, scalar: Scalar) -> Checked {
 }
 
 /// A bool node over the given domain.
-fn bool_node(kind: CheckedKind, domain: Domain) -> Checked {
+fn bool_node(kind: CheckedKind, domain: Domain, dimension: Dimension) -> Checked {
     Checked::Typed(CheckedNode {
         kind,
         output: Type {
             domain,
-            dimension: Dimension::Vec1,
+            dimension,
             scalar: Scalar::Bool,
         },
     })
@@ -1782,7 +1801,7 @@ mod tests {
     // Booleans.
 
     #[test]
-    fn comparisons_make_bools_at_vec1() {
+    fn comparisons_make_bools_at_the_wider_side() {
         assert_eq!(
             typed("rough < 0.5"),
             ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
@@ -1816,18 +1835,20 @@ mod tests {
             ty(Domain::Face, Dimension::Vec1, Scalar::Bool)
         );
         assert_eq!(
-            failure("color < 0.5"),
-            CheckFailure::WideComparison {
-                operation: "<".to_owned(),
-                found: Dimension::Vec4
-            }
+            typed("color < 0.5"),
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::Bool)
         );
         assert_eq!(
-            failure("rough == color.rgb"),
-            CheckFailure::WideComparison {
-                operation: "==".to_owned(),
-                found: Dimension::Vec3
-            }
+            typed("rough == color.rgb"),
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("position > 2"),
+            ty(Domain::Voxel, Dimension::Vec3, Scalar::Bool)
+        );
+        assert_eq!(
+            failure("color.rg > color.rgb"),
+            dimensions(">", &[Dimension::Vec2, Dimension::Vec3])
         );
     }
 
@@ -1847,16 +1868,41 @@ mod tests {
         );
         assert_eq!(
             failure("tag < \"x\""),
-            CheckFailure::StringOrder {
-                operation: "<".to_owned()
+            CheckFailure::EqualityOnly {
+                operation: "<".to_owned(),
+                found: Scalar::String
             }
         );
         assert_eq!(failure("tag == 1"), non_numeric("==", Scalar::String));
         assert_eq!(failure("rough == tag"), non_numeric("==", Scalar::String));
-        assert_eq!(failure("glowing == true"), non_numeric("==", Scalar::Bool));
+        assert_eq!(failure("glowing == 1"), non_numeric("==", Scalar::Bool));
+        assert_eq!(failure("tag == glowing"), non_numeric("==", Scalar::String));
+    }
+
+    #[test]
+    fn bools_take_equality_alone() {
         assert_eq!(
-            failure("glowing != glowing"),
-            non_numeric("!=", Scalar::Bool)
+            typed("glowing == true"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("glowing != glowing"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("color > 0.5 == glowing"),
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::Bool)
+        );
+        assert_eq!(
+            failure("glowing < true"),
+            CheckFailure::EqualityOnly {
+                operation: "<".to_owned(),
+                found: Scalar::Bool
+            }
+        );
+        assert_eq!(
+            failure("color.rg > 0.5 == color.rgb > 0.5"),
+            dimensions("==", &[Dimension::Vec2, Dimension::Vec3])
         );
     }
 
@@ -1864,13 +1910,13 @@ mod tests {
     fn a_comparison_chain_errors() {
         assert_eq!(failure("rough < 0.5 < 1.0"), non_numeric("<", Scalar::Bool));
         assert_eq!(
-            failure("1.0 == 1.0 == true"),
+            failure("1.0 == 1.0 == 1.0"),
             non_numeric("==", Scalar::Bool)
         );
     }
 
     #[test]
-    fn folds_take_a_comparison_written_in_place() {
+    fn folds_take_a_bool_of_any_dimension_to_vec1() {
         assert_eq!(
             typed("all(color.rgb > 0.9)"),
             ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
@@ -1900,6 +1946,18 @@ mod tests {
             ty(Domain::Voxel, Dimension::Vec1, Scalar::Bool)
         );
         assert_eq!(
+            typed("any(glowing)"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("all(!(color > 0.5))"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("any(true)"),
+            ty(Domain::Plain, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
             rendered("all(color.rgb > 0.9)"),
             "(all (> (. `color` 012) 0.9f32))"
         );
@@ -1907,21 +1965,17 @@ mod tests {
             failure("any(color.rg > color.rgb)"),
             dimensions(">", &[Dimension::Vec2, Dimension::Vec3])
         );
-
-        for text in ["any(glowing)", "all(rough)", "any(true)", "all(!glowing)"] {
-            assert!(
-                matches!(failure(text), CheckFailure::FoldNeedsComparison { .. }),
-                "{text}"
-            );
-        }
-
+        assert_eq!(failure("all(rough)"), non_bool("all", Scalar::F32));
+        assert_eq!(failure("any(tag)"), non_bool("any", Scalar::String));
         assert_eq!(
             failure("any(tag < \"x\")"),
-            CheckFailure::StringOrder {
-                operation: "<".to_owned()
+            CheckFailure::EqualityOnly {
+                operation: "<".to_owned(),
+                found: Scalar::String
             }
         );
         assert_eq!(failure("all(1 < 2)"), CheckFailure::UntypedLiteral);
+        assert_eq!(failure("any(1)"), CheckFailure::UntypedLiteral);
     }
 
     #[test]
@@ -1946,6 +2000,26 @@ mod tests {
             typed("!true && false"),
             ty(Domain::Plain, Dimension::Vec1, Scalar::Bool)
         );
+        assert_eq!(
+            typed("!(color > 0.5)"),
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("color > 0.5 && glowing"),
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("true || color.rgb == plain3"),
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("color.rgb > 0.5 ^ color.rgb < 0.9"),
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::Bool)
+        );
+        assert_eq!(
+            failure("color.rg > 0.5 && color.rgb > 0.5"),
+            dimensions("&&", &[Dimension::Vec2, Dimension::Vec3])
+        );
         assert_eq!(failure("!rough"), non_bool("!", Scalar::F32));
         assert_eq!(failure("!tag"), non_bool("!", Scalar::String));
         assert_eq!(failure("glowing || tag"), non_bool("||", Scalar::String));
@@ -1966,7 +2040,6 @@ mod tests {
         assert_eq!(failure("max(glowing)"), non_numeric("max", Scalar::Bool));
         assert_eq!(failure("sum(glowing)"), non_numeric("sum", Scalar::Bool));
         assert_eq!(failure("avg(glowing)"), non_numeric("avg", Scalar::Bool));
-        assert_eq!(failure("glowing.r"), non_numeric(".r", Scalar::Bool));
         assert_eq!(
             failure("faceAvg(corner(glowing))"),
             non_numeric("faceAvg", Scalar::Bool)
@@ -2029,8 +2102,24 @@ mod tests {
             ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
         );
         assert_eq!(
+            typed("mix(color, 0.rrrr, color > 0.5)"),
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+        );
+        assert_eq!(
+            typed("mix(position, position * 0, position > 2)"),
+            ty(Domain::Voxel, Dimension::Vec3, Scalar::U32)
+        );
+        assert_eq!(
             failure("mix(color, color.rgb, glowing)"),
-            dimensions("mix", &[Dimension::Vec4, Dimension::Vec3])
+            dimensions("mix", &[Dimension::Vec4, Dimension::Vec3, Dimension::Vec1])
+        );
+        assert_eq!(
+            failure("mix(color, 0.rrrr, color.rgb > 0.5)"),
+            dimensions("mix", &[Dimension::Vec4, Dimension::Vec4, Dimension::Vec3])
+        );
+        assert_eq!(
+            failure("mix(rough, 1, color > 0.5)"),
+            dimensions("mix", &[Dimension::Vec1, Dimension::Vec1, Dimension::Vec4])
         );
         assert_eq!(
             failure("mix(count, 1.5, glowing)"),
@@ -2101,6 +2190,48 @@ mod tests {
     }
 
     // Swizzles.
+
+    #[test]
+    fn the_constructors_pack_bools() {
+        assert_eq!(
+            typed("rgb(glowing, true, glowing)"),
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("rg(occlusion < 0.5, false)"),
+            ty(Domain::Corner, Dimension::Vec2, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("r(true)"),
+            ty(Domain::Plain, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
+            failure("rg(glowing, glowing.rr)"),
+            CheckFailure::RequiresDimension {
+                operation: "rg".to_owned(),
+                expected: Dimension::Vec1,
+                found: Dimension::Vec2
+            }
+        );
+        assert_eq!(failure("rgb(true, 0, 0)"), non_numeric("rgb", Scalar::Bool));
+    }
+
+    #[test]
+    fn a_bool_swizzles_as_a_number_does() {
+        assert_eq!(
+            typed("glowing.rr"),
+            ty(Domain::Swatch, Dimension::Vec2, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("(color > 0.5).a"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::Bool)
+        );
+        assert_eq!(
+            typed("(position > 2).zyx"),
+            ty(Domain::Voxel, Dimension::Vec3, Scalar::Bool)
+        );
+        assert_eq!(failure("tag.r"), non_numeric(".r", Scalar::String));
+    }
 
     #[test]
     fn a_swizzle_draws_from_one_alphabet_within_its_source() {

@@ -5,103 +5,110 @@ use crate::{
 use meshdoc::MeshPropertyValue;
 use vox_value_language::{Components, Scalar, Value};
 
-/// The property `value` lands as under `transfer`. Only f32 has rows, so an
-/// array of a wider bool, integer, or string errors.
+/// The property `value` lands as under `transfer`.
 pub(crate) fn extra_property_value(
     element: &MeshElement,
     value: &Value,
     transfer: Transfer,
 ) -> Result<MeshPropertyValue> {
-    let kind = value.to_type();
-
     if transfer == Transfer::Srgb && value.scalar() != Scalar::F32 {
         return Err(Error::mesh_record(
             element.clone(),
-            format!("is a {kind}, and `srgb` transfers f32 alone"),
+            format!("is a {}, and `srgb` transfers f32 alone", value.to_type()),
         ));
     }
 
-    let width = value.dimension().width();
-    let array = value.domain().is_array();
-    let single = !array && width == 1;
-
-    let flat = || {
-        if array && width > 1 {
-            Err(Error::mesh_record(
-                element.clone(),
-                format!("is a {kind}, and an extras entry holds rows of f32 alone"),
-            ))
-        } else {
-            Ok(())
-        }
+    let shape = Shape {
+        width: value.dimension().width(),
+        array: value.domain().is_array(),
     };
 
     let ints = |components: Vec<i64>| {
-        if single {
-            MeshPropertyValue::Int(components[0])
-        } else {
-            MeshPropertyValue::Ints(components)
-        }
+        shape.land(
+            &components,
+            MeshPropertyValue::Int,
+            MeshPropertyValue::Ints,
+            MeshPropertyValue::IntRows,
+        )
     };
 
     Ok(match value.components() {
-        Components::Bool(components) => {
-            flat()?;
-
-            if single {
-                MeshPropertyValue::Bool(components[0])
-            } else {
-                MeshPropertyValue::Bools(components.clone())
-            }
-        }
+        Components::Bool(components) => shape.land(
+            components,
+            MeshPropertyValue::Bool,
+            MeshPropertyValue::Bools,
+            MeshPropertyValue::BoolRows,
+        ),
 
         Components::F32(components) => {
-            let rows = components
-                .chunks_exact(width)
-                .map(|entry| {
-                    Ok(encode_components(element, entry, transfer, false)?
-                        .into_iter()
-                        .map(narrow)
-                        .collect::<Vec<f64>>())
-                })
-                .collect::<Result<Vec<_>>>()?;
+            let encoded: Vec<f64> = components
+                .chunks_exact(shape.width)
+                .map(|entry| encode_components(element, entry, transfer, false))
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .map(narrow)
+                .collect();
 
-            if single {
-                MeshPropertyValue::Float(rows[0][0])
-            } else if !array {
-                MeshPropertyValue::Floats(rows[0].clone())
-            } else if width == 1 {
-                MeshPropertyValue::Floats(rows.into_iter().map(|row| row[0]).collect())
-            } else {
-                MeshPropertyValue::FloatRows(rows)
-            }
+            shape.land(
+                &encoded,
+                MeshPropertyValue::Float,
+                MeshPropertyValue::Floats,
+                MeshPropertyValue::FloatRows,
+            )
         }
 
-        Components::String(components) => {
-            flat()?;
-
-            if single {
-                MeshPropertyValue::Text(components[0].clone())
-            } else {
-                MeshPropertyValue::Texts(components.clone())
-            }
-        }
+        Components::String(components) => shape.land(
+            components,
+            MeshPropertyValue::Text,
+            MeshPropertyValue::Texts,
+            MeshPropertyValue::TextRows,
+        ),
 
         Components::U8(components) => {
-            flat()?;
             ints(components.iter().map(|&number| i64::from(number)).collect())
         }
 
         Components::U16(components) => {
-            flat()?;
             ints(components.iter().map(|&number| i64::from(number)).collect())
         }
 
         Components::U32(components) => {
-            flat()?;
             ints(components.iter().map(|&number| i64::from(number)).collect())
         }
     })
+}
+
+/// The shape a value's components land in.
+#[derive(Clone, Copy)]
+struct Shape {
+    width: usize,
+    array: bool,
+}
+
+impl Shape {
+    /// `components` as a leaf for a plain vec1, a list for a plain vecN or a
+    /// vec1 array, or rows of `width` for a vecN array.
+    fn land<T: Clone>(
+        self,
+        components: &[T],
+        leaf: fn(T) -> MeshPropertyValue,
+        list: fn(Vec<T>) -> MeshPropertyValue,
+        rows: fn(Vec<Vec<T>>) -> MeshPropertyValue,
+    ) -> MeshPropertyValue {
+        if !self.array && self.width == 1 {
+            leaf(components[0].clone())
+        } else if !self.array || self.width == 1 {
+            list(components.to_vec())
+        } else {
+            rows(
+                components
+                    .chunks_exact(self.width)
+                    .map(<[T]>::to_vec)
+                    .collect(),
+            )
+        }
+    }
 }
 
 /// `component` narrowed to f32 and widened back through its shortest
@@ -173,12 +180,28 @@ mod tests {
             MeshPropertyValue::Bools(vec![true, false])
         );
         assert_eq!(
+            landed(
+                Domain::Face,
+                Dimension::Vec2,
+                Components::Bool(vec![true, false, false, true])
+            ),
+            MeshPropertyValue::BoolRows(vec![vec![true, false], vec![false, true]])
+        );
+        assert_eq!(
             landed(Domain::Plain, Dimension::Vec1, Components::U32(vec![7])),
             MeshPropertyValue::Int(7)
         );
         assert_eq!(
             landed(Domain::Swatch, Dimension::Vec1, Components::U8(vec![1, 2])),
             MeshPropertyValue::Ints(vec![1, 2])
+        );
+        assert_eq!(
+            landed(
+                Domain::Swatch,
+                Dimension::Vec2,
+                Components::U8(vec![1, 2, 3, 4])
+            ),
+            MeshPropertyValue::IntRows(vec![vec![1, 2], vec![3, 4]])
         );
         assert_eq!(
             landed(
@@ -199,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn srgb_curves_the_floats_and_an_array_of_wide_non_floats_errors() {
+    fn srgb_curves_the_floats_and_errors_on_a_non_float() {
         let grey = Value::new(Domain::Plain, Dimension::Vec1, Components::F32(vec![0.5])).unwrap();
         let MeshPropertyValue::Float(curved) =
             extra_property_value(&element(), &grey, Transfer::Srgb).unwrap()
@@ -211,13 +234,5 @@ mod tests {
         let flag =
             Value::new(Domain::Plain, Dimension::Vec1, Components::Bool(vec![true])).unwrap();
         assert!(extra_property_value(&element(), &flag, Transfer::Srgb).is_err());
-
-        let pairs = Value::new(
-            Domain::Swatch,
-            Dimension::Vec2,
-            Components::U8(vec![1, 2, 3, 4]),
-        )
-        .unwrap();
-        assert!(extra_property_value(&element(), &pairs, Transfer::Linear).is_err());
     }
 }

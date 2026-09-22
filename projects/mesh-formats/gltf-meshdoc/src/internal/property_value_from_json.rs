@@ -66,46 +66,64 @@ pub fn property_value_from_json(
 }
 
 /// The list value of `entries`, all of one kind, or `None` when they mix.
-/// An empty list is an empty float list.
+/// An empty list, or a list of empty rows, reads as float.
 fn list_from_json(entries: &[Value]) -> Option<MeshPropertyValue> {
-    if let Some(values) = entries
-        .iter()
-        .map(Value::as_bool)
-        .collect::<Option<Vec<bool>>>()
-        && !entries.is_empty()
-    {
-        return Some(MeshPropertyValue::Bools(values));
+    if entries.is_empty() {
+        return Some(MeshPropertyValue::Floats(vec![]));
     }
 
-    if let Some(values) = entries
+    let rows: Option<Vec<&[Value]>> = entries
         .iter()
-        .map(|entry| entry.as_str().map(str::to_owned))
-        .collect::<Option<Vec<String>>>()
-        && !entries.is_empty()
-    {
-        return Some(MeshPropertyValue::Texts(values));
+        .map(|entry| entry.as_array().map(Vec::as_slice))
+        .collect();
+
+    let Some(rows) = rows else {
+        if let Some(values) = leaves(entries, Value::as_bool) {
+            return Some(MeshPropertyValue::Bools(values));
+        }
+
+        if let Some(values) = leaves(entries, text) {
+            return Some(MeshPropertyValue::Texts(values));
+        }
+
+        if let Some(values) = leaves(entries, Value::as_i64) {
+            return Some(MeshPropertyValue::Ints(values));
+        }
+
+        return leaves(entries, Value::as_f64).map(MeshPropertyValue::Floats);
+    };
+
+    if rows.iter().all(|row| row.is_empty()) {
+        return Some(MeshPropertyValue::FloatRows(vec![vec![]; rows.len()]));
     }
 
-    if entries.iter().all(Value::is_number) {
-        return Some(
-            match entries
-                .iter()
-                .map(Value::as_i64)
-                .collect::<Option<Vec<i64>>>()
-            {
-                Some(values) if !entries.is_empty() => MeshPropertyValue::Ints(values),
-                _ => MeshPropertyValue::Floats(entries.iter().filter_map(Value::as_f64).collect()),
-            },
-        );
+    if let Some(rows) = rows_of(&rows, Value::as_bool) {
+        return Some(MeshPropertyValue::BoolRows(rows));
     }
 
-    entries
-        .iter()
-        .map(|entry| {
-            entry
-                .as_array()
-                .and_then(|row| row.iter().map(Value::as_f64).collect::<Option<Vec<f64>>>())
-        })
-        .collect::<Option<Vec<Vec<f64>>>>()
-        .map(MeshPropertyValue::FloatRows)
+    if let Some(rows) = rows_of(&rows, text) {
+        return Some(MeshPropertyValue::TextRows(rows));
+    }
+
+    if let Some(rows) = rows_of(&rows, Value::as_i64) {
+        return Some(MeshPropertyValue::IntRows(rows));
+    }
+
+    rows_of(&rows, Value::as_f64).map(MeshPropertyValue::FloatRows)
+}
+
+/// Every entry of `values` read by `leaf`, or `None` when one is another
+/// kind.
+fn leaves<T>(values: &[Value], leaf: impl Fn(&Value) -> Option<T>) -> Option<Vec<T>> {
+    values.iter().map(leaf).collect()
+}
+
+/// Every row of `rows` read by `leaf`, or `None` when a leaf is another kind.
+fn rows_of<T>(rows: &[&[Value]], leaf: impl Fn(&Value) -> Option<T>) -> Option<Vec<Vec<T>>> {
+    rows.iter().map(|row| leaves(row, &leaf)).collect()
+}
+
+/// A string leaf, owned.
+fn text(value: &Value) -> Option<String> {
+    value.as_str().map(str::to_owned)
 }

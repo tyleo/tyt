@@ -48,9 +48,7 @@ pub(crate) enum CheckedKind {
 
     Fold {
         fold: Fold,
-        operator: ComparisonOperator,
-        left: Box<CheckedNode>,
-        right: Box<CheckedNode>,
+        operand: Box<CheckedNode>,
     },
 
     Index {

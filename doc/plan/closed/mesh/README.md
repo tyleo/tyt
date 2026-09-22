@@ -17,11 +17,9 @@ The build bent from the design where the landed crates decided:
    list has to hold that domain
 5. A mesh image extra samples through a stream some primitive writes at its
    bake domain, and every primitive writing it places it at one position
-6. Extras rows exist for `f32` alone; a wider bool, integer, or string array
-   errors, and a vec1 array of those lands as a list
-7. JSON and extras floats narrow to `f32` after the transfer runs in `f64`
-8. `srgb` on an unsigned value errors wherever it errors on a bool or a string
-9. A vec3 `COLOR_0` lands as VEC4 with an alpha of one, the document's one
+6. JSON and extras floats narrow to `f32` after the transfer runs in `f64`
+7. `srgb` on an unsigned value errors wherever it errors on a bool or a string
+8. A vec3 `COLOR_0` lands as VEC4 with an alpha of one, the document's one
    vertex color shape
 10. A profile with no `materials` declares count 0, and its compute keys
     travel with `--values-from`

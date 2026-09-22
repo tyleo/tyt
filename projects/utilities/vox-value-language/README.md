@@ -147,20 +147,25 @@ clamps: a bound is always the author's `clamp`.
 
 ## Booleans
 
-A comparison makes a bool: `<`, `<=`, `>`, `>=`, `==`, and `!=` take a vec1 on
-each side and yield one. `true` and `false` name a plain bool directly. `==`
-and `!=` also compare two strings by value.
+A comparison makes a bool: `<`, `<=`, `>`, `>=`, `==`, and `!=` compare
+component by component, the sides sharing a dimension or either being a vec1,
+and yield a bool of the wider side. `true` and `false` name a plain bool
+directly. `==` and `!=` also compare two bools or two strings by value.
 
-A wider comparison names its fold: inside `any(c)` and `all(c)` the sides share
-a dimension or either is a vec1, the components compare one by one, and the
-reduction folds the answers, `any` with or and `all` with and. The comparison
-is legal only directly inside its reduction: a bare `vec3 < vec3` errors, and
-the component answers never escape as a value. No bool vector exists.
+`any(c)` and `all(c)` fold a bool of any dimension to a vec1, `any` with or
+and `all` with and, so `all(color.rgb > 0.9)` asks whether every channel
+passes. `!`, `&&`, `^`, and `||` combine bools component by component under
+the same pairing rule, with `^` the exclusive or.
 
-`!`, `&&`, `^`, and `||` combine bools, with `^` the exclusive or. A bool never
-mixes with a number: arithmetic on a bool errors, and every function rejects
-one except `mix` and the domain climbs. `mix(x, y, cond)` picks `x` or `y` per
-entry by the bool, so `mix(0f32, 1, glowing)` makes a `0`/`1` mask.
+A bool never mixes with a number: arithmetic on a bool errors, and every
+function rejects one except `mix`, the folds, the constructors, and the domain
+climbs. A bool swizzles as a number does, so `(color > 0.5).a` picks the alpha
+answer, and the constructors pack bool parts, so `rgb(a, b, c)` over three
+bools is a vec3 bool.
+`mix(x, y, cond)` picks `x` or `y` by the bool, per entry
+from a vec1 and per component from a bool of the branches' dimension, so
+`mix(0f32, 1, glowing)` makes a `0`/`1` mask and `mix(color, 0.rrrr, color >
+0.5)` zeroes the channels that pass.
 
 Shape follows the numeric rules: a comparison against a plain value broadcasts
 across an array, two arrays pair element by element, and the logical operators
@@ -224,7 +229,9 @@ the exclusive or.
 
 The dimension rules for the arithmetic operators: `+` and `-` take equal
 dimensions; `*` takes equal dimensions or a vec1 on either side; `/` takes equal
-dimensions or a vec1 divisor. The result takes the larger dimension.
+dimensions or a vec1 divisor. The comparisons and the binary logical operators
+take equal dimensions or a vec1 on either side. The result takes the larger
+dimension.
 
 ## Swizzles
 
@@ -256,7 +263,7 @@ otherwise, and every one pairs arrays element by element and broadcasts plain
 values, the result an array when any argument is.
 
 1. `r(x)`, `rg(x, y)`, `rgb(x, y, z)`, `rgba(x, y, z, w)` build a vector from
-   vec1 parts.
+   vec1 parts, `f32` or all bool.
 2. `min(e)`, `max(e)`, `sum(e)`, `avg(e)` reduce an array across its whole
    domain, per component, to a plain value. `min`, `max`, and `sum` keep the
    operand type and take any; `avg` takes any and returns `f32`.
@@ -289,11 +296,11 @@ values, the result an array when any argument is.
     the conversions, componentwise, under the rules in [Numbers](#numbers).
 19. `mix(x, y, cond)`: `x` where the bool is false and `y` where it is true.
     The branches share a dimension and a type, any number, bool, or string,
-    and the result takes it. A numeric pair keeps the type it is given:
-    `mix(0f32, 1, glowing)` pins one branch to type the other.
-20. `any(c)`, `all(c)`: fold a comparison's component answers into one bool
-    per entry, `any` with or and `all` with and. The argument is a comparison
-    written in place.
+    and the result takes it; `dim(cond) = dim(x)` or 1. A numeric pair keeps
+    the type it is given: `mix(0f32, 1, glowing)` pins one branch to type the
+    other.
+20. `any(c)`, `all(c)`: fold a bool's components into one bool per entry,
+    `any` with or and `all` with and; result vec1.
 21. `faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, `faceSum(e)`: a corner array to
     a face array.
 22. `voxelAvg(e)`, `voxelMin(e)`, `voxelMax(e)`, `voxelSum(e)`: a face or

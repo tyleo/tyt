@@ -1,6 +1,6 @@
 use crate::function::Function;
 
-/// How `any` and `all` fold a comparison's component answers.
+/// How `any` and `all` fold a bool's components into one.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum Fold {
     All,

@@ -11,7 +11,7 @@ pub struct Value {
 
 impl Value {
     /// Builds a value, erroring on a component count that disagrees with the
-    /// domain and dimension and on a bool or string above vec1.
+    /// domain and dimension and on a string above vec1.
     ///
     /// # Arguments
     /// - `domain`: what the value has one entry per.
@@ -19,10 +19,8 @@ impl Value {
     /// - `components`: the entries, flattened component by component; a plain
     ///   value holds exactly one entry, and an array any whole number of them.
     pub fn new(domain: Domain, dimension: Dimension, components: Components) -> Result<Value> {
-        let scalar = components.scalar();
-
-        if !scalar.is_numeric() && dimension != Dimension::Vec1 {
-            return Err(Error::NonNumericWidth { scalar, dimension });
+        if components.scalar() == Scalar::String && dimension != Dimension::Vec1 {
+            return Err(Error::StringWidth { dimension });
         }
 
         let width = dimension.width();
@@ -152,25 +150,14 @@ mod tests {
     }
 
     #[test]
-    fn a_bool_or_string_is_vec1_alone() {
+    fn a_string_is_vec1_alone() {
         assert!(
-            Value::new(
-                Domain::Swatch,
-                Dimension::Vec1,
-                Components::Bool(vec![true, false])
-            )
-            .is_ok()
-        );
-        assert_eq!(
             Value::new(
                 Domain::Swatch,
                 Dimension::Vec2,
                 Components::Bool(vec![true, false])
-            ),
-            Err(Error::NonNumericWidth {
-                scalar: Scalar::Bool,
-                dimension: Dimension::Vec2
-            })
+            )
+            .is_ok()
         );
         assert_eq!(
             Value::new(
@@ -178,8 +165,7 @@ mod tests {
                 Dimension::Vec2,
                 Components::String(vec!["a".to_owned(), "b".to_owned()])
             ),
-            Err(Error::NonNumericWidth {
-                scalar: Scalar::String,
+            Err(Error::StringWidth {
                 dimension: Dimension::Vec2
             })
         );

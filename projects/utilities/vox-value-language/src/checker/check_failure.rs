@@ -10,9 +10,8 @@ pub enum CheckFailure {
         found: Vec<Dimension>,
     },
 
-    /// `any` or `all` took something other than a comparison written in
-    /// place.
-    FoldNeedsComparison { operation: String },
+    /// Bools or strings met a comparison other than `==` and `!=`.
+    EqualityOnly { operation: String, found: Scalar },
 
     /// An index was not unsigned.
     IndexScalar { found: Scalar },
@@ -54,9 +53,6 @@ pub enum CheckFailure {
     /// A climb named a domain below its operand's.
     StepDown { operation: String, found: Domain },
 
-    /// Strings met a comparison other than `==` and `!=`.
-    StringOrder { operation: String },
-
     /// A swizzle mixed the `rgba` and `xyzw` alphabets.
     SwizzleAlphabets { member: String },
 
@@ -78,9 +74,6 @@ pub enum CheckFailure {
 
     /// A bare whole-number literal met nothing that fixes its type.
     UntypedLiteral,
-
-    /// A comparison above vec1 sat outside `any` and `all`.
-    WideComparison { operation: String, found: Dimension },
 }
 
 impl Display for CheckFailure {
@@ -92,12 +85,10 @@ impl Display for CheckFailure {
                 list(found)
             ),
 
-            CheckFailure::FoldNeedsComparison { operation } => {
-                write!(
-                    formatter,
-                    "`{operation}` takes a comparison written in place"
-                )
-            }
+            CheckFailure::EqualityOnly { operation, found } => write!(
+                formatter,
+                "`{operation}` orders numbers; a {found} takes `==` and `!=` alone"
+            ),
 
             CheckFailure::IndexScalar { found } => {
                 write!(formatter, "an index is unsigned, not {found}")
@@ -150,11 +141,6 @@ impl Display for CheckFailure {
                 "`{operation}` climbs, and a {found} value sits above it"
             ),
 
-            CheckFailure::StringOrder { operation } => write!(
-                formatter,
-                "`{operation}` orders numbers; strings take `==` and `!=` alone"
-            ),
-
             CheckFailure::SwizzleAlphabets { member } => write!(
                 formatter,
                 "the swizzle `{member}` mixes the rgba and xyzw alphabets"
@@ -188,11 +174,6 @@ impl Display for CheckFailure {
             CheckFailure::UntypedLiteral => write!(
                 formatter,
                 "a bare whole-number literal takes its type from context, and nothing here fixes one"
-            ),
-
-            CheckFailure::WideComparison { operation, found } => write!(
-                formatter,
-                "a {found} comparison names its fold: `{operation}` sits inside `any` or `all`"
             ),
         }
     }

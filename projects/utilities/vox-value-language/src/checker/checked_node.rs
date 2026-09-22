@@ -73,18 +73,13 @@ impl CheckedNode {
                 format!("(default `{name}`{marker} {})", fallback.render())
             }
 
-            CheckedKind::Fold {
-                fold,
-                operator,
-                left,
-                right,
-            } => {
+            CheckedKind::Fold { fold, operand } => {
                 let fold = match fold {
                     Fold::All => "all",
                     Fold::Any => "any",
                 };
 
-                format!("({fold} ({operator} {} {}))", left.render(), right.render())
+                format!("({fold} {})", operand.render())
             }
 
             CheckedKind::Index { source, index } => {

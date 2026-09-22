@@ -15,13 +15,16 @@ pub fn property_value_to_json(
     match value {
         MeshPropertyValue::Bool(value) => json!(value),
         MeshPropertyValue::Bools(values) => json!(values),
+        MeshPropertyValue::BoolRows(rows) => json!(rows),
         MeshPropertyValue::Int(value) => json!(value),
         MeshPropertyValue::Ints(values) => json!(values),
+        MeshPropertyValue::IntRows(rows) => json!(rows),
         MeshPropertyValue::Float(value) => json!(value),
         MeshPropertyValue::Floats(values) => json!(values),
         MeshPropertyValue::FloatRows(rows) => json!(rows),
         MeshPropertyValue::Text(value) => json!(value),
         MeshPropertyValue::Texts(values) => json!(values),
+        MeshPropertyValue::TextRows(rows) => json!(rows),
         MeshPropertyValue::Texture(texture_ref) => json!({
             "index": texture_indices[&texture_ref.texture_id],
             "texCoord": texture_ref.uv_stream_id.to_u32(),

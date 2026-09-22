@@ -33,7 +33,6 @@ impl Reads {
         match &node.kind {
             CheckedKind::Binary { left, right, .. }
             | CheckedKind::Comparison { left, right, .. }
-            | CheckedKind::Fold { left, right, .. }
             | CheckedKind::Logical { left, right, .. } => {
                 self.gather(left, reduced);
                 self.gather(right, reduced);
@@ -49,6 +48,7 @@ impl Reads {
 
             CheckedKind::Climb { operand, .. }
             | CheckedKind::Convert { operand, .. }
+            | CheckedKind::Fold { operand, .. }
             | CheckedKind::Unary { operand, .. } => self.gather(operand, reduced),
 
             CheckedKind::Default {

@@ -1322,18 +1322,6 @@ mod tests {
         assert_eq!(
             failing(
                 vec![value_extra(
-                    "pairs",
-                    ExtraForm::Json,
-                    "u8(baseColor * 255)",
-                    Transfer::Linear
-                )],
-                vec![]
-            ),
-            mesh_element("pairs")
-        );
-        assert_eq!(
-            failing(
-                vec![value_extra(
                     "count",
                     ExtraForm::Json,
                     "2u32",

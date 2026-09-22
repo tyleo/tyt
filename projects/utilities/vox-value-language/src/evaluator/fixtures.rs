@@ -237,6 +237,10 @@ pub(crate) fn u32s(domain: Domain, dimension: Dimension, values: &[u32]) -> Valu
     Value::new(domain, dimension, Components::U32(values.to_vec())).unwrap()
 }
 
+pub(crate) fn wide_bools(domain: Domain, dimension: Dimension, values: &[bool]) -> Value {
+    Value::new(domain, dimension, Components::Bool(values.to_vec())).unwrap()
+}
+
 pub(crate) fn bools(domain: Domain, values: &[bool]) -> Value {
     Value::new(domain, Dimension::Vec1, Components::Bool(values.to_vec())).unwrap()
 }

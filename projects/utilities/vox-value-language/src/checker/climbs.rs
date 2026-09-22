@@ -11,7 +11,6 @@ pub(crate) fn climbs(node: &CheckedNode, lifted: &mut Vec<CheckedExpression>) {
     let paired: Vec<&CheckedNode> = match &node.kind {
         CheckedKind::Binary { left, right, .. }
         | CheckedKind::Comparison { left, right, .. }
-        | CheckedKind::Fold { left, right, .. }
         | CheckedKind::Logical { left, right, .. } => vec![left, right],
 
         CheckedKind::Bool(_)
@@ -23,6 +22,7 @@ pub(crate) fn climbs(node: &CheckedNode, lifted: &mut Vec<CheckedExpression>) {
 
         CheckedKind::Climb { operand, .. }
         | CheckedKind::Convert { operand, .. }
+        | CheckedKind::Fold { operand, .. }
         | CheckedKind::Unary { operand, .. } => vec![operand],
 
         CheckedKind::Default {

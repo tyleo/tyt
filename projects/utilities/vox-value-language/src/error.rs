@@ -1,4 +1,4 @@
-use crate::{CheckFailure, Dimension, Domain, EvalFailure, ParseFailure, Scalar, Type};
+use crate::{CheckFailure, Dimension, Domain, EvalFailure, ParseFailure, Type};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -45,12 +45,6 @@ pub enum Error {
     /// An environment `f32` array holds a NaN or infinite component.
     NonFiniteInput { name: String },
 
-    /// A bool or string was given a width above vec1.
-    NonNumericWidth {
-        scalar: Scalar,
-        dimension: Dimension,
-    },
-
     /// The text broke a token or grammar rule over the named byte range.
     Parse {
         range: Range<usize>,
@@ -59,6 +53,9 @@ pub enum Error {
 
     /// A face's piece points past the voxel table.
     PieceVoxel { face: usize, voxel: u32 },
+
+    /// A string was given a width above vec1.
+    StringWidth { dimension: Dimension },
 
     /// The value environment holds a name the type environment lacks.
     UnexpectedValue { name: String },
@@ -123,10 +120,6 @@ impl Display for Error {
                 write!(formatter, "`{name}` holds a non-finite component")
             }
 
-            Error::NonNumericWidth { scalar, dimension } => {
-                write!(formatter, "a {scalar} is vec1 alone, not {dimension}")
-            }
-
             Error::Parse { range, failure } => {
                 write!(
                     formatter,
@@ -140,6 +133,10 @@ impl Display for Error {
                     formatter,
                     "face {face} names voxel {voxel} past the voxel table"
                 )
+            }
+
+            Error::StringWidth { dimension } => {
+                write!(formatter, "a string is vec1 alone, not {dimension}")
             }
 
             Error::UnexpectedValue { name } => {

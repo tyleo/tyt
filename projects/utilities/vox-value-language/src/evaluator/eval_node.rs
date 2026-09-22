@@ -77,12 +77,7 @@ impl Evaluator<'_> {
                 }
             }
 
-            CheckedKind::Fold {
-                fold,
-                operator,
-                left,
-                right,
-            } => self.fold(*fold, *operator, left, right, output),
+            CheckedKind::Fold { fold, operand } => self.fold(*fold, operand, output),
 
             CheckedKind::Index { source, index } => {
                 index_entry(&self.node(source)?, &self.node(index)?, output)
@@ -216,6 +211,18 @@ impl Evaluator<'_> {
                 keep_call(function, &values, output.scalar, entries, width)?
             }
 
+            // Only a constructor answers a bool, packing its vec1 parts.
+            _ if output.scalar == Scalar::Bool => {
+                let parts: Vec<_> = values.iter().map(ValueExt::bools).collect();
+                let mut packed = Vec::with_capacity(entries * width);
+
+                for entry in 0..entries {
+                    packed.extend(parts.iter().map(|part| *part.component(entry, 0)));
+                }
+
+                Components::Bool(packed)
+            }
+
             _ => Components::F32(finite(
                 f32_call(function, &values, entries, width)?,
                 function.to_function().name(),
@@ -235,25 +242,18 @@ impl Evaluator<'_> {
         let left = self.lifted(left, output)?;
         let right = self.lifted(right, output)?;
         let entries = self.lengths.of(output.domain);
-        let answers = compare_values(operator, &left, &right, entries, 1)?;
+        let width = output.dimension.width();
+        let answers = compare_values(operator, &left, &right, entries, width)?;
 
         Ok(build(output, Components::Bool(answers)))
     }
 
-    fn fold(
-        &self,
-        fold: Fold,
-        operator: ComparisonOperator,
-        left: &CheckedNode,
-        right: &CheckedNode,
-        output: Type,
-    ) -> EvalResult<Value> {
-        let left = self.lifted(left, output)?;
-        let right = self.lifted(right, output)?;
-        let entries = self.lengths.of(output.domain);
-        let width = left.dimension().width().max(right.dimension().width());
-        let answers = compare_values(operator, &left, &right, entries, width)?;
-        let folded = answers
+    fn fold(&self, fold: Fold, operand: &CheckedNode, output: Type) -> EvalResult<Value> {
+        let operand = self.node(operand)?;
+        let width = operand.dimension().width();
+        let folded = operand
+            .bools()
+            .components
             .chunks(width)
             .map(|entry| match fold {
                 Fold::All => entry.iter().all(|&answer| answer),
@@ -274,7 +274,8 @@ impl Evaluator<'_> {
         let left = self.lifted(left, output)?;
         let right = self.lifted(right, output)?;
         let entries = self.lengths.of(output.domain);
-        let answers = componentwise([left.bools(), right.bools()], entries, 1, |[a, b]| {
+        let width = output.dimension.width();
+        let answers = componentwise([left.bools(), right.bools()], entries, width, |[a, b]| {
             Ok(match operator {
                 LogicalOperator::And => *a && *b,
                 LogicalOperator::Or => *a || *b,
@@ -297,6 +298,7 @@ impl Evaluator<'_> {
         let chooser = self.lifted(chooser, output)?;
         let transform = Mix {
             width: output.dimension.width(),
+            chooser_width: chooser.dimension().width(),
             chooser: chooser.bools().components,
         };
 
@@ -337,9 +339,10 @@ impl Evaluator<'_> {
 }
 
 /// Picks each component from the second operand where the chooser holds
-/// and the first elsewhere.
+/// and the first elsewhere. A vec1 chooser picks whole entries.
 struct Mix<'a> {
     width: usize,
+    chooser_width: usize,
     chooser: &'a [bool],
 }
 
@@ -350,7 +353,13 @@ impl EntryPairTransform for Mix<'_> {
             .zip(second)
             .enumerate()
             .map(|(index, (first, second))| {
-                if self.chooser[index / self.width] {
+                let chosen = if self.chooser_width == 1 {
+                    self.chooser[index / self.width]
+                } else {
+                    self.chooser[index]
+                };
+
+                if chosen {
                     second.clone()
                 } else {
                     first.clone()
@@ -699,7 +708,9 @@ fn compare_values(
             width,
             |[a, b]| Ok(compare(operator, a, b)),
         ),
-        Scalar::Bool => unreachable!("the checker rejects a bool comparison"),
+        Scalar::Bool => componentwise([left.bools(), right.bools()], entries, width, |[a, b]| {
+            Ok(compare(operator, a, b))
+        }),
     }
 }
 
@@ -768,7 +779,7 @@ mod tests {
         Components, Dimension, Domain, Error, EvalFailure, Scalar, Value, ValueEnvironment,
         evaluator::{
             assert_close, bools, buried, empty, evaluate, f32s, lamp, step, strings, u8s, u16s,
-            u32s,
+            u32s, wide_bools,
         },
     };
 
@@ -1272,6 +1283,14 @@ mod tests {
             value("voxelPosition.y"),
             u32s(Domain::Voxel, Dimension::Vec1, &[0, 1])
         );
+        assert_eq!(
+            value("(baseColorFactor > 0.55).b"),
+            bools(Domain::Swatch, &[false, true])
+        );
+        assert_eq!(
+            value("(unit == 0).zyx"),
+            wide_bools(Domain::Plain, Dimension::Vec3, &[true, true, false])
+        );
     }
 
     // Booleans and strings.
@@ -1326,6 +1345,43 @@ mod tests {
             value("roughnessFactor == 0.9"),
             bools(Domain::Swatch, &[true, false])
         );
+        assert_eq!(value("flag == true"), bools(Domain::Swatch, &[false, true]));
+        assert_eq!(
+            value("(unit == 0) != true"),
+            wide_bools(Domain::Plain, Dimension::Vec3, &[true, false, false])
+        );
+    }
+
+    #[test]
+    fn a_wide_comparison_answers_per_component() {
+        assert_eq!(
+            value("baseColorFactor.rgb > 0.55"),
+            wide_bools(
+                Domain::Swatch,
+                Dimension::Vec3,
+                &[false, false, false, true, true, true]
+            )
+        );
+        assert_eq!(
+            value("0.7 < baseColorFactor"),
+            wide_bools(
+                Domain::Swatch,
+                Dimension::Vec4,
+                &[false, false, false, true, true, true, false, false]
+            )
+        );
+        assert_eq!(
+            value("wide == wide.yx"),
+            wide_bools(
+                Domain::Voxel,
+                Dimension::Vec2,
+                &[false, false, false, false]
+            )
+        );
+        assert_eq!(
+            value("unit == 0"),
+            wide_bools(Domain::Plain, Dimension::Vec3, &[false, true, true])
+        );
     }
 
     #[test]
@@ -1359,6 +1415,12 @@ mod tests {
             bools(Domain::Voxel, &[false, true])
         );
         assert_eq!(value("all(0.5 < unit)"), bools(Domain::Plain, &[false]));
+        assert_eq!(value("any(flag)"), bools(Domain::Swatch, &[false, true]));
+        assert_eq!(
+            value("all(!(baseColorFactor.rgb > 0.55))"),
+            bools(Domain::Swatch, &[true, false])
+        );
+        assert_eq!(value("any(true)"), bools(Domain::Plain, &[true]));
     }
 
     #[test]
@@ -1376,6 +1438,30 @@ mod tests {
         );
         assert_eq!(value("!flag || flag"), bools(Domain::Swatch, &[true, true]));
         assert_eq!(value("!true && false"), bools(Domain::Plain, &[false]));
+        assert_eq!(
+            value("!(unit == 0)"),
+            wide_bools(Domain::Plain, Dimension::Vec3, &[true, false, false])
+        );
+        assert_eq!(
+            value("unit == 0 && true"),
+            wide_bools(Domain::Plain, Dimension::Vec3, &[false, true, true])
+        );
+        assert_eq!(
+            value("baseColorFactor.rgb > 0.55 || flag"),
+            wide_bools(
+                Domain::Swatch,
+                Dimension::Vec3,
+                &[false, false, false, true, true, true]
+            )
+        );
+        assert_eq!(
+            value("baseColorFactor.rgb > 0.55 ^ baseColorFactor.rgb > 0.8"),
+            wide_bools(
+                Domain::Swatch,
+                Dimension::Vec3,
+                &[false, false, false, false, false, true]
+            )
+        );
     }
 
     #[test]
@@ -1404,6 +1490,14 @@ mod tests {
         assert_eq!(
             value("mix(\"OPAQUE\", \"BLEND\", min(baseColorFactor.a) < 1)"),
             strings(Domain::Plain, &["BLEND"])
+        );
+        close(
+            "mix(baseColorFactor, 0.rrrr, baseColorFactor > 0.55)",
+            &[0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0],
+        );
+        assert_eq!(
+            value("mix(wide, wide * 0, wide > 60)"),
+            u8s(Domain::Voxel, Dimension::Vec2, &[0, 0, 50, 25])
         );
     }
 
@@ -1443,6 +1537,18 @@ mod tests {
         );
         close("rgba(1, 1, 1, 1)", &[1.0, 1.0, 1.0, 1.0]);
         close("rgb(0.5, faceValue, 1)[9]", &[0.5, 9.0, 1.0]);
+        assert_eq!(
+            value("rgb(flag, true, flag)"),
+            wide_bools(
+                Domain::Swatch,
+                Dimension::Vec3,
+                &[false, true, false, true, true, true]
+            )
+        );
+        assert_eq!(
+            value("rg(unit.x == 1, false)"),
+            wide_bools(Domain::Plain, Dimension::Vec2, &[true, false])
+        );
     }
 
     #[test]

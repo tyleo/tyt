@@ -193,29 +193,28 @@ with `f32(e)` carrying an unsigned value in.
 
 ## Booleans
 
-A comparison makes a bool: `<`, `<=`, `>`, `>=`, `==`, and `!=` take a vec1 on
-each side and yield one. The literals `true` and `false` name one directly,
-plain, with both names reserved and a colliding property backtick-quoted. `==`
-and `!=` also compare two [strings](#strings) by value.
+A comparison makes a bool: `<`, `<=`, `>`, `>=`, `==`, and `!=` compare
+component by component, the sides sharing a dimension or either being a vec1,
+broadcasting as `*` does, and yield a bool of the wider side. The literals
+`true` and `false` name one directly, plain, with both names reserved and a
+colliding property backtick-quoted. `==` and `!=` also compare two
+[strings](#strings) by value.
 
-A wider comparison names its fold: inside `any(c)` and `all(c)` the sides share
-a dimension or either is a vec1, broadcasting as it does through `*`. The
-components compare one by one and the reduction folds the answers, `any` with or
-and `all` with and, so `all(baseColorFactor.rgb > 0.9)` is true where a color
-runs near white. The comparison is legal only directly inside its reduction: a
-bare `vec3 < vec3` errors because it names no fold, and the component answers
-never escape as a value. No bool vector exists, and the reductions take a
-comparison written in place, never a stored bool.
+`any(c)` and `all(c)` fold a bool of any dimension to a vec1, `any` with or and
+`all` with and, so `all(baseColorFactor.rgb > 0.9)` is true where a color runs
+near white. A select takes a vec1 bool, so a wide comparison folds before it
+routes faces.
 
-`!`, `&&`, `^`, and `||` combine bools, with `^` the exclusive or. Nothing else
-touches the type. A bool never mixes with a number, so there is no `0`/`1`
-coercion: `rgb(glowing, 0, 0)` errors, arithmetic on a bool errors, and every
-function rejects one except `mix` and the domain climbs. `mix(x, y, cond)` is
-the deliberate bridge out, picking `x` or `y` per entry by the bool, so
-`mix(0f32, 1, glowing)` makes the `0`/`1` mask; see [Functions](#functions). The
-climbs move a bool's entries and never touch them, and beyond these only
-grouping parentheses and `e[i]` apply, the index sampling a bool array at an
-entry.
+`!`, `&&`, `^`, and `||` combine bools component by component, with `^` the
+exclusive or, and `==` and `!=` compare two bools. A bool swizzles and packs
+through the constructors as a number does. A bool never mixes with a number,
+so there is no `0`/`1` coercion: `rgb(glowing, 0, 0)` errors, arithmetic on a
+bool errors, and every other function rejects one except `mix` and the domain
+climbs. `mix(x, y, cond)` is the deliberate bridge out, picking `x` or `y` by
+the bool, so `mix(0f32, 1, glowing)` makes the `0`/`1` mask; see
+[Functions](#functions). The climbs move a bool's entries and never touch
+them, and beyond these only grouping parentheses and `e[i]` apply, the index
+sampling a bool array at an entry.
 
 The type reaches three destinations: the select of
 [`--primitive`](mesh.md#primitives-and-materials), reading at the face domain

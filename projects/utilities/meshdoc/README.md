@@ -85,7 +85,7 @@ let material_id = main.retain_material(MeshMaterial {
 
 A material and an object each carry named `MeshProperty` entries for what
 the model does not place. A `MeshPropertyValue` is a bool, an integer, a
-float, a string, a list of any of those, a list of float rows, a texture
+float, a string, a list or a list of rows of any of those, a texture
 reference, or one of the document's files. Names are unique within their
 owner, floats are finite, and every texture and file referenced is live. A
 bridge writes them where its format keeps application data and reads them
