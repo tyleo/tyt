@@ -178,7 +178,7 @@ mod tests {
     use branded_id::{IdVec, U32Id};
     use meshdoc::{
         BMeshMaterial, MeshAlphaMode, MeshAttributeComponents, MeshImageSource, MeshMagFilter,
-        MeshMain, MeshPropertyValue, MeshWrap,
+        MeshMain, MeshMinFilter, MeshPropertyValue, MeshWrap,
     };
     use png::{ColorType, Decoder, Info};
     use std::io::Cursor;
@@ -975,6 +975,40 @@ mod tests {
         assert_eq!((info.width, info.height), (8, 8));
         assert_eq!(samples.iter().filter(|&&sample| sample == 255).count(), 24);
         assert_eq!(samples.iter().filter(|&&sample| sample == 0).count(), 40);
+    }
+
+    #[test]
+    fn a_corner_texture_samples_linear() {
+        let material_id = U32Id::from_u32(0);
+        let mut record = record(Method::Greedy);
+        record.computed_bindings.push(ComputedBinding {
+            name: "ao".to_owned(),
+            computation: Computation::Occlusion,
+        });
+        record.files = vec![file_write("bar-ao.png", None, "ao", Transfer::Linear)];
+        record.materials = materials(vec![
+            value_slot("metallicRoughnessTexture", "ao"),
+            slot(
+                "occlusionTexture",
+                SlotSource::File("bar-ao.png".to_owned()),
+            ),
+        ]);
+        record.primitives[U32Id::from_u32(0).to_usize_id()].material_id = Some(material_id);
+
+        let document = meshed(&record);
+
+        // The embedded bake and the referenced file both sit on the corner
+        // atlas, so both textures blend their blocks.
+        let material = document.material(material_id).unwrap();
+        for texture_ref in [
+            material.metallic_roughness_texture.unwrap(),
+            material.occlusion_texture.unwrap(),
+        ] {
+            let texture = document.texture(texture_ref.texture_id).unwrap();
+            assert_eq!(texture.mag_filter, Some(MeshMagFilter::Linear));
+            assert_eq!(texture.min_filter, Some(MeshMinFilter::Linear));
+            assert_eq!(texture.wrap_s, MeshWrap::ClampToEdge);
+        }
     }
 
     #[test]

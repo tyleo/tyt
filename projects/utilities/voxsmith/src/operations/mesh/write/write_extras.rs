@@ -40,11 +40,13 @@ pub(crate) fn write_extras<D: EncodePng>(
                         .get(file)
                         .expect("the streams checked every referenced png");
 
-                    let texture_id = images.reference(document, file, file_id)?;
+                    let bake = context.streams.bake(&element);
+
+                    let texture_id = images.reference(document, file, file_id, bake)?;
 
                     MeshPropertyValue::Texture(MeshTextureRef {
                         texture_id,
-                        uv_stream_id: stream_id(context.streams.bake(&element)),
+                        uv_stream_id: stream_id(bake),
                     })
                 }
 

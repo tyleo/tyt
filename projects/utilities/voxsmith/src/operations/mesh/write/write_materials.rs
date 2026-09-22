@@ -81,7 +81,8 @@ pub(crate) fn write_materials<D: EncodePng>(
 
                     let file_id = file_ids[file];
 
-                    let texture_id = images.reference(document, file, file_id)?;
+                    let texture_id =
+                        images.reference(document, file, file_id, streams.bake(&element))?;
 
                     set_texture(&mut material, property, texture_ref(texture_id));
                 }
