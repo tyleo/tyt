@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "gltf-meshdoc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "branded-id",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "goxl-voxcore"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "goxl",
@@ -1006,7 +1006,7 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "meshconv"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "gltf-meshdoc",
@@ -1016,7 +1016,7 @@ dependencies = [
 
 [[package]]
 name = "meshdoc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -1067,7 +1067,7 @@ dependencies = [
 
 [[package]]
 name = "mvox-voxcore"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "mvox",
@@ -1868,7 +1868,7 @@ version = "0.1.1"
 
 [[package]]
 name = "ty-math"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "glam",
  "palette",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -2150,7 +2150,7 @@ dependencies = [
 
 [[package]]
 name = "vmax"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "serde",
  "serde_bytes",
@@ -2170,7 +2170,7 @@ dependencies = [
 
 [[package]]
 name = "vmax-voxcore"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "serde",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "voxcore"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "voxj"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "base64",
  "flate2",
@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "voxsmith"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "branded-id",
  "meshdoc",
@@ -2262,7 +2262,7 @@ dependencies = [
 
 [[package]]
 name = "vxl"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "branded-id",
  "clap",
