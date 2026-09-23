@@ -8,6 +8,9 @@ description = "Converts between Voxel Json documents and the voxcore state."
 keywords = ["voxel", "voxj", "json", "3d", "conversion"]
 categories = ["encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = "0.1.7"
 ty-math = { version = "0.2.0", default-features = false }

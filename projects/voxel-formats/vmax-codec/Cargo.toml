@@ -8,6 +8,9 @@ description = "Reads and writes Voxel Max (.vmax) package files."
 keywords = ["voxelmax", "vmax", "voxel", "3d", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 lzfse = { version = "0.2", optional = true }
 plist = { version = "1", optional = true }

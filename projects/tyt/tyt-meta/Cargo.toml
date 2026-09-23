@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Meta-tools for scaffolding new tyt sub-crates and commands."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "meta"
 path = "src/main.rs"

@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Dependency injection implementations for tyt sub-crates."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 base64 = "0.22"
 crossterm = "0.29"

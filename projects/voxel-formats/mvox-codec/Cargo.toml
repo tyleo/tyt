@@ -8,5 +8,8 @@ description = "Reads and writes MagicaVoxel (.vox) files."
 keywords = ["magicavoxel", "vox", "voxel", "3d", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 mvox = "0.1.1"

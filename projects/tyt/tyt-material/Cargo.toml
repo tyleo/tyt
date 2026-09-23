@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Command-line tools for working with materials."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "material"
 path = "src/main.rs"

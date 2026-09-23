@@ -8,6 +8,9 @@ description = "Converts between Voxel Max packages and the voxcore state."
 keywords = ["voxelmax", "vmax", "voxel", "3d", "conversion"]
 categories = ["encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = "0.1.10"
 serde = { version = "1", features = ["derive"], optional = true }

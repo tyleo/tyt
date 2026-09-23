@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Operations on the filesystem"
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "fs"
 path = "src/main.rs"

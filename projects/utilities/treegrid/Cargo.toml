@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Hierarchical-data rendering: populate a forest of labeled, data-bearing nodes, then render it under a chosen layout and label mode."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = "0.1.7"
 serde_json = { version = "1", features = ["preserve_order"], optional = true }

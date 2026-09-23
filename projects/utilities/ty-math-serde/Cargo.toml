@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Serde-compatible parity types for ty-math."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 ty-math = { version = "0.2.0", features = ["color"] }

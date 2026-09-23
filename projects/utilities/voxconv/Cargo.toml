@@ -8,6 +8,9 @@ description = "Reads and writes voxel file formats through the voxcore state."
 keywords = ["voxel", "conversion", "3d", "vox", "voxj"]
 categories = ["encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = { version = "0.1.7", optional = true }
 goxl-voxcore = { version = "0.1.0", default-features = false, optional = true }

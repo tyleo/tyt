@@ -8,6 +8,9 @@ description = "Core data types for the Qubicle (.qb / .qbt / .qbcl) file formats
 keywords = ["qubicle", "qb", "qbt", "voxel", "3d"]
 categories = ["data-structures", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [features]
 default = ["qb", "qbt", "qbcl"]
 qb = []

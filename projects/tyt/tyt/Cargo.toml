@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "A single app, `tyt`, which ties all my command-line tools together."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "tyt"
 path = "src/main.rs"

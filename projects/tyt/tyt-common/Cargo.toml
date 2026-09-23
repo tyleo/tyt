@@ -5,3 +5,7 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Common types and utilities shared across all tyt crates."
+
+
+[package.metadata.workspaces]
+independent = true

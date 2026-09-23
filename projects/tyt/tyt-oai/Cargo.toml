@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Commands for working with the OpenAI API."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "oai"
 path = "src/main.rs"

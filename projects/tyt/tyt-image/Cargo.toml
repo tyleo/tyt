@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Command-line tools for working with images."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "image"
 path = "src/main.rs"

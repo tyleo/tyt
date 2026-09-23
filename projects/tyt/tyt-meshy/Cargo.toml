@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Commands for working with the Meshy API"
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "meshy"
 path = "src/main.rs"

@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Core types for working with meshes."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = "0.1.10"
 ty-math = { version = "0.2.0", default-features = false, features = ["color"] }

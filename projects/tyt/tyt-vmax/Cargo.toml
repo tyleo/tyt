@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Commands for working with Voxel Max."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "vmax"
 path = "src/main.rs"

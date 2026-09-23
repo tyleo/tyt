@@ -8,6 +8,9 @@ description = "Converts between glTF files and the meshdoc state."
 keywords = ["gltf", "glb", "mesh", "3d", "conversion"]
 categories = ["encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 base64 = { version = "0.22", optional = true }
 branded-id = "0.1.10"

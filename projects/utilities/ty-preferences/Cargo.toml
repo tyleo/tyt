@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Layered preference loading from sectioned config files."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 jsonc-parser = { version = "0.33.1", features = ["cst", "serde"], optional = true }
 serde = { version = "1", optional = true }

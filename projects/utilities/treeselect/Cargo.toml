@@ -5,3 +5,7 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Tree selection: resolve per-node match flags over parent links into selected and visible flags plus match roots."
+
+
+[package.metadata.workspaces]
+independent = true

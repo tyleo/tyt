@@ -8,6 +8,9 @@ description = "Converts between MagicaVoxel files and the voxcore state."
 keywords = ["magicavoxel", "vox", "voxel", "3d", "conversion"]
 categories = ["encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = "0.1.10"
 mvox = "0.1.1"

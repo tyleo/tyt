@@ -8,6 +8,9 @@ description = "Reads and writes mesh file formats through the meshdoc state."
 keywords = ["mesh", "conversion", "3d", "gltf", "glb"]
 categories = ["encoding", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = { version = "0.1.10", optional = true }
 gltf-meshdoc = { version = "0.1.0", default-features = false, optional = true }

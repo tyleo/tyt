@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Utilities for working with voxels."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 branded-id = "0.1.7"
 meshdoc = "0.1.0"

@@ -6,6 +6,9 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Math types and utilities shared across all tyt crates."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 # Backs ty-math's color aliases. Slim on purpose: no `serializing` (keeps the
 # hand-rolled serde DTO and its r/g/b/a wire), no `named`/`random`.

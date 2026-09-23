@@ -8,4 +8,7 @@ description = "Core data types for the Goxel (.gox) file format."
 keywords = ["goxel", "gox", "voxel", "3d", "model"]
 categories = ["data-structures", "game-development", "graphics"]
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]

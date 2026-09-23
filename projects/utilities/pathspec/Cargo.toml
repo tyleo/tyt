@@ -6,5 +6,8 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Gitignore-style glob pattern matching over logical paths."
 
+[package.metadata.workspaces]
+independent = true
+
 [dependencies]
 globset = "0.4"

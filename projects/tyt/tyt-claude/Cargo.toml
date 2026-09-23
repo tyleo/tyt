@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "Operations for working with claude"
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "claude"
 path = "src/main.rs"

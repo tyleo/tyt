@@ -7,6 +7,9 @@ repository = "https://github.com/tyleo/tyt"
 description = "A command-line tool for working with voxels."
 autobins = false
 
+[package.metadata.workspaces]
+independent = true
+
 [[bin]]
 name = "vxl"
 path = "src/main.rs"

@@ -97,3 +97,7 @@ vmax-voxcore = { path = "projects/voxel-formats/vmax-voxcore" }
 voxj = { path = "projects/voxel-formats/voxj" }
 voxj-codec = { path = "projects/voxel-formats/voxj-codec" }
 voxj-voxcore = { path = "projects/voxel-formats/voxj-voxcore" }
+
+[workspace.metadata.workspaces]
+
+allow_branch = "main"
