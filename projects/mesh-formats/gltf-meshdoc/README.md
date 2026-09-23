@@ -89,8 +89,9 @@ serialize as bare numbers.
 
 ## Not carried
 
-Primitives of points or lines have no triangles and error. Vertex color sets
-beyond `COLOR_0` error. Sparse accessors are not read. Texture-info and
-material-slot `extras` and extensions, buffer and accessor names, and
-animation samplers no channel plays are dropped. The listing order of
-files, properties, and further vertex attributes is not kept.
+Primitives of points or lines have no triangles and error. A primitive with no
+vertices is not written. Vertex color sets beyond `COLOR_0` error. Sparse
+accessors are not read. Texture-info and material-slot `extras` and extensions,
+buffer and accessor names, and animation samplers no channel plays are dropped.
+The listing order of files, properties, and further vertex attributes is not
+kept.

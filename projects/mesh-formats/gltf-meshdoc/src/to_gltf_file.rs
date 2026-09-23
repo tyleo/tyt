@@ -52,8 +52,9 @@ const TRANSMISSION_EXTENSION: &str = "KHR_materials_transmission";
 /// scene, so a node retained after the load is reachable. The document's files
 /// land as the loose files under their names. A material's and an object's
 /// properties land in its `extras.vxl.values`, and a primitive's name in its
-/// `extras.vxl.name`. `options` picks where the images go. `dependencies`
-/// encodes the data URIs of the images that go there.
+/// `extras.vxl.name`. A primitive with no vertices leaves the file because
+/// glTF forbids an empty accessor. `options` picks where the images go.
+/// `dependencies` encodes the data URIs of the images that go there.
 ///
 /// Errors if:
 ///
@@ -347,6 +348,10 @@ pub fn to_gltf_file<D: EncodeBase64>(
                     primitive_id.to_u32()
                 ))
             })?;
+
+            if primitive.vertex_count() == 0 {
+                continue;
+            }
 
             let mut attributes = BTreeMap::new();
 
@@ -1070,13 +1075,13 @@ fn min_max(input: &[f32]) -> Option<Value> {
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, GltfImageStorage, GltfMeshMain, GltfWriteOptions, from_gltf_file,
-        snapshot, test_main, to_gltf_file, to_gltf_mesh_main,
+        DependenciesImpl, GltfExtPrimitive, GltfImageStorage, GltfMeshMain, GltfWriteOptions,
+        from_gltf_file, snapshot, test_main, to_gltf_file, to_gltf_mesh_main,
     };
     use branded_id::U32Id;
     use meshdoc::{
-        MeshHierarchyNode, MeshImageSource, MeshMaterial, MeshProperty, MeshPropertyValue,
-        MeshTexture,
+        MeshHierarchyNode, MeshImageSource, MeshMaterial, MeshPrimitive, MeshProperty,
+        MeshPropertyValue, MeshTexture,
     };
     use serde_json::json;
 
@@ -1300,6 +1305,46 @@ mod tests {
         assert_eq!(
             loaded.hierarchy_node(U32Id::from_u32(0)).unwrap().name,
             "leaf"
+        );
+    }
+
+    /// An empty primitive stays out of the file, and the ones around it keep
+    /// their geometry.
+    #[test]
+    fn an_empty_primitive_leaves_the_file() {
+        let mut main = to_gltf_mesh_main(test_main());
+        let object_id = main.iter_objects().next().unwrap().0;
+        let primitive_id = main
+            .retain_primitive(object_id, MeshPrimitive::new(vec![], vec![]).unwrap())
+            .unwrap();
+        main.ext_mut()
+            .meshes
+            .get_mut(&object_id)
+            .unwrap()
+            .primitives
+            .insert(primitive_id, GltfExtPrimitive::default());
+        let primitive_count = main.object(object_id).unwrap().primitive_count();
+
+        let file = to_gltf_file(&DependenciesImpl, &main, &GltfWriteOptions::default()).unwrap();
+        assert_eq!(file.root.meshes[0].primitives.len(), primitive_count - 1);
+        assert!(
+            file.root
+                .accessors
+                .iter()
+                .all(|accessor| accessor.count.0 > 0)
+        );
+        assert!(
+            file.root
+                .buffer_views
+                .iter()
+                .all(|view| view.byte_length.0 > 0)
+        );
+
+        let loaded = from_gltf_file(&DependenciesImpl, &file).unwrap();
+        loaded.validate().unwrap();
+        assert_eq!(
+            loaded.object(object_id).unwrap().primitive_count(),
+            primitive_count - 1
         );
     }
 
