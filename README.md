@@ -163,14 +163,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## Releasing
 
-Releases use [`cargo-workspaces`](https://github.com/pksunkara/cargo-workspaces) (`cargo install cargo-workspaces` once). Only the crates that actually changed get bumped. `tyt` itself must always be force-bumped so its published `Cargo.lock` refreshes, otherwise `cargo install tyt` keeps pinning the old sub-crate versions.
+Releases use [`cargo-workspaces`](https://github.com/pksunkara/cargo-workspaces) (`cargo install cargo-workspaces` once). Every crate marks itself `independent` in its manifest, so only the crates that actually changed get bumped. `tyt` itself must always be force-bumped so its published `Cargo.lock` refreshes, otherwise `cargo install tyt` keeps pinning the old sub-crate versions.
 
 ```sh
 cargo workspaces version --force tyt patch --yes   # bump changed crates + force tyt, commit, tag, push
-cargo workspaces publish --from-git                # publish to crates.io in dependency order
+cargo workspaces publish --publish-as-is           # publish to crates.io in dependency order, skipping published versions
 ```
 
-Stick with `patch`. Use `custom <version>` for an explicit version.
+A crate not yet on crates.io publishes by hand first at the version its manifest names, with `cargo publish -p <crate>`, and the version command then takes `--ignore-changes '<crate path>/**'` so the bump leaves it there. Stick with `patch`. Use `custom <version>` for an explicit version.
 
 ## License
 
