@@ -6,9 +6,11 @@ line that fires it, its expansion into flags, and the glTF it produces._
 Two small models carry every example. Every snippet spells its file from the
 root down to the leaf it shows, the untouched keys folded into one ellipsis
 comment and a large leaf collapsed to its own. The numbers are real: counts
-match the model and indices match the arrays they point into. A `.glb`'s snippet
-is its JSON chunk, the binary chunk riding behind it. A built-in profile lives
-in no file, so its snippet roots at the map the binary embeds.
+match the model and indices match the arrays they point into. The snippets leave
+out the default fields the bridge writes explicitly: `alphaMode`, `doubleSided`,
+the factors, and a texture's `strength`. A `.glb`'s snippet is its JSON chunk,
+the binary chunk riding behind it. A built-in profile lives in no file, so its
+snippet roots at the map the binary embeds.
 
 ## The models
 
@@ -117,6 +119,9 @@ taken:
 }
 ```
 
+A `.vxlconfig` in the working directory loads only inside a git repository;
+see the [implementation notes](implementation.md#ty-preferences).
+
 ```sh
 # the bare run
 vxl mesh lamp.voxj
@@ -137,7 +142,7 @@ is six faces, twelve triangles, twenty-four vertices, and thirty-six indices.
 ```jsonc
 {
   "asset": { "version": "2.0" },
-  "buffers": [{ "byteLength": 648 }],
+  "buffers": [{ "byteLength": 720 }],
   "accessors": [
     {
       "bufferView": 0,
@@ -148,7 +153,7 @@ is six faces, twelve triangles, twenty-four vertices, and thirty-six indices.
       "max": [1, 2, 1],
     }, // POSITION
     { "bufferView": 1, "componentType": 5126, "count": 24, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5123, "count": 36, "type": "SCALAR" }, // indices
+    { "bufferView": 2, "componentType": 5125, "count": 36, "type": "SCALAR" }, // indices
   ],
   "meshes": [
     {
@@ -165,8 +170,9 @@ is six faces, twelve triangles, twenty-four vertices, and thirty-six indices.
 ```
 
 The buffer is the three streams packed: twenty-four positions and twenty-four
-normals at twelve bytes each, thirty-six `u16` indices at two, 648 bytes.
-`--voxel-size` defaults to one meter, so positions run zero to `[1, 2, 1]`.
+normals at twelve bytes each, thirty-six `u32` indices at four, 720 bytes.
+`--voxel-size` defaults to one meter, so positions run from `[0, 0, 0]` to
+`[1, 2, 1]`.
 
 ## The pbr bake
 
@@ -200,7 +206,8 @@ vxl mesh lamp.voxj
   --profile pbr
 ```
 
-or expanded into its flags:
+or expanded into its flags, the slots listed in the profile's key order
+because the write order sets the image order:
 
 ```sh
 vxl mesh lamp.voxj
@@ -209,11 +216,11 @@ vxl mesh lamp.voxj
   --values-from emissive
   --material-count 1
   --write-material-slot-value 0 baseColorTexture albedo
-  --write-material-slot-value 0 occlusionTexture orm
-  --write-material-slot-value 0 metallicRoughnessTexture orm
-  --write-material-slot-value 0 emissiveTexture emissive
   --write-material-slot-value 0 emissiveFactor white
   --write-material-slot-value 0 emissiveStrength maxStrength
+  --write-material-slot-value 0 emissiveTexture emissive
+  --write-material-slot-value 0 metallicRoughnessTexture orm
+  --write-material-slot-value 0 occlusionTexture orm
 ```
 
 The profile evaluates its values over the two swatches:
@@ -237,21 +244,21 @@ the steel, `(0.75, 0.25)` for the bulb.
   "extensionsUsed": ["KHR_materials_emissive_strength"],
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 3,
       "componentType": 5126,
       "count": 40,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [1, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
-    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 4, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 5, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 6, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
   "images": [
-    { "mimeType": "image/png", "bufferView": 4 }, // albedo, sRGB
-    { "mimeType": "image/png", "bufferView": 5 }, // orm, linear
-    { "mimeType": "image/png", "bufferView": 6 }, // emissive, sRGB
+    { "mimeType": "image/png", "bufferView": 0 }, // albedo, sRGB
+    { "mimeType": "image/png", "bufferView": 1 }, // emissive, sRGB
+    { "mimeType": "image/png", "bufferView": 2 }, // orm, linear
   ],
   "samplers": [
     {
@@ -260,20 +267,21 @@ the steel, `(0.75, 0.25)` for the bulb.
       "wrapS": 33071,
       "wrapT": 33071, // CLAMP_TO_EDGE
     },
+    /* ... one per texture, all alike */
   ],
   "textures": [
     { "sampler": 0, "source": 0 },
-    { "sampler": 0, "source": 1 },
-    { "sampler": 0, "source": 2 },
+    { "sampler": 1, "source": 1 },
+    { "sampler": 2, "source": 2 },
   ],
   "materials": [
     {
       "pbrMetallicRoughness": {
         "baseColorTexture": { "index": 0, "texCoord": 0 },
-        "metallicRoughnessTexture": { "index": 1, "texCoord": 0 },
+        "metallicRoughnessTexture": { "index": 2, "texCoord": 0 },
       },
-      "occlusionTexture": { "index": 1, "texCoord": 0 },
-      "emissiveTexture": { "index": 2, "texCoord": 0 },
+      "occlusionTexture": { "index": 2, "texCoord": 0 },
+      "emissiveTexture": { "index": 1, "texCoord": 0 },
       "emissiveFactor": [1, 1, 1],
       "extensions": {
         "KHR_materials_emissive_strength": { "emissiveStrength": 4 },
@@ -401,8 +409,8 @@ relative path:
 }
 ```
 
-`voxelSize` scales vertex positions alone, so the same forty vertices now run to
-`[0.1, 0.2, 0.1]`.
+`voxelSize` scales vertex positions alone, so the same forty vertices now run
+from `[0, 0, 0]` to `[0.1, 0.2, 0.1]`.
 
 ## The palette pattern
 
@@ -473,7 +481,7 @@ supplying every base color.
     }, // POSITION
     { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
     { "bufferView": 2, "componentType": 5121, "count": 40, "type": "SCALAR" }, // _PALETTE
-    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 3, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
   "meshes": [
     {
@@ -561,18 +569,18 @@ is the face stream:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 1,
       "componentType": 5126,
       "count": 40,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
-    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 4, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
-  "images": [{ "mimeType": "image/png", "bufferView": 4 }],
+  "images": [{ "mimeType": "image/png", "bufferView": 0 }],
   "textures": [{ "sampler": 0, "source": 0 }],
   "materials": [
     {
@@ -597,9 +605,9 @@ is the face stream:
 }
 ```
 
-The material carries exactly the one slot the run wrote, base color falling to
-the spec's white default, so the mesh renders as lit stone with darkened
-creases.
+The material carries the one slot the run wrote over the explicit defaults,
+with base color at the spec's white, so the mesh renders as lit stone with
+darkened creases.
 
 Written whole, the corner value skips the reduction and bakes the
 [corner atlas](mesh.md#the-corner-atlas) instead:
@@ -619,18 +627,18 @@ and each crease shades smooth across its face instead of flat:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 1,
       "componentType": 5126,
       "count": 40,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
-    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 4, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
-  "images": [{ "mimeType": "image/png", "bufferView": 4 }], // 8x8, a block per face
+  "images": [{ "mimeType": "image/png", "bufferView": 0 }], // 8x8, a block per face
   "samplers": [
     {
       "magFilter": 9729,
@@ -724,19 +732,19 @@ exist:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 1,
       "componentType": 5126,
       "count": 40,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
-    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_1
-    { "bufferView": 4, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 4, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_1
+    { "bufferView": 5, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
-  "images": [{ "mimeType": "image/png", "bufferView": 5 }], // albedo, 1x1
+  "images": [{ "mimeType": "image/png", "bufferView": 0 }], // albedo, 1x1
   "textures": [{ "sampler": 0, "source": 0 }],
   "materials": [
     {
@@ -830,24 +838,24 @@ stream:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 2,
       "componentType": 5126,
       "count": 40,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
-    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 4, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 5, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
   "images": [
-    { "mimeType": "image/png", "bufferView": 4 }, // albedo per face, sRGB
-    { "mimeType": "image/png", "bufferView": 5 }, // ao, linear
+    { "mimeType": "image/png", "bufferView": 0 }, // albedo per face, sRGB
+    { "mimeType": "image/png", "bufferView": 1 }, // ao, linear
   ],
   "textures": [
     { "sampler": 0, "source": 0 },
-    { "sampler": 0, "source": 1 },
+    { "sampler": 1, "source": 1 },
   ],
   "materials": [
     {
@@ -885,25 +893,25 @@ the streams derive `[swatch, face]`, each texture at its value's exact domain:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 2,
       "componentType": 5126,
       "count": 40,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
-    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_1
-    { "bufferView": 4, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 4, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 5, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_1
+    { "bufferView": 6, "componentType": 5125, "count": 60, "type": "SCALAR" }, // indices
   ],
   "images": [
-    { "mimeType": "image/png", "bufferView": 5 }, // albedo, 1x1
-    { "mimeType": "image/png", "bufferView": 6 }, // ao, 4x4
+    { "mimeType": "image/png", "bufferView": 0 }, // albedo, 1x1
+    { "mimeType": "image/png", "bufferView": 1 }, // ao, 4x4
   ],
   "textures": [
     { "sampler": 0, "source": 0 },
-    { "sampler": 0, "source": 1 },
+    { "sampler": 1, "source": 1 },
   ],
   "materials": [
     {
@@ -1018,36 +1026,36 @@ the mesh lays out once:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 2,
       "componentType": 5126,
       "count": 32,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 32, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 32, "type": "VEC2" }, // face
-    { "bufferView": 3, "componentType": 5126, "count": 32, "type": "VEC2" }, // swatch
-    { "bufferView": 4, "componentType": 5123, "count": 48, "type": "SCALAR" }, // indices
+    { "bufferView": 3, "componentType": 5126, "count": 32, "type": "VEC3" }, // NORMAL
+    { "bufferView": 4, "componentType": 5126, "count": 32, "type": "VEC2" }, // face
+    { "bufferView": 5, "componentType": 5126, "count": 32, "type": "VEC2" }, // swatch
+    { "bufferView": 6, "componentType": 5125, "count": 48, "type": "SCALAR" }, // indices
     {
-      "bufferView": 5,
+      "bufferView": 7,
       "componentType": 5126,
       "count": 8,
       "type": "VEC3",
       "min": [1, 1, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 6, "componentType": 5126, "count": 8, "type": "VEC3" }, // NORMAL
-    { "bufferView": 7, "componentType": 5126, "count": 8, "type": "VEC2" }, // face
-    { "bufferView": 8, "componentType": 5123, "count": 12, "type": "SCALAR" }, // indices
+    { "bufferView": 8, "componentType": 5126, "count": 8, "type": "VEC3" }, // NORMAL
+    { "bufferView": 9, "componentType": 5126, "count": 8, "type": "VEC2" }, // face
+    { "bufferView": 10, "componentType": 5125, "count": 12, "type": "SCALAR" }, // indices
   ],
   "images": [
-    { "mimeType": "image/png", "bufferView": 9 }, // albedo, 1x1
-    { "mimeType": "image/png", "bufferView": 10 }, // ao, 4x4
+    { "mimeType": "image/png", "bufferView": 0 }, // albedo, 1x1
+    { "mimeType": "image/png", "bufferView": 1 }, // ao, 4x4
   ],
   "textures": [
     { "sampler": 0, "source": 0 },
-    { "sampler": 0, "source": 1 },
+    { "sampler": 1, "source": 1 },
   ],
   "materials": [
     {
@@ -1100,35 +1108,35 @@ answer:
   "asset": { "version": "2.0" },
   "accessors": [
     {
-      "bufferView": 0,
+      "bufferView": 2,
       "componentType": 5126,
       "count": 32,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 32, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5126, "count": 32, "type": "VEC2" }, // swatch
-    { "bufferView": 3, "componentType": 5126, "count": 32, "type": "VEC2" }, // face
-    { "bufferView": 4, "componentType": 5123, "count": 48, "type": "SCALAR" }, // indices
+    { "bufferView": 3, "componentType": 5126, "count": 32, "type": "VEC3" }, // NORMAL
+    { "bufferView": 4, "componentType": 5126, "count": 32, "type": "VEC2" }, // swatch
+    { "bufferView": 5, "componentType": 5126, "count": 32, "type": "VEC2" }, // face
+    { "bufferView": 6, "componentType": 5125, "count": 48, "type": "SCALAR" }, // indices
     {
-      "bufferView": 5,
+      "bufferView": 7,
       "componentType": 5126,
       "count": 8,
       "type": "VEC3",
       "min": [1, 1, 0],
       "max": [2, 2, 1],
     }, // POSITION
-    { "bufferView": 6, "componentType": 5126, "count": 8, "type": "VEC3" }, // NORMAL
-    { "bufferView": 7, "componentType": 5123, "count": 12, "type": "SCALAR" }, // indices
+    { "bufferView": 8, "componentType": 5126, "count": 8, "type": "VEC3" }, // NORMAL
+    { "bufferView": 9, "componentType": 5125, "count": 12, "type": "SCALAR" }, // indices
   ],
   "images": [
-    { "mimeType": "image/png", "bufferView": 8 }, // albedo, 1x1
-    { "mimeType": "image/png", "bufferView": 9 }, // ao, 4x4
+    { "mimeType": "image/png", "bufferView": 0 }, // albedo, 1x1
+    { "mimeType": "image/png", "bufferView": 1 }, // ao, 4x4
   ],
   "textures": [
     { "sampler": 0, "source": 0 },
-    { "sampler": 0, "source": 1 },
+    { "sampler": 1, "source": 1 },
   ],
   "materials": [
     {
@@ -1220,8 +1228,8 @@ vxl mesh lamp.voxj
 
 `baseColorFactor.a` is the entries `[1, 0.6]`, `min` folds them to 0.6, the
 comparison answers true, and `mix` picks `"BLEND"`. The writer checks the token
-against glTF's `alphaMode` list at the edge, so a typo errors with the format
-named rather than landing in the file:
+against `alphaMode`'s three words at the edge, so a typo never reaches the
+file:
 
 ```jsonc
 {

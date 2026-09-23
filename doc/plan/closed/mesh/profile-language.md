@@ -273,7 +273,7 @@ The checks split by when they run:
    4. no element claiming one destination twice
 5. the run
    1. dimensions and shapes against the effective palette
-   2. slot names and their encodings against the resolved output format
+   2. slot names and their encodings against the document's material model
    3. name bindings against the command line
    4. image file references against the pngs the run writes
 

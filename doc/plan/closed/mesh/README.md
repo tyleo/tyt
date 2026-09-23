@@ -8,7 +8,8 @@ crate-internal seam, and the [worked examples](examples.md) run as written.
 The build bent from the design where the landed crates decided:
 
 1. A `false` select writes an empty primitive, keeping primitive indices
-   stable, and the bridge emits its zero-count accessors
+   stable. The glTF bridge leaves empty primitives out of the file because
+   glTF forbids an empty accessor
 2. A corner-domain select errors instead of routing, because a select routes
    whole faces
 3. Two slots or extras share an embedded image by expression text and bake
@@ -21,11 +22,10 @@ The build bent from the design where the landed crates decided:
 7. `srgb` on an unsigned value errors wherever it errors on a bool or a string
 8. A vec3 `COLOR_0` lands as VEC4 with an alpha of one, the document's one
    vertex color shape
-10. A profile with no `materials` declares count 0, and its compute keys
-    travel with `--values-from`
-11. The bridge fixes the rest of the output: `u32` indices, one sampler per
-    texture, explicit defaults, key-ordered extras, and the frame change that
-    sends the voxel `+Y` to glTF `-Z`
+9. A profile with no `materials` declares count 0, and its compute keys
+   travel with `--values-from`
+10. The bridge fixes the rest of the output: `u32` indices, one sampler per
+    texture, explicit defaults, and key-ordered extras
 
 This plan rewrites [`vxl mesh`](mesh.md) which makes geometry and palette-atlas
 textures. The plan keeps the geometry core and redoes everything around it: the

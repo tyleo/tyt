@@ -111,7 +111,9 @@ multi-object document needs a selector. See
    `corner` value from `--compute-occlusion`. `face` sits below `corner`, so the
    list cannot hold it, and the texture errors. The bake never steps a value
    down, because stepping down loses detail. The value can take the step itself.
-   For example, `faceAvg` turns the `corner` value into a `face` value.
+   For example, `faceAvg` turns the `corner` value into a `face` value. A
+   written file takes no climb, because its image already has its value's
+   layout, and a texture referencing one needs that domain on the list.
 
    Without the flag the list derives automatically. Every texture of the
    material, extras images included, puts its value's domain on the list. The
@@ -132,14 +134,15 @@ multi-object document needs a selector. See
    with, and `none` is no material at all. The expression is the select that
    routes the primitive's faces. Primitives number from `0` in flag order. The
    select is a [bool](value-language.md#booleans) read at the
-   [face domain](value-language.md#domains), lower domains climbing in. The
-   primitive takes every face whose entry is true. The selects partition the
-   faces: a face no select takes errors, and a face two selects take errors too.
-   Without the flag the mesh has one primitive, index 0, holding every face and
-   addressable like any other. That implicit primitive draws with material 0
-   when the mesh carries materials, and with no material when it carries none.
-   The first `--primitive` replaces it, so the declared primitives are exactly
-   the mesh's; see [Primitives and materials](#primitives-and-materials).
+   [face domain](value-language.md#domains). A corner bool errors because a
+   select routes whole faces. The primitive takes every face whose entry is
+   true. The selects partition the faces: a face no select takes errors, and a
+   face two selects take errors too. Without the flag the mesh has one
+   primitive, index 0, holding every face and addressable like any other. That
+   implicit primitive draws with material 0 when the mesh carries materials,
+   and with no material when it carries none. The first `--primitive` replaces
+   it, so the declared primitives are exactly the mesh's; see
+   [Primitives and materials](#primitives-and-materials).
 
 10. `--primitive-name <primitive-index> <name>`
     - Repeatable: yes
@@ -230,14 +233,12 @@ multi-object document needs a selector. See
     - Repeatable: yes
 
     Writes a [swatch, voxel, face, or corner](value-language.md#domains) array
-    to an 8-bit PNG beside the mesh, one texel per entry. A file no material
-    references bakes at the value's domain. An image reference from a material
-    bakes the file at the domain the reference resolves through the material's
-    list. References resolving two domains claim the file twice and error. A
-    corner bake takes the [corner atlas](#the-corner-atlas)'s block layout. The
-    value's width sets the channel format: vec1 writes grey; vec2, grey-alpha;
-    vec3, RGB; vec4, RGBA. A component outside `[0, 1]` errors. The file
-    declares its transfer in its chunks; see the
+    to an 8-bit PNG beside the mesh, one texel per entry. The file bakes at its
+    value's domain, and a corner bake takes the
+    [corner atlas](#the-corner-atlas)'s block layout.
+    The value's width sets the channel format: vec1 writes grey; vec2,
+    grey-alpha; vec3, RGB; vec4, RGBA. A component outside `[0, 1]` errors. The
+    file declares its transfer in its chunks; see the
     [notes](value-language.md#notes).
     1. `linear`: applies no transfer.
     2. `srgb`: applies the sRGB transfer, for an image a viewer reads as color.
@@ -283,8 +284,8 @@ multi-object document needs a selector. See
     - Repeatable: yes
 
     Sets the property `<dst-property>` of the indexed material. A plain value
-    becomes a material field. An array value embeds as an image, in the glb
-    binary chunk or as a data URI in a `.gltf`; see
+    becomes a material field. An array value embeds as an image in the buffer,
+    the glb's binary chunk or the `.gltf`'s data URI; see
     [Material slots](value-language.md#material-slots).
 
 28. `--write-mesh-extra-image-file <dst-name> <src-file>`
@@ -292,14 +293,16 @@ multi-object document needs a selector. See
 
     Sets a mesh `extras.vxl.values.<dst-name>` entry to an image reference. The
     entry holds a texture index, and the texture points at `<src-file>` by
-    relative path; see [Palettes](#palettes).
+    relative path. The image samples through a stream some primitive writes;
+    see [UV streams](#uv-streams) and [Palettes](#palettes).
 
 29. `--write-mesh-extra-image-value <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes an array value as an embedded image. The mesh
-    `extras.vxl.values.<dst-name>` entry holds its texture index. A plain value
-    errors; see [Palettes](#palettes).
+    `extras.vxl.values.<dst-name>` entry holds its texture index. The image
+    samples through a stream some primitive writes; see
+    [UV streams](#uv-streams). A plain value errors; see [Palettes](#palettes).
 
 30. `--write-mesh-extra-json-file <dst-name> <src-file>`
     - Repeatable: yes
@@ -389,8 +392,9 @@ shows its colors.
 The `--primitive` select routes the faces: a [bool](value-language.md#booleans)
 read at the [face domain](value-language.md#domains) takes every true face into
 the primitive. A lower-domain bool can route whole swatches or whole voxels. A
-greedy quad can cover several voxels. When their answers differ, the quad splits
-and each piece follows its voxel; see
+corner bool errors because a select routes whole faces. A greedy quad can cover
+several voxels. When their answers differ, the quad splits and each piece
+follows its voxel; see
 [computed voxel position](value-language.md#computed-voxel-position). The
 selects partition the faces: a face no select takes would be a silent drop, and
 a face two selects take would be claimed twice, so both error. The partition
@@ -399,8 +403,10 @@ every method: it covers faces through the used swatches and solid voxels, which
 no method changes. A face bool answers per emitted face, so a face partition
 that holds under one method can leave another's faces unclaimed. The fix is a
 complement: `rest = !(metal || glass)` covers whatever the mesher emits. A
-`false` select takes nothing, which is legal wherever the rest cover the mesh.
-Selects only route and never change what geometry exists.
+`false` select passes wherever the rest cover the mesh. It takes no face and
+writes an empty primitive, so the indices stay stable. The glTF bridge leaves
+that primitive out of the file because glTF forbids an empty accessor. Selects
+only route and never change what geometry exists.
 
 The selects split the model. Every face draws once with its swatch's material:
 
@@ -416,7 +422,7 @@ vxl mesh turret.voxj
 ```jsonc
 {
   "asset": { "version": "2.0" },
-  "materials": [{}, {}],
+  "materials": [{ /* ... */ }, { /* ... */ }],
   "meshes": [
     {
       "primitives": [
@@ -560,16 +566,18 @@ The UVs place each face on the atlas's texel grid. A primitive carries one UV
 stream per [atlas](#atlases) its faces read: the face's cell sits at a different
 location in each. Each stream writes a glTF `TEXCOORD_<n>` attribute.
 
-Each material declares its stream list with `--material-uv`. Without the flag
-the list derives from the material's textures. The list follows what the
-consumer reads. For example, an engine that reads one UV set takes
-`--material-uv 0 face` alone. Material 0's swatch maps then bake per face into
-that one stream. An engine can set its face maps ahead of its swatch maps by
-listing `face` first because the flag order sets the `TEXCOORD` numbers.
+Each material declares its stream list with `--material-uv`, and without the
+flag the list derives from the material's textures. The list follows what the
+consumer reads: an engine that reads one UV set lists one domain, and the flag
+order sets the `TEXCOORD` numbers.
 
 The streams land per primitive. A primitive with a material writes that
 material's list, and one without writes nothing. `--write-primitive-uv` replaces
 that default with the streams the flag names.
+
+A mesh image extra has no material to list streams for. It samples through the
+stream a primitive writes at its bake domain. Some primitive has to write that
+stream, and every primitive writing the stream has to place it at one position.
 
 Every texture's `texCoord` derives. The domain it bakes at finds its position in
 the stream order of each primitive that draws the material. That position
@@ -589,7 +597,7 @@ at two positions claim one destination twice and error. No flag sets a
   "asset": { "version": "2.0" },
   "textures": [
     { "sampler": 0, "source": 0 },
-    { "sampler": 0, "source": 1 },
+    { "sampler": 1, "source": 1 },
   ],
   "materials": [
     {

@@ -281,18 +281,19 @@ Attribution stays in vxl, which maps each record element to its origin as it
 lowers. A voxsmith error identifies the element it rose from, and vxl rewraps
 the error to point at the flag or the profile entry.
 
-voxsmith's entry point, `mesh`, runs in memory. It takes the record, the loaded
-state, and the selected object, and returns the [document](#meshdoc). It calls
+voxsmith's entry point, `mesh`, runs in memory. It takes the png encoder its
+dependencies inject, the loaded state, the selected object, and the record. It
+returns the [document](#meshdoc). It calls
 [vox-value-language](#vox-value-language) to parse, check, and evaluate the
 program, then meshes the geometry, bakes the atlases, and encodes the images
-through the png encoder its dependencies inject. Every voxsmith operation takes
-that shape: it runs over voxcore and meshdoc types, reads no file, and knows no
-format. vxl holds both ends of the run. It loads the state through voxconv and
-saves the document through meshconv, which lands the document's files beside
-the mesh. The slot and attribute writes resolve under meshdoc's material and
-stream vocabulary, so voxsmith never learns the output format, and the bridge
-maps that vocabulary onto the format's schema. The tests build a state and a
-record by hand and never touch a file.
+through that encoder. Every voxsmith operation takes that shape: it runs over
+voxcore and meshdoc types, reads no file, and knows no format. vxl holds both
+ends of the run. It loads the state through voxconv and saves the document
+through meshconv, which lands the document's files beside the mesh. The slot and
+attribute writes resolve under meshdoc's material and stream vocabulary, so
+voxsmith never learns the output format, and the bridge maps that vocabulary
+onto the format's schema. The tests build a state and a record by hand and never
+touch a file.
 
 ## meshdoc
 
@@ -322,8 +323,9 @@ where each element of the [record](#one-record) lands:
   into the one object in table order, so a record id indexes the document
   unchanged.
 
-Positions are in meters, Z-up, and the images stay encoded: the run encodes
-each atlas once through the injected png encoder, and no bridge decodes one.
+Positions are in meters on glTF's axes, and the images stay encoded: the run
+encodes each atlas once through the injected png encoder, and no bridge decodes
+one.
 Where a written image embeds or lands loose is meshconv's write option, not a
 document fact.
 
@@ -612,8 +614,7 @@ them under `extras.vxl.values`.
 
 The primitive writers land
 [`COLOR_0` and the underscore attributes](value-language.md#vertex-attributes)
-on the corners, as the vertex colors and the further vertex attributes, with
-lower domains climbing in.
+on the corners, as the vertex colors and the further vertex attributes.
 
 ## vxl
 
@@ -726,10 +727,10 @@ the state through the hooks: the asset block, scenes, cameras, skins,
 animations, morph targets, and the extras and extensions the model does not
 place. The `codec` module goes to and from `.gltf` and `.glb` bytes, lists the
 loose URIs a primary references, and frames GLB in the crate; the data URIs go
-through injected base64 codecs bound behind `impl`. Axes convert between Y-up
-and Z-up on both arrows. A material's or mesh's `extras.vxl.values` load as
-properties and write back from them, a primitive's `extras.vxl.name` as its
-name, and a property's file reference resolves against the loose files.
+through injected base64 codecs bound behind `impl`. Geometry copies straight
+because meshdoc shares glTF's axes. A material's or mesh's `extras.vxl.values`
+load as properties and write back from them, a primitive's `extras.vxl.name`
+as its name, and a property's file reference resolves against the loose files.
 
 ### The meshconv crate
 
@@ -748,8 +749,9 @@ bridge's image storage. A new format adds a bridge crate and a feature here.
 ### The command tail
 
 `vxl mesh` loads through voxconv, meshes into a document, and saves through
-meshconv, with `--to` picking the container and `--texture-storage` where the
-images go. vxl depends on meshconv and meshdoc and never on a bridge.
+meshconv, with `--to` picking the container. An embedded image lands in a
+buffer view, and a written file lands beside the mesh. vxl depends on meshconv
+and meshdoc and never on a bridge.
 
 ### The retired maps listing
 

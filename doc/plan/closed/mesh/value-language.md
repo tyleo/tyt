@@ -154,8 +154,8 @@ The destinations read the domain. A texture takes a swatch, voxel, face, or
 corner array, one texel per entry, its layout and UV stream following the domain
 it bakes at; see [UV streams](mesh.md#uv-streams). A
 [select](mesh.md#primitives-and-materials) reads at the faces, and the
-[vertex attributes](#vertex-attributes) read at the corners, the ladder's top,
-with lower domains climbing in. A material factor takes a plain value alone.
+[vertex attributes](#vertex-attributes) read at the corners. A material factor
+takes a plain value alone.
 
 ## Numbers
 
@@ -217,9 +217,9 @@ them, and beyond these only grouping parentheses and `e[i]` apply, the index
 sampling a bool array at an entry.
 
 The type reaches three destinations: the select of
-[`--primitive`](mesh.md#primitives-and-materials), reading at the face domain
-with lower domains climbing in; a [JSON value](#json-files), written as `true`
-or `false`; and a boolean [material property](#material-slots), plain alone:
+[`--primitive`](mesh.md#primitives-and-materials), reading at the face domain;
+a [JSON value](#json-files), written as `true` or `false`; and a boolean
+[material property](#material-slots), plain alone:
 
 ```sh
 --value "glowing = emissiveStrength > 0"   # bool array, one entry per swatch
@@ -267,11 +267,11 @@ extras entry. The JSON forms write the quoted string itself, so
 a palette index. Every numeric destination, a PNG, a texture, a vertex
 attribute, a factor, rejects a string.
 
-An enum property takes one word from the fixed list its format's schema defines,
+An enum property takes one word from the fixed list the material model defines,
 glTF's `alphaMode` taking `OPAQUE`, `MASK`, or `BLEND`. The property reads a
 plain string, and the writer checks the value against the list at the edge,
-erroring on an unknown token with the format named. No conversion exists in the
-language; only the destination knows the list:
+erroring on an unknown token and listing the words it takes. No conversion
+exists in the language; only the destination knows the list:
 
 ```sh
 # static: cutout mode, written directly
@@ -369,17 +369,18 @@ palette writes an array of those. An array of any [domain](#domains) lands, one
 row per entry in the order a [computed index](#computed-index) numbers. The
 token names the transfer the numbers take: `linear` writes them as evaluated,
 and `srgb` transfer-encodes them under the image rules, so an alpha component
-stays linear and a component outside `[0, 1]` errors. Both write full floats:
-an `srgb` JSON holds display-encoded floats where an `srgb` PNG holds
-display-encoded bytes. The token rides each flag, so one file can mix
-encodings, each key taking its declared transfer, and nothing about the
-destination appears in an expression.
+stays linear and a component outside `[0, 1]` errors. Both write `f32` floats
+after the curve runs in `f64`: an `srgb` JSON holds display-encoded floats where
+an `srgb` PNG holds display-encoded bytes. The token rides each flag, so one
+file can mix encodings, each key taking its declared transfer, and nothing about
+the destination appears in an expression.
 
 A bool writes as itself, `true` or `false`, an array of them per entry. Its
-token is `linear`, the identity; `srgb` on a bool errors because a transfer
-curve belongs to numbers. A runtime wanting `0`/`1` instead takes the written
-mask, `mix(0f32, 1, glowing)`. A [string](#strings) writes its quoted JSON form
-the same way, `linear` its only token.
+token is `linear`, the identity; `srgb` on a bool errors because the transfer
+curve belongs to `f32`. An unsigned value under `srgb` errors the same way. A
+runtime wanting `0`/`1` instead takes the written mask, `mix(0f32, 1, glowing)`.
+A [string](#strings) writes its quoted JSON form the same way, `linear` its only
+token.
 
 Merging at the flag keeps every value simple, a vector or a bool and never a
 grouping, so a dot postfix is always a swizzle and the checker asks only shape
@@ -399,8 +400,9 @@ conversion happens only where something outside has an opinion.
 one property of the indexed material, destination before source like every
 writer, with the index riding first: which material, then what on it. The
 examples write material `0`, the mention declaring it. The property takes the
-target format's name, the leaf of its material schema, so the flag invents no
-vocabulary; the writer does the nesting and the `extensionsUsed` bookkeeping:
+leaf name of glTF's material schema, the vocabulary the mesh document models,
+so the flag invents nothing; the bridge does the nesting and the
+`extensionsUsed` bookkeeping:
 
 ```sh
 # pbrMetallicRoughness.baseColorTexture
@@ -417,14 +419,10 @@ vocabulary; the writer does the nesting and the `extensionsUsed` bookkeeping:
 --write-material-slot-value 0 ior glassIor
 ```
 
-The vocabulary comes from the resolved output format because one run writes one
-mesh file and `--to` has already chosen it. Each format brings its own names:
-FBX calls its slots `DiffuseColor` and `NormalMap`, MTL calls them `map_Kd` and
-`map_Pr`, and glTF packs roughness into `metallicRoughnessTexture`, which a
-neutral `roughness` slot could not honestly target. The vocabularies do not
-overlap, so retargeting a script from `--to gltf` to `--to fbx` makes every slot
-name unknown at once and errors loudly, with the error naming the format it
-checked against.
+The mesh document fixes the vocabulary: its material model holds glTF's schema
+leaves as fields, and the glTF bridge writes them into its schema without a
+translation table. A name outside the model errors as a property the document
+does not model, so a typo never lands in the file.
 
 The property's type decides how its expression reads:
 
@@ -456,9 +454,10 @@ because only its writer's value gives the image the domain that seats the
 reference on a UV stream. A paint-over edits the written file in place after the
 run, and the reference holds. A `--write-file-png-value` beside a
 `--write-material-slot-value` leaves the mesh referencing the embedded copy,
-with the loose file a working duplicate of the same bytes. Two slots
-naming one value share the one embedded image, which is how an ORM packing fills
-both of its slots; two slots demanding different encodings of one value error.
+with the loose file a working duplicate of the same bytes. Two slots writing
+one expression, letter for letter, share the one embedded image, which is how
+an ORM packing fills both of its slots; two slots demanding different encodings
+of one value error.
 
 A writer and a slot stay separate flags because each is whole alone. A writer
 alone makes a file the mesh never mentions. A factor is a slot with no bytes,
@@ -551,8 +550,8 @@ vocabulary holds one attribute, `COLOR_0`, the vertex color: the mesher owns
 `TEXCOORD_n`. The defined vocabulary fixes each attribute's encoding the way
 the material schema fixes its slots', so the flag carries no token. A name
 outside the vocabulary errors; the custom flag is the underscore's home.
-`COLOR_0` takes a vec3 or vec4, writing VEC3 or VEC4 floats, because glTF
-forbids a narrower vertex color.
+`COLOR_0` takes a vec3 or vec4 because glTF forbids a narrower vertex color.
+Either writes VEC4 floats, with a vec3 taking an alpha of one.
 
 `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb>`
 is the custom twin. glTF requires the underscore prefix on application-specific
@@ -565,11 +564,9 @@ accessor and the token picks the transfer. An `f32` value takes `linear` or
 errors. A `u32` value errors because glTF forbids the width on an attribute;
 narrow with `u16(e)` first; see [Numbers](#numbers).
 
-The attributes live on the corners, the [ladder](#domains)'s top, so a value of
-any domain climbs in: a swatch value gives each corner its face's swatch's
-entry, leaving a merged greedy quad uniform, a voxel value splits a span its
-entries disagree across, and a corner value writes each corner exactly, which is
-what [computed occlusion](#computed-occlusion) wants.
+The attributes read at the corners, the [ladder](#domains)'s top, so a value of
+any domain reaches them, and a greedy quad merges only where the value agrees;
+see [Atlases](mesh.md#atlases).
 
 A format without vertex attributes rejects both flags. Each flag writes its
 indexed primitive alone, so two primitives carry exactly the attributes their
@@ -1737,10 +1734,7 @@ Shape rules, with a value either plain or an array over the effective palette
    `--write-file-json-value` under `linear`, `--primitive`'s select, a boolean
    material property, and `mix`'s chooser; nothing else takes one.
 7. An array carries its [domain](#domains), and rule 2 pairs entries after the
-   lower domain climbs onto the higher; the climb is implicit, with
-   `swatch`/`voxel`/`face`/`corner` naming it, and a step down always takes a
-   reduction naming its destination and any array above it, or a reduction to
-   plain, never an implicit one.
+   lower domain climbs onto the higher.
 8. `mix(a, b, cond)` follows rule 2 across `a`, `b`, and `cond`, the result's
    shape from any operand array.
 9. A string rides the same axes: a literal is plain, a string property an array,
