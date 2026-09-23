@@ -25,7 +25,7 @@ vxl mesh turret.voxj
 `--select` and `--select-index` choose the object. The default `--select *`
 takes every object. The selection must resolve to exactly one object, so a
 multi-object document needs a selector. See
-[Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
+[Object selectors](../../plan/open/vxl-commands/reference/conventions.md#object-selectors).
 
 ## Options
 
@@ -214,7 +214,7 @@ multi-object document needs a selector. See
     Chooses the object by hierarchy path, with a node path selecting its
     subtree. Unions with `--select-index`. Any explicit selector replaces the
     default, so `--select-index` alone never unions with `*`. See
-    [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
+    [Object selectors](../../plan/open/vxl-commands/reference/conventions.md#object-selectors).
 
 19. `--select-index <index>`
     - Repeatable: yes

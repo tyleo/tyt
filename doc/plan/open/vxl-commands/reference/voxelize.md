@@ -6,7 +6,7 @@
 vxl voxelize <input> [output] [--resolution <axis> <n> | --voxel-size <meters>] [options]
 ```
 
-Rasterizes a mesh into a voxel grid. This is the inverse of [`vxl mesh`](mesh.md).
+Rasterizes a mesh into a voxel grid. This is the inverse of [`vxl mesh`](../../../../ref/mesh/mesh.md).
 The input is a glTF mesh, text (`.gltf`) or binary (`.glb`); glTF is the only
 mesh format read for now. The default output path is the input stem with the
 `.voxj` extension. The grid resolution is set one of two mutually
@@ -44,7 +44,7 @@ real-world voxel size with `--voxel-size`. When neither is given it defaults to
    4. `auto`, the default, picks `per-texel` when the mesh carries textures and
       `per-primitive` when it does not.
 
-   Every mode writes the same properties [`mesh`](mesh.md) bakes back,
+   Every mode writes the same properties [`mesh`](../../../../ref/mesh/mesh.md) bakes back,
    `baseColor`, `metallic`, `roughness`, `emissiveColor`,
    `emissiveStrength`, and `occlusionStrength`, so a voxelized model round-trips
    through `mesh`.
@@ -88,7 +88,7 @@ count, not an edge length. `--voxel-size` reads the source mesh's
 real-world size only to choose the grid counts; the written document is still
 unitless. glTF is meter-native, and any scene- or node-level scale on the mesh
 is applied before voxelizing, so two glTF exports of the same object at different
-authored scales voxelize alike, mirroring [`vxl mesh`](mesh.md)'s
+authored scales voxelize alike, mirroring [`vxl mesh`](../../../../ref/mesh/mesh.md)'s
 `--voxel-size`. When `--voxel-size` is used, `voxelize` records
 `<meters>` as the placing node's scale so the assembled model keeps its source
 dimensions; `--resolution` has no real-world size to record. See

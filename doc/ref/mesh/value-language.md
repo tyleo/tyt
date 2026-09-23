@@ -389,7 +389,7 @@ builds, not a grouping in the language, and a written file is never a voxel-json
 value pool.
 
 The single stored form follows the voxel-json
-[value kinds](../../closed/voxj-value-kinds/README.md), which deleted their
+[value kinds](../../plan/closed/voxj-value-kinds/README.md), which deleted their
 color kinds because the stored form and the transfer are a writer's choices, not
 the value's. voxj stores linear light, the language evaluates in it, and a
 conversion happens only where something outside has an opinion.

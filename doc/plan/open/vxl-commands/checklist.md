@@ -45,33 +45,33 @@ off as they land.
 - [x] `--atlas` layout `ValueEnum`: `palette` shipped, one texel per distinct
       flattened material the object uses, its layers merged per property name
       by the format's layer-override resolution; `unwrap` (per-mesh UV) hidden
-      until it lands. See [mesh](reference/mesh.md#the-palette-atlas).
+      until it lands. See [mesh](../../../ref/mesh/mesh.md#the-palette-atlas).
 - [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` =
       `property` | `1-property` | `property.r`/`.g`/`.b`/`.a` color component |
       `0` | `1` | `computed-occlusion`) and the RGBA packing, sized by the
-      highest channel named. See [mesh](reference/mesh.md#channel-expressions).
+      highest channel named. See [mesh](../../../ref/mesh/value-language.md).
 - [x] `--texture` preset packings (albedo, orm, metallic-roughness,
       metallic-smoothness, mse, emissive, occlusion, roughness, smoothness) and
       the `pbr` bundle; `computed-occlusion` hidden until the unwrap atlas
-      lands. See [mesh](reference/mesh.md).
+      lands. See [mesh](../../../ref/mesh/mesh.md).
 - [x] `--define-property <property> <name>` binding, a pure rename alias giving
       a custom voxel-json key a name a packing reads. The type is not declared:
       `mesh` reads it from the key's value pool in its winning layer's palette,
       a color pool exposing components and a scalar pool read whole, and a key
       no layer binds follows the format's unbound-default rule (a glTF built-in
       bakes its spec default, a custom key errors). See
-      [mesh](reference/mesh.md#channel-expressions).
+      [mesh](../../../ref/mesh/value-language.md).
 - [ ] `--vertex` / `--vertex-map` carrier: the vertex twins of the texture
       flags, writing `COLOR_0` and custom `_NAME` attributes, the
       `palette-index` / `palette-layers` index presets, and the `PaletteData`
       JSON per `--palette-storage`. See
-      [mesh Deferred](reference/mesh.md#deferred).
+      [mesh Deferred](../../../ref/mesh/mesh.md).
 - [x] `ResourceStorage` `ValueEnum` (`embedded` | `external` | `both`) backing
       `--texture-storage` and `--palette-storage`, defaulting per target
       (`embedded` for `.glb`, `external` for `.gltf`): embed images in the glb
       chunk / gltf data URI and the palette JSON under `extras.vxl`, write
       external `.png` and `-palette.json` files, or both. See
-      [mesh](reference/mesh.md). (Image storage shipped with `mesh`; the palette
+      [mesh](../../../ref/mesh/mesh.md). (Image storage shipped with `mesh`; the palette
       JSON reuse lands with the vertex carriers.)
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
       `--position-encoding`, `--sample-encoding`) in
@@ -92,7 +92,7 @@ off as they land.
 
 ## Commands
 
-### mesh ([reference/mesh.md](reference/mesh.md))
+### mesh ([ref/mesh](../../../ref/mesh/mesh.md))
 
 - [x] `Mesh` command struct, dispatch, and single-object pure-geometry output;
       error when the selection is not exactly one object. The mesher lives in
@@ -104,7 +104,7 @@ off as they land.
       the shared `pathspec` gitignore engine like `hierarchy show`.
 - [ ] `--atlas unwrap` and the `--computed-occlusion-*` tuning flags, landing
       with the computed-occlusion maps. See
-      [mesh Deferred](reference/mesh.md#deferred).
+      [mesh Deferred](../../../ref/mesh/mesh.md).
 - [x] Material maps: `--texture <preset>` presets and the `pbr` bundle,
       repeatable; `--texture-name <preset> <file-name>` /
       `--texture-name-prefix <file-name>` naming; `--texture-map <file-name>
@@ -116,7 +116,7 @@ off as they land.
 - [ ] Vertex attribute maps: `--vertex <preset>`, `--vertex-target <preset>
       <target>`, `--vertex-map <target> <channels>`, and the `PaletteData` JSON
       per `--palette-storage`. See
-      [mesh Deferred](reference/mesh.md#deferred).
+      [mesh Deferred](../../../ref/mesh/mesh.md).
 - [x] `Dependencies::resolve_objects` and `mesh_object` and their impls, the
       flag-agnostic split that replaces the planned single `Dependencies::mesh`:
       the impl resolves the selectors to object indices and meshes by index,

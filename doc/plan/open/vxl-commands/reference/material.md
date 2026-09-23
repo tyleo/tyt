@@ -6,14 +6,14 @@
 vxl material <input> [output-stem] [maps] [options]
 ```
 
-Bakes the material maps from [`vxl mesh`](mesh.md) without writing any geometry,
+Bakes the material maps from [`vxl mesh`](../../../../ref/mesh/mesh.md) without writing any geometry,
 so you can produce or re-bake textures for a mesh you already have. It takes the
 same map flags as `mesh`: `--texture <preset>` for the presets and bundles,
 `--texture-name` / `--texture-name-prefix` for naming the preset images,
 `--texture-map <file-name> <channels>` for a custom packing, and
 `--define-property` for naming custom properties; see
-[The palette atlas](mesh.md#the-palette-atlas) and
-[Channel expressions](mesh.md#channel-expressions). The default `output-stem` is
+[The palette atlas](../../../../ref/mesh/mesh.md#the-palette-atlas) and
+[Channel expressions](../../../../ref/mesh/value-language.md). The default `output-stem` is
 the input stem, and each preset image defaults to that stem plus the preset
 name.
 
@@ -27,7 +27,7 @@ distinct flattened material the object uses.
 1. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
 2. `--atlas` `palette` (default `palette`): atlas layout, the same as `mesh`;
-   see [The palette atlas](mesh.md#the-palette-atlas). An `unwrap` layout is
+   see [The palette atlas](../../../../ref/mesh/mesh.md#the-palette-atlas). An `unwrap` layout is
    deferred with `mesh`'s.
 3. `--select <glob>`: restrict the material set to objects by hierarchy path,
    matched as `hierarchy show` matches node paths so a node path selects its

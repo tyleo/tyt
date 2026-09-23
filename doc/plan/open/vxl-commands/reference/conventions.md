@@ -60,7 +60,7 @@ one rule set, matched by the `pathspec` engine:
 
 ## Object selectors
 
-[`mesh`](mesh.md) and [`material`](material.md) choose which objects to output,
+[`mesh`](../../../../ref/mesh/mesh.md) and [`material`](material.md) choose which objects to output,
 [`to`](to/README.md) which objects to write, [`info`](info.md) which objects to
 report, and [`palette quantize`](palette/quantize.md) and
 [`palette remap`](palette/remap.md) which objects to dither, with two
@@ -91,7 +91,7 @@ matches. Given neither, every object is selected; given one that matches
 nothing, the command errors rather than quietly selecting nothing. `material`
 outputs the selection, `to` writes it, `info` reports it, and `quantize` and
 `remap` dither it; `mesh` outputs it too but for now requires it to resolve to
-a single object (see [mesh](mesh.md)).
+a single object (see [mesh](../../../../ref/mesh/mesh.md)).
 
 Baking a matched node's subtree and transforms into one larger placed mesh,
 rather than selecting its objects as pure geometry, is a separate mode left for a

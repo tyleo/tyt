@@ -3,7 +3,7 @@
 *Part of the [Vxl Command-Line Reference](../README.md).*
 
 Rationale for the non-obvious choices, for reviewers. The `mesh` command's
-design lives in [mesh](mesh.md).
+design lives in [mesh](../../../../ref/mesh/mesh.md).
 
 1. No standalone `optimize`, `pack`, or `unpack`. Every one is a special case
    of `to voxj`, which already owns encoding and container selection, so adding
@@ -33,7 +33,7 @@ design lives in [mesh](mesh.md).
    addressing model across mesh, material, quantize, and remap.
 5. `palette show` reads a property's meaning from its name, per the format's
    glTF vocabulary; a value pool carries only a shape, the same rule the
-   [`mesh` packings](mesh.md#channel-expressions) bake by. The selector's
+   [`mesh` packings](../../../../ref/mesh/value-language.md) bake by. The selector's
    reading field names the transfer and spelling explicitly (`auto`,
    `linear-float`, `plain`, `srgb-float`, `srgb-hex`); under `auto` a
    vocabulary color name reads `srgb-hex`, a vocabulary scalar reads its

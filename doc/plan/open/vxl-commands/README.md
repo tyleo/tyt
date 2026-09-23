@@ -39,7 +39,7 @@ vocabulary names such as `baseColor`.
 
 - [`vxl to <format>`](reference/to/README.md): convert between voxel formats,
   and the canonical way to re-encode, pack, and unpack a document.
-- [`vxl mesh`](reference/mesh.md): voxel to editable mesh, with material maps as
+- [`vxl mesh`](../../../ref/mesh/mesh.md): voxel to editable mesh, with material maps as
   textures or per-vertex attributes.
 - [`vxl material`](reference/material.md): bake material maps only.
 - [`vxl voxelize`](reference/voxelize.md): mesh to voxel grid.
