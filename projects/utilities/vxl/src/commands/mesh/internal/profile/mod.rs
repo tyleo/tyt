@@ -12,6 +12,7 @@ mod primitive_entry;
 mod profile;
 mod profile_set;
 mod slot_entry;
+mod stack_profiles;
 mod texture_shape_entry;
 mod value_entry;
 
@@ -28,5 +29,6 @@ pub(crate) use primitive_entry::*;
 pub(crate) use profile::*;
 pub(crate) use profile_set::*;
 pub(crate) use slot_entry::*;
+pub(crate) use stack_profiles::*;
 pub(crate) use texture_shape_entry::*;
 pub(crate) use value_entry::*;

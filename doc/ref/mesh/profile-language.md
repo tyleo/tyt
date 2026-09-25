@@ -4,7 +4,8 @@ _Part of the [mesh plan](README.md)._
 
 A profile is a named piece of configuration whose elements stand for
 [`vxl mesh`](mesh.md) flags. `--profile` applies a profile whole, and
-`--values-from` applies only a profile's values.
+`--values-from` applies only a profile's values. Repeated `--profile` flags
+[stack](#stacking) their profiles.
 [Built-in profiles](#built-in-profiles) ship in the binary. Default profiles
 like `--profile pbr` work before any `.vxlconfig` exists. The rest are
 user-defined under `.vxlconfig`'s `mesh.profiles` key. A config profile sharing
@@ -250,8 +251,8 @@ program once, at its first arrival, however many flags or imports name it.
 
 ## Loading
 
-The profiles resolve as a stack: the built-ins, then each `.vxlconfig` in the
-cascade the [implementation notes](implementation.md#ty-preferences) lay out.
+The profiles resolve as a cascade: the built-ins, then each `.vxlconfig` in the
+order the [implementation notes](implementation.md#ty-preferences) lay out.
 Each profile name is read from the last layer that supplies it, wholesale. The
 layers merge into one namespace before `valuesFrom` resolves, so a config that
 overrides `defaults` changes every profile built on it, including one from an
@@ -266,11 +267,12 @@ The checks split by when they run:
 3. each loaded profile
    1. its `values` fragments parsing
    2. its `valuesFrom` names resolving without a cycle
-4. the profile applied whole
-   1. its remaining expressions parsing
-   2. every `material` inside the material count
-   3. every `uvs` entry `corner`, `face`, `swatch`, or `voxel` named once
-   4. no element claiming one destination twice
+4. the profile stack applied whole
+   1. the stack merging, an element two members set erroring
+   2. its remaining expressions parsing
+   3. every `material` inside the material count
+   4. every `uvs` entry `corner`, `face`, `swatch`, or `voxel` named once
+   5. no element claiming one destination twice
 5. the run
    1. dimensions and shapes against the effective palette
    2. slot names and their encodings against the document's material model
@@ -279,7 +281,7 @@ The checks split by when they run:
 
 ## Built-in profiles
 
-The built-ins are the bottom layer of the [stack](#loading). The binary embeds
+The built-ins are the bottom layer of the [cascade](#loading). The binary embeds
 this section's map as data and parses it with the config deserializer when a
 profile loads: the built-ins take the same schema by construction:
 
@@ -624,3 +626,23 @@ primitive index the run never declared still errors rather than growing the
 count. A material's `uvs` list is one element, so any `--material-uv` naming the
 material replaces all of it, and a geometry flag replaces its key the same way:
 `--method culled` beside a profile spelling `greedy` meshes culled.
+
+## Stacking
+
+Repeating `--profile` stacks the profiles in line order, so
+
+```sh
+vxl mesh turret.voxj
+  --profile albedo
+  --profile orm
+```
+
+writes the albedo slot beside the two orm slots without a profile for that
+combination. Each member lands its values by name, as `--values-from` would.
+The members' writers merge into one profile that applies whole. The
+`materials` and `primitives` lists merge by position. A member listing no
+materials adds none because the longest list sets the stack's count. Every
+other element comes from one member. When two members set the same slot,
+extra, file key, name, `uvs` list, or geometry key, the run errors and reports
+both. The hand flags replace the stack's elements as they replace one
+profile's.

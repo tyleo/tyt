@@ -7,7 +7,7 @@ use crate::{
         apply_profile_primitives, check_expression, check_image_sources,
         declare_profile_primitives, flag_occurrences, load_profile_set, parse_flag_index,
         parse_flag_value, parse_texture_shape, push_file_write, push_unique, push_uv_stream,
-        resolve_gltf_container, select_one_object, written_file_name,
+        resolve_gltf_container, select_one_object, stack_profiles, written_file_name,
     },
 };
 use branded_id::U32Id;
@@ -155,12 +155,14 @@ pub struct Mesh {
     /// `valuesFrom` values first. Wherever the flag sits, the profile's values
     /// join the program ahead of every `--value` and `--values-from` binding,
     /// so a hand binding can read or redefine a profile value. An explicit
-    /// flag replaces the profile element it collides with. The profiles are
-    /// the built-ins under every `.vxlconfig`'s `mesh.profiles`, the user's
-    /// `~/.vxlconfig` first and then each directory from the git root down to
-    /// the working directory, a name reading from the last file supplying it.
-    #[arg(value_name = "profile", long)]
-    profile: Option<String>,
+    /// flag replaces the profile element it collides with. Repeatable: the
+    /// profiles stack in line order, their lists merging by position. An
+    /// element two of them set errors. The profiles are the built-ins under
+    /// every `.vxlconfig`'s `mesh.profiles`, the user's `~/.vxlconfig` first
+    /// and then each directory from the git root down to the working
+    /// directory, a name reading from the last file supplying it.
+    #[arg(value_name = "profile", long, action = ArgAction::Append)]
+    profile: Vec<String>,
 
     #[command(flatten)]
     program_flags: ProgramFlags,
@@ -394,28 +396,30 @@ impl Mesh {
 
     /// Whether any flag reads a profile.
     fn uses_profiles(&self) -> bool {
-        self.profile.is_some() || self.program_flags.uses_profiles()
+        !self.profile.is_empty() || self.program_flags.uses_profiles()
     }
 
-    /// The record the flags and the profile lower into, checked for what they
-    /// alone decide: the material and primitive counts, an element written
-    /// twice, the attribute naming rules, every expression parsing, and every
-    /// image reference pointing at a written PNG. A flag's element stands at
-    /// its destination, and the profile fills the rest. `profiles` holds the
-    /// loaded set when any flag reads a profile.
+    /// The record the flags and the profile stack lower into, checked for
+    /// what they alone decide: the material and primitive counts, an element
+    /// written twice, the attribute naming rules, every expression parsing,
+    /// and every image reference pointing at a written PNG. A flag's element
+    /// stands at its destination, and the stack fills the rest. `profiles`
+    /// holds the loaded set when any flag reads a profile.
     fn record(&self, output: &Path, profiles: Option<&ProfileSet>) -> Result<MeshRecord> {
         let file_stem = self.file_stem(output);
 
-        let profile = match &self.profile {
-            Some(name) => {
-                let profile = profiles
-                    .expect("--profile loads the profiles")
-                    .get("--profile", name)?;
+        let profile = match self.profile.as_slice() {
+            [] => None,
 
-                Some((format!("the profile `{name}`"), profile))
+            names => {
+                let stack = stack_profiles(
+                    profiles.expect("--profile loads the profiles"),
+                    "--profile",
+                    names,
+                )?;
+
+                Some((profile_origin(names), stack))
             }
-
-            None => None,
         };
 
         let mut materials = match (self.material_count, &profile) {
@@ -467,7 +471,7 @@ impl Mesh {
 
         let mut builder = ProgramBuilder::new(profiles, self.computed_bindings()?);
 
-        if let Some(name) = &self.profile {
+        for name in &self.profile {
             builder.land_profile("--profile", name)?;
         }
 
@@ -858,6 +862,19 @@ impl Mesh {
         }
 
         Ok(extras)
+    }
+}
+
+/// The errors' phrase for the stack of the profiles `names`.
+fn profile_origin(names: &[String]) -> String {
+    let quoted: Vec<_> = names.iter().map(|name| format!("`{name}`")).collect();
+
+    match quoted.as_slice() {
+        [name] => format!("the profile {name}"),
+
+        [head @ .., last] => format!("the profile stack {} and {last}", head.join(", ")),
+
+        [] => unreachable!("a stack holds a profile"),
     }
 }
 
@@ -1646,6 +1663,55 @@ mod tests {
         let mesh = parse(&["--file-stem", "lamp"]);
         let (_, output) = mesh.resolve_output();
         assert_eq!(mesh.file_stem(&output), "lamp");
+    }
+
+    #[test]
+    fn profiles_stack_in_line_order_and_a_shared_element_errors() {
+        let record = record(&["--profile", "albedo", "--profile", "orm"]);
+
+        let mut expected = DEFAULTS.to_vec();
+        expected.extend(["albedo", "orm"]);
+        assert_eq!(bound_names(&record), expected);
+
+        let [material] = record.materials.as_slice() else {
+            panic!("one material");
+        };
+        let properties: Vec<_> = material
+            .slots
+            .iter()
+            .map(|slot| slot.property.as_str())
+            .collect();
+        assert_eq!(
+            properties,
+            [
+                "baseColorTexture",
+                "metallicRoughnessTexture",
+                "occlusionTexture"
+            ]
+        );
+
+        let error = error_of(&["--profile", "pbr", "--profile", "albedo"]);
+        assert!(
+            error.contains(
+                "the profile `albedo` sets materials entry 0's slot `baseColorTexture`, which \
+                 the profile `pbr` sets already"
+            ),
+            "{error}"
+        );
+
+        let error = error_of(&[
+            "--profile",
+            "albedo",
+            "--profile",
+            "orm",
+            "--material-name",
+            "1",
+            "glow",
+        ]);
+        assert!(
+            error.contains("the profile stack `albedo` and `orm` declares material 0 alone"),
+            "{error}"
+        );
     }
 
     #[test]

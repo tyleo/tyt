@@ -182,14 +182,16 @@ multi-object document needs a selector. See
     fills `{file-stem}-mse.png` as `turret-mse.png`.
 
 15. `--profile <profile>`
-    - Repeatable: no
+    - Repeatable: yes
 
     Applies a profile. The profile expands to its flags, the `valuesFrom` values
     applying first. Wherever the flag sits on the line, the profile's values
     join the program ahead of every `--value` and `--values-from` binding, so a
-    hand binding can read or redefine a profile value. An explicit flag
-    replaces the element it collides with; see the
-    [profile language](profile-language.md).
+    hand binding can read or redefine a profile value. Repeated, the profiles
+    stack in line order. The material and primitive lists merge by position,
+    and an element two profiles set errors. An explicit flag replaces the
+    element it collides with; see the
+    [profile language](profile-language.md#stacking).
 
 16. `--value <bindings>`
     - Repeatable: yes

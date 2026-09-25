@@ -5,14 +5,14 @@ use crate::{
 use std::collections::BTreeMap;
 
 /// The profiles a run can apply, one namespace merged from the layers of the
-/// stack. Each name reads from the last layer supplying it, wholesale.
+/// cascade. Each name reads from the last layer supplying it, wholesale.
 #[derive(Clone, Debug)]
 pub(crate) struct ProfileSet {
     profiles: BTreeMap<String, Profile>,
 }
 
 impl ProfileSet {
-    /// The built-ins alone, the bottom layer of the stack.
+    /// The built-ins alone, the bottom layer of the cascade.
     #[cfg(test)]
     pub(crate) fn built_in() -> Self {
         ProfileSet {
