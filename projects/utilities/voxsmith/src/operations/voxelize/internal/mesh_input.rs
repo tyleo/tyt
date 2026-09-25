@@ -1,45 +1,48 @@
-use crate::operations::voxelize::{MeshMaterial, MeshMaterialMaps, MeshTexture, MeshTriangle};
-use ty_math::{TyBoundsF64, TyVector3F64};
+use crate::operations::voxelize::{
+    DecodedImage, MeshTriangle, PlacedPrimitive, TextureSlots, triangle_bounds,
+};
+use branded_id::U32Id;
+use meshdoc::{BMeshImage, MeshState};
+use std::collections::HashMap;
+use ty_math::TyVector3F64;
 
 /// A triangle mesh in world space, flattened from a mesh document with every
 /// node transform applied, the one shape [`voxelize_mesh`] rasterizes. The
-/// document's axes are the grid's, so a mesh `+y` is a voxel `+y`.
+/// document's axes are the grid's, so a mesh `+y` is a voxel `+y`. Materials
+/// and textures are read from the document. Only the images the sampled
+/// slots draw are decoded.
 ///
 /// [`voxelize_mesh`]: crate::operations::voxelize::voxelize_mesh
-pub struct MeshInput {
-    /// The triangles to rasterize, each tagged with its material.
+pub(crate) struct MeshInput<'a> {
+    /// The placed primitives, indexed by a triangle's tag.
+    pub primitives: Vec<PlacedPrimitive<'a>>,
+
+    /// The triangles to rasterize, each tagged with its placed primitive.
     pub triangles: Vec<MeshTriangle>,
 
-    /// The distinct materials the triangles reference, indexed by a
-    /// triangle's material tag.
-    pub materials: Vec<MeshMaterial>,
+    /// The decoded images the sampled slots draw, by image id.
+    pub images: HashMap<U32Id<BMeshImage>, DecodedImage>,
 
-    /// Each material's optional texture bindings, parallel to
-    /// [`materials`](Self::materials).
-    pub maps: Vec<MeshMaterialMaps>,
-
-    /// The decoded texture images a map binding indexes.
-    pub textures: Vec<MeshTexture>,
+    /// The document state the materials and textures are read from.
+    pub state: &'a MeshState,
 
     /// The mesh's name, for the voxelized object. `None` when the source has
     /// none.
     pub name: Option<String>,
 }
 
-impl MeshInput {
-    /// Whether any material carries a texture map, the case `auto` samples
-    /// per texel.
+impl MeshInput<'_> {
+    /// Whether any placed primitive samples a texture, the case `auto`
+    /// samples per texel.
     pub fn is_textured(&self) -> bool {
-        self.maps.iter().any(MeshMaterialMaps::any)
+        (0..self.primitives.len()).any(|index| TextureSlots::resolve(self, index as u32).any())
     }
 
     /// The size of the mesh's bounding box in meters, which a caller divides to
     /// choose a grid resolution. Zero on every axis when the mesh has no
     /// triangles.
     pub fn extent(&self) -> TyVector3F64 {
-        let points = self.triangles.iter().flat_map(|triangle| triangle.points);
-
-        match TyBoundsF64::from_points(points) {
+        match triangle_bounds(&self.triangles) {
             Some(bounds) => bounds.size(),
             None => TyVector3F64::ZERO,
         }

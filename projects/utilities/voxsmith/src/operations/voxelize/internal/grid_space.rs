@@ -15,9 +15,8 @@ impl GridSpace {
     /// The grid space for `counts` fit tightly around `triangles`, or `None` when
     /// the soup has no points.
     pub fn from_triangles(triangles: &[MeshTriangle], counts: TyVector3U32) -> Option<Self> {
-        let points = triangles.iter().flat_map(|triangle| triangle.points);
-        let (min, max) = triangle_bounds(points)?;
-        Some(Self::from_bounds(min, max, counts))
+        let bounds = triangle_bounds(triangles)?;
+        Some(Self::from_bounds(bounds.min(), bounds.max(), counts))
     }
 
     /// The grid space for `counts` over the box `[min, max]`.

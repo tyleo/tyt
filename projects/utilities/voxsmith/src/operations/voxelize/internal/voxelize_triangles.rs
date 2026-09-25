@@ -29,10 +29,8 @@ pub(crate) fn voxelize_triangles(
 
     let mut covering = vec![None; nx * ny * nz];
 
-    let points = triangles.iter().flat_map(|triangle| triangle.points);
-
     // No triangles, or a zero-size grid: an all-empty grid.
-    let Some((min, max)) = triangle_bounds(points).filter(|_| !filled.is_empty()) else {
+    let Some(bounds) = triangle_bounds(triangles).filter(|_| !filled.is_empty()) else {
         return VoxelGrid {
             filled,
             triangle: covering,
@@ -42,7 +40,7 @@ pub(crate) fn voxelize_triangles(
     // The affine map onto grid space, where each voxel is the unit cube
     // `[i, i + 1)` on each axis. A zero-extent axis (a flat mesh) collapses to a
     // single slice, guarded inside the map.
-    let space = GridSpace::from_bounds(min, max, counts);
+    let space = GridSpace::from_bounds(bounds.min(), bounds.max(), counts);
 
     for (index, triangle) in triangles.iter().enumerate() {
         // The triangle in grid coordinates. The map onto grid space is affine
@@ -353,20 +351,19 @@ fn cell_range(grid: &[[f64; 3]; 3], counts: [usize; 3]) -> ([usize; 3], [usize; 
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::voxelize::{
-        MeshTriangle, MeshTriangleUvs, VoxelGrid, voxelize_triangles,
-    };
+    use crate::operations::voxelize::{MeshTriangle, VoxelGrid, voxelize_triangles};
+    use branded_id::U32Id;
     use ty_math::{TyVector3F64, TyVector3U32};
 
-    /// Tags a triangle soup with one material so the geometry tests can build
-    /// [`MeshTriangle`]s from plain points.
-    fn tagged(points: Vec<[[f64; 3]; 3]>, material_index: u32) -> Vec<MeshTriangle> {
+    /// Tags a triangle soup with one placed primitive so the geometry tests
+    /// can build [`MeshTriangle`]s from plain points.
+    fn tagged(points: Vec<[[f64; 3]; 3]>, primitive: u32) -> Vec<MeshTriangle> {
         points
             .into_iter()
             .map(|points| MeshTriangle {
                 points: points.map(|[x, y, z]| TyVector3F64::new(x, y, z)),
-                uvs: MeshTriangleUvs::default(),
-                material_index,
+                vertex_ids: [U32Id::from_u32(0); 3],
+                primitive,
             })
             .collect()
     }

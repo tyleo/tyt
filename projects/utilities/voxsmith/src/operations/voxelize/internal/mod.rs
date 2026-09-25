@@ -1,43 +1,37 @@
 mod grid_space;
-mod mesh_base_color_map;
-mod mesh_emissive_map;
 mod mesh_input;
 mod mesh_input_from_mesh_main;
-mod mesh_material;
-mod mesh_material_maps;
-mod mesh_metallic_roughness_map;
-mod mesh_occlusion_map;
-mod mesh_sampler;
-mod mesh_texture;
 mod mesh_triangle;
-mod mesh_triangle_uvs;
-mod mesh_wrap;
+mod placed_primitive;
 mod sample_material;
+mod texture_slot;
+mod texture_slots;
 mod triangle_bounds;
 mod triangle_box_overlap;
 mod voxel_grid;
-mod voxelize_input;
+mod voxel_material;
 mod voxelize_mesh;
 mod voxelize_triangles;
 
 pub(crate) use grid_space::*;
-pub(crate) use mesh_base_color_map::*;
-pub(crate) use mesh_emissive_map::*;
 pub(crate) use mesh_input::*;
 pub(crate) use mesh_input_from_mesh_main::*;
-pub(crate) use mesh_material::*;
-pub(crate) use mesh_material_maps::*;
-pub(crate) use mesh_metallic_roughness_map::*;
-pub(crate) use mesh_occlusion_map::*;
-pub(crate) use mesh_sampler::*;
-pub(crate) use mesh_texture::*;
 pub(crate) use mesh_triangle::*;
-pub(crate) use mesh_triangle_uvs::*;
-pub(crate) use mesh_wrap::*;
+pub(crate) use placed_primitive::*;
 pub(crate) use sample_material::*;
+pub(crate) use texture_slot::*;
+pub(crate) use texture_slots::*;
 pub(crate) use triangle_bounds::*;
 pub(crate) use triangle_box_overlap::*;
 pub(crate) use voxel_grid::*;
-pub(crate) use voxelize_input::*;
+pub(crate) use voxel_material::*;
 pub(crate) use voxelize_mesh::*;
 pub(crate) use voxelize_triangles::*;
+
+// Test support.
+
+#[cfg(test)]
+mod test;
+
+#[cfg(test)]
+pub(crate) use test::*;

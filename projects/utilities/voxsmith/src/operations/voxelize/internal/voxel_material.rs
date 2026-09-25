@@ -1,14 +1,12 @@
-use ty_math::TyLinSrgbaF64;
+use meshdoc::MeshMaterial;
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64};
 
-/// A mesh material's flat PBR factors in the glTF metallic-roughness attribute
-/// vocabulary a voxel palette material carries: `baseColor`, `metallic`,
-/// `roughness`, `emissiveColor`, `emissiveStrength`, `occlusionStrength`,
-/// `ior`, and `transmission`. This is the
-/// per-primitive material: one material per mesh material, read from its
-/// factors alone. The voxelizer turns each distinct material into one palette
-/// material over value pools bound by these names.
+/// The material one voxel samples, in the vocabulary a palette material
+/// carries. Read from a mesh material's flat factors, with the sampled maps
+/// applied where a slot resolves. Each distinct material becomes one palette
+/// material.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MeshMaterial {
+pub(crate) struct VoxelMaterial {
     /// Straight-RGBA base color in linear light. glTF `baseColorFactor`.
     pub base_color: TyLinSrgbaF64,
 
@@ -18,9 +16,8 @@ pub(crate) struct MeshMaterial {
     /// Roughness, `0..=1`. glTF `roughnessFactor`.
     pub roughness: f64,
 
-    /// Emissive color in linear light. glTF `emissiveFactor` carries no alpha,
-    /// so the alpha is held opaque and ignored.
-    pub emissive_color: TyLinSrgbaF64,
+    /// Emissive color in linear light. glTF `emissiveFactor`.
+    pub emissive_color: TyLinSrgbF64,
 
     /// Emissive strength scaling [`emissive_color`](Self::emissive_color), `0+`.
     /// glTF's `KHR_materials_emissive_strength`.
@@ -37,7 +34,7 @@ pub(crate) struct MeshMaterial {
     pub transmission: f64,
 }
 
-impl MeshMaterial {
+impl VoxelMaterial {
     /// A flat opaque material of `base_color` with default finish: non-metal,
     /// matte, non-emissive, unoccluded, dielectric, opaque. This is the whole
     /// body in flat mode, and the invented interior a fill color paints.
@@ -46,11 +43,28 @@ impl MeshMaterial {
             base_color,
             metallic: 0.0,
             roughness: 1.0,
-            emissive_color: TyLinSrgbaF64::new(0.0, 0.0, 0.0, 1.0),
+            emissive_color: TyLinSrgbF64::new(0.0, 0.0, 0.0),
             emissive_strength: 0.0,
             occlusion: 1.0,
             ior: 1.5,
             transmission: 0.0,
+        }
+    }
+}
+
+/// A mesh material's flat factors. Occlusion has no flat factor and starts
+/// full.
+impl From<&MeshMaterial> for VoxelMaterial {
+    fn from(material: &MeshMaterial) -> Self {
+        Self {
+            base_color: material.base_color_factor,
+            metallic: material.metallic_factor,
+            roughness: material.roughness_factor,
+            emissive_color: material.emissive_factor,
+            emissive_strength: material.emissive_strength,
+            occlusion: 1.0,
+            ior: material.ior,
+            transmission: material.transmission_factor,
         }
     }
 }

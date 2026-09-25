@@ -1,18 +1,20 @@
-use crate::operations::voxelize::MeshTriangleUvs;
+use branded_id::U32Id;
+use meshdoc::BMeshVertex;
 use ty_math::TyVector3F64;
 
-/// One mesh triangle in world space, tagged with the material it was
-/// drawn with. The tag is an index into the
-/// [`Mesh`](crate::operations::voxelize::Mesh) material table, so the
-/// rasterizer can attribute each surface voxel to a material.
+/// One mesh triangle in world space, tagged with its placed primitive. The
+/// tag indexes the [`MeshInput`] primitive table, where the material and the
+/// UV streams live.
+///
+/// [`MeshInput`]: crate::operations::voxelize::MeshInput
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct MeshTriangle {
     /// The triangle's three vertices.
     pub points: [TyVector3F64; 3],
 
-    /// The per-vertex texture coordinates, one set per PBR map slot.
-    pub uvs: MeshTriangleUvs,
+    /// The three vertices' ids in the placed primitive.
+    pub vertex_ids: [U32Id<BMeshVertex>; 3],
 
-    /// Index into the mesh's material table of the material this triangle uses.
-    pub material_index: u32,
+    /// Index into the mesh's primitive table.
+    pub primitive: u32,
 }

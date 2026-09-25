@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     operations::voxelize::{
-        FillMode, MaterialMode, MeshInput, MeshMaterial, OutOfRangeProperty, SurfaceMode,
-        VoxelGrid, sample_material, voxelize_triangles,
+        FillMode, MaterialMode, MeshInput, OutOfRangeProperty, SurfaceMode, VoxelGrid,
+        VoxelMaterial, VoxelizeOptions, sample_material, voxelize_triangles,
     },
     utilities::{check_material_property_ranges, check_material_range},
 };
@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
 };
-use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -29,35 +29,25 @@ use voxcore::{
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`MeshInput`] into a [`VoxMain`] of one object placed by one
-/// root node. Errors when the mesh has no triangle geometry or the grid
-/// exceeds voxcore's dense-grid limit.
+/// root node, under `options` with the grid already sized. Errors when the
+/// mesh has no triangle geometry or the grid exceeds voxcore's dense-grid
+/// limit.
 ///
 /// # Arguments
 /// * `mesh` - the mesh to rasterize, in world space.
 /// * `counts` - voxels per axis, sized by the caller from
 ///   [`MeshInput::extent`].
-/// * `surface_mode` - how surface voxels are found; see [`SurfaceMode`].
-/// * `fill_mode` - how the interior is filled; see [`FillMode`].
-/// * `material_mode` - how voxels take materials; see [`MaterialMode`].
-/// * `fill_color` - the color of voxels a mode cannot sample, or `None` for
-///   the default.
 /// * `node_scale` - the placing node's uniform scale.
-/// * `name` - object-name override; `None` uses the mesh's name.
-/// * `fallback_name` - the object name when neither `name` nor the mesh has one.
-/// * `out_of_range` - what an out-of-range material property does; see
-///   [`OutOfRangeProperty`].
-#[allow(clippy::too_many_arguments)]
+/// * `fallback_name` - the object name when neither `options.name` nor the
+///   mesh has one.
+/// * `options` - everything but the resolution, which the caller resolved
+///   into `counts` and `node_scale`.
 pub fn voxelize_mesh(
-    mesh: &MeshInput,
+    mesh: &MeshInput<'_>,
     counts: TyVector3U32,
-    surface_mode: SurfaceMode,
-    fill_mode: FillMode,
-    material_mode: MaterialMode,
-    fill_color: Option<[u8; 4]>,
     node_scale: f64,
-    name: Option<&str>,
     fallback_name: &str,
-    out_of_range: OutOfRangeProperty,
+    options: &VoxelizeOptions,
 ) -> Result<VoxMain> {
     if mesh.triangles.is_empty() {
         return Err(Error::invalid("mesh has no triangle geometry"));
@@ -73,21 +63,28 @@ pub fn voxelize_mesh(
     let grid = voxelize_triangles(
         &mesh.triangles,
         counts,
-        surface_mode == SurfaceMode::CenterInside,
-        fill_mode == FillMode::Solid,
+        options.surface_mode == SurfaceMode::CenterInside,
+        options.fill_mode == FillMode::Solid,
     );
 
-    let cell_materials = resolve_materials(mesh, &grid, counts, material_mode, fill_color);
+    let cell_materials = resolve_materials(
+        mesh,
+        &grid,
+        counts,
+        options.material_mode,
+        options.fill_color,
+    );
 
     let mut main = VoxMain::default();
 
     let (palette, sample_ids, default_material_id) =
-        build_palette(&mut main, &cell_materials, out_of_range)?;
+        build_palette(&mut main, &cell_materials, options.out_of_range_property)?;
 
     let palette_id = main.retain_palette(palette)?;
 
-    let object_name = name
-        .map(str::to_owned)
+    let object_name = options
+        .name
+        .clone()
         .or(mesh.name.clone())
         .unwrap_or_else(|| fallback_name.to_owned());
 
@@ -131,12 +128,12 @@ pub fn voxelize_mesh(
 
 /// The material of every filled cell under `material_mode`.
 fn resolve_materials(
-    mesh: &MeshInput,
+    mesh: &MeshInput<'_>,
     grid: &VoxelGrid,
     counts: TyVector3U32,
     material_mode: MaterialMode,
     fill_color: Option<[u8; 4]>,
-) -> Vec<Option<MeshMaterial>> {
+) -> Vec<Option<VoxelMaterial>> {
     let mut cell_materials = match material_mode {
         MaterialMode::Flat => return flat_cells(grid, fill_color),
 
@@ -167,8 +164,8 @@ fn resolve_materials(
 }
 
 /// Every filled cell takes the one fill color (white when `none`).
-fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshMaterial>> {
-    let material = MeshMaterial::flat(fill_lin_srgba_f64_color(fill_color));
+fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<VoxelMaterial>> {
+    let material = VoxelMaterial::flat(fill_lin_srgba_f64_color(fill_color));
     grid.filled
         .iter()
         .map(|&filled| filled.then_some(material))
@@ -177,32 +174,30 @@ fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshM
 
 /// Each surface cell takes its covering triangle's flat material; interior and
 /// empty cells are `None`.
-fn primitive_cells(mesh: &MeshInput, grid: &VoxelGrid) -> Vec<Option<MeshMaterial>> {
+fn primitive_cells(mesh: &MeshInput<'_>, grid: &VoxelGrid) -> Vec<Option<VoxelMaterial>> {
+    let materials: Vec<VoxelMaterial> = mesh
+        .primitives
+        .iter()
+        .map(|placed| VoxelMaterial::from(placed.material))
+        .collect();
+
     grid.triangle
         .iter()
         .map(|&covering| {
-            covering.map(|triangle| {
-                mesh.materials[mesh.triangles[triangle as usize].material_index as usize]
-            })
+            covering.map(|triangle| materials[mesh.triangles[triangle as usize].primitive as usize])
         })
         .collect()
 }
 
-/// Each surface cell takes its covering material with every present map sampled
-/// per texel over the cell footprint; interior and empty cells are `None`.
+/// Each surface cell takes its covering material with every resolved texture
+/// slot sampled per texel over the cell footprint; interior and empty cells
+/// are `None`.
 fn sampled_cells(
-    mesh: &MeshInput,
+    mesh: &MeshInput<'_>,
     grid: &VoxelGrid,
     counts: TyVector3U32,
-) -> Vec<Option<MeshMaterial>> {
-    sample_material(
-        &mesh.triangles,
-        &mesh.materials,
-        &mesh.maps,
-        &mesh.textures,
-        grid,
-        counts,
-    )
+) -> Vec<Option<VoxelMaterial>> {
+    sample_material(mesh, grid, counts)
 }
 
 /// Paints every filled interior cell, the volume a `solid` fill invents with
@@ -213,7 +208,7 @@ fn fill_interior(
     grid: &VoxelGrid,
     counts: TyVector3U32,
     fill_color: Option<[u8; 4]>,
-    cell_materials: &mut [Option<MeshMaterial>],
+    cell_materials: &mut [Option<VoxelMaterial>],
 ) {
     let has_interior = grid
         .filled
@@ -227,7 +222,7 @@ fn fill_interior(
 
     match fill_color {
         Some(color) => {
-            let fill = MeshMaterial::flat(fill_lin_srgba_f64_color(Some(color)));
+            let fill = VoxelMaterial::flat(fill_lin_srgba_f64_color(Some(color)));
             for (cell, triangle) in grid.triangle.iter().enumerate() {
                 if grid.filled[cell] && triangle.is_none() {
                     cell_materials[cell] = Some(fill);
@@ -240,7 +235,7 @@ fn fill_interior(
                 if grid.filled[cell] && grid.triangle[cell].is_none() {
                     let resolved = nearest[cell]
                         .and_then(|source| cell_materials[source])
-                        .unwrap_or_else(|| MeshMaterial::flat(fill_lin_srgba_f64_color(None)));
+                        .unwrap_or_else(|| VoxelMaterial::flat(fill_lin_srgba_f64_color(None)));
                     cell_materials[cell] = Some(resolved);
                 }
             }
@@ -264,12 +259,12 @@ type PaletteBuild = (
 /// `out_of_range`.
 fn build_palette(
     main: &mut VoxMain,
-    cell_materials: &[Option<MeshMaterial>],
+    cell_materials: &[Option<VoxelMaterial>],
     out_of_range: OutOfRangeProperty,
 ) -> Result<PaletteBuild> {
     // Merge identical materials into a distinct list, first seen in raster
     // order, remembering each filled cell's position in it.
-    let mut distinct: Vec<MeshMaterial> = Vec::new();
+    let mut distinct: Vec<VoxelMaterial> = Vec::new();
     let mut lookup: HashMap<MaterialKey, usize> = HashMap::new();
     let cell_indices: Vec<Option<usize>> = cell_materials
         .iter()
@@ -287,16 +282,23 @@ fn build_palette(
     // An all-empty grid still needs a non-empty palette so its value pools and
     // default material are valid; give it a lone white material.
     if distinct.is_empty() {
-        distinct.push(MeshMaterial::flat(fill_lin_srgba_f64_color(None)));
+        distinct.push(VoxelMaterial::flat(fill_lin_srgba_f64_color(None)));
     }
 
     // The color properties follow the same policy as the scalars: every
     // component of `baseColor`, alpha included, and `emissiveColor` lies in
     // `[0, 1]`.
     for material in &mut distinct {
-        material.base_color = property_color(material.base_color, BASE_COLOR, out_of_range)?;
-        material.emissive_color =
-            property_color(material.emissive_color, EMISSIVE_COLOR, out_of_range)?;
+        material.base_color = TyLinSrgbaF64::from(property_color(
+            <[f64; 4]>::from(material.base_color),
+            BASE_COLOR,
+            out_of_range,
+        )?);
+        material.emissive_color = TyLinSrgbF64::from(property_color(
+            <[f64; 3]>::from(material.emissive_color),
+            EMISSIVE_COLOR,
+            out_of_range,
+        )?);
     }
 
     // One deduplicated value pool per property, plus each distinct material's
@@ -423,8 +425,8 @@ struct ValuePoolColumn<T> {
 /// A four-component color value pool over the extracted linear color,
 /// deduplicated by its components' bit patterns.
 fn lin_srgba_f64_value_pool(
-    materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
+    materials: &[VoxelMaterial],
+    get: impl Fn(&VoxelMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 4]> {
     value_pool_column(
         materials,
@@ -434,17 +436,14 @@ fn lin_srgba_f64_value_pool(
 }
 
 /// A three-component color value pool over the extracted linear color,
-/// deduplicated by its components' bit patterns. The alpha is dropped.
+/// deduplicated by its components' bit patterns.
 fn lin_srgb_f64_value_pool(
-    materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
+    materials: &[VoxelMaterial],
+    get: impl Fn(&VoxelMaterial) -> TyLinSrgbF64,
 ) -> ValuePoolColumn<[f64; 3]> {
     value_pool_column(
         materials,
-        |material| {
-            let color = get(material);
-            [color.red, color.green, color.blue]
-        },
+        |material| <[f64; 3]>::from(get(material)),
         |color| color.map(f64::to_bits),
     )
 }
@@ -452,8 +451,8 @@ fn lin_srgb_f64_value_pool(
 /// A float value pool over the extracted scalar, deduplicated by its bit
 /// pattern.
 fn f64_value_pool(
-    materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> f64,
+    materials: &[VoxelMaterial],
+    get: impl Fn(&VoxelMaterial) -> f64,
 ) -> ValuePoolColumn<f64> {
     value_pool_column(materials, |material| get(material), |value| value.to_bits())
 }
@@ -461,8 +460,8 @@ fn f64_value_pool(
 /// A deduplicated value pool column: each material's extracted value interned
 /// by `key`, the distinct values kept in first-seen order.
 fn value_pool_column<T, K: Eq + Hash>(
-    materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> T,
+    materials: &[VoxelMaterial],
+    get: impl Fn(&VoxelMaterial) -> T,
     key: impl Fn(&T) -> K,
 ) -> ValuePoolColumn<T> {
     let mut values = Vec::new();
@@ -499,18 +498,17 @@ fn property_value_pool(
     Ok(VoxValuePool::float(values)?)
 }
 
-/// A color value with every component checked against [`COLOR_RANGE`]. A
-/// component outside it follows `out_of_range`.
-fn property_color(
-    color: TyLinSrgbaF64,
+/// A color's components, each checked against [`COLOR_RANGE`]. A component
+/// outside it follows `out_of_range`.
+fn property_color<const N: usize>(
+    mut components: [f64; N],
     key: &str,
     out_of_range: OutOfRangeProperty,
-) -> Result<TyLinSrgbaF64> {
-    let mut components = <[f64; 4]>::from(color);
+) -> Result<[f64; N]> {
     for component in &mut components {
         *component = property_value(*component, COLOR_RANGE, key, out_of_range)?;
     }
-    Ok(TyLinSrgbaF64::from(components))
+    Ok(components)
 }
 
 /// One property value under the out-of-range policy: itself when it lies in
@@ -540,13 +538,12 @@ fn property_value(
 type MaterialKey = ([u64; 4], u64, u64, [u64; 3], u64, u64, u64, u64);
 
 /// The [`MaterialKey`] for a material.
-fn material_key(material: &MeshMaterial) -> MaterialKey {
-    let emissive = material.emissive_color;
+fn material_key(material: &VoxelMaterial) -> MaterialKey {
     (
         <[f64; 4]>::from(material.base_color).map(f64::to_bits),
         material.metallic.to_bits(),
         material.roughness.to_bits(),
-        [emissive.red, emissive.green, emissive.blue].map(f64::to_bits),
+        <[f64; 3]>::from(material.emissive_color).map(f64::to_bits),
         material.emissive_strength.to_bits(),
         material.occlusion.to_bits(),
         material.ior.to_bits(),
@@ -637,75 +634,46 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
 
 #[cfg(test)]
 mod tests {
+    use super::build_palette;
     use crate::{
         Result,
-        operations::voxelize::{
-            FillMode, MaterialMode, MeshInput, MeshMaterial, MeshTriangle, MeshTriangleUvs,
-            OutOfRangeProperty, SurfaceMode, voxelize_mesh,
-        },
+        operations::voxelize::{OutOfRangeProperty, VoxelMaterial},
     };
-    use ty_math::{TyLinSrgbaF64, TyVector3F64, TyVector3U32};
+    use branded_id::U32Id;
+    use ty_math::TyLinSrgbaF64;
     use voxcore::{
-        VoxMain, VoxValuePoolValueRef,
+        BVoxMaterial, BVoxPalette, VoxMain, VoxValuePoolValueRef,
         material::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC},
     };
 
-    /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
-    /// cell, the left tagged material `0` and the right material `1`.
-    fn two_cell_mesh(materials: Vec<MeshMaterial>) -> MeshInput {
-        let triangle = |cell: f64, material_index: u32| MeshTriangle {
-            points: [
-                TyVector3F64::new(cell + 0.2, 0.2, 0.5),
-                TyVector3F64::new(cell + 0.8, 0.2, 0.5),
-                TyVector3F64::new(cell + 0.5, 0.8, 0.5),
-            ],
-            uvs: MeshTriangleUvs::default(),
-            material_index,
-        };
-
-        MeshInput {
-            triangles: vec![triangle(0.0, 0), triangle(1.0, 1)],
-            maps: vec![Default::default(); materials.len()],
-            materials,
-            textures: Vec::new(),
-            name: None,
-        }
-    }
-
-    /// Voxelizes the two-cell mesh per-primitive under `out_of_range`.
-    fn voxelize_with(
-        materials: Vec<MeshMaterial>,
+    /// A palette over one filled cell per material, retained into a main,
+    /// with each cell's material id.
+    fn palette_of(
+        materials: Vec<VoxelMaterial>,
         out_of_range: OutOfRangeProperty,
-    ) -> Result<VoxMain> {
-        voxelize_mesh(
-            &two_cell_mesh(materials),
-            TyVector3U32::new(2, 1, 1),
-            SurfaceMode::TriangleCover,
-            FillMode::Surface,
-            MaterialMode::PerPrimitive,
-            None,
-            1.0,
-            None,
-            "mesh",
-            out_of_range,
-        )
+    ) -> Result<(VoxMain, U32Id<BVoxPalette>, Vec<U32Id<BVoxMaterial>>)> {
+        let mut main = VoxMain::default();
+        let cells: Vec<Option<VoxelMaterial>> = materials.into_iter().map(Some).collect();
+
+        let (palette, sample_ids, _) = build_palette(&mut main, &cells, out_of_range)?;
+
+        let palette_id = main.retain_palette(palette)?;
+        let material_ids = sample_ids
+            .into_iter()
+            .map(|sample_id| sample_id.expect("every cell is filled"))
+            .collect();
+        Ok((main, palette_id, material_ids))
     }
 
-    /// Voxelizes the two-cell mesh per-primitive, rejecting an out-of-range
-    /// value.
-    fn voxelize(materials: Vec<MeshMaterial>) -> VoxMain {
-        voxelize_with(materials, OutOfRangeProperty::Error).unwrap()
-    }
-
-    /// The strength the given voxel's material samples from the
-    /// `emissiveStrength` property.
-    fn sampled_strength(main: &VoxMain, position: TyVector3U32) -> f64 {
-        let (_, object) = main.iter_objects().next().unwrap();
-        let (layer_id, palette_id) = object.iter_layers().next().unwrap();
+    /// The float `property` holds for `material_id`.
+    fn number(
+        main: &VoxMain,
+        palette_id: U32Id<BVoxPalette>,
+        material_id: U32Id<BVoxMaterial>,
+        property: &str,
+    ) -> f64 {
         let palette = main.palette(palette_id).unwrap();
-        let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
-        let voxel_id = object.voxel_id(position).unwrap();
-        let material_id = object.voxel_material(voxel_id, layer_id).unwrap();
+        let property_id = palette.property_id_by_name(property).unwrap();
         match main
             .material_value(palette_id, material_id, property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
@@ -715,75 +683,106 @@ mod tests {
         }
     }
 
+    /// The values of the pool `property` draws from, in listing order.
+    fn values<'a>(
+        main: &'a VoxMain,
+        palette_id: U32Id<BVoxPalette>,
+        property: &str,
+    ) -> Vec<VoxValuePoolValueRef<'a>> {
+        let palette = main.palette(palette_id).unwrap();
+        let property_id = palette.property_id_by_name(property).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
+        let value_pool = main.value_pool(value_pool_id).unwrap();
+        value_pool
+            .iter_values()
+            .map(|(value_id, _)| value_pool.value(value_id).unwrap())
+            .collect()
+    }
+
+    /// A flat red material.
+    fn red() -> VoxelMaterial {
+        VoxelMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0))
+    }
+
+    /// A flat blue material.
+    fn blue() -> VoxelMaterial {
+        VoxelMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0))
+    }
+
+    /// `material` with `emissive_strength`.
+    fn glowing(mut material: VoxelMaterial, emissive_strength: f64) -> VoxelMaterial {
+        material.emissive_strength = emissive_strength;
+        material
+    }
+
     #[test]
     fn a_shared_strength_repeats_one_value_pool_value() {
-        let mut emissive = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-        emissive.emissive_strength = 2.0;
-
-        let mut other = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
-        other.emissive_strength = 2.0;
-
-        let main = voxelize(vec![emissive, other]);
-
-        // Two distinct materials share the strength, so both rows repeat the
-        // deduplicated value pool's one value.
-        let (_, palette) = main.iter_palettes().next().unwrap();
-        assert_eq!(palette.iter_materials().count(), 2);
-        let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
-        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        assert_eq!(main.value_pool(value_pool_id).unwrap().len(), 1);
-        assert_eq!(sampled_strength(&main, TyVector3U32::new(0, 0, 0)), 2.0);
-        assert_eq!(sampled_strength(&main, TyVector3U32::new(1, 0, 0)), 2.0);
-    }
-
-    #[test]
-    fn mixed_strengths_sample_per_material() {
-        let mut dim = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-        dim.emissive_strength = 1.0;
-
-        let mut bright = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-        bright.emissive_strength = 3.0;
-
-        let main = voxelize(vec![dim, bright]);
-
-        assert_eq!(sampled_strength(&main, TyVector3U32::new(0, 0, 0)), 1.0);
-        assert_eq!(sampled_strength(&main, TyVector3U32::new(1, 0, 0)), 3.0);
-    }
-
-    #[test]
-    fn a_flat_fill_carries_the_default_strength() {
-        // Flat mode paints one material with the default strength.
-        let main = voxelize_mesh(
-            &two_cell_mesh(Vec::new()),
-            TyVector3U32::new(2, 1, 1),
-            SurfaceMode::TriangleCover,
-            FillMode::Surface,
-            MaterialMode::Flat,
-            None,
-            1.0,
-            None,
-            "mesh",
+        let (main, palette_id, material_ids) = palette_of(
+            vec![glowing(red(), 2.0), glowing(blue(), 2.0)],
             OutOfRangeProperty::Error,
         )
         .unwrap();
 
-        assert_eq!(sampled_strength(&main, TyVector3U32::new(0, 0, 0)), 0.0);
+        // Two distinct materials share the strength, so both rows repeat the
+        // deduplicated value pool's one value.
+        assert_eq!(main.palette(palette_id).unwrap().material_count(), 2);
+        assert_eq!(values(&main, palette_id, EMISSIVE_STRENGTH).len(), 1);
+        assert_eq!(
+            number(&main, palette_id, material_ids[0], EMISSIVE_STRENGTH),
+            2.0
+        );
+        assert_eq!(
+            number(&main, palette_id, material_ids[1], EMISSIVE_STRENGTH),
+            2.0
+        );
     }
 
-    /// The two-cell mesh's materials with the right one's `metallic` out
-    /// of its range.
-    fn over_metallic() -> Vec<MeshMaterial> {
-        let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
+    #[test]
+    fn identical_materials_merge_and_mixed_strengths_sample_per_material() {
+        let (main, palette_id, material_ids) = palette_of(
+            vec![
+                glowing(red(), 1.0),
+                glowing(red(), 3.0),
+                glowing(red(), 1.0),
+            ],
+            OutOfRangeProperty::Error,
+        )
+        .unwrap();
 
-        let mut over = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
+        assert_eq!(main.palette(palette_id).unwrap().material_count(), 2);
+        assert_eq!(material_ids[0], material_ids[2]);
+        assert_eq!(
+            number(&main, palette_id, material_ids[0], EMISSIVE_STRENGTH),
+            1.0
+        );
+        assert_eq!(
+            number(&main, palette_id, material_ids[1], EMISSIVE_STRENGTH),
+            3.0
+        );
+    }
+
+    #[test]
+    fn an_empty_grid_gets_a_lone_white_material() {
+        let mut main = VoxMain::default();
+        let (palette, sample_ids, default_material_id) =
+            build_palette(&mut main, &[None, None], OutOfRangeProperty::Error).unwrap();
+
+        assert_eq!(palette.material_count(), 1);
+        assert_eq!(sample_ids, [None, None]);
+        assert_eq!(default_material_id, U32Id::from_u32(0));
+    }
+
+    /// Materials with the second one's `metallic` out of its range.
+    fn over_metallic() -> Vec<VoxelMaterial> {
+        let mut over = blue();
         over.metallic = 1.5;
 
-        vec![matte, over]
+        vec![red(), over]
     }
 
     #[test]
     fn an_out_of_range_scalar_errors_by_default() {
-        let error = voxelize_with(over_metallic(), OutOfRangeProperty::Error).unwrap_err();
+        let error = palette_of(over_metallic(), OutOfRangeProperty::Error).unwrap_err();
 
         // The property and the value both point back at the source mesh.
         let message = error.to_string();
@@ -793,20 +792,12 @@ mod tests {
 
     #[test]
     fn an_out_of_range_scalar_clamps_when_asked() {
-        let main = voxelize_with(over_metallic(), OutOfRangeProperty::Clamp).unwrap();
+        let (main, palette_id, _) = palette_of(over_metallic(), OutOfRangeProperty::Clamp).unwrap();
 
         // Both materials land on the value pool, the out-of-range one at the
         // range's top.
-        let (_, palette) = main.iter_palettes().next().unwrap();
-        let property_id = palette.property_id_by_name(METALLIC).unwrap();
-        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = main.value_pool(value_pool_id).unwrap();
-        let values: Vec<VoxValuePoolValueRef> = value_pool
-            .iter_values()
-            .map(|(value_id, _)| value_pool.value(value_id).unwrap())
-            .collect();
         assert_eq!(
-            values,
+            values(&main, palette_id, METALLIC),
             vec![
                 VoxValuePoolValueRef::Float(0.0),
                 VoxValuePoolValueRef::Float(1.0)
@@ -817,24 +808,21 @@ mod tests {
     #[test]
     fn an_ior_of_zero_passes_the_union_range() {
         // `ior` admits exactly 0 for "does not refract" alongside 1 and up.
-        let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-        let mut hollow = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
+        let mut hollow = blue();
         hollow.ior = 0.0;
 
-        assert!(voxelize_with(vec![matte, hollow], OutOfRangeProperty::Error).is_ok());
+        assert!(palette_of(vec![red(), hollow], OutOfRangeProperty::Error).is_ok());
     }
 
-    /// The two-cell mesh's materials with the right one's `baseColor` red
-    /// outside `[0, 1]`.
-    fn over_red() -> Vec<MeshMaterial> {
-        let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-        let hot = MeshMaterial::flat(TyLinSrgbaF64::new(2.0, 0.0, 0.0, 1.0));
-        vec![matte, hot]
+    /// Materials with the second one's `baseColor` red outside `[0, 1]`.
+    fn over_red() -> Vec<VoxelMaterial> {
+        let hot = VoxelMaterial::flat(TyLinSrgbaF64::new(2.0, 0.0, 0.0, 1.0));
+        vec![red(), hot]
     }
 
     #[test]
     fn an_out_of_range_color_errors_by_default() {
-        let error = voxelize_with(over_red(), OutOfRangeProperty::Error).unwrap_err();
+        let error = palette_of(over_red(), OutOfRangeProperty::Error).unwrap_err();
 
         let message = error.to_string();
         assert!(message.contains("baseColor"), "{message}");
@@ -843,19 +831,13 @@ mod tests {
 
     #[test]
     fn an_out_of_range_color_clamps_when_asked() {
-        let main = voxelize_with(over_red(), OutOfRangeProperty::Clamp).unwrap();
+        let (main, palette_id, _) = palette_of(over_red(), OutOfRangeProperty::Clamp).unwrap();
 
         // The hot red clamps onto the matte one, so the deduplicated
         // baseColor value pool holds one value.
-        let (_, palette) = main.iter_palettes().next().unwrap();
-        let property_id = palette.property_id_by_name(BASE_COLOR).unwrap();
-        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = main.value_pool(value_pool_id).unwrap();
-        assert_eq!(value_pool.len(), 1);
-        let (value_id, _) = value_pool.iter_values().next().unwrap();
         assert_eq!(
-            value_pool.value(value_id),
-            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))
+            values(&main, palette_id, BASE_COLOR),
+            vec![VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0])]
         );
     }
 
@@ -863,14 +845,13 @@ mod tests {
     fn a_nan_scalar_errors_under_either_mode() {
         // A NaN has no clamped value, so asking to clamp does not admit it.
         let nan_metallic = || {
-            let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-            let mut broken = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
+            let mut broken = blue();
             broken.metallic = f64::NAN;
-            vec![matte, broken]
+            vec![red(), broken]
         };
 
-        assert!(voxelize_with(nan_metallic(), OutOfRangeProperty::Error).is_err());
-        assert!(voxelize_with(nan_metallic(), OutOfRangeProperty::Clamp).is_err());
+        assert!(palette_of(nan_metallic(), OutOfRangeProperty::Error).is_err());
+        assert!(palette_of(nan_metallic(), OutOfRangeProperty::Clamp).is_err());
     }
 
     #[test]
@@ -878,15 +859,10 @@ mod tests {
         // `emissiveStrength` is unbounded above, but an unbounded top means
         // arbitrarily large and finite. An infinity has no clamp on the
         // interval either.
-        let infinite_strength = || {
-            let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-            let mut broken = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
-            broken.emissive_strength = f64::INFINITY;
-            vec![matte, broken]
-        };
+        let infinite_strength = || vec![red(), glowing(blue(), f64::INFINITY)];
 
-        assert!(voxelize_with(infinite_strength(), OutOfRangeProperty::Error).is_err());
-        assert!(voxelize_with(infinite_strength(), OutOfRangeProperty::Clamp).is_err());
+        assert!(palette_of(infinite_strength(), OutOfRangeProperty::Error).is_err());
+        assert!(palette_of(infinite_strength(), OutOfRangeProperty::Clamp).is_err());
     }
 
     #[test]
@@ -894,23 +870,14 @@ mod tests {
         // `ior` admits `{0} union [1, inf)`. Zero is in range, so the clamp
         // leaves it alone. Only a value between the union's parts lands on
         // the interval's end.
-        let iors = || {
-            let mut refracting = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
-            refracting.ior = 0.0;
-            let mut between = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
-            between.ior = 0.5;
-            vec![refracting, between]
-        };
+        let mut refracting = red();
+        refracting.ior = 0.0;
+        let mut between = blue();
+        between.ior = 0.5;
 
-        let main = voxelize_with(iors(), OutOfRangeProperty::Clamp).unwrap();
-        let (_, palette) = main.iter_palettes().next().unwrap();
-        let property_id = palette.property_id_by_name(IOR).unwrap();
-        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let value_pool = main.value_pool(value_pool_id).unwrap();
-        let values: Vec<VoxValuePoolValueRef> = value_pool
-            .iter_values()
-            .map(|(value_id, _)| value_pool.value(value_id).unwrap())
-            .collect();
+        let (main, palette_id, _) =
+            palette_of(vec![refracting, between], OutOfRangeProperty::Clamp).unwrap();
+        let values = values(&main, palette_id, IOR);
 
         assert!(
             values.contains(&VoxValuePoolValueRef::Float(0.0)),
