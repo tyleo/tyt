@@ -16,7 +16,7 @@ use voxsmith::{
     },
 };
 
-/// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
+/// Rasterizes a mesh into voxel objects, the inverse of `mesh`.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "voxelize")]
 pub struct Voxelize {
@@ -68,11 +68,6 @@ pub struct Voxelize {
     #[arg(value_name = "fill-color", long, default_value = "none")]
     fill_color: NoneOr<Rgba>,
 
-    /// Name for the voxelized object. Defaults to the document's object name,
-    /// else the input file stem.
-    #[arg(value_name = "name", long)]
-    name: Option<String>,
-
     /// What a source material value outside its property's range does, such
     /// as a `metallic` above `1`. `error` reports the property and refuses
     /// the mesh. `clamp` clamps it onto the range and voxelizes on.
@@ -109,13 +104,20 @@ impl Voxelize {
             ..write_options
         };
 
+        let stem = self
+            .input
+            .path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("voxelized");
+
         let options = VoxelizeOptions {
             resolution,
             surface_mode: self.surface_mode,
             fill_mode: self.fill_mode,
             material_mode: self.material_mode,
             fill_color: self.fill_color.value().map(|color| color.0),
-            name: self.name,
+            fallback_name: Some(stem.to_owned()),
             out_of_range_property: self.out_of_range_property,
             reduction: self.quantize_options.resolve(),
         };
@@ -124,16 +126,7 @@ impl Voxelize {
 
         let document = load(&dependencies, from, &self.input.path)?;
 
-        // The final fallback when neither `--name` nor the document names the
-        // object.
-        let stem = self
-            .input
-            .path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap_or("voxelized");
-
-        let main = voxelize(&VoxsmithDependenciesImpl, &document, stem, &options)?;
+        let main = voxelize(&VoxsmithDependenciesImpl, &document, &options)?;
 
         Ok(save(
             &dependencies,

@@ -6,7 +6,7 @@
 vxl voxelize <input> [output] [--resolution <reference> <n> | --voxel-size <meters>] [options]
 ```
 
-Rasterizes a mesh into a voxel grid. This is the inverse of [`vxl mesh`](../../../../ref/mesh/mesh.md).
+Rasterizes a mesh into voxel objects. This is the inverse of [`vxl mesh`](../../../../ref/mesh/mesh.md).
 The input is a glTF mesh, text (`.gltf`) or binary (`.glb`); glTF is the only
 mesh format read for now. The default output path is the input stem with the
 `.voxj` extension. The voxel size is set one of two mutually exclusive
@@ -14,15 +14,28 @@ ways: a voxel count along a reference side with `--resolution` or the size
 directly with `--voxel-size`. When neither is given it defaults to
 `--voxel-size 1`, one voxel per meter.
 
+Every mesh object the hierarchy places becomes one voxel object, in world
+space with its node transforms applied, so an object two nodes place
+voxelizes twice. All objects sit on one lattice of voxel-size cubes anchored
+at the world origin, so their voxels align, and each takes a root node named
+after its placing mesh node with the voxel size as its scale and the object's
+lattice cell as its origin. The voxel object is named after the mesh object,
+else its placing node, else the input file stem. The objects share one
+palette. An object with no triangles is an error that reports the object.
+
 1. `--from` `gltf` | `glb`: source mesh format, glTF text or binary. Inferred
    from the input extension when omitted.
-2. `--resolution <reference> <n>`: divide a reference side of the mesh's world
-   bounds into `<n>` voxels. The voxel size is that side over `<n>`, and the
-   other axes take as many voxels as cover their extent. `<reference>` is one
-   of `longest-world`, `shortest-world` (the shortest side with any extent), or
-   `world-x` | `world-y` | `world-z`. A reference with no extent, such as
-   `world-y` on a flat mesh, is an error. Use this to cap detail at a known
-   voxel count.
+2. `--resolution <reference> <n>`: divide a reference side into `<n>` voxels.
+   The voxel size is that side over `<n>`, and every other side takes as many
+   voxels as cover it. World references measure the bounds of every object
+   together: `longest-world`, `shortest-world`, and `world-x` | `world-y` |
+   `world-z`. Object references measure each object's bounds and take the
+   extreme across objects: `longest-object` and `shortest-object` over any
+   side, and `longest-object-x` | `longest-object-y` | `longest-object-z` and
+   `shortest-object-x` | `shortest-object-y` | `shortest-object-z` along one
+   axis. A shortest reference skips sides with no extent. A reference with no
+   extent, such as `world-y` on a flat mesh, is an error. Use this to cap
+   detail at a known voxel count.
 3. `--voxel-size <meters>` (default `1`): the edge length of one voxel in meters.
    Each axis takes as many voxels as cover the mesh extent there, so the same
    `<meters>` yields a consistent real-world voxel size across meshes of
@@ -81,10 +94,6 @@ directly with `--voxel-size`. When neither is given it defaults to
    (`median-cut`, `oklab`, `none`). They shape the `--max-palette-materials`
    reduction and are inert when it does not fire; `--dither` diffuses the
    snapping error across the voxels in 3D order.
-9. `--name <name>`: the voxelized object's name. Defaults to the mesh's own name,
-   the first mesh-bearing node's (its own preferred over its mesh's), falling
-   back to the input file stem when the glTF names neither.
-
 The format carries no physical units: one unit is one voxel, and real-world
 scale comes from hierarchy-node transforms. Both flags resolve to one voxel
 size, which `voxelize` records as the placing node's scale so the assembled

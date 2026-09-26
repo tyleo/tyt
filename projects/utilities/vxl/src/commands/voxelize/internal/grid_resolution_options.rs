@@ -11,11 +11,15 @@ use voxsmith::operations::voxelize::{GridResolution, ResolutionReference};
 ))]
 pub struct GridResolutionOptions {
     /// Voxel count `n` along a reference side. The voxel size is that side
-    /// divided by `n`. `<reference>` is one of:
+    /// divided by `n`. World references measure every object together.
+    /// Object references take the longest or shortest object. `<reference>`
+    /// is one of:
     ///
-    /// 1. `longest-world`: the longest side of the mesh's world bounds.
-    /// 2. `shortest-world`: the shortest side with any extent.
-    /// 3. `world-x` | `world-y` | `world-z`: the world extent along that axis.
+    /// 1. `longest-world` | `shortest-world`
+    /// 2. `world-x` | `world-y` | `world-z`
+    /// 3. `longest-object` | `shortest-object`
+    /// 4. `longest-object-x` | `longest-object-y` | `longest-object-z`
+    /// 5. `shortest-object-x` | `shortest-object-y` | `shortest-object-z`
     #[arg(value_names = ["reference", "n"], long, num_args = 2, verbatim_doc_comment)]
     resolution: Option<Vec<String>>,
 

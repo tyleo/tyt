@@ -26,8 +26,9 @@ pub struct VoxelizeOptions {
     /// color for a solid interior.
     pub fill_color: Option<[u8; 4]>,
 
-    /// The object name, overriding the mesh's name.
-    pub name: Option<String>,
+    /// The name of a voxel object whose mesh object and placing node are both
+    /// unnamed, or `None` to leave it unnamed.
+    pub fallback_name: Option<String>,
 
     /// Whether a material value outside its property's glTF range errors or
     /// clamps.

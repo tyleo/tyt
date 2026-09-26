@@ -1,4 +1,4 @@
-use ty_math::{TyBoundsF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyBoundsF64, TyVector3F64, TyVector3I32, TyVector3U32};
 
 /// The map from world space onto the voxel grid. The rasterizer and the
 /// sampler share one so both agree on which cell a point falls in.
@@ -14,22 +14,31 @@ impl GridSpace {
         Self { min, size, counts }
     }
 
-    /// The grid of `size` voxels covering `bounds` from its min corner.
-    pub fn fit(bounds: &TyBoundsF64, size: TyVector3F64) -> Self {
-        let extent = bounds.size();
+    /// The grid of `size` voxels covering `bounds` on the lattice of `size`
+    /// cells anchored at the origin, with at least one cell per axis.
+    pub fn on_lattice(bounds: &TyBoundsF64, size: TyVector3F64) -> Self {
+        let min = bounds.min().to_array();
+        let max = bounds.max().to_array();
+        let size = size.to_array();
 
-        let counts = TyVector3U32::new(
-            cell_count(extent.x, size.x),
-            cell_count(extent.y, size.y),
-            cell_count(extent.z, size.z),
-        );
+        let first = [0, 1, 2].map(|axis| snap(min[axis] / size[axis]).floor());
+        let last = [0, 1, 2].map(|axis| snap(max[axis] / size[axis]).ceil());
+        let counts = [0, 1, 2].map(|axis| (last[axis] - first[axis]).max(1.0) as u32);
 
-        Self::new(bounds.min(), size, counts)
+        Self::new(
+            TyVector3F64::new(first[0] * size[0], first[1] * size[1], first[2] * size[2]),
+            TyVector3F64::new(size[0], size[1], size[2]),
+            TyVector3U32::new(counts[0], counts[1], counts[2]),
+        )
     }
 
-    /// The voxel edge length on each axis.
-    pub fn size(&self) -> TyVector3F64 {
-        self.size
+    /// The lattice cell at the grid's min corner, in voxels from the origin.
+    /// Whole for a grid built [`on_lattice`](Self::on_lattice).
+    pub fn min_cell(&self) -> TyVector3I32 {
+        let [x, y, z] = (self.min / self.size)
+            .to_array()
+            .map(|cell| cell.round() as i32);
+        TyVector3I32::new(x, y, z)
     }
 
     /// The cell counts per axis.
@@ -65,18 +74,15 @@ impl GridSpace {
     }
 }
 
-/// The cells of `size` covering `extent`, at least one.
-fn cell_count(extent: f64, size: f64) -> u32 {
-    let cells = extent / size;
+/// `cells`, or the whole number it lies within float error of.
+fn snap(cells: f64) -> f64 {
     let whole = cells.round();
 
-    let count = if (cells - whole).abs() <= 1e-9 * whole.max(1.0) {
+    if (cells - whole).abs() <= 1e-9 * whole.abs().max(1.0) {
         whole
     } else {
-        cells.ceil()
-    };
-
-    count.max(1.0) as u32
+        cells
+    }
 }
 
 /// A floored grid coordinate clamped to `0..=last`.
@@ -91,19 +97,33 @@ pub(crate) fn clamp_index(value: f64, last: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use crate::operations::voxelize::GridSpace;
-    use ty_math::{TyBoundsF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyBoundsF64, TyVector3F64, TyVector3I32, TyVector3U32};
 
     #[test]
-    fn fit_covers_the_extent_and_rounds_a_whole_count_through_float_error() {
+    fn the_lattice_covers_the_extent_and_rounds_a_whole_count_through_float_error() {
         // `3.0 / 0.1` is a hair over 30 in floating point.
         let bounds = TyBoundsF64::from_min_size(
             TyVector3F64::new(1.0, 0.0, 0.0),
             TyVector3F64::new(3.0, 0.25, 0.0),
         );
 
-        let space = GridSpace::fit(&bounds, TyVector3F64::splat(0.1));
+        let space = GridSpace::on_lattice(&bounds, TyVector3F64::splat(0.1));
 
         assert_eq!(space.counts(), TyVector3U32::new(30, 3, 1));
+        assert_eq!(space.min_cell(), TyVector3I32::new(10, 0, 0));
         assert_eq!(space.to_grid(TyVector3F64::new(4.0, 0.0, 0.0))[0], 30.0);
+    }
+
+    #[test]
+    fn the_lattice_snaps_the_min_corner_below_the_bounds() {
+        let bounds = TyBoundsF64::from_min_size(
+            TyVector3F64::new(-0.5, 0.25, 2.0),
+            TyVector3F64::new(2.0, 1.0, 0.0),
+        );
+
+        let space = GridSpace::on_lattice(&bounds, TyVector3F64::splat(1.0));
+
+        assert_eq!(space.min_cell(), TyVector3I32::new(-1, 0, 2));
+        assert_eq!(space.counts(), TyVector3U32::new(3, 2, 1));
     }
 }

@@ -1,8 +1,9 @@
 use crate::{
     Error, Result,
     operations::voxelize::{
-        FillMode, GridSpace, MaterialMode, MeshInput, OutOfRangeProperty, SurfaceMode, VoxelGrid,
-        VoxelMaterial, VoxelizeOptions, sample_material, voxelize_triangles,
+        FillMode, GridSpace, MaterialMode, MeshInput, MeshTriangle, OutOfRangeProperty,
+        SurfaceMode, VoxelGrid, VoxelMaterial, VoxelizeOptions, sample_material,
+        voxelize_triangles,
     },
     utilities::{check_material_property_ranges, check_material_range},
 };
@@ -12,7 +13,7 @@ use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
 };
-use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3U32};
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -28,46 +29,60 @@ use voxcore::{
 /// arrives in. Decode it with [`lin_srgba_f64_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
-/// Voxelizes a [`MeshInput`] onto `space` into a [`VoxMain`] of one object
-/// placed by one root node, whose scale records the voxel size. Errors when
-/// the grid exceeds voxcore's dense-grid limit.
+/// Voxelizes every placed object of a [`MeshInput`] into a [`VoxMain`], one
+/// object per placement on the lattice of `voxel_size` cubes anchored at the
+/// world origin, all sharing one palette. Errors when an object has no
+/// triangles or its grid exceeds voxcore's dense-grid limit.
 ///
 /// # Arguments
 /// * `mesh` - the mesh to rasterize, in world space.
-/// * `space` - the grid to rasterize onto.
-/// * `fallback_name` - the object name when neither `options.name` nor the
-///   mesh has one.
+/// * `voxel_size` - the voxel edge length, in the mesh's units.
 /// * `options` - everything but the resolution, which the caller resolved
-///   into `space`.
+///   into `voxel_size`.
 pub fn voxelize_mesh(
     mesh: &MeshInput<'_>,
-    space: &GridSpace,
-    fallback_name: &str,
+    voxel_size: f64,
     options: &VoxelizeOptions,
 ) -> Result<VoxMain> {
-    let counts = space.counts();
+    let size = TyVector3F64::splat(voxel_size);
 
-    // Cap the grid before rasterizing. An oversized resolution errors before
-    // the occupancy grid allocation overflows or exhausts memory.
-    let volume = counts.x as u64 * counts.y as u64 * counts.z as u64;
-    if volume > VoxObject::MAX_GRID_CELLS {
-        return Err(grid_too_large(counts));
+    // Rasterize each object onto its own grid, every cell's material into one
+    // list so the objects share one palette.
+    let mut spaces = Vec::with_capacity(mesh.objects.len());
+    let mut cell_materials = Vec::new();
+
+    for placed in &mesh.objects {
+        let bounds = mesh.object_bounds(placed, options.fallback_name.as_deref())?;
+        let space = GridSpace::on_lattice(&bounds, size);
+        let counts = space.counts();
+
+        // Cap the grid before rasterizing. An oversized resolution errors
+        // before the occupancy grid allocation overflows or exhausts memory.
+        let volume = counts.x as u64 * counts.y as u64 * counts.z as u64;
+        if volume > VoxObject::MAX_GRID_CELLS {
+            return Err(grid_too_large(counts));
+        }
+
+        let triangles = mesh.object_triangles(placed);
+
+        let grid = voxelize_triangles(
+            triangles,
+            &space,
+            options.surface_mode == SurfaceMode::CenterInside,
+            options.fill_mode == FillMode::Solid,
+        );
+
+        cell_materials.extend(resolve_materials(
+            mesh,
+            triangles,
+            &grid,
+            &space,
+            options.material_mode,
+            options.fill_color,
+        ));
+
+        spaces.push(space);
     }
-
-    let grid = voxelize_triangles(
-        &mesh.triangles,
-        space,
-        options.surface_mode == SurfaceMode::CenterInside,
-        options.fill_mode == FillMode::Solid,
-    );
-
-    let cell_materials = resolve_materials(
-        mesh,
-        &grid,
-        space,
-        options.material_mode,
-        options.fill_color,
-    );
 
     let mut main = VoxMain::default();
 
@@ -76,41 +91,45 @@ pub fn voxelize_mesh(
 
     let palette_id = main.retain_palette(palette)?;
 
-    let object_name = options
-        .name
-        .clone()
-        .or(mesh.name.clone())
-        .unwrap_or_else(|| fallback_name.to_owned());
+    let mut next = 0;
 
-    let mut object = VoxObject::new(object_name, counts).map_err(|_| grid_too_large(counts))?;
+    for (placed, space) in mesh.objects.iter().zip(&spaces) {
+        let counts = space.counts();
+        let cells = counts.x as usize * counts.y as usize * counts.z as usize;
+        let samples = &sample_ids[next..next + cells];
+        next += cells;
 
-    object.retain_layer(palette_id, default_material_id);
+        let name = placed.name(options.fallback_name.as_deref()).to_owned();
+        let mut object = VoxObject::new(name, counts).map_err(|_| grid_too_large(counts))?;
 
-    for (index, sample_id) in sample_ids.iter().enumerate() {
-        if let Some(material_id) = sample_id {
-            let voxel_id = U32Id::from_u32(index as u32);
-            object
-                .retain_voxel(voxel_id, &[*material_id])
-                .expect("a grid index is a live voxel sampling the one layer");
+        object.set_origin(space.min_cell());
+        object.retain_layer(palette_id, default_material_id);
+
+        for (index, sample_id) in samples.iter().enumerate() {
+            if let Some(material_id) = sample_id {
+                let voxel_id = U32Id::from_u32(index as u32);
+                object
+                    .retain_voxel(voxel_id, &[*material_id])
+                    .expect("a grid index is a live voxel sampling the one layer");
+            }
         }
+
+        let object_id = main.retain_object(object)?;
+
+        let node = VoxHierarchyNode {
+            name: placed.node_name.clone(),
+            transform: TyTransformF64 {
+                scale: size,
+                ..Default::default()
+            },
+            child_object_ids: vec![object_id],
+            ..Default::default()
+        };
+
+        let node_id = main.retain_hierarchy_node(node)?;
+
+        main.push_root_hierarchy_node_id(node_id)?;
     }
-
-    let object_id = main.retain_object(object)?;
-
-    let transform = TyTransformF64 {
-        scale: space.size(),
-        ..Default::default()
-    };
-
-    let node = VoxHierarchyNode {
-        child_object_ids: vec![object_id],
-        transform,
-        ..Default::default()
-    };
-
-    let node_id = main.retain_hierarchy_node(node)?;
-
-    main.push_root_hierarchy_node_id(node_id)?;
 
     // The values were checked or clamped above. This run guarantees nothing
     // out of range leaves the import.
@@ -122,6 +141,7 @@ pub fn voxelize_mesh(
 /// The material of every filled cell under `material_mode`.
 fn resolve_materials(
     mesh: &MeshInput<'_>,
+    triangles: &[MeshTriangle],
     grid: &VoxelGrid,
     space: &GridSpace,
     material_mode: MaterialMode,
@@ -130,13 +150,13 @@ fn resolve_materials(
     let mut cell_materials = match material_mode {
         MaterialMode::Flat => return flat_cells(grid, fill_color),
 
-        MaterialMode::PerPrimitive => primitive_cells(mesh, grid),
+        MaterialMode::PerPrimitive => primitive_cells(mesh, triangles, grid),
 
-        MaterialMode::PerTexel => sample_material(mesh, grid, space),
+        MaterialMode::PerTexel => sample_material(mesh, triangles, grid, space),
 
-        MaterialMode::Auto if mesh.is_textured() => sample_material(mesh, grid, space),
+        MaterialMode::Auto if mesh.is_textured() => sample_material(mesh, triangles, grid, space),
 
-        MaterialMode::Auto => primitive_cells(mesh, grid),
+        MaterialMode::Auto => primitive_cells(mesh, triangles, grid),
     };
 
     fill_interior(grid, space.counts(), fill_color, &mut cell_materials);
@@ -167,7 +187,11 @@ fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<Voxel
 
 /// Each surface cell takes its covering triangle's flat material; interior and
 /// empty cells are `None`.
-fn primitive_cells(mesh: &MeshInput<'_>, grid: &VoxelGrid) -> Vec<Option<VoxelMaterial>> {
+fn primitive_cells(
+    mesh: &MeshInput<'_>,
+    triangles: &[MeshTriangle],
+    grid: &VoxelGrid,
+) -> Vec<Option<VoxelMaterial>> {
     let materials: Vec<VoxelMaterial> = mesh
         .primitives
         .iter()
@@ -177,7 +201,7 @@ fn primitive_cells(mesh: &MeshInput<'_>, grid: &VoxelGrid) -> Vec<Option<VoxelMa
     grid.triangle
         .iter()
         .map(|&covering| {
-            covering.map(|triangle| materials[mesh.triangles[triangle as usize].primitive as usize])
+            covering.map(|triangle| materials[triangles[triangle as usize].primitive as usize])
         })
         .collect()
 }

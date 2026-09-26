@@ -2,39 +2,38 @@ use crate::{
     Error, Result,
     dependencies::voxelize::DecodeImage,
     operations::voxelize::{
-        GridResolution, GridSpace, ResolutionReference, VoxelizeOptions, mesh_input_from_mesh_main,
+        GridResolution, MeshInput, ResolutionReference, VoxelizeOptions, mesh_input_from_mesh_main,
         voxelize_mesh,
     },
     utilities::{order_palette_colors, reduce_palette},
 };
 use meshdoc::{MeshExt, MeshMain};
-use ty_math::{TyBoundsF64, TyVector3F64};
+use ty_math::TyVector3F64;
 use voxcore::VoxMain;
 
 /// Voxelizes the mesh document `main` under `options` into a [`VoxMain`] of
-/// one object placed by one root node, its palette reduced when
-/// `options.reduction` is set and left canonical: colors in material order,
-/// ids compacted. Every object the hierarchy places rasterizes in world
-/// space, its node transforms applied. `dependencies` decodes the
-/// document's images for per-texel sampling. `fallback_name` names the
-/// object when neither `options.name` nor the document does. Errors when the
-/// mesh has no triangle geometry or the resolution's reference side has no
-/// extent.
+/// one object per placed mesh object, all placed on one voxel lattice in
+/// world space with their node transforms applied. The objects share one
+/// palette, reduced when `options.reduction` is set and left canonical:
+/// colors in material order, ids compacted. `dependencies` decodes the
+/// document's images for per-texel sampling. Errors when the document places
+/// no object, an object has no triangle geometry, or the resolution's
+/// reference side has no extent.
 pub fn voxelize<D: DecodeImage, T: MeshExt>(
     dependencies: &D,
     main: &MeshMain<T>,
-    fallback_name: &str,
     options: &VoxelizeOptions,
 ) -> Result<VoxMain> {
     let input = mesh_input_from_mesh_main(dependencies, main)?;
 
-    let bounds = input
-        .bounds()
-        .ok_or_else(|| Error::invalid("mesh has no triangle geometry"))?;
+    if input.objects.is_empty() {
+        return Err(Error::invalid("mesh places no objects"));
+    }
 
-    let space = resolve_grid(&bounds, options.resolution)?;
+    let voxel_size =
+        resolve_voxel_size(&input, options.resolution, options.fallback_name.as_deref())?;
 
-    let mut main = voxelize_mesh(&input, &space, fallback_name, options)?;
+    let mut main = voxelize_mesh(&input, voxel_size, options)?;
 
     let palette_id = main
         .iter_palettes()
@@ -58,128 +57,133 @@ pub fn voxelize<D: DecodeImage, T: MeshExt>(
     Ok(main)
 }
 
-/// The grid covering `bounds` at `resolution`. Errors on a reference side
-/// with no extent.
-fn resolve_grid(bounds: &TyBoundsF64, resolution: GridResolution) -> Result<GridSpace> {
-    let size = match resolution {
-        GridResolution::VoxelSize(size) => size,
-
-        GridResolution::ReferenceCount { reference, count } => {
-            let side = reference_side(bounds.size(), reference);
-
-            if side <= 0.0 {
-                return Err(Error::invalid(format!(
-                    "resolution reference {reference:?} has no extent to divide"
-                )));
-            }
-
-            side / f64::from(count.max(1))
-        }
+/// The voxel size `resolution` sets over `input`. Errors on a reference side
+/// with no extent, or an object with no triangles.
+fn resolve_voxel_size(
+    input: &MeshInput<'_>,
+    resolution: GridResolution,
+    fallback_name: Option<&str>,
+) -> Result<f64> {
+    let GridResolution::ReferenceCount { reference, count } = resolution else {
+        let GridResolution::VoxelSize(size) = resolution else {
+            unreachable!("a resolution is a size or a count");
+        };
+        return Ok(size);
     };
 
-    Ok(GridSpace::fit(bounds, TyVector3F64::splat(size)))
+    let objects: Vec<TyVector3F64> = input
+        .objects
+        .iter()
+        .map(|object| Ok(input.object_bounds(object, fallback_name)?.size()))
+        .collect::<Result<_>>()?;
+
+    let world = input
+        .bounds()
+        .expect("an object with bounds gives the mesh bounds")
+        .size();
+
+    let side = reference_side(world, &objects, reference);
+
+    if side <= 0.0 {
+        return Err(Error::invalid(format!(
+            "resolution reference {reference:?} has no extent to divide"
+        )));
+    }
+
+    Ok(side / f64::from(count.max(1)))
 }
 
-/// The side of `extent` that `reference` measures, or zero when it has none.
-fn reference_side(extent: TyVector3F64, reference: ResolutionReference) -> f64 {
-    let sides = extent.to_array();
+/// The side `reference` measures over the `world` extent and each object's,
+/// or zero when it has none.
+fn reference_side(
+    world: TyVector3F64,
+    objects: &[TyVector3F64],
+    reference: ResolutionReference,
+) -> f64 {
+    let axis = |extent: TyVector3F64, axis: usize| extent.to_array()[axis];
+    let longest_of = |extent: TyVector3F64| extent.to_array().into_iter().fold(0.0, f64::max);
+    let shortest_of = |extent: TyVector3F64| shortest_positive(extent.to_array());
+    let longest_object = |side: &dyn Fn(TyVector3F64) -> f64| {
+        objects
+            .iter()
+            .map(|&extent| side(extent))
+            .fold(0.0, f64::max)
+    };
+    let shortest_object = |side: &dyn Fn(TyVector3F64) -> f64| {
+        shortest_positive(objects.iter().map(|&extent| side(extent)))
+    };
 
     match reference {
-        ResolutionReference::LongestWorld => sides.into_iter().fold(0.0, f64::max),
-        ResolutionReference::ShortestWorld => {
-            sides
-                .into_iter()
-                .filter(|&side| side > 0.0)
-                .fold(0.0, |shortest, side| {
-                    if shortest > 0.0 {
-                        shortest.min(side)
-                    } else {
-                        side
-                    }
-                })
-        }
-        ResolutionReference::WorldX => sides[0],
-        ResolutionReference::WorldY => sides[1],
-        ResolutionReference::WorldZ => sides[2],
+        ResolutionReference::LongestWorld => longest_of(world),
+        ResolutionReference::ShortestWorld => shortest_of(world),
+        ResolutionReference::WorldX => axis(world, 0),
+        ResolutionReference::WorldY => axis(world, 1),
+        ResolutionReference::WorldZ => axis(world, 2),
+        ResolutionReference::LongestObject => longest_object(&longest_of),
+        ResolutionReference::ShortestObject => shortest_object(&shortest_of),
+        ResolutionReference::LongestObjectX => longest_object(&|extent| axis(extent, 0)),
+        ResolutionReference::LongestObjectY => longest_object(&|extent| axis(extent, 1)),
+        ResolutionReference::LongestObjectZ => longest_object(&|extent| axis(extent, 2)),
+        ResolutionReference::ShortestObjectX => shortest_object(&|extent| axis(extent, 0)),
+        ResolutionReference::ShortestObjectY => shortest_object(&|extent| axis(extent, 1)),
+        ResolutionReference::ShortestObjectZ => shortest_object(&|extent| axis(extent, 2)),
     }
+}
+
+/// The smallest positive side, or zero when none is positive.
+fn shortest_positive(sides: impl IntoIterator<Item = f64>) -> f64 {
+    sides
+        .into_iter()
+        .filter(|&side| side > 0.0)
+        .fold(0.0, |shortest, side| {
+            if shortest > 0.0 {
+                shortest.min(side)
+            } else {
+                side
+            }
+        })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_grid;
-    use crate::operations::voxelize::{GridResolution, ResolutionReference};
-    use ty_math::{TyBoundsF64, TyVector3F64, TyVector3U32};
+    use super::reference_side;
+    use crate::operations::voxelize::ResolutionReference;
+    use ty_math::TyVector3F64;
 
-    /// The bounds `[0, extent]` on each axis.
-    fn bounds(x: f64, y: f64, z: f64) -> TyBoundsF64 {
-        TyBoundsF64::from_min_size(TyVector3F64::ZERO, TyVector3F64::new(x, y, z))
+    /// The extent `(x, y, z)`.
+    fn extent(x: f64, y: f64, z: f64) -> TyVector3F64 {
+        TyVector3F64::new(x, y, z)
     }
 
-    /// The resolution dividing `reference` into `count` voxels.
-    fn count(reference: ResolutionReference, count: u32) -> GridResolution {
-        GridResolution::ReferenceCount { reference, count }
-    }
-
-    #[test]
-    fn a_reference_count_sets_the_voxel_size_and_covers_the_other_axes() {
-        let space = resolve_grid(
-            &bounds(3.0, 2.0, 1.0),
-            count(ResolutionReference::LongestWorld, 4),
+    /// Every reference's side over a world of `[3, 2, 0]` holding objects of
+    /// `[3, 1, 0]` and `[2, 2, 0]`.
+    fn side(reference: ResolutionReference) -> f64 {
+        reference_side(
+            extent(3.0, 2.0, 0.0),
+            &[extent(3.0, 1.0, 0.0), extent(2.0, 2.0, 0.0)],
+            reference,
         )
-        .unwrap();
-
-        assert_eq!(space.size(), TyVector3F64::splat(0.75));
-        assert_eq!(space.counts(), TyVector3U32::new(4, 3, 2));
     }
 
     #[test]
-    fn the_shortest_reference_skips_a_flat_axis() {
-        let space = resolve_grid(
-            &bounds(4.0, 0.0, 2.0),
-            count(ResolutionReference::ShortestWorld, 4),
-        )
-        .unwrap();
-
-        assert_eq!(space.size(), TyVector3F64::splat(0.5));
-        assert_eq!(space.counts(), TyVector3U32::new(8, 1, 4));
+    fn world_references_measure_the_whole_and_skip_flat_sides_for_shortest() {
+        assert_eq!(side(ResolutionReference::LongestWorld), 3.0);
+        assert_eq!(side(ResolutionReference::ShortestWorld), 2.0);
+        assert_eq!(side(ResolutionReference::WorldX), 3.0);
+        assert_eq!(side(ResolutionReference::WorldY), 2.0);
+        assert_eq!(side(ResolutionReference::WorldZ), 0.0);
     }
 
     #[test]
-    fn a_named_reference_divides_that_axis() {
-        let space = resolve_grid(
-            &bounds(4.0, 2.0, 1.0),
-            count(ResolutionReference::WorldY, 4),
-        )
-        .unwrap();
-
-        assert_eq!(space.size(), TyVector3F64::splat(0.5));
-        assert_eq!(space.counts(), TyVector3U32::new(8, 4, 2));
-    }
-
-    #[test]
-    fn a_reference_without_extent_errors() {
-        assert!(
-            resolve_grid(
-                &bounds(4.0, 0.0, 2.0),
-                count(ResolutionReference::WorldY, 4)
-            )
-            .is_err()
-        );
-        assert!(
-            resolve_grid(
-                &bounds(0.0, 0.0, 0.0),
-                count(ResolutionReference::ShortestWorld, 4)
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn a_voxel_size_rounds_each_axis_up_and_keeps_the_size() {
-        let space = resolve_grid(&bounds(3.0, 4.0, 3.0), GridResolution::VoxelSize(2.0)).unwrap();
-
-        assert_eq!(space.size(), TyVector3F64::splat(2.0));
-        assert_eq!(space.counts(), TyVector3U32::new(2, 2, 2));
+    fn object_references_take_the_extreme_across_objects() {
+        assert_eq!(side(ResolutionReference::LongestObject), 3.0);
+        assert_eq!(side(ResolutionReference::ShortestObject), 1.0);
+        assert_eq!(side(ResolutionReference::LongestObjectX), 3.0);
+        assert_eq!(side(ResolutionReference::ShortestObjectX), 2.0);
+        assert_eq!(side(ResolutionReference::LongestObjectY), 2.0);
+        assert_eq!(side(ResolutionReference::ShortestObjectY), 1.0);
+        assert_eq!(side(ResolutionReference::LongestObjectZ), 0.0);
+        assert_eq!(side(ResolutionReference::ShortestObjectZ), 0.0);
     }
 }
 
@@ -188,15 +192,17 @@ mod document_tests {
     use crate::{
         dependencies::DependenciesImpl,
         operations::voxelize::{
-            FillMode, GridResolution, MapSpec, MaterialMode, OutOfRangeProperty, SurfaceMode,
-            VoxelizeOptions, box_main, box_primitive, document_of, full_square, pbr_quad_main,
-            png_rgba, textured_quad_main, triangle_of, voxel_attribute, voxel_hex, voxel_number,
-            voxelize,
+            FillMode, GridResolution, MapSpec, MaterialMode, OutOfRangeProperty,
+            ResolutionReference, SurfaceMode, VoxelizeOptions, box_main, box_primitive,
+            document_of, full_square, pbr_quad_main, png_rgba, textured_quad_main, triangle_of,
+            voxel_attribute, voxel_hex, voxel_number, voxelize,
         },
         utilities::{ColorSpace, Dither, PaletteReduction, ReductionMethod},
     };
     use meshdoc::{MeshHierarchyNode, MeshMain, MeshMaterial, MeshObject, MeshPrimitive};
-    use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{
+        TyLinSrgbF64, TyLinSrgbaF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+    };
     use voxcore::{
         VoxMain, VoxValuePoolValueRef,
         material::{
@@ -219,7 +225,7 @@ mod document_tests {
             fill_mode,
             material_mode,
             fill_color: None,
-            name: None,
+            fallback_name: Some("voxelized".to_owned()),
             out_of_range_property: OutOfRangeProperty::Error,
             reduction: None,
         }
@@ -247,10 +253,9 @@ mod document_tests {
         )
     }
 
-    /// Voxelizes `document` under `options` with the fallback name
-    /// `voxelized`.
+    /// Voxelizes `document` under `options`.
     fn run(document: &MeshMain<()>, options: &VoxelizeOptions) -> VoxMain {
-        let main = voxelize(&DependenciesImpl, document, "voxelized", options).unwrap();
+        let main = voxelize(&DependenciesImpl, document, options).unwrap();
         assert_eq!(main.validate(), Ok(()));
         main
     }
@@ -366,27 +371,149 @@ mod document_tests {
         assert_eq!(voxel_hex(&main, origin), "#FFFFFFFF");
     }
 
-    /// The one object's name after voxelizing `document` under a `name`
-    /// override.
-    fn object_name(document: &MeshMain<()>, name: Option<&str>) -> String {
-        let main = run(
-            document,
-            &VoxelizeOptions {
-                name: name.map(str::to_owned),
-                ..solid(MaterialMode::Flat)
-            },
-        );
+    /// The one object's name after voxelizing `document`.
+    fn object_name(document: &MeshMain<()>) -> String {
+        let main = run(document, &solid(MaterialMode::Flat));
         main.iter_objects().next().unwrap().1.name().to_owned()
     }
 
     #[test]
-    fn the_name_override_beats_the_mesh_name_and_the_fallback_fills_in() {
-        let named = box_main(1.0, 1.0, 1.0, None, Some("Ship"));
-        assert_eq!(object_name(&named, None), "Ship");
-        assert_eq!(object_name(&named, Some("Override")), "Override");
+    fn the_object_name_falls_back_to_the_node_then_the_option() {
+        let mut main = MeshMain::default();
+        let mut object = MeshObject::new("Hull".to_owned());
+        object.retain_primitive(box_primitive(1.0, 1.0, 1.0));
+        let object_id = main.retain_object(object).unwrap();
+        let node_id = main
+            .retain_hierarchy_node(MeshHierarchyNode {
+                name: "Ship".to_owned(),
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+        assert_eq!(object_name(&main), "Hull");
+
+        let node_named = box_main(1.0, 1.0, 1.0, None, Some("Ship"));
+        assert_eq!(object_name(&node_named), "Ship");
 
         let unnamed = box_main(1.0, 1.0, 1.0, None, None);
-        assert_eq!(object_name(&unnamed, None), "voxelized");
+        assert_eq!(object_name(&unnamed), "voxelized");
+
+        let main = run(
+            &unnamed,
+            &VoxelizeOptions {
+                fallback_name: None,
+                ..solid(MaterialMode::Flat)
+            },
+        );
+        assert_eq!(main.iter_objects().next().unwrap().1.name(), "");
+    }
+
+    /// A document of one `Crate` box of `side` meters placed by two unnamed
+    /// nodes, at the origin and translated by `offset` along x.
+    fn two_crates(side: f64, offset: f64) -> MeshMain<()> {
+        let mut main = MeshMain::default();
+        let mut object = MeshObject::new("Crate".to_owned());
+        object.retain_primitive(box_primitive(side, side, side));
+        let object_id = main.retain_object(object).unwrap();
+
+        let node_of = |main: &mut MeshMain<()>, x: f64| {
+            main.retain_hierarchy_node(MeshHierarchyNode {
+                transform: TyTransformF64 {
+                    position: TyVector3F64::new(x, 0.0, 0.0),
+                    ..Default::default()
+                },
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap()
+        };
+        let left = node_of(&mut main, 0.0);
+        let right = node_of(&mut main, offset);
+        main.set_root_hierarchy_node_ids(vec![left, right]).unwrap();
+        main.validate().unwrap();
+        main
+    }
+
+    #[test]
+    fn each_placement_becomes_one_object_on_a_shared_lattice_and_palette() {
+        let main = run(
+            &two_crates(1.0, 4.5),
+            &VoxelizeOptions {
+                resolution: GridResolution::ReferenceCount {
+                    reference: ResolutionReference::LongestObject,
+                    count: 2,
+                },
+                ..solid(MaterialMode::Flat)
+            },
+        );
+
+        assert_eq!(main.object_count(), 2);
+        assert_eq!(main.palette_count(), 1);
+        assert_eq!(main.root_hierarchy_node_ids().len(), 2);
+
+        // Half-meter cubes: the second crate spans `[4.5, 5.5]`, lattice
+        // cells 9 and 10.
+        let objects: Vec<_> = main.iter_objects().map(|(_, object)| object).collect();
+        assert_eq!(objects[0].origin(), TyVector3I32::new(0, 0, 0));
+        assert_eq!(objects[0].bounds(), TyVector3U32::new(2, 2, 2));
+        assert_eq!(objects[0].live_count(), 8);
+        assert_eq!(objects[1].origin(), TyVector3I32::new(9, 0, 0));
+        assert_eq!(objects[1].bounds(), TyVector3U32::new(2, 2, 2));
+        assert_eq!(objects[1].name(), "Crate");
+
+        let (palette_id, _) = main.iter_palettes().next().unwrap();
+        for object in &objects {
+            let (_, layer_palette_id) = object.iter_layers().next().unwrap();
+            assert_eq!(layer_palette_id, palette_id);
+        }
+
+        for &root_id in main.root_hierarchy_node_ids() {
+            let node = main.hierarchy_node(root_id).unwrap();
+            assert_eq!(node.transform.scale, TyVector3F64::splat(0.5));
+            assert_eq!(node.transform.position, TyVector3F64::ZERO);
+        }
+    }
+
+    #[test]
+    fn a_world_reference_spans_every_object() {
+        // Two unit crates 4 meters apart span 5 meters, so 10 voxels across
+        // are half a meter each.
+        let main = run(
+            &two_crates(1.0, 4.0),
+            &VoxelizeOptions {
+                resolution: GridResolution::ReferenceCount {
+                    reference: ResolutionReference::WorldX,
+                    count: 10,
+                },
+                ..solid(MaterialMode::Flat)
+            },
+        );
+
+        let (_, object) = main.iter_objects().next().unwrap();
+        assert_eq!(object.bounds(), TyVector3U32::new(2, 2, 2));
+    }
+
+    #[test]
+    fn an_object_without_triangles_errors_with_its_name() {
+        let mut main: MeshMain<()> = MeshMain::default();
+        let object_id = main
+            .retain_object(MeshObject::new("Empty".to_owned()))
+            .unwrap();
+        let node_id = main
+            .retain_hierarchy_node(MeshHierarchyNode {
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+
+        let error = voxelize(&DependenciesImpl, &main, &solid(MaterialMode::Flat)).unwrap_err();
+        assert!(error.to_string().contains("Empty"), "{error}");
+
+        let empty: MeshMain<()> = MeshMain::default();
+        let error = voxelize(&DependenciesImpl, &empty, &solid(MaterialMode::Flat)).unwrap_err();
+        assert!(error.to_string().contains("no objects"), "{error}");
     }
 
     #[test]

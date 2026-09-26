@@ -32,11 +32,13 @@ const THIRD: f64 = 1.0 / 3.0;
 /// sampled attributes merge on their float bit patterns downstream.
 ///
 /// # Arguments
-/// * `mesh` - the flattened mesh, its triangles carrying their placement.
+/// * `mesh` - the flattened mesh the triangles' materials are read from.
+/// * `triangles` - the triangles `grid` was rasterized from.
 /// * `grid` - the rasterized occupancy and per-cell covering triangle.
 /// * `space` - the grid `grid` was rasterized onto.
 pub(crate) fn sample_material(
     mesh: &MeshInput<'_>,
+    triangles: &[MeshTriangle],
     grid: &VoxelGrid,
     space: &GridSpace,
 ) -> Vec<Option<VoxelMaterial>> {
@@ -49,7 +51,7 @@ pub(crate) fn sample_material(
     // A running per-attribute sum and shared sample count per cell.
     let mut accum = vec![CellAccum::default(); cells];
 
-    for (index, triangle) in mesh.triangles.iter().enumerate() {
+    for (index, triangle) in triangles.iter().enumerate() {
         let slots = &slots[triangle.primitive as usize];
         if !slots.any() {
             continue;
@@ -90,7 +92,7 @@ pub(crate) fn sample_material(
     }
 
     (0..cells)
-        .map(|cell| resolve_cell(mesh, &slots, grid, space, &accum[cell], cell))
+        .map(|cell| resolve_cell(mesh, triangles, &slots, grid, space, &accum[cell], cell))
         .collect()
 }
 
@@ -100,6 +102,7 @@ pub(crate) fn sample_material(
 /// cell center (when it grazed).
 fn resolve_cell(
     mesh: &MeshInput<'_>,
+    triangles: &[MeshTriangle],
     slots: &[TextureSlots<'_>],
     grid: &VoxelGrid,
     space: &GridSpace,
@@ -107,7 +110,7 @@ fn resolve_cell(
     cell: usize,
 ) -> Option<VoxelMaterial> {
     let covering = grid.triangle[cell]? as usize;
-    let triangle = &mesh.triangles[covering];
+    let triangle = &triangles[covering];
     let slots = &slots[triangle.primitive as usize];
     let source = mesh.primitives[triangle.primitive as usize].material;
     let mut material = VoxelMaterial::from(source);
@@ -377,12 +380,12 @@ mod tests {
         let document = document_of(main, primitive, None, TyTransformF64::default());
 
         let mesh = mesh_input_from_mesh_main(&DependenciesImpl, &document).unwrap();
-        let space = GridSpace::fit(&mesh.bounds().unwrap(), TyVector3F64::splat(0.625));
+        let space = GridSpace::on_lattice(&mesh.bounds().unwrap(), TyVector3F64::splat(0.625));
         assert_eq!(space.counts(), TyVector3U32::new(8, 8, 5));
         // Triangle-cover, hollow: the covering array a texel sampler reads.
         let grid = voxelize_triangles(&mesh.triangles, &space, false, false);
 
-        let sampled = sample_material(&mesh, &grid, &space);
+        let sampled = sample_material(&mesh, &mesh.triangles, &grid, &space);
 
         let surface = grid.triangle.iter().filter(|t| t.is_some()).count();
         assert!(surface > 0, "the oblique triangle rasterizes surface cells");

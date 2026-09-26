@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     dependencies::voxelize::DecodeImage,
-    operations::voxelize::{MeshInput, MeshTriangle, PlacedPrimitive},
+    operations::voxelize::{MeshInput, MeshTriangle, PlacedObject, PlacedPrimitive},
 };
 use branded_id::U32Id;
 use meshdoc::{
@@ -13,14 +13,11 @@ use ty_math::{TyTransformF64, TyVector3F64};
 /// The material a primitive without one draws.
 static DEFAULT_MATERIAL: LazyLock<MeshMaterial> = LazyLock::new(MeshMaterial::default);
 
-/// Flattens a mesh document into the world-space triangle mesh the
-/// voxelizer rasterizes: every object the hierarchy places, its node
-/// transforms applied, so two documents of one object at different scales
-/// voxelize alike. Each image a sampled slot draws decodes once through
-/// `dependencies`. A normal map or other unsampled image stays encoded. A
-/// primitive with no material draws the default material. The mesh takes the
-/// name of the first placed object, or of its placing node when the object
-/// has none. Errors when an image does not decode.
+/// Flattens a mesh document into world-space triangles, one placed object per
+/// node and object pair the hierarchy reaches. Each image a sampled slot
+/// draws decodes once through `dependencies`. An unsampled image such as a
+/// normal map stays encoded. A primitive with no material draws the default.
+/// Errors when an image does not decode.
 pub fn mesh_input_from_mesh_main<'a, D: DecodeImage, T: MeshExt>(
     dependencies: &D,
     main: &'a MeshMain<T>,
@@ -31,11 +28,11 @@ pub fn mesh_input_from_mesh_main<'a, D: DecodeImage, T: MeshExt>(
         dependencies,
         state,
         input: MeshInput {
+            objects: Vec::new(),
             primitives: Vec::new(),
             triangles: Vec::new(),
             images: HashMap::new(),
             state,
-            name: None,
         },
     };
 
@@ -54,8 +51,9 @@ struct Walk<'a, 'd, D> {
 }
 
 impl<'a, D: DecodeImage> Walk<'a, '_, D> {
-    /// Appends the triangles of the objects `node_id` places, in world
-    /// space under `parent`, then recurses into its children.
+    /// Appends a placed object for each object `node_id` places, its
+    /// triangles in world space under `parent`, then recurses into the
+    /// children.
     fn node(&mut self, node_id: U32Id<BMeshHierarchyNode>, parent: &TyTransformF64) -> Result<()> {
         let state = self.state;
 
@@ -70,16 +68,17 @@ impl<'a, D: DecodeImage> Walk<'a, '_, D> {
                 .object(object_id)
                 .expect("a placed object is one of the document's");
 
-            if self.input.name.is_none() {
-                let name = [object.name(), node.name.as_str()]
-                    .into_iter()
-                    .find(|name| !name.is_empty());
-                self.input.name = name.map(str::to_owned);
-            }
+            let start = self.input.triangles.len();
 
             for (_, primitive) in object.iter_primitives() {
                 self.primitive(primitive, &world)?;
             }
+
+            self.input.objects.push(PlacedObject {
+                object_name: object.name().to_owned(),
+                node_name: node.name.clone(),
+                range: start..self.input.triangles.len(),
+            });
         }
 
         for &child_id in &node.child_node_ids {
@@ -185,8 +184,8 @@ mod tests {
     };
     use branded_id::U32Id;
     use meshdoc::{
-        MeshImage, MeshImageMediaType, MeshImageSource, MeshMain, MeshMaterial, MeshTexture,
-        MeshTextureRef,
+        MeshHierarchyNode, MeshImage, MeshImageMediaType, MeshImageSource, MeshMain, MeshMaterial,
+        MeshObject, MeshTexture, MeshTextureRef,
     };
     use ty_math::{TyTransformF64, TyVector2F64, TyVector3F64};
 
@@ -216,14 +215,50 @@ mod tests {
     }
 
     #[test]
-    fn names_the_mesh_from_the_node_when_the_object_is_unnamed() {
+    fn each_placement_is_one_object_with_its_names() {
         let named = box_main(1.0, 1.0, 1.0, None, Some("Ship"));
         let input = mesh_input_from_mesh_main(&DependenciesImpl, &named).unwrap();
-        assert_eq!(input.name.as_deref(), Some("Ship"));
+        assert_eq!(input.objects.len(), 1);
+        assert_eq!(input.objects[0].object_name, "");
+        assert_eq!(input.objects[0].node_name, "Ship");
+        assert_eq!(input.objects[0].range, 0..12);
+        assert_eq!(input.objects[0].name(Some("stem")), "Ship");
 
         let unnamed = box_main(1.0, 1.0, 1.0, None, None);
         let input = mesh_input_from_mesh_main(&DependenciesImpl, &unnamed).unwrap();
-        assert_eq!(input.name, None);
+        assert_eq!(input.objects[0].name(Some("stem")), "stem");
+        assert_eq!(input.objects[0].name(None), "");
+    }
+
+    #[test]
+    fn an_object_two_nodes_place_appears_twice() {
+        let mut main = MeshMain::default();
+        let mut object = MeshObject::new("Crate".to_owned());
+        object.retain_primitive(box_primitive(1.0, 1.0, 1.0));
+        let object_id = main.retain_object(object).unwrap();
+
+        let node_of = |main: &mut MeshMain<()>, x: f64| {
+            main.retain_hierarchy_node(MeshHierarchyNode {
+                transform: TyTransformF64 {
+                    position: TyVector3F64::new(x, 0.0, 0.0),
+                    ..Default::default()
+                },
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap()
+        };
+        let left = node_of(&mut main, 0.0);
+        let right = node_of(&mut main, 4.0);
+        main.set_root_hierarchy_node_ids(vec![left, right]).unwrap();
+        main.validate().unwrap();
+
+        let input = mesh_input_from_mesh_main(&DependenciesImpl, &main).unwrap();
+        assert_eq!(input.objects.len(), 2);
+        assert_eq!(input.triangles.len(), 24);
+        assert_eq!(input.objects[1].name(None), "Crate");
+        let right = input.object_bounds(&input.objects[1], None).unwrap();
+        assert!((right.min().x - 4.0).abs() < 1e-9, "{right:?}");
     }
 
     #[test]
