@@ -9,6 +9,8 @@ mod quantize_options;
 mod reduction_method;
 mod resolution_reference;
 mod surface_mode;
+mod voxel_frame;
+mod voxel_scale;
 
 pub(crate) use grid_resolution_options::*;
 pub(crate) use palette_reduction_options::*;

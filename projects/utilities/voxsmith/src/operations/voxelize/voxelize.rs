@@ -2,8 +2,8 @@ use crate::{
     Error, Result,
     dependencies::voxelize::DecodeImage,
     operations::voxelize::{
-        GridResolution, MeshInput, ResolutionReference, VoxelizeOptions, mesh_input_from_mesh_main,
-        voxelize_mesh,
+        GridResolution, MeshInput, ResolutionReference, VoxelScale, VoxelizeOptions,
+        mesh_input_from_mesh_main, voxelize_mesh,
     },
     utilities::{order_palette_colors, reduce_palette},
 };
@@ -12,26 +12,25 @@ use ty_math::TyVector3F64;
 use voxcore::VoxMain;
 
 /// Voxelizes the mesh document `main` under `options` into a [`VoxMain`] of
-/// one object per placed mesh object, all placed on one voxel lattice in
-/// world space with their node transforms applied. The objects share one
+/// one object per placed mesh object, each on a voxel lattice anchored at the
+/// origin of the frame `options.frame` chooses. The objects share one
 /// palette, reduced when `options.reduction` is set and left canonical:
 /// colors in material order, ids compacted. `dependencies` decodes the
 /// document's images for per-texel sampling. Errors when the document places
-/// no object, an object has no triangle geometry, or the resolution's
-/// reference side has no extent.
+/// no object, an object has no triangle geometry, the resolution's reference
+/// side has no extent, or a world reference is asked for under a kept scale.
 pub fn voxelize<D: DecodeImage, T: MeshExt>(
     dependencies: &D,
     main: &MeshMain<T>,
     options: &VoxelizeOptions,
 ) -> Result<VoxMain> {
-    let input = mesh_input_from_mesh_main(dependencies, main)?;
+    let input = mesh_input_from_mesh_main(dependencies, main, options.frame, options.scale)?;
 
     if input.objects.is_empty() {
         return Err(Error::invalid("mesh places no objects"));
     }
 
-    let voxel_size =
-        resolve_voxel_size(&input, options.resolution, options.fallback_name.as_deref())?;
+    let voxel_size = resolve_voxel_size(&input, options)?;
 
     let mut main = voxelize_mesh(&input, voxel_size, options)?;
 
@@ -57,28 +56,39 @@ pub fn voxelize<D: DecodeImage, T: MeshExt>(
     Ok(main)
 }
 
-/// The voxel size `resolution` sets over `input`. Errors on a reference side
-/// with no extent, or an object with no triangles.
-fn resolve_voxel_size(
-    input: &MeshInput<'_>,
-    resolution: GridResolution,
-    fallback_name: Option<&str>,
-) -> Result<f64> {
-    let GridResolution::ReferenceCount { reference, count } = resolution else {
-        let GridResolution::VoxelSize(size) = resolution else {
+/// The voxel size `options.resolution` sets over `input`. World references
+/// measure the world bounds and need a baked scale. Object references measure
+/// each object's grid-frame bounds in the voxel size's units. Errors on a
+/// reference side with no extent, or an object with no triangles.
+fn resolve_voxel_size(input: &MeshInput<'_>, options: &VoxelizeOptions) -> Result<f64> {
+    let GridResolution::ReferenceCount { reference, count } = options.resolution else {
+        let GridResolution::VoxelSize(size) = options.resolution else {
             unreachable!("a resolution is a size or a count");
         };
         return Ok(size);
     };
 
+    if reference.is_world() && options.scale == VoxelScale::Keep {
+        return Err(Error::invalid(format!(
+            "resolution reference {reference:?} measures world space, which a kept node scale \
+             does not voxelize in"
+        )));
+    }
+
     let objects: Vec<TyVector3F64> = input
         .objects
         .iter()
-        .map(|object| Ok(input.object_bounds(object, fallback_name)?.size()))
+        .map(|object| {
+            let bounds = input.object_bounds(object, options.fallback_name.as_deref())?;
+            Ok(bounds.size() * object.grid_unit(options.frame, options.scale))
+        })
         .collect::<Result<_>>()?;
 
     let world = input
-        .bounds()
+        .objects
+        .iter()
+        .filter_map(|object| object.world_bounds)
+        .reduce(|union, bounds| union.encapsulate(&bounds))
         .expect("an object with bounds gives the mesh bounds")
         .size();
 
@@ -193,9 +203,9 @@ mod document_tests {
         dependencies::DependenciesImpl,
         operations::voxelize::{
             FillMode, GridResolution, MapSpec, MaterialMode, OutOfRangeProperty,
-            ResolutionReference, SurfaceMode, VoxelizeOptions, box_main, box_primitive,
-            document_of, full_square, pbr_quad_main, png_rgba, textured_quad_main, triangle_of,
-            voxel_attribute, voxel_hex, voxel_number, voxelize,
+            ResolutionReference, SurfaceMode, VoxelFrame, VoxelScale, VoxelizeOptions, box_main,
+            box_primitive, document_of, full_square, pbr_quad_main, png_rgba, textured_quad_main,
+            triangle_of, voxel_attribute, voxel_hex, voxel_number, voxelize,
         },
         utilities::{ColorSpace, Dither, PaletteReduction, ReductionMethod},
     };
@@ -221,6 +231,8 @@ mod document_tests {
     ) -> VoxelizeOptions {
         VoxelizeOptions {
             resolution: GridResolution::VoxelSize(meters),
+            frame: VoxelFrame::World,
+            scale: VoxelScale::Bake,
             surface_mode,
             fill_mode,
             material_mode,
@@ -492,6 +504,174 @@ mod document_tests {
 
         let (_, object) = main.iter_objects().next().unwrap();
         assert_eq!(object.bounds(), TyVector3U32::new(2, 2, 2));
+    }
+
+    /// A document of one unit `Crate` box placed by a node at `x = 3` scaled
+    /// by two on z, and by an unscaled node at the origin.
+    fn scaled_crates() -> MeshMain<()> {
+        let mut main = MeshMain::default();
+        let mut object = MeshObject::new("Crate".to_owned());
+        object.retain_primitive(box_primitive(1.0, 1.0, 1.0));
+        let object_id = main.retain_object(object).unwrap();
+
+        let scaled = main
+            .retain_hierarchy_node(MeshHierarchyNode {
+                name: "Tall".to_owned(),
+                transform: TyTransformF64 {
+                    position: TyVector3F64::new(3.0, 0.0, 0.0),
+                    scale: TyVector3F64::new(1.0, 1.0, 2.0),
+                    ..Default::default()
+                },
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        let plain = main
+            .retain_hierarchy_node(MeshHierarchyNode {
+                name: "Plain".to_owned(),
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![scaled, plain])
+            .unwrap();
+        main.validate().unwrap();
+        main
+    }
+
+    /// The scaled crates at half-meter voxels under `frame` and `scale`: the
+    /// object count, then each root node's transform with the bounds and
+    /// origin of the object it places, in root order.
+    fn scaled_crates_under(
+        frame: VoxelFrame,
+        scale: VoxelScale,
+    ) -> (usize, Vec<(TyTransformF64, TyVector3U32, TyVector3I32)>) {
+        let main = run(
+            &scaled_crates(),
+            &VoxelizeOptions {
+                resolution: GridResolution::VoxelSize(0.5),
+                frame,
+                scale,
+                ..solid(MaterialMode::Flat)
+            },
+        );
+
+        let placements = main
+            .root_hierarchy_node_ids()
+            .iter()
+            .map(|&root_id| {
+                let node = main.hierarchy_node(root_id).unwrap();
+                let object = main.object(node.child_object_ids[0]).unwrap();
+                (node.transform, object.bounds(), object.origin())
+            })
+            .collect();
+
+        (main.object_count(), placements)
+    }
+
+    #[test]
+    fn a_world_frame_bakes_the_scale_into_aligned_cubes() {
+        let (objects, placements) = scaled_crates_under(VoxelFrame::World, VoxelScale::Bake);
+
+        assert_eq!(objects, 2);
+        let (tall, tall_bounds, tall_origin) = placements[0];
+        assert_eq!(tall.scale, TyVector3F64::splat(0.5));
+        assert_eq!(tall.position, TyVector3F64::ZERO);
+        assert_eq!(tall_bounds, TyVector3U32::new(2, 2, 4));
+        assert_eq!(tall_origin, TyVector3I32::new(6, 0, 0));
+    }
+
+    #[test]
+    fn a_world_frame_with_a_kept_scale_scales_the_cubes_on_the_node() {
+        let (objects, placements) = scaled_crates_under(VoxelFrame::World, VoxelScale::Keep);
+
+        assert_eq!(objects, 2);
+        let (tall, tall_bounds, tall_origin) = placements[0];
+        assert_eq!(tall.scale, TyVector3F64::new(0.5, 0.5, 1.0));
+        assert_eq!(tall.position, TyVector3F64::ZERO);
+        assert_eq!(tall_bounds, TyVector3U32::new(2, 2, 2));
+        assert_eq!(tall_origin, TyVector3I32::new(6, 0, 0));
+    }
+
+    #[test]
+    fn a_local_frame_with_a_baked_scale_splits_instances_by_scale() {
+        let (objects, placements) = scaled_crates_under(VoxelFrame::Local, VoxelScale::Bake);
+
+        assert_eq!(objects, 2);
+        let (tall, tall_bounds, tall_origin) = placements[0];
+        assert_eq!(tall.scale, TyVector3F64::splat(0.5));
+        assert_eq!(tall.position, TyVector3F64::new(3.0, 0.0, 0.0));
+        assert_eq!(tall_bounds, TyVector3U32::new(2, 2, 4));
+        assert_eq!(tall_origin, TyVector3I32::ZERO);
+        let (_, plain_bounds, _) = placements[1];
+        assert_eq!(plain_bounds, TyVector3U32::new(2, 2, 2));
+    }
+
+    #[test]
+    fn a_local_frame_with_a_kept_scale_shares_one_object() {
+        let (objects, placements) = scaled_crates_under(VoxelFrame::Local, VoxelScale::Keep);
+
+        assert_eq!(objects, 1);
+        let (tall, tall_bounds, _) = placements[0];
+        assert_eq!(tall.scale, TyVector3F64::new(0.5, 0.5, 1.0));
+        assert_eq!(tall.position, TyVector3F64::new(3.0, 0.0, 0.0));
+        assert_eq!(tall_bounds, TyVector3U32::new(2, 2, 2));
+        let (plain, plain_bounds, _) = placements[1];
+        assert_eq!(plain.scale, TyVector3F64::splat(0.5));
+        assert_eq!(plain_bounds, TyVector3U32::new(2, 2, 2));
+    }
+
+    #[test]
+    fn object_references_measure_the_grid_frame_in_the_voxel_sizes_units() {
+        // Baked: the tall crate is two meters on z, so 4 voxels is half a meter.
+        let main = run(
+            &scaled_crates(),
+            &VoxelizeOptions {
+                resolution: GridResolution::ReferenceCount {
+                    reference: ResolutionReference::LongestObject,
+                    count: 4,
+                },
+                frame: VoxelFrame::Local,
+                scale: VoxelScale::Bake,
+                ..solid(MaterialMode::Flat)
+            },
+        );
+        let root_id = main.root_hierarchy_node_ids()[0];
+        let node = main.hierarchy_node(root_id).unwrap();
+        assert_eq!(node.transform.scale, TyVector3F64::splat(0.5));
+
+        // Kept: the crate is one unscaled meter on every side, so 4 voxels is
+        // a quarter, and a world reference is refused.
+        let main = run(
+            &scaled_crates(),
+            &VoxelizeOptions {
+                resolution: GridResolution::ReferenceCount {
+                    reference: ResolutionReference::LongestObject,
+                    count: 4,
+                },
+                frame: VoxelFrame::Local,
+                scale: VoxelScale::Keep,
+                ..solid(MaterialMode::Flat)
+            },
+        );
+        let root_id = main.root_hierarchy_node_ids()[0];
+        let node = main.hierarchy_node(root_id).unwrap();
+        assert_eq!(node.transform.scale, TyVector3F64::new(0.25, 0.25, 0.5));
+
+        let error = voxelize(
+            &DependenciesImpl,
+            &scaled_crates(),
+            &VoxelizeOptions {
+                resolution: GridResolution::ReferenceCount {
+                    reference: ResolutionReference::LongestWorld,
+                    count: 4,
+                },
+                scale: VoxelScale::Keep,
+                ..solid(MaterialMode::Flat)
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("world"), "{error}");
     }
 
     #[test]

@@ -322,8 +322,8 @@ mod tests {
     use crate::{
         dependencies::DependenciesImpl,
         operations::voxelize::{
-            GridSpace, document_of, mesh_input_from_mesh_main, png_rgba, sample_material,
-            triangle_of, voxelize_triangles,
+            GridSpace, VoxelFrame, VoxelScale, document_of, mesh_input_from_mesh_main, png_rgba,
+            sample_material, triangle_of, voxelize_triangles,
         },
     };
     use branded_id::U32Id;
@@ -379,8 +379,15 @@ mod tests {
         primitive.set_material_id(Some(material_id));
         let document = document_of(main, primitive, None, TyTransformF64::default());
 
-        let mesh = mesh_input_from_mesh_main(&DependenciesImpl, &document).unwrap();
-        let space = GridSpace::on_lattice(&mesh.bounds().unwrap(), TyVector3F64::splat(0.625));
+        let mesh = mesh_input_from_mesh_main(
+            &DependenciesImpl,
+            &document,
+            VoxelFrame::World,
+            VoxelScale::Bake,
+        )
+        .unwrap();
+        let bounds = mesh.object_bounds(&mesh.objects[0], None).unwrap();
+        let space = GridSpace::on_lattice(&bounds, TyVector3F64::splat(0.625));
         assert_eq!(space.counts(), TyVector3U32::new(8, 8, 5));
         // Triangle-cover, hollow: the covering array a texel sampler reads.
         let grid = voxelize_triangles(&mesh.triangles, &space, false, false);

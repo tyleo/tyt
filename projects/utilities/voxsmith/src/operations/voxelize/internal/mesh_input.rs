@@ -39,12 +39,6 @@ impl MeshInput<'_> {
         (0..self.primitives.len()).any(|index| TextureSlots::resolve(self, index as u32).any())
     }
 
-    /// The bounding box of every placed object in world space, or `None`
-    /// when no object has triangles.
-    pub fn bounds(&self) -> Option<TyBoundsF64> {
-        triangle_bounds(&self.triangles)
-    }
-
     /// The triangles of `object`.
     pub fn object_triangles(&self, object: &PlacedObject) -> &[MeshTriangle] {
         &self.triangles[object.range.clone()]

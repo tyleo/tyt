@@ -1,6 +1,7 @@
 use crate::{
     operations::voxelize::{
-        FillMode, GridResolution, MaterialMode, OutOfRangeProperty, SurfaceMode,
+        FillMode, GridResolution, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelFrame,
+        VoxelScale,
     },
     utilities::PaletteReduction,
 };
@@ -11,6 +12,12 @@ use crate::{
 pub struct VoxelizeOptions {
     /// How the voxel size is chosen.
     pub resolution: GridResolution,
+
+    /// The frame each object's grid is built in.
+    pub frame: VoxelFrame,
+
+    /// What happens to a placing node's scale.
+    pub scale: VoxelScale,
 
     /// How the surface decides which cells it occupies.
     pub surface_mode: SurfaceMode,

@@ -43,3 +43,13 @@ pub enum ResolutionReference {
     /// The shortest extent along z of any object's bounds.
     ShortestObjectZ,
 }
+
+impl ResolutionReference {
+    /// Whether this is a world reference.
+    pub fn is_world(self) -> bool {
+        matches!(
+            self,
+            Self::LongestWorld | Self::ShortestWorld | Self::WorldX | Self::WorldY | Self::WorldZ
+        )
+    }
+}

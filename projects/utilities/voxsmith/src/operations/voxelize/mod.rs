@@ -7,6 +7,8 @@ mod material_mode;
 mod out_of_range_property;
 mod resolution_reference;
 mod surface_mode;
+mod voxel_frame;
+mod voxel_scale;
 #[allow(clippy::module_inception)]
 mod voxelize;
 mod voxelize_options;
@@ -18,6 +20,8 @@ pub use material_mode::*;
 pub use out_of_range_property::*;
 pub use resolution_reference::*;
 pub use surface_mode::*;
+pub use voxel_frame::*;
+pub use voxel_scale::*;
 pub use voxelize::*;
 pub use voxelize_options::*;
 

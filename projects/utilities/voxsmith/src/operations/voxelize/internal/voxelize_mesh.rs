@@ -2,18 +2,21 @@ use crate::{
     Error, Result,
     operations::voxelize::{
         FillMode, GridSpace, MaterialMode, MeshInput, MeshTriangle, OutOfRangeProperty,
-        SurfaceMode, VoxelGrid, VoxelMaterial, VoxelizeOptions, sample_material,
+        SurfaceMode, VoxelFrame, VoxelGrid, VoxelMaterial, VoxelizeOptions, sample_material,
         voxelize_triangles,
     },
     utilities::{check_material_property_ranges, check_material_range},
 };
 use branded_id::U32Id;
-use meshdoc::material::{COLOR_RANGE, MaterialRange, scalar_range};
+use meshdoc::{
+    BMeshObject,
+    material::{COLOR_RANGE, MaterialRange, scalar_range},
+};
 use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
 };
-use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -31,12 +34,14 @@ const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes every placed object of a [`MeshInput`] into a [`VoxMain`], one
 /// object per placement on the lattice of `voxel_size` cubes anchored at the
-/// world origin, all sharing one palette. Errors when an object has no
-/// triangles or its grid exceeds voxcore's dense-grid limit.
+/// grid frame's origin, all sharing one palette. In a local frame, placements
+/// of one mesh object at one grid size share one voxel object. Errors when an
+/// object has no triangles or its grid exceeds voxcore's dense-grid limit.
 ///
 /// # Arguments
-/// * `mesh` - the mesh to rasterize, in world space.
-/// * `voxel_size` - the voxel edge length, in the mesh's units.
+/// * `mesh` - the mesh to rasterize, in the grid frame `options` chose.
+/// * `voxel_size` - the voxel edge length, in world units under a baked
+///   scale and in unscaled units under a kept one.
 /// * `options` - everything but the resolution, which the caller resolved
 ///   into `voxel_size`.
 pub fn voxelize_mesh(
@@ -44,15 +49,33 @@ pub fn voxelize_mesh(
     voxel_size: f64,
     options: &VoxelizeOptions,
 ) -> Result<VoxMain> {
-    let size = TyVector3F64::splat(voxel_size);
+    let fallback_name = options.fallback_name.as_deref();
 
     // Rasterize each object onto its own grid, every cell's material into one
-    // list so the objects share one palette.
-    let mut spaces = Vec::with_capacity(mesh.objects.len());
+    // list so the objects share one palette. `sources[i]` is the rasterized
+    // grid placement `i` shows.
+    let mut rasterized: Vec<(usize, GridSpace)> = Vec::new();
+    let mut sources: Vec<usize> = Vec::with_capacity(mesh.objects.len());
+    let mut shared: HashMap<(U32Id<BMeshObject>, [u64; 3]), usize> = HashMap::new();
     let mut cell_materials = Vec::new();
 
-    for placed in &mesh.objects {
-        let bounds = mesh.object_bounds(placed, options.fallback_name.as_deref())?;
+    for (index, placed) in mesh.objects.iter().enumerate() {
+        let size = TyVector3F64::splat(voxel_size) / placed.grid_unit(options.frame, options.scale);
+
+        if options.frame == VoxelFrame::Local {
+            let key = (placed.mesh_object_id, size.to_array().map(f64::to_bits));
+
+            if let Some(&source) = shared.get(&key) {
+                sources.push(source);
+                continue;
+            }
+
+            shared.insert(key, rasterized.len());
+        }
+
+        sources.push(rasterized.len());
+
+        let bounds = mesh.object_bounds(placed, fallback_name)?;
         let space = GridSpace::on_lattice(&bounds, size);
         let counts = space.counts();
 
@@ -81,7 +104,7 @@ pub fn voxelize_mesh(
             options.fill_color,
         ));
 
-        spaces.push(space);
+        rasterized.push((index, space));
     }
 
     let mut main = VoxMain::default();
@@ -91,15 +114,16 @@ pub fn voxelize_mesh(
 
     let palette_id = main.retain_palette(palette)?;
 
+    let mut object_ids = Vec::with_capacity(rasterized.len());
     let mut next = 0;
 
-    for (placed, space) in mesh.objects.iter().zip(&spaces) {
+    for &(index, ref space) in &rasterized {
         let counts = space.counts();
         let cells = counts.x as usize * counts.y as usize * counts.z as usize;
         let samples = &sample_ids[next..next + cells];
         next += cells;
 
-        let name = placed.name(options.fallback_name.as_deref()).to_owned();
+        let name = mesh.objects[index].name(fallback_name).to_owned();
         let mut object = VoxObject::new(name, counts).map_err(|_| grid_too_large(counts))?;
 
         object.set_origin(space.min_cell());
@@ -114,15 +138,14 @@ pub fn voxelize_mesh(
             }
         }
 
-        let object_id = main.retain_object(object)?;
+        object_ids.push(main.retain_object(object)?);
+    }
 
+    for (placed, &source) in mesh.objects.iter().zip(&sources) {
         let node = VoxHierarchyNode {
             name: placed.node_name.clone(),
-            transform: TyTransformF64 {
-                scale: size,
-                ..Default::default()
-            },
-            child_object_ids: vec![object_id],
+            transform: placed.node_transform(voxel_size, options.frame, options.scale),
+            child_object_ids: vec![object_ids[source]],
             ..Default::default()
         };
 

@@ -1,5 +1,6 @@
 use crate::{
-    Dependencies, Error, MeshInput, NoneOr, Result, Rgba, VoxjEncodingOptions, cli_value_parser,
+    CliValue, Dependencies, Error, MeshInput, NoneOr, Result, Rgba, VoxjEncodingOptions,
+    cli_value_parser,
     commands::{GridResolutionOptions, QuantizeOptions},
 };
 use clap::Parser;
@@ -12,7 +13,8 @@ use voxconv::{
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::voxelize::{
-        FillMode, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelizeOptions, voxelize,
+        FillMode, GridResolution, MaterialMode, OutOfRangeProperty, SurfaceMode, VoxelFrame,
+        VoxelScale, VoxelizeOptions, voxelize,
     },
 };
 
@@ -30,6 +32,25 @@ pub struct Voxelize {
 
     #[command(flatten)]
     resolution_options: GridResolutionOptions,
+
+    /// The frame each object's voxel grid is built in.
+    #[arg(
+        value_name = "frame",
+        long,
+        default_value = "world",
+        value_parser = cli_value_parser::<VoxelFrame>()
+    )]
+    frame: VoxelFrame,
+
+    /// What happens to a placing node's scale. Under `keep` the voxel size is
+    /// in unscaled units and world references are rejected.
+    #[arg(
+        value_name = "scale",
+        long,
+        default_value = "bake",
+        value_parser = cli_value_parser::<VoxelScale>()
+    )]
+    scale: VoxelScale,
 
     /// How the mesh fills the grid, independent of `--material-mode`.
     #[arg(
@@ -91,6 +112,7 @@ impl Voxelize {
         let resolution = self.resolution_options.resolve()?;
 
         self.validate_fill_color()?;
+        self.validate_reference(resolution)?;
 
         let (serialization, write_options, output) = self
             .encoding_options
@@ -113,6 +135,8 @@ impl Voxelize {
 
         let options = VoxelizeOptions {
             resolution,
+            frame: self.frame,
+            scale: self.scale,
             surface_mode: self.surface_mode,
             fill_mode: self.fill_mode,
             material_mode: self.material_mode,
@@ -137,6 +161,23 @@ impl Voxelize {
             main,
             &output,
         )?)
+    }
+
+    /// Rejects a world `--resolution` reference under `--scale keep`, which
+    /// leaves no world voxel size to divide.
+    fn validate_reference(&self, resolution: GridResolution) -> Result<()> {
+        if let GridResolution::ReferenceCount { reference, .. } = resolution
+            && reference.is_world()
+            && self.scale == VoxelScale::Keep
+        {
+            return Err(Error::usage(format!(
+                "--resolution {} measures world space, which --scale keep does not voxelize in; \
+                 use an object reference or --voxel-size",
+                reference.name()
+            )));
+        }
+
+        Ok(())
     }
 
     /// Rejects a `--fill-color` that a sampling-mode surface shell would drop.
@@ -223,5 +264,29 @@ mod tests {
     #[test]
     fn an_omitted_fill_color_is_none() {
         assert_eq!(parse(&[]).fill_color, NoneOr::None);
+    }
+
+    #[test]
+    fn a_world_reference_is_rejected_under_a_kept_scale() {
+        let kept = parse(&["--scale", "keep"]);
+        let resolution = kept.resolution_options.resolve().unwrap();
+        assert!(kept.validate_reference(resolution).is_err());
+
+        let baked = parse(&[]);
+        let resolution = baked.resolution_options.resolve().unwrap();
+        assert!(baked.validate_reference(resolution).is_ok());
+
+        let object = Voxelize::try_parse_from([
+            "voxelize",
+            "model.glb",
+            "--resolution",
+            "longest-object",
+            "32",
+            "--scale",
+            "keep",
+        ])
+        .unwrap();
+        let resolution = object.resolution_options.resolve().unwrap();
+        assert!(object.validate_reference(resolution).is_ok());
     }
 }
