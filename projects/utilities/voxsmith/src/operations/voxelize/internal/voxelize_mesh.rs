@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     operations::voxelize::{
-        FillMode, MaterialMode, MeshInput, OutOfRangeProperty, SurfaceMode, VoxelGrid,
+        FillMode, GridSpace, MaterialMode, MeshInput, OutOfRangeProperty, SurfaceMode, VoxelGrid,
         VoxelMaterial, VoxelizeOptions, sample_material, voxelize_triangles,
     },
     utilities::{check_material_property_ranges, check_material_range},
@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
 };
-use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -28,30 +28,24 @@ use voxcore::{
 /// arrives in. Decode it with [`lin_srgba_f64_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
-/// Voxelizes a [`MeshInput`] into a [`VoxMain`] of one object placed by one
-/// root node, under `options` with the grid already sized. Errors when the
-/// mesh has no triangle geometry or the grid exceeds voxcore's dense-grid
-/// limit.
+/// Voxelizes a [`MeshInput`] onto `space` into a [`VoxMain`] of one object
+/// placed by one root node, whose scale records the voxel size. Errors when
+/// the grid exceeds voxcore's dense-grid limit.
 ///
 /// # Arguments
 /// * `mesh` - the mesh to rasterize, in world space.
-/// * `counts` - voxels per axis, sized by the caller from
-///   [`MeshInput::extent`].
-/// * `node_scale` - the placing node's uniform scale.
+/// * `space` - the grid to rasterize onto.
 /// * `fallback_name` - the object name when neither `options.name` nor the
 ///   mesh has one.
 /// * `options` - everything but the resolution, which the caller resolved
-///   into `counts` and `node_scale`.
+///   into `space`.
 pub fn voxelize_mesh(
     mesh: &MeshInput<'_>,
-    counts: TyVector3U32,
-    node_scale: f64,
+    space: &GridSpace,
     fallback_name: &str,
     options: &VoxelizeOptions,
 ) -> Result<VoxMain> {
-    if mesh.triangles.is_empty() {
-        return Err(Error::invalid("mesh has no triangle geometry"));
-    }
+    let counts = space.counts();
 
     // Cap the grid before rasterizing. An oversized resolution errors before
     // the occupancy grid allocation overflows or exhausts memory.
@@ -62,7 +56,7 @@ pub fn voxelize_mesh(
 
     let grid = voxelize_triangles(
         &mesh.triangles,
-        counts,
+        space,
         options.surface_mode == SurfaceMode::CenterInside,
         options.fill_mode == FillMode::Solid,
     );
@@ -70,7 +64,7 @@ pub fn voxelize_mesh(
     let cell_materials = resolve_materials(
         mesh,
         &grid,
-        counts,
+        space,
         options.material_mode,
         options.fill_color,
     );
@@ -103,9 +97,8 @@ pub fn voxelize_mesh(
 
     let object_id = main.retain_object(object)?;
 
-    // One root node placing the object and carrying the real-world scale.
     let transform = TyTransformF64 {
-        scale: TyVector3F64::splat(node_scale),
+        scale: space.size(),
         ..Default::default()
     };
 
@@ -130,7 +123,7 @@ pub fn voxelize_mesh(
 fn resolve_materials(
     mesh: &MeshInput<'_>,
     grid: &VoxelGrid,
-    counts: TyVector3U32,
+    space: &GridSpace,
     material_mode: MaterialMode,
     fill_color: Option<[u8; 4]>,
 ) -> Vec<Option<VoxelMaterial>> {
@@ -139,14 +132,14 @@ fn resolve_materials(
 
         MaterialMode::PerPrimitive => primitive_cells(mesh, grid),
 
-        MaterialMode::PerTexel => sampled_cells(mesh, grid, counts),
+        MaterialMode::PerTexel => sample_material(mesh, grid, space),
 
-        MaterialMode::Auto if mesh.is_textured() => sampled_cells(mesh, grid, counts),
+        MaterialMode::Auto if mesh.is_textured() => sample_material(mesh, grid, space),
 
         MaterialMode::Auto => primitive_cells(mesh, grid),
     };
 
-    fill_interior(grid, counts, fill_color, &mut cell_materials);
+    fill_interior(grid, space.counts(), fill_color, &mut cell_materials);
 
     // The surface pass records a covering triangle on every cell a face passes
     // through, including a boundary-grazed cell a solid fill leaves outside its
@@ -187,17 +180,6 @@ fn primitive_cells(mesh: &MeshInput<'_>, grid: &VoxelGrid) -> Vec<Option<VoxelMa
             covering.map(|triangle| materials[mesh.triangles[triangle as usize].primitive as usize])
         })
         .collect()
-}
-
-/// Each surface cell takes its covering material with every resolved texture
-/// slot sampled per texel over the cell footprint; interior and empty cells
-/// are `None`.
-fn sampled_cells(
-    mesh: &MeshInput<'_>,
-    grid: &VoxelGrid,
-    counts: TyVector3U32,
-) -> Vec<Option<VoxelMaterial>> {
-    sample_material(mesh, grid, counts)
 }
 
 /// Paints every filled interior cell, the volume a `solid` fill invents with

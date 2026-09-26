@@ -9,7 +9,7 @@ use crate::{
 /// under.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VoxelizeOptions {
-    /// How the grid is sized from the mesh extent.
+    /// How the voxel size is chosen.
     pub resolution: GridResolution,
 
     /// How the surface decides which cells it occupies.

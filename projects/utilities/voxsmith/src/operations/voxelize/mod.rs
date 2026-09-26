@@ -5,7 +5,7 @@ mod fill_mode;
 mod grid_resolution;
 mod material_mode;
 mod out_of_range_property;
-mod resolution_axis;
+mod resolution_reference;
 mod surface_mode;
 #[allow(clippy::module_inception)]
 mod voxelize;
@@ -16,7 +16,7 @@ pub use fill_mode::*;
 pub use grid_resolution::*;
 pub use material_mode::*;
 pub use out_of_range_property::*;
-pub use resolution_axis::*;
+pub use resolution_reference::*;
 pub use surface_mode::*;
 pub use voxelize::*;
 pub use voxelize_options::*;

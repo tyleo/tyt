@@ -7,7 +7,7 @@ mod out_of_range_property;
 mod palette_reduction_options;
 mod quantize_options;
 mod reduction_method;
-mod resolution_axis;
+mod resolution_reference;
 mod surface_mode;
 
 pub(crate) use grid_resolution_options::*;

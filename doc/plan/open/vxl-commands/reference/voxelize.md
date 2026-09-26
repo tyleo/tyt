@@ -3,28 +3,31 @@
 *Part of the [Vxl Command-Line Reference](../README.md).*
 
 ```
-vxl voxelize <input> [output] [--resolution <axis> <n> | --voxel-size <meters>] [options]
+vxl voxelize <input> [output] [--resolution <reference> <n> | --voxel-size <meters>] [options]
 ```
 
 Rasterizes a mesh into a voxel grid. This is the inverse of [`vxl mesh`](../../../../ref/mesh/mesh.md).
 The input is a glTF mesh, text (`.gltf`) or binary (`.glb`); glTF is the only
 mesh format read for now. The default output path is the input stem with the
-`.voxj` extension. The grid resolution is set one of two mutually
-exclusive ways: a voxel count along a chosen axis with `--resolution` or a
-real-world voxel size with `--voxel-size`. When neither is given it defaults to
+`.voxj` extension. The voxel size is set one of two mutually exclusive
+ways: a voxel count along a reference side with `--resolution` or the size
+directly with `--voxel-size`. When neither is given it defaults to
 `--voxel-size 1`, one voxel per meter.
 
 1. `--from` `gltf` | `glb`: source mesh format, glTF text or binary. Inferred
    from the input extension when omitted.
-2. `--resolution <axis> <n>`: pin one axis to a voxel count of `<n>` and size the
-   other axes to preserve aspect, fit tight to `bounds`. `<axis>` selects which
-   axis `<n>` counts along: `long` the longest extent, `short` the shortest, or
-   `x` | `y` | `z` a specific axis. Use this to cap detail at a known voxel count.
+2. `--resolution <reference> <n>`: divide a reference side of the mesh's world
+   bounds into `<n>` voxels. The voxel size is that side over `<n>`, and the
+   other axes take as many voxels as cover their extent. `<reference>` is one
+   of `longest-world`, `shortest-world` (the shortest side with any extent), or
+   `world-x` | `world-y` | `world-z`. A reference with no extent, such as
+   `world-y` on a flat mesh, is an error. Use this to cap detail at a known
+   voxel count.
 3. `--voxel-size <meters>` (default `1`): the edge length of one voxel in meters.
-   Each axis count is the mesh extent on that axis in meters divided by `<meters>`
-   and rounded up, so the same `<meters>` yields a consistent real-world voxel size
-   across meshes of different sizes. Mutually exclusive with `--resolution`, and
-   used with `<meters>` of `1` when neither flag is given.
+   Each axis takes as many voxels as cover the mesh extent there, so the same
+   `<meters>` yields a consistent real-world voxel size across meshes of
+   different sizes. Mutually exclusive with `--resolution`, and used with
+   `<meters>` of `1` when neither flag is given.
 4. `--fill-mode` `solid` | `surface` (default `solid`): how the mesh fills the
    grid. `solid` rasterizes the surface and flood-fills the volume it encloses,
    producing a filled body, and expects a watertight mesh. `surface` rasterizes
@@ -83,15 +86,12 @@ real-world voxel size with `--voxel-size`. When neither is given it defaults to
    back to the input file stem when the glTF names neither.
 
 The format carries no physical units: one unit is one voxel, and real-world
-scale comes from hierarchy-node transforms. `--resolution` is a voxel
-count, not an edge length. `--voxel-size` reads the source mesh's
-real-world size only to choose the grid counts; the written document is still
-unitless. glTF is meter-native, and any scene- or node-level scale on the mesh
-is applied before voxelizing, so two glTF exports of the same object at different
-authored scales voxelize alike, mirroring [`vxl mesh`](../../../../ref/mesh/mesh.md)'s
-`--voxel-size`. When `--voxel-size` is used, `voxelize` records
-`<meters>` as the placing node's scale so the assembled model keeps its source
-dimensions; `--resolution` has no real-world size to record. See
+scale comes from hierarchy-node transforms. Both flags resolve to one voxel
+size, which `voxelize` records as the placing node's scale so the assembled
+model keeps its source dimensions. glTF is meter-native, and any scene- or
+node-level scale on the mesh is applied before voxelizing, so two glTF exports
+of the same object at different authored scales voxelize alike, mirroring
+[`vxl mesh`](../../../../ref/mesh/mesh.md)'s `--voxel-size`. See
 [Coordinate System](../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#coordinate-system).
 
 `voxelize` writes a voxel-json document and shares `to voxj`'s encoding options:

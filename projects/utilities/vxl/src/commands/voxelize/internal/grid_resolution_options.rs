@@ -1,8 +1,8 @@
 use crate::{CliValue, Error, PositiveF64, Result};
 use clap::{ArgGroup, Args};
-use voxsmith::operations::voxelize::{GridResolution, ResolutionAxis};
+use voxsmith::operations::voxelize::{GridResolution, ResolutionReference};
 
-/// The `voxelize` grid-resolution controls. Flattened onto the command, which
+/// The `voxelize` voxel-size controls. Flattened onto the command, which
 /// takes at most one of the two flags and defaults to one voxel per meter when
 /// neither is given.
 #[derive(Clone, Debug, Args)]
@@ -10,34 +10,32 @@ use voxsmith::operations::voxelize::{GridResolution, ResolutionAxis};
     ArgGroup::new("grid_resolution").args(["resolution", "voxel_size"])
 ))]
 pub struct GridResolutionOptions {
-    /// Voxel count `n` along a chosen axis, the other axes preserving aspect.
-    /// `<axis>` is one of:
+    /// Voxel count `n` along a reference side. The voxel size is that side
+    /// divided by `n`. `<reference>` is one of:
     ///
-    /// 1. `long`: the mesh's longest extent.
-    /// 2. `short`: the mesh's shortest extent.
-    /// 3. `x` | `y` | `z`: that specific axis.
-    #[arg(value_names = ["axis", "n"], long, num_args = 2, verbatim_doc_comment)]
+    /// 1. `longest-world`: the longest side of the mesh's world bounds.
+    /// 2. `shortest-world`: the shortest side with any extent.
+    /// 3. `world-x` | `world-y` | `world-z`: the world extent along that axis.
+    #[arg(value_names = ["reference", "n"], long, num_args = 2, verbatim_doc_comment)]
     resolution: Option<Vec<String>>,
 
-    /// Edge length of one voxel in meters, keeping the mesh's real-world size.
+    /// Edge length of one voxel in meters.
     #[arg(value_name = "voxel-size", long)]
     voxel_size: Option<PositiveF64>,
 }
 
 impl GridResolutionOptions {
-    /// Resolves the grid-resolution flags into a [`GridResolution`]. `--resolution`
-    /// pins one axis to a voxel count; `--voxel-size` sets a real-world voxel size;
-    /// with neither it defaults to one voxel per meter. Rejects a `--resolution`
-    /// with an unknown axis or a count below one.
+    /// Resolves the voxel-size flags into a [`GridResolution`]. Rejects an
+    /// unknown reference or a count below one.
     pub fn resolve(&self) -> Result<GridResolution> {
         if let Some(values) = &self.resolution {
             // `num_args = 2` guarantees exactly two values when the flag is set.
-            let [axis, count] = values.as_slice() else {
-                return Err(Error::usage("--resolution takes an axis and a count"));
+            let [reference, count] = values.as_slice() else {
+                return Err(Error::usage("--resolution takes a reference and a count"));
             };
 
-            let axis = ResolutionAxis::parse(axis)
-                .map_err(|message| Error::usage(format!("--resolution axis: {message}")))?;
+            let reference = ResolutionReference::parse(reference)
+                .map_err(|message| Error::usage(format!("--resolution reference: {message}")))?;
 
             let count = match count.parse::<u32>() {
                 Ok(count) if count >= 1 => count,
@@ -48,14 +46,14 @@ impl GridResolutionOptions {
                 }
             };
 
-            return Ok(GridResolution::AxisVoxelCount { axis, count });
+            return Ok(GridResolution::ReferenceCount { reference, count });
         }
 
         if let Some(size) = self.voxel_size {
-            return Ok(GridResolution::MetersPerVoxel(size.0));
+            return Ok(GridResolution::VoxelSize(size.0));
         }
 
-        Ok(GridResolution::MetersPerVoxel(1.0))
+        Ok(GridResolution::VoxelSize(1.0))
     }
 }
 
@@ -63,7 +61,7 @@ impl GridResolutionOptions {
 mod tests {
     use crate::commands::GridResolutionOptions;
     use clap::Parser;
-    use voxsmith::operations::voxelize::{GridResolution, ResolutionAxis};
+    use voxsmith::operations::voxelize::{GridResolution, ResolutionReference};
 
     /// A throwaway command flattening the grid-resolution options, so their flags
     /// parse as they do on `voxelize`.
@@ -95,62 +93,56 @@ mod tests {
     }
 
     #[test]
-    fn resolution_resolves_to_an_axis_count() {
-        assert!(matches!(
-            resolve(&["--resolution", "long", "32"]),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Long,
+    fn resolution_resolves_to_a_reference_count() {
+        assert_eq!(
+            resolve(&["--resolution", "longest-world", "32"]),
+            GridResolution::ReferenceCount {
+                reference: ResolutionReference::LongestWorld,
                 count: 32
             }
-        ));
-    }
-
-    #[test]
-    fn resolution_accepts_the_short_axis() {
-        assert!(matches!(
-            resolve(&["--resolution", "short", "16"]),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Short,
+        );
+        assert_eq!(
+            resolve(&["--resolution", "shortest-world", "16"]),
+            GridResolution::ReferenceCount {
+                reference: ResolutionReference::ShortestWorld,
                 count: 16
             }
-        ));
-    }
-
-    #[test]
-    fn resolution_accepts_a_named_axis() {
-        assert!(matches!(
-            resolve(&["--resolution", "y", "8"]),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Y,
+        );
+        assert_eq!(
+            resolve(&["--resolution", "world-y", "8"]),
+            GridResolution::ReferenceCount {
+                reference: ResolutionReference::WorldY,
                 count: 8
             }
-        ));
+        );
     }
 
     #[test]
     fn voxel_size_resolves_to_a_size() {
-        let resolution = resolve(&["--voxel-size", "0.25"]);
-        assert!(matches!(resolution, GridResolution::MetersPerVoxel(size) if size == 0.25));
+        assert_eq!(
+            resolve(&["--voxel-size", "0.25"]),
+            GridResolution::VoxelSize(0.25)
+        );
     }
 
     #[test]
     fn neither_flag_defaults_to_one_meter_per_voxel() {
-        assert!(matches!(resolve(&[]), GridResolution::MetersPerVoxel(size) if size == 1.0));
+        assert_eq!(resolve(&[]), GridResolution::VoxelSize(1.0));
     }
 
     #[test]
     fn a_zero_count_is_rejected() {
-        assert!(rejects(&["--resolution", "long", "0"]));
+        assert!(rejects(&["--resolution", "longest-world", "0"]));
     }
 
     #[test]
-    fn an_unknown_axis_is_rejected() {
-        assert!(rejects(&["--resolution", "diagonal", "4"]));
+    fn an_unknown_reference_is_rejected() {
+        assert!(rejects(&["--resolution", "long", "4"]));
     }
 
     #[test]
-    fn a_lone_axis_without_a_count_is_rejected() {
-        assert!(rejects(&["--resolution", "long"]));
+    fn a_lone_reference_without_a_count_is_rejected() {
+        assert!(rejects(&["--resolution", "longest-world"]));
     }
 
     #[test]
@@ -164,7 +156,7 @@ mod tests {
     fn the_two_flags_are_mutually_exclusive() {
         assert!(rejects(&[
             "--resolution",
-            "long",
+            "longest-world",
             "32",
             "--voxel-size",
             "0.25"

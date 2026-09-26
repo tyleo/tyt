@@ -171,7 +171,13 @@ mod tests {
     /// Parses a `voxelize` invocation with a valid resolution already set, so a
     /// test only supplies the flags it exercises.
     fn parse(args: &[&str]) -> Voxelize {
-        let mut argv = vec!["voxelize", "model.glb", "--resolution", "long", "32"];
+        let mut argv = vec![
+            "voxelize",
+            "model.glb",
+            "--resolution",
+            "longest-world",
+            "32",
+        ];
         argv.extend_from_slice(args);
         Voxelize::try_parse_from(argv).unwrap()
     }

@@ -1,19 +1,17 @@
-use crate::operations::voxelize::ResolutionAxis;
+use crate::operations::voxelize::ResolutionReference;
 
-/// How a voxelized mesh's grid is sized from the mesh extent.
+/// How the voxel size is chosen.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum GridResolution {
-    /// A voxel count along a chosen axis; the other axes are sized to preserve
-    /// aspect, leaving the placing node's scale at `1`.
-    AxisVoxelCount {
-        /// Which axis the `count` sizes.
-        axis: ResolutionAxis,
+    /// The edge length of one voxel, in the mesh's units.
+    VoxelSize(f64),
 
-        /// Voxels along `axis`.
+    /// A reference side divided into `count` voxels.
+    ReferenceCount {
+        /// The side to divide.
+        reference: ResolutionReference,
+
+        /// Voxels along the side.
         count: u32,
     },
-
-    /// Meters per voxel, sizing each axis to a fixed real-world voxel size and
-    /// recorded as the placing node's scale.
-    MetersPerVoxel(f64),
 }

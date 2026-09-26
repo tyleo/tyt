@@ -4,7 +4,7 @@ use crate::operations::voxelize::{
 use branded_id::U32Id;
 use meshdoc::{BMeshImage, MeshState};
 use std::collections::HashMap;
-use ty_math::TyVector3F64;
+use ty_math::TyBoundsF64;
 
 /// A triangle mesh in world space, flattened from a mesh document with every
 /// node transform applied, the one shape [`voxelize_mesh`] rasterizes. The
@@ -38,13 +38,9 @@ impl MeshInput<'_> {
         (0..self.primitives.len()).any(|index| TextureSlots::resolve(self, index as u32).any())
     }
 
-    /// The size of the mesh's bounding box in meters, which a caller divides to
-    /// choose a grid resolution. Zero on every axis when the mesh has no
-    /// triangles.
-    pub fn extent(&self) -> TyVector3F64 {
-        match triangle_bounds(&self.triangles) {
-            Some(bounds) => bounds.size(),
-            None => TyVector3F64::ZERO,
-        }
+    /// The mesh's bounding box in world space, or `None` when the mesh has
+    /// no triangles.
+    pub fn bounds(&self) -> Option<TyBoundsF64> {
+        triangle_bounds(&self.triangles)
     }
 }

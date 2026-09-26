@@ -1,33 +1,40 @@
-use crate::operations::voxelize::{MeshTriangle, triangle_bounds};
-use ty_math::{TyVector3F64, TyVector3U32};
+use ty_math::{TyBoundsF64, TyVector3F64, TyVector3U32};
 
-/// The affine map from world space onto the voxel grid: the grid's min corner
-/// and per-axis voxel edge length. The rasterizer and the texel sampler both
-/// build it from the same bounds, so a sampled surface point lands in the same
-/// cell the occupancy grid filled.
+/// The map from world space onto the voxel grid. The rasterizer and the
+/// sampler share one so both agree on which cell a point falls in.
 pub(crate) struct GridSpace {
     min: TyVector3F64,
     size: TyVector3F64,
-    counts: [usize; 3],
+    counts: TyVector3U32,
 }
 
 impl GridSpace {
-    /// The grid space for `counts` fit tightly around `triangles`, or `None` when
-    /// the soup has no points.
-    pub fn from_triangles(triangles: &[MeshTriangle], counts: TyVector3U32) -> Option<Self> {
-        let bounds = triangle_bounds(triangles)?;
-        Some(Self::from_bounds(bounds.min(), bounds.max(), counts))
+    /// A grid from its corner, voxel size, and counts.
+    pub fn new(min: TyVector3F64, size: TyVector3F64, counts: TyVector3U32) -> Self {
+        Self { min, size, counts }
     }
 
-    /// The grid space for `counts` over the box `[min, max]`.
-    pub fn from_bounds(min: TyVector3F64, max: TyVector3F64, counts: TyVector3U32) -> Self {
-        let counts = [counts.x as usize, counts.y as usize, counts.z as usize];
-        let size = TyVector3F64::new(
-            voxel_size(min.x, max.x, counts[0]),
-            voxel_size(min.y, max.y, counts[1]),
-            voxel_size(min.z, max.z, counts[2]),
+    /// The grid of `size` voxels covering `bounds` from its min corner.
+    pub fn fit(bounds: &TyBoundsF64, size: TyVector3F64) -> Self {
+        let extent = bounds.size();
+
+        let counts = TyVector3U32::new(
+            cell_count(extent.x, size.x),
+            cell_count(extent.y, size.y),
+            cell_count(extent.z, size.z),
         );
-        Self { min, size, counts }
+
+        Self::new(bounds.min(), size, counts)
+    }
+
+    /// The voxel edge length on each axis.
+    pub fn size(&self) -> TyVector3F64 {
+        self.size
+    }
+
+    /// The cell counts per axis.
+    pub fn counts(&self) -> TyVector3U32 {
+        self.counts
     }
 
     /// `point` in grid coordinates, where one unit is one voxel from the min
@@ -40,7 +47,7 @@ impl GridSpace {
     /// clamped to the grid.
     pub fn cell_index(&self, point: TyVector3F64) -> usize {
         let grid = self.to_grid(point);
-        let [nx, ny, nz] = self.counts;
+        let [nx, ny, nz] = self.counts.to_array().map(|count| count as usize);
         let x = clamp_index(grid[0], nx.saturating_sub(1));
         let y = clamp_index(grid[1], ny.saturating_sub(1));
         let z = clamp_index(grid[2], nz.saturating_sub(1));
@@ -49,7 +56,7 @@ impl GridSpace {
 
     /// The world-space center of the cell at raster index `cell`.
     pub fn cell_center(&self, cell: usize) -> TyVector3F64 {
-        let [_, ny, nz] = self.counts;
+        let [_, ny, nz] = self.counts.to_array().map(|count| count as usize);
         let plane = ny * nz;
         let (x, remainder) = (cell / plane, cell % plane);
         let (y, z) = (remainder / nz, remainder % nz);
@@ -58,14 +65,18 @@ impl GridSpace {
     }
 }
 
-/// The edge length of one voxel on an axis, or `1.0` for a zero-extent axis.
-fn voxel_size(min: f64, max: f64, count: usize) -> f64 {
-    let extent = max - min;
-    if extent > 0.0 && count > 0 {
-        extent / count as f64
+/// The cells of `size` covering `extent`, at least one.
+fn cell_count(extent: f64, size: f64) -> u32 {
+    let cells = extent / size;
+    let whole = cells.round();
+
+    let count = if (cells - whole).abs() <= 1e-9 * whole.max(1.0) {
+        whole
     } else {
-        1.0
-    }
+        cells.ceil()
+    };
+
+    count.max(1.0) as u32
 }
 
 /// A floored grid coordinate clamped to `0..=last`.
@@ -74,5 +85,25 @@ pub(crate) fn clamp_index(value: f64, last: usize) -> usize {
         0
     } else {
         (value as usize).min(last)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::operations::voxelize::GridSpace;
+    use ty_math::{TyBoundsF64, TyVector3F64, TyVector3U32};
+
+    #[test]
+    fn fit_covers_the_extent_and_rounds_a_whole_count_through_float_error() {
+        // `3.0 / 0.1` is a hair over 30 in floating point.
+        let bounds = TyBoundsF64::from_min_size(
+            TyVector3F64::new(1.0, 0.0, 0.0),
+            TyVector3F64::new(3.0, 0.25, 0.0),
+        );
+
+        let space = GridSpace::fit(&bounds, TyVector3F64::splat(0.1));
+
+        assert_eq!(space.counts(), TyVector3U32::new(30, 3, 1));
+        assert_eq!(space.to_grid(TyVector3F64::new(4.0, 0.0, 0.0))[0], 30.0);
     }
 }

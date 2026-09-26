@@ -1,46 +1,31 @@
 use crate::operations::voxelize::{
-    GridSpace, MeshTriangle, VoxelGrid, clamp_index, triangle_bounds, triangle_box_overlap,
+    GridSpace, MeshTriangle, VoxelGrid, clamp_index, triangle_box_overlap,
 };
-use ty_math::TyVector3U32;
 
-/// Rasterizes a soup of material-tagged triangles into a [`VoxelGrid`], one
-/// entry per cell in `x*Y*Z + y*Z + z` raster order (matching
+/// Rasterizes a soup of tagged triangles onto `space` into a [`VoxelGrid`],
+/// one entry per cell in `x*Y*Z + y*Z + z` raster order (matching
 /// [`VoxObject`](voxcore::VoxObject) voxel ids). A cell is filled when a
-/// triangle passes through it, recording the first triangle to reach it. The
-/// mesh's bounding box is fit tightly to the grid, so the longest mesh axis
-/// spans its full count, and an empty soup yields an all-empty grid.
+/// triangle passes through it, recording the first triangle to reach it. An
+/// empty soup yields an all-empty grid.
 ///
 /// # Arguments
-/// * `triangles` - the triangles to rasterize, in grid-independent world space.
-/// * `counts` - the grid resolution in voxels per axis.
+/// * `triangles` - the triangles to rasterize, in world space.
+/// * `space` - the grid to rasterize onto.
 /// * `surface_mode` - when true, a voxel is filled when its center lies inside
 ///   the surface; when false, when any triangle passes through it.
 /// * `fill_mode` - when true, fill the interior; when false, leave a hollow
 ///   shell.
 pub(crate) fn voxelize_triangles(
     triangles: &[MeshTriangle],
-    counts: TyVector3U32,
+    space: &GridSpace,
     surface_mode: bool,
     fill_mode: bool,
 ) -> VoxelGrid {
-    let (nx, ny, nz) = (counts.x as usize, counts.y as usize, counts.z as usize);
+    let [nx, ny, nz] = space.counts().to_array().map(|count| count as usize);
 
     let mut filled = vec![false; nx * ny * nz];
 
     let mut covering = vec![None; nx * ny * nz];
-
-    // No triangles, or a zero-size grid: an all-empty grid.
-    let Some(bounds) = triangle_bounds(triangles).filter(|_| !filled.is_empty()) else {
-        return VoxelGrid {
-            filled,
-            triangle: covering,
-        };
-    };
-
-    // The affine map onto grid space, where each voxel is the unit cube
-    // `[i, i + 1)` on each axis. A zero-extent axis (a flat mesh) collapses to a
-    // single slice, guarded inside the map.
-    let space = GridSpace::from_bounds(bounds.min(), bounds.max(), counts);
 
     for (index, triangle) in triangles.iter().enumerate() {
         // The triangle in grid coordinates. The map onto grid space is affine
@@ -83,10 +68,10 @@ pub(crate) fn voxelize_triangles(
         // Cover shell, filled: flood the volume the shell encloses.
         (false, true) => fill_enclosed(&mut filled, nx, ny, nz),
         // Inside-center body, filled: the enclosed body itself.
-        (true, true) => fill_center_inside(&mut filled, &space, triangles, nx, ny, nz),
+        (true, true) => fill_center_inside(&mut filled, space, triangles, nx, ny, nz),
         // Inside-center body, hollow: that body eroded to its boundary layer.
         (true, false) => {
-            fill_center_inside(&mut filled, &space, triangles, nx, ny, nz);
+            fill_center_inside(&mut filled, space, triangles, nx, ny, nz);
             strip_interior(&mut filled, nx, ny, nz);
         }
     }
@@ -351,7 +336,9 @@ fn cell_range(grid: &[[f64; 3]; 3], counts: [usize; 3]) -> ([usize; 3], [usize; 
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::voxelize::{MeshTriangle, VoxelGrid, voxelize_triangles};
+    use crate::operations::voxelize::{
+        GridSpace, MeshTriangle, VoxelGrid, triangle_bounds, voxelize_triangles,
+    };
     use branded_id::U32Id;
     use ty_math::{TyVector3F64, TyVector3U32};
 
@@ -412,9 +399,12 @@ mod tests {
     const INSIDE_FILLED: (bool, bool) = (true, true);
     const INSIDE_HOLLOW: (bool, bool) = (true, false);
 
-    /// Voxelizes under a named `(surface_mode, fill_mode)` mode pair.
+    /// Voxelizes under a named `(surface_mode, fill_mode)` mode pair onto a
+    /// grid of `counts` unit voxels from the soup's min corner.
     fn voxelize(triangles: &[MeshTriangle], counts: TyVector3U32, mode: (bool, bool)) -> VoxelGrid {
-        voxelize_triangles(triangles, counts, mode.0, mode.1)
+        let min = triangle_bounds(triangles).map_or(TyVector3F64::ZERO, |bounds| bounds.min());
+        let space = GridSpace::new(min, TyVector3F64::ONE, counts);
+        voxelize_triangles(triangles, &space, mode.0, mode.1)
     }
 
     #[test]
@@ -532,7 +522,7 @@ mod tests {
     #[test]
     fn a_flat_axis_collapses_to_one_slice() {
         // A quad in the z = 0 plane has zero extent on z, so the grid is one
-        // voxel deep there and never divides by zero.
+        // voxel deep there.
         let quad = tagged(
             vec![
                 [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 4.0, 0.0]],

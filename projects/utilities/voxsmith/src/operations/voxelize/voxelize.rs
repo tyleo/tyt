@@ -1,13 +1,14 @@
 use crate::{
-    Result,
+    Error, Result,
     dependencies::voxelize::DecodeImage,
     operations::voxelize::{
-        GridResolution, ResolutionAxis, VoxelizeOptions, mesh_input_from_mesh_main, voxelize_mesh,
+        GridResolution, GridSpace, ResolutionReference, VoxelizeOptions, mesh_input_from_mesh_main,
+        voxelize_mesh,
     },
     utilities::{order_palette_colors, reduce_palette},
 };
 use meshdoc::{MeshExt, MeshMain};
-use ty_math::{TyVector3F64, TyVector3U32};
+use ty_math::{TyBoundsF64, TyVector3F64};
 use voxcore::VoxMain;
 
 /// Voxelizes the mesh document `main` under `options` into a [`VoxMain`] of
@@ -16,7 +17,9 @@ use voxcore::VoxMain;
 /// ids compacted. Every object the hierarchy places rasterizes in world
 /// space, its node transforms applied. `dependencies` decodes the
 /// document's images for per-texel sampling. `fallback_name` names the
-/// object when neither `options.name` nor the document does.
+/// object when neither `options.name` nor the document does. Errors when the
+/// mesh has no triangle geometry or the resolution's reference side has no
+/// extent.
 pub fn voxelize<D: DecodeImage, T: MeshExt>(
     dependencies: &D,
     main: &MeshMain<T>,
@@ -25,9 +28,13 @@ pub fn voxelize<D: DecodeImage, T: MeshExt>(
 ) -> Result<VoxMain> {
     let input = mesh_input_from_mesh_main(dependencies, main)?;
 
-    let (counts, node_scale) = resolve_grid(input.extent(), options.resolution);
+    let bounds = input
+        .bounds()
+        .ok_or_else(|| Error::invalid("mesh has no triangle geometry"))?;
 
-    let mut main = voxelize_mesh(&input, counts, node_scale, fallback_name, options)?;
+    let space = resolve_grid(&bounds, options.resolution)?;
+
+    let mut main = voxelize_mesh(&input, &space, fallback_name, options)?;
 
     let palette_id = main
         .iter_palettes()
@@ -51,107 +58,128 @@ pub fn voxelize<D: DecodeImage, T: MeshExt>(
     Ok(main)
 }
 
-/// The grid counts and the placing node's scale for the mesh `extent` at
-/// `resolution`.
-fn resolve_grid(extent: TyVector3F64, resolution: GridResolution) -> (TyVector3U32, f64) {
-    match resolution {
-        GridResolution::MetersPerVoxel(meters) => {
-            let count = |edge: f64| (edge / meters).ceil().max(1.0) as u32;
+/// The grid covering `bounds` at `resolution`. Errors on a reference side
+/// with no extent.
+fn resolve_grid(bounds: &TyBoundsF64, resolution: GridResolution) -> Result<GridSpace> {
+    let size = match resolution {
+        GridResolution::VoxelSize(size) => size,
 
-            let counts = TyVector3U32::new(count(extent.x), count(extent.y), count(extent.z));
+        GridResolution::ReferenceCount { reference, count } => {
+            let side = reference_side(bounds.size(), reference);
 
-            (counts, meters)
+            if side <= 0.0 {
+                return Err(Error::invalid(format!(
+                    "resolution reference {reference:?} has no extent to divide"
+                )));
+            }
+
+            side / f64::from(count.max(1))
         }
+    };
 
-        GridResolution::AxisVoxelCount { axis, count } => {
-            let n = count.max(1) as f64;
+    Ok(GridSpace::fit(bounds, TyVector3F64::splat(size)))
+}
 
-            let reference = match axis {
-                ResolutionAxis::Long => extent.x.max(extent.y).max(extent.z),
-                ResolutionAxis::Short => extent.x.min(extent.y).min(extent.z),
-                ResolutionAxis::X => extent.x,
-                ResolutionAxis::Y => extent.y,
-                ResolutionAxis::Z => extent.z,
-            };
+/// The side of `extent` that `reference` measures, or zero when it has none.
+fn reference_side(extent: TyVector3F64, reference: ResolutionReference) -> f64 {
+    let sides = extent.to_array();
 
-            let count = |edge: f64| {
-                if reference > 0.0 {
-                    (edge / reference * n).round().max(1.0) as u32
-                } else {
-                    1
-                }
-            };
-
-            let counts = TyVector3U32::new(count(extent.x), count(extent.y), count(extent.z));
-
-            (counts, 1.0)
+    match reference {
+        ResolutionReference::LongestWorld => sides.into_iter().fold(0.0, f64::max),
+        ResolutionReference::ShortestWorld => {
+            sides
+                .into_iter()
+                .filter(|&side| side > 0.0)
+                .fold(0.0, |shortest, side| {
+                    if shortest > 0.0 {
+                        shortest.min(side)
+                    } else {
+                        side
+                    }
+                })
         }
+        ResolutionReference::WorldX => sides[0],
+        ResolutionReference::WorldY => sides[1],
+        ResolutionReference::WorldZ => sides[2],
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::resolve_grid;
-    use crate::operations::voxelize::{GridResolution, ResolutionAxis};
-    use ty_math::{TyVector3F64, TyVector3U32};
+    use crate::operations::voxelize::{GridResolution, ResolutionReference};
+    use ty_math::{TyBoundsF64, TyVector3F64, TyVector3U32};
 
-    #[test]
-    fn axis_voxel_count_sizes_the_longest_axis_and_preserves_aspect() {
-        let (counts, node_scale) = resolve_grid(
-            TyVector3F64::new(4.0, 2.0, 1.0),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Long,
-                count: 4,
-            },
-        );
-        assert_eq!(counts, TyVector3U32::new(4, 2, 1));
-        assert_eq!(node_scale, 1.0);
+    /// The bounds `[0, extent]` on each axis.
+    fn bounds(x: f64, y: f64, z: f64) -> TyBoundsF64 {
+        TyBoundsF64::from_min_size(TyVector3F64::ZERO, TyVector3F64::new(x, y, z))
+    }
+
+    /// The resolution dividing `reference` into `count` voxels.
+    fn count(reference: ResolutionReference, count: u32) -> GridResolution {
+        GridResolution::ReferenceCount { reference, count }
     }
 
     #[test]
-    fn axis_voxel_count_sizes_the_shortest_axis() {
-        let (counts, _) = resolve_grid(
-            TyVector3F64::new(4.0, 2.0, 1.0),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Short,
-                count: 4,
-            },
-        );
-        assert_eq!(counts, TyVector3U32::new(16, 8, 4));
+    fn a_reference_count_sets_the_voxel_size_and_covers_the_other_axes() {
+        let space = resolve_grid(
+            &bounds(3.0, 2.0, 1.0),
+            count(ResolutionReference::LongestWorld, 4),
+        )
+        .unwrap();
+
+        assert_eq!(space.size(), TyVector3F64::splat(0.75));
+        assert_eq!(space.counts(), TyVector3U32::new(4, 3, 2));
     }
 
     #[test]
-    fn axis_voxel_count_sizes_a_named_axis() {
-        let (counts, _) = resolve_grid(
-            TyVector3F64::new(4.0, 2.0, 1.0),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Y,
-                count: 4,
-            },
-        );
-        assert_eq!(counts, TyVector3U32::new(8, 4, 2));
+    fn the_shortest_reference_skips_a_flat_axis() {
+        let space = resolve_grid(
+            &bounds(4.0, 0.0, 2.0),
+            count(ResolutionReference::ShortestWorld, 4),
+        )
+        .unwrap();
+
+        assert_eq!(space.size(), TyVector3F64::splat(0.5));
+        assert_eq!(space.counts(), TyVector3U32::new(8, 1, 4));
     }
 
     #[test]
-    fn axis_voxel_count_keeps_a_zero_axis_at_one_voxel() {
-        let (counts, _) = resolve_grid(
-            TyVector3F64::new(4.0, 0.0, 2.0),
-            GridResolution::AxisVoxelCount {
-                axis: ResolutionAxis::Long,
-                count: 4,
-            },
-        );
-        assert_eq!(counts, TyVector3U32::new(4, 1, 2));
+    fn a_named_reference_divides_that_axis() {
+        let space = resolve_grid(
+            &bounds(4.0, 2.0, 1.0),
+            count(ResolutionReference::WorldY, 4),
+        )
+        .unwrap();
+
+        assert_eq!(space.size(), TyVector3F64::splat(0.5));
+        assert_eq!(space.counts(), TyVector3U32::new(8, 4, 2));
     }
 
     #[test]
-    fn meters_per_voxel_rounds_each_axis_up_and_records_the_size() {
-        let (counts, node_scale) = resolve_grid(
-            TyVector3F64::new(3.0, 4.0, 3.0),
-            GridResolution::MetersPerVoxel(2.0),
+    fn a_reference_without_extent_errors() {
+        assert!(
+            resolve_grid(
+                &bounds(4.0, 0.0, 2.0),
+                count(ResolutionReference::WorldY, 4)
+            )
+            .is_err()
         );
-        assert_eq!(counts, TyVector3U32::new(2, 2, 2));
-        assert_eq!(node_scale, 2.0);
+        assert!(
+            resolve_grid(
+                &bounds(0.0, 0.0, 0.0),
+                count(ResolutionReference::ShortestWorld, 4)
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_voxel_size_rounds_each_axis_up_and_keeps_the_size() {
+        let space = resolve_grid(&bounds(3.0, 4.0, 3.0), GridResolution::VoxelSize(2.0)).unwrap();
+
+        assert_eq!(space.size(), TyVector3F64::splat(2.0));
+        assert_eq!(space.counts(), TyVector3U32::new(2, 2, 2));
     }
 }
 
@@ -186,7 +214,7 @@ mod document_tests {
         material_mode: MaterialMode,
     ) -> VoxelizeOptions {
         VoxelizeOptions {
-            resolution: GridResolution::MetersPerVoxel(meters),
+            resolution: GridResolution::VoxelSize(meters),
             surface_mode,
             fill_mode,
             material_mode,
@@ -238,7 +266,7 @@ mod document_tests {
         let main = run(
             &box_main(2.0, 2.0, 8.0, None, None),
             &VoxelizeOptions {
-                resolution: GridResolution::MetersPerVoxel(2.0),
+                resolution: GridResolution::VoxelSize(2.0),
                 fill_color: Some([255, 0, 0, 255]),
                 ..solid(MaterialMode::Flat)
             },

@@ -208,7 +208,7 @@ mod tests {
         );
 
         let input = mesh_input_from_mesh_main(&DependenciesImpl, &document).unwrap();
-        let extent = input.extent();
+        let extent = input.bounds().unwrap().size();
         assert!((extent.z - 2.0).abs() < 1e-9, "z extent {}", extent.z);
         assert!((extent.x - 1.0).abs() < 1e-9, "x extent {}", extent.x);
         assert_eq!(input.triangles.len(), 12);
