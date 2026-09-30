@@ -1,7 +1,9 @@
 # Voxel rendering plan
 
-Status: **open**. The shape below was agreed on 2026-09-28. Nothing is built
-yet. The [checklist](checklist.md) tracks phase 1.
+Status: **open**. The shape below was agreed on 2026-09-28. Phase 1 is built;
+the [checklist](checklist.md) tracks it, and the
+[reference pages](../../../ref/render/README.md) hold the contract and the
+profile language. Phase 2 is the `node` frame and spot lights.
 
 ## Goal
 
@@ -106,282 +108,24 @@ The chain is `vxl` over `voxsmith` over `voxrender` over `voxsurface` over
    scene and draws it into a texture the caller owns. It has no window either.
    Presenting is the engine's job.
 
-## The contract, first cut
+## The contract
 
-1. **Frame.** voxj's: glTF Y-up, right-handed, +Z toward the viewer. A voxel
-   at `p` fills the unit cube with min corner `p`. Placement follows the node
-   DAG; one path, one placement. A voxel size in meters scales the whole scene
-   the way `object mesh` does.
-2. **Surface.** The boundary faces between live and non-live cells, as
-   `voxsurface` enumerates them. Faces are axis-aligned unit squares with flat
-   normals. No smoothing, no bevels, no sub-voxel detail.
-3. **Materials.** The effective palette per voxel, in voxj's glTF vocabulary
-   with glTF's defaults. The first cut shades `baseColor`, `metallic`,
-   `roughness`, `emissiveColor`, `emissiveStrength`, and `occlusionStrength`.
-   Every live voxel is opaque: alpha, `transmission`, and `ior` are deferred.
-4. **Shading.** glTF's metallic-roughness model: Lambert diffuse and GGX
-   specular in linear light.
-5. **Lights.** A list of lights, each with a color and a strength, plus one
-   occlusion switch. The first cut has three kinds:
-   1. A `directional` light is a rotation. It shines down its local -Z, as a
-      light under glTF's `KHR_lights_punctual` does. It carries a shadow
-      granularity.
-   2. A `point` light is a position with glTF's punctual falloff: inverse
-      square, an optional `range`, and glTF's smooth cutoff at that range. It
-      carries a shadow granularity too. Falloff runs in meters after the
-      voxel size applies, so one rig lights a large voxel size differently
-      from a small one.
-   3. A `hemisphere` light is the ambient term, a sky color above and a
-      ground color below, about world +Y. It has no transform.
-
-   The occlusion switch is `none` or `corner`. `corner` is the
-   neighbor-occupancy rule voxel art uses, one value per face corner from the
-   three adjacent cells. It has one implementation, in `voxsurface`. The
-   reference shades with it, `object mesh` bakes it, and a standalone tier
-   stores it with its faces. Traced occlusion is a later value. A shadow is
-   one grid ray toward the light. The ray runs to infinity for a directional
-   light and ends at a point light. It is sampled at one of three
-   granularities:
-   1. `per-pixel`: a crisp diagonal edge across faces, the MagicaVoxel render
-      and Teardown look.
-   2. `per-face`: one value per voxel face, a crisp staircase at voxel
-      resolution, the look Minecraft's Vibrant Visuals snaps to.
-   3. `per-corner`: one value per face corner, interpolated, a soft staircase,
-      the vanilla Minecraft smooth-lighting look with a sun.
-
-   `none` turns a light's shadow off.
-6. **Transforms.** Every view and light resolves to one world-space
-   `TyPoseF64`, a position and a unit quaternion. Object placements keep the
-   `TyTransformF64` their nodes carry, because voxels scale and cameras do
-   not. A view reads both parts of its pose. A directional light reads the
-   rotation and a point light reads the position. The configured form is
-   three shapes, named by what they carry. An entity is never handed a part
-   it has no use for. Each shape is a tagged union over the frame its values
-   are read in:
-   1. `world` is the document's frame
-   2. `subject` has world axes centered on the subject's bounds
-   3. `camera` is the view being rendered, so a light in it follows every
-      view
-   4. `orbit` is a position on a sphere about the subject's center, facing it
-
-   A rotation is one of four forms, shared by every shape:
-   1. `quaternion`, as a node stores it
-   2. `euler`, angles about the fixed x, y, then z axes, as
-      `node set rotation` takes them
-   3. `look-at`, toward a point in the frame
-   4. `angles`, the rotation of something at that spherical direction about
-      the frame's origin, facing the origin. For a light this is where it
-      comes from
-
-   `look-at` and `angles` take the frame's +Y as up. A direction along +Y or
-   -Y takes -Z as up instead. A `top` view then shows the front at the bottom
-   of the image. voxsmith resolves transforms in the order subject bounds,
-   then views, then lights. Floats narrow to `f32` at the same upload
-   boundary where ids pack.
-7. **Views.** A view is a named camera: a pose transform, a projection, and a
-   field of view or an orthographic scale. Projection is perspective unless
-   the view says otherwise. The subject defaults to the rendered objects.
-   `select` narrows it with hierarchy-path globs. An orbit's distance
-   defaults to `fit`, the rule `tyt fbx render` uses. The subject's
-   world-space bounds give a center and a diagonal. The camera sits on its
-   orbit at the distance, or orthographic scale, that fits the bounding
-   sphere of that diagonal into the shorter image axis with a small margin.
-   A sphere fits regardless of orientation, so every fitted view of one
-   subject sits at one distance. The views show inline in the terminal one
-   below another, or under `--to png` each writes one PNG beside the input,
-   named by the input's stem or `--file-stem`. With several views, the
-   view name joins the stem with a hyphen, as `object mesh` joins object
-   names.
-   `--print-camera` prints a view's resolved pose as a `world` transform
-   with a `quaternion` rotation. The output pastes back as a flag or a
-   profile entry.
-8. **Output.** Linear light, the Khronos PBR Neutral tonemap, sRGB transfer,
-   8-bit RGBA. The background is transparent by default. PBR Neutral keeps
-   base colors true until highlights compress. A voxel palette is what a
-   reviewer most needs to see unchanged.
-9. **Determinism.** No randomness anywhere in the first cut. Tests compare
-   images with a small per-channel tolerance, not byte equality, because
-   float math differs across platforms and GPUs.
+[The contract](../../../ref/render/contract.md) says what the image of a
+scene is: the frame, the surface, the materials, the shading, the lights with
+their shadows and occlusion, the transforms, the views, the output encoding,
+and the determinism the tests rely on. It moved out of this plan when phase 1
+landed, so the reference page owns the wording every renderer follows.
 
 ## Profiles
 
 Views and lights are configured the way `object mesh` configures materials
-and primitives:
-
-1. A profile lives under `.vxlconfig`'s `object.render.profiles` key
-2. Built-ins are embedded in the binary
-3. `--profile` applies one profile whole and stacks on repeat
-4. Each profile element has a mirroring flag
-5. `vxl profile object render list` prints the merged namespace
-
-The rules of the [mesh profile language](../../../ref/mesh/profile-language.md)
-carry over:
-
-1. A config profile sharing a built-in's name replaces it wholesale
-2. An explicit flag replaces the element it collides with
-3. Two stack members setting one element error
-
-```ts
-/** A profile; each element mirrors a `vxl object render` flag. */
-interface Profile {
-  /** One line the profile listings print beside the name. */
-  description?: string;
-
-  /** Mirrors `--width`. */
-  width?: number;
-
-  /** Mirrors `--height`. */
-  height?: number;
-
-  /** Mirrors `--background`; omitted, transparent. */
-  background?: "transparent" | string;
-
-  /** Mirrors `--occlusion`; omitted, `corner`. */
-  occlusion?: "none" | "corner";
-
-  /** Mirrors `--voxel-size`, meters per voxel; omitted, `1`. */
-  voxelSize?: number;
-
-  /** Mirrors `--views-from` per entry; only the views travel. */
-  viewsFrom?: string[];
-
-  /** Mirrors the `--view-*` flags, keyed by the name that suffixes the file. */
-  views?: Record<string, ViewEntry>;
-
-  /** Mirrors `--lights-from` per entry; only the rig travels. */
-  lightsFrom?: string[];
-
-  /** Mirrors the `--light-*` flags, its list position the `<light-index>`. */
-  lights?: LightEntry[];
-}
-
-type Vec3 = [number, number, number];
-type Quat = [number, number, number, number];
-
-/** A view. */
-interface ViewEntry {
-  /** Mirrors `--view-frame`, `--view-position`, and a rotation flag, or
-   *  `--view-orbit` for the whole element. */
-  transform: PoseTransform;
-
-  /** Mirrors `--view-projection`; omitted, `perspective`. */
-  projection?: "perspective" | "orthographic";
-
-  /** Mirrors `--view-fov`, the vertical field of view; omitted, `35`.
-   *  Errors under `orthographic`. */
-  fov?: number;
-
-  /** Mirrors `--view-scale`, the world units across the shorter image axis
-   *  under `orthographic`; omitted, `fit`. Errors under `perspective`. */
-  scale?: number;
-
-  /** Mirrors `--view-select`, hierarchy-path globs; omitted, the rendered
-   *  objects. The subject that `subject` and `orbit` are about. */
-  select?: string[];
-}
-
-/** A light. Mirrors `--light <light-index> <kind>`. */
-type LightEntry =
-  | {
-      kind: "directional";
-      /** Mirrors `--light-frame` and a rotation flag. */
-      transform: RotationTransform;
-      /** Mirrors `--light-shadow`; omitted, `per-corner`. */
-      shadow?: "none" | "per-pixel" | "per-face" | "per-corner";
-      /** Mirrors `--light-color`. */
-      color?: string;
-      /** Mirrors `--light-strength`. */
-      strength?: number;
-    }
-  | {
-      kind: "point";
-      /** Mirrors `--light-frame` and `--light-position`, or
-       *  `--light-orbit` for the whole element. */
-      transform: PositionTransform;
-      shadow?: "none" | "per-pixel" | "per-face" | "per-corner";
-      color?: string;
-      strength?: number;
-      /** Mirrors `--light-range`, meters; omitted, no cutoff. */
-      range?: number;
-    }
-  | {
-      kind: "hemisphere";
-      /** Mirrors `--light-sky` and `--light-ground`. */
-      sky?: string;
-      ground?: string;
-      strength?: number;
-    };
-
-/** A position and a rotation. Views, and spot lights later. */
-type PoseTransform =
-  | { kind: "world"; position: Vec3; rotation: Rotation }
-  | { kind: "subject"; position: Vec3; rotation: Rotation }
-  /** Degrees. `distance` omitted, `fit`. */
-  | { kind: "orbit"; azimuth: number; elevation: number;
-      distance?: number | "fit" };
-
-/** A rotation only. A directional light sits at its frame's origin. */
-type RotationTransform =
-  | { kind: "world"; rotation: Rotation }
-  | { kind: "camera"; rotation: Rotation };
-
-/** A position only. Point lights. */
-type PositionTransform =
-  | { kind: "world"; position: Vec3 }
-  | { kind: "subject"; position: Vec3 }
-  | { kind: "camera"; position: Vec3 }
-  /** Degrees. `distance` is required. */
-  | { kind: "orbit"; azimuth: number; elevation: number; distance: number };
-
-/** Shared by every shape. Each form mirrors the `--view-*` and `--light-*`
- *  flag of its name. */
-type Rotation =
-  /** The form a node stores. */
-  | { kind: "quaternion"; value: Quat }
-  /** Fixed x, y, then z; `unit` omitted, `deg`. */
-  | { kind: "euler"; value: Vec3; unit?: "deg" | "rad" }
-  /** Aims -Z at a point in the frame; omitted, the frame's origin. */
-  | { kind: "look-at"; target?: Vec3 }
-  /** Azimuth from +Z toward +X, elevation toward +Y, facing the origin. */
-  | { kind: "angles"; azimuth: number; elevation: number };
-```
-
-Views and lights are independent halves. A profile may set either. A stack
-that sets no view renders the built-in `hero` view. A stack that sets no
-light uses the built-in `studio` rig, the way `object mesh` falls back to its
-implicit primitive. `--profile turnaround --profile dusk` composes a view set
-with a light rig.
-
-A profile can import one half of another profile, the way a mesh profile's
-`valuesFrom` imports values. `viewsFrom` imports views and `lightsFrom`
-imports a rig:
-
-1. Imports land depth-first in list order, ahead of the profile's own views
-   or rig
-2. Only the imported half travels. The image elements and the other half
-   stay behind
-3. A profile's views and its rig each land once, however many imports and
-   `--profile` flags bring them
-4. Imports resolve after the cascade merges, so a config that overrides
-   `hero` changes `turnaround`
-5. An imported element collides like a stack member's. A rig is one
-   element, so a profile's rig comes from its `lights` or from one import
-6. An import cycle errors
-
-The built-ins:
-
-1. `hero`: one perspective view on an orbit at 45 degrees of azimuth and 30
-   of elevation, the front-right-top.
-2. `front`, `back`, `left`, `right`, `top`, `bottom`: one view each on an
-   orbit along an axis.
-3. `turnaround`: imports the views of `hero`, `front`, `right`, `back`, and
-   `left` for one run.
-4. `studio`: one directional light in the `camera` frame at `angles` of -30
-   and 30, above and to the left of whoever is looking, over a hemisphere
-   light. The offset gives a box three distinct shades. The three-shadow
-   renders in the checklist set its shadow granularity.
-5. `flat`: one directional light in the `camera` frame at `angles` of zero
-   and zero, a headlight with no shadow, for judging color alone.
+and primitives: profiles under `.vxlconfig`'s `object.render.profiles` key,
+built-ins embedded in the binary, `--profile` applying one whole and stacking
+on repeat, a mirroring flag per element, and `vxl profile object render list`
+printing the merged namespace. The
+[profile language](../../../ref/render/profile-language.md) holds the schema,
+the loading, the built-ins, and the stacking, and the
+[command reference](../../../ref/render/render.md) holds the flags.
 
 ## Realtime tiers
 
@@ -500,11 +244,8 @@ grid cap of `2^27` cells bounds an object, never a scene.
 3. Spot and area lights. A spot light takes the pose shape a view takes.
 4. The `node` frame: a transform read in a hierarchy node's world transform,
    so a camera can ride a player.
-5. Showing the image inline in the terminal when no output is given, as
-   `tyt fbx render` does over Kitty, iTerm2, and Sixel. vxl would carry its
-   own small implementation because it does not depend on `tyt-injection`.
-6. Tiling several views into one sheet.
-7. The desktop tier and `voxrender-wgpu`, each its own plan.
+5. Tiling several views into one sheet.
+6. The desktop tier and `voxrender-wgpu`, each its own plan.
 
 `tyt fbx render`'s remaining surface does not carry over: its render engine
 and sample count belong to Blender, its near and far planes to a depth

@@ -28,6 +28,14 @@ scaling `origin` and `bounds` with it, so `node set scale` keeps the object's
 size in the scene. `mesh` writes the selected objects as a glTF mesh. The
 [mesh reference](../../../doc/ref/mesh/mesh.md) covers its flags.
 
+`render` draws the selected objects into one image per view, placed as `mesh`
+places them. The views and lights come from profiles in `.vxlconfig` and the
+flags that mirror them. With neither, the `hero` view renders under the
+`studio` lights. The image shows inline in the terminal, or `--to png` writes
+one PNG per view beside the input. The
+[render reference](../../../doc/ref/render/render.md) covers the flags and the
+profiles.
+
 ```sh
 # Copies the first three props under the one node matching house.
 vxl object add scene.voxj --source props.voxj --select-index 0-2 --select-parent house
@@ -40,6 +48,12 @@ vxl object downsample scene.voxj --select crate --factor 2
 
 # Splits each of the crate's voxels into ten per axis.
 vxl object upsample scene.voxj --select crate --factor 10
+
+# Shows the crate from the front-right-top under the studio lights.
+vxl object render scene.voxj --select crate
+
+# Writes scene-front.png and scene-top.png beside the input.
+vxl object render scene.voxj --profile front --profile top --to png
 ```
 
 ## Object Voxels

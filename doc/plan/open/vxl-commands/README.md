@@ -1,8 +1,9 @@
 # Vxl Command-Line Reference
 
 `vxl` is a command-line tool for working with voxel data. It converts between
-voxel formats, meshes voxels into editable geometry, voxelizes meshes, bakes
-material textures, and inspects and validates voxel-json documents.
+voxel formats, meshes voxels into editable geometry, renders voxels into
+images, voxelizes meshes, bakes material textures, and inspects and validates
+voxel-json documents.
 
 This reference targets the voxel-json format. Its on-disk shape, encodings,
 palette model, hierarchy, and validation rules are defined in the
@@ -48,6 +49,8 @@ Every command sits under the noun it addresses, then its verb.
 - [`vxl mesh-doc voxelize`](reference/mesh-doc/voxelize.md): mesh to voxel grid.
 - [`vxl object mesh`](../../../ref/mesh/mesh.md): voxel to editable mesh, with
   material maps as textures or per-vertex attributes.
+- [`vxl object render`](../../../ref/render/render.md): voxel to image, one
+  per view, inline in the terminal or as PNGs.
 - [`vxl object material`](reference/object/material.md): bake material maps
   only.
 - [`vxl object`](../../closed/vxl-object-commands/README.md#vxl-object): edit
@@ -65,6 +68,8 @@ Every command sits under the noun it addresses, then its verb.
   palettes.
 - [`vxl profile object mesh list`](../../../ref/mesh/profile-language.md#loading):
   list the profiles `object mesh --profile` can apply.
+- [`vxl profile object render list`](../../../ref/render/profile-language.md#loading):
+  list the profiles `object render --profile` can apply.
 - [`vxl profile object voxels quantize list`](reference/object/voxels/quantize.md#profiles):
   list the profiles `object voxels quantize --profile` can apply.
 - [`vxl profile palette quantize list`](reference/palette/quantize.md#profiles):

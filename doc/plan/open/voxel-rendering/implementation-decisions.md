@@ -325,3 +325,23 @@ they land.
   with and without occlusion show the creases of the reactor's base plate
   darkening under `corner` and flat under `none`. The checklist's look at
   the mesh in a viewer beside the render is still open.
+
+## S13. Docs
+
+- The contract got its own page, `contract.md`, beside the command page,
+  because every renderer implements it and the realtime tiers will read it
+  without the vxl flags. `render.md` holds the command, its options, and the
+  file naming, and `profile-language.md` the schema, the loading, the
+  built-ins, and the stacking.
+- The reference index links back to the open plan instead of carrying the
+  plan the way `doc/ref/mesh` does, because the plan stays open through
+  phase 2. The plan's contract and profile sections shrank to pointers under
+  their old headings, so the links into them hold.
+- The schema marks a view's and a light's `transform` optional because the
+  flags can supply it, and the record errors when nothing does. The plan's
+  block had it required.
+- `voxrender` and `voxsurface` had READMEs from S1 and S2, so the step added
+  none. voxsmith's README now says the render shares the mesh bake's PNG
+  encoder.
+- The vxl-commands README's intro gained rendering, and `vxl object render`
+  and `vxl profile object render list` joined its command list.

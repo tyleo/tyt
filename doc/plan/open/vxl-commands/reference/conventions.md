@@ -71,14 +71,16 @@ set, matched by the `pathspec` engine:
 
 [`object mesh`](../../../../ref/mesh/mesh.md) and
 [`object material`](object/material.md) choose which objects to output,
+[`object render`](../../../../ref/render/render.md) which objects to draw,
 [`vox-doc to`](vox-doc/to/README.md) which objects to write,
 [`vox-doc show`](vox-doc/show.md) which objects to report,
 [`object voxels quantize`](object/voxels/quantize.md) which objects to
 quantize, and [`palette remap`](palette/remap.md) which objects to dither, with
 two repeatable options, one per addressing mode, so a value is never parsed as
-either an index or a glob. Selection targets objects; under `object mesh` each
-matched object becomes one mesh object placed by the hierarchy nodes reaching
-it, so a path is the selection key and the placement follows from the document.
+either an index or a glob. Selection targets objects; under `object mesh` and
+`object render` each matched object lands placed by the hierarchy nodes
+reaching it, so a path is the selection key and the placement follows from the
+document.
 
 1. `--select-index <index>`: an object index into the document's `objects`,
    a plain integer such as `0` or a range `a-b` such as `2-5`. Repeat the flag
@@ -101,9 +103,11 @@ Both options repeat, and every `--select-index` and `--select` value unions its
 matches. Given neither, every object is selected; given one that matches
 nothing, the command errors rather than quietly selecting nothing.
 `object material` outputs the selection, `vox-doc to` writes it, `vox-doc show`
-reports it, `object voxels quantize` quantizes it, `remap` dithers it, and
-`object mesh` outputs it into one mesh, or one per object under `--split-files`
-(see [mesh](../../../../ref/mesh/mesh.md)).
+reports it, `object voxels quantize` quantizes it, `remap` dithers it,
+`object render` draws it in every view (see
+[render](../../../../ref/render/render.md)), and `object mesh` outputs it into
+one mesh, or one per object under `--split-files` (see
+[mesh](../../../../ref/mesh/mesh.md)).
 
 Baking a matched node's subtree and transforms into one flattened mesh, rather
 than carrying the nodes over, is a separate mode left for a later pass.

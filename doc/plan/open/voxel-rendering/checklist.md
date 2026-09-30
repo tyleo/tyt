@@ -159,7 +159,7 @@ resample plan has one.
       render and check the occlusion agrees. Pick a granularity, write it
       into `studio`, and record it in README decision 6. The renders stay out
       of the repository.
-- [ ] **S13. Docs.** Move the contract and the profile schema to
+- [x] **S13. Docs.** Move the contract and the profile schema to
       `doc/ref/render`, shaped like `doc/ref/mesh`. Link the README's
       contract section to it. Add a rendering paragraph to the vxl README's
       Objects section. Add `object render` to the vxl-commands README command
