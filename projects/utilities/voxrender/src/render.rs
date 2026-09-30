@@ -370,6 +370,9 @@ mod tests {
             bilinear, direct_radiance, hemisphere_radiance, point_attenuation, shade_hit,
             shadow_factor,
         },
+        test_utilities::{
+            check_goldens, cube_scene, l_shape_scene, room_scene, two_placements_scene,
+        },
     };
     use branded_id::U32Id;
     use ty_math::{
@@ -778,5 +781,61 @@ mod tests {
         let back = SurfaceSpan { sign: -1, ..face };
         assert_eq!(bilinear(&back, values, [1.0, 0.0]), 4.0);
         assert_eq!(bilinear(&back, values, [0.0, 1.0]), 2.0);
+    }
+
+    #[test]
+    fn the_cube_matches_its_goldens() {
+        check_goldens(
+            "cube",
+            cube_scene,
+            [
+                include_bytes!("goldens/cube-per-pixel.png"),
+                include_bytes!("goldens/cube-per-face.png"),
+                include_bytes!("goldens/cube-per-corner.png"),
+                include_bytes!("goldens/cube-unoccluded.png"),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_l_shape_matches_its_goldens() {
+        check_goldens(
+            "l-shape",
+            l_shape_scene,
+            [
+                include_bytes!("goldens/l-shape-per-pixel.png"),
+                include_bytes!("goldens/l-shape-per-face.png"),
+                include_bytes!("goldens/l-shape-per-corner.png"),
+                include_bytes!("goldens/l-shape-unoccluded.png"),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_two_placements_match_their_goldens() {
+        check_goldens(
+            "two-placements",
+            two_placements_scene,
+            [
+                include_bytes!("goldens/two-placements-per-pixel.png"),
+                include_bytes!("goldens/two-placements-per-face.png"),
+                include_bytes!("goldens/two-placements-per-corner.png"),
+                include_bytes!("goldens/two-placements-unoccluded.png"),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_room_matches_its_goldens() {
+        check_goldens(
+            "room",
+            room_scene,
+            [
+                include_bytes!("goldens/room-per-pixel.png"),
+                include_bytes!("goldens/room-per-face.png"),
+                include_bytes!("goldens/room-per-corner.png"),
+                include_bytes!("goldens/room-unoccluded.png"),
+            ],
+        );
     }
 }

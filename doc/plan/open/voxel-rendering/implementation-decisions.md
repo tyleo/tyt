@@ -279,3 +279,24 @@ they land.
   composite grid in the style of tyt's `display_images_in_grid` was tried
   and dropped: the user's terminal placed the larger image and drew
   nothing, and the user preferred a vertical strip.
+
+## S11. Golden images
+
+- The fixtures are `test_utilities` functions taking the shadow
+  granularity, each retaining its view and lights, so a golden pins
+  the scene API end to end. `check_goldens` renders the four variants of
+  a fixture and compares each against its PNG, or rewrites the PNGs under
+  `VOXRENDER_UPDATE_GOLDENS`.
+- The goldens are 64 by 64 and sit in `src/goldens`, beside the tests in
+  `render.rs` that embed them. The size keeps the sixteen files under 30
+  kilobytes together while a shadow edge still spans several pixels.
+- The cube and the slab pair render the same under every variant, because
+  neither has a crease and the cube has nothing to shadow. Their goldens
+  pin the shading and the placement math. The L-shape and the room carry
+  the shadow and occlusion differences.
+- voxrender's goldens are plain RGBA PNGs from the `png` dev-dependency.
+  The sRGB chunks are voxsmith's encoder's to write, and voxsmith's golden
+  goes through `encode_render_png` in that file's tests, so it checks the
+  chunk beside the pixels.
+- `test_utilities` is gated on `cpu` beside `test`, because the checker
+  calls `render` and the fixtures have no other caller.

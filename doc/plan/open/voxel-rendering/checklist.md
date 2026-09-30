@@ -144,7 +144,7 @@ resample plan has one.
       view's resolved pose as its `--view-frame <name> world`,
       `--view-position`, and `--view-quaternion` flags on one line. Parse
       tests per flag family.
-- [ ] **S11. Golden images.** Build fixture scenes in `voxrender` through the
+- [x] **S11. Golden images.** Build fixture scenes in `voxrender` through the
       scene API: one cube, an L-shape that shadows itself, two placements of
       one object, and a point-lit room. Each fixture gets one PNG per shadow
       granularity plus one with `occlusion` off. The PNGs embed beside the

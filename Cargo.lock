@@ -2246,6 +2246,7 @@ name = "voxrender"
 version = "0.1.0"
 dependencies = [
  "branded-id",
+ "png",
  "ty-math",
  "voxcore",
  "voxsurface",

@@ -98,3 +98,8 @@ mod shadow_target;
 
 #[cfg(feature = "cpu")]
 pub(crate) use shadow_target::*;
+
+// Test support
+
+#[cfg(all(test, feature = "cpu"))]
+mod test_utilities;

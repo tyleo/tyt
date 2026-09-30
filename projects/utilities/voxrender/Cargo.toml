@@ -21,3 +21,6 @@ voxsurface = "0.1.0"
 [features]
 default = ["cpu"]
 cpu = []
+
+[dev-dependencies]
+png = "0.18"
