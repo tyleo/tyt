@@ -152,7 +152,7 @@ resample plan has one.
       within a tolerance of two. An environment variable rewrites them.
       voxsmith gets one end-to-end golden over `two_material_scene` under
       `hero` and `studio` to pin the PNG encoding.
-- [ ] **S12. Three-shadow renders.** Render `energy-reactor`,
+- [x] **S12. Three-shadow renders.** Render `energy-reactor`,
       `mixed-shapes-with-material`, `emissive`, and `pivots` from
       `submodules/tyt-assets/src/vmax` under `turnaround` and `studio` at
       each granularity. Open each object's `object mesh` output beside its

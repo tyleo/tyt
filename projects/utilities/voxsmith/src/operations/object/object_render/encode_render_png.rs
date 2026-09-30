@@ -102,7 +102,7 @@ mod tests {
                         elevation: 30.0,
                     },
                 },
-                shadow: RenderShadow::PerPixel,
+                shadow: RenderShadow::PerCorner,
                 color: TyLinSrgbF64::new(1.0, 1.0, 1.0),
                 strength: 2.5,
             },

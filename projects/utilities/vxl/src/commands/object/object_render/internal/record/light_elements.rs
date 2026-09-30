@@ -7,8 +7,10 @@ use voxsmith::operations::object::{
     LightRecord, PositionTransform, RenderShadow, Rotation, RotationTransform,
 };
 
-/// The shadow granularity of a light that sets none.
-const DEFAULT_SHADOW: RenderShadow = RenderShadow::PerPixel;
+/// The shadow granularity of a light that sets none. The three-shadow
+/// renders picked it because it reads as one look with the corner
+/// occlusion and the standalone tier computes it exactly.
+const DEFAULT_SHADOW: RenderShadow = RenderShadow::PerCorner;
 
 /// A light's elements as the flags set them, over the profile rig's entry
 /// where the rig supplies one. A flag setting an element twice errors, as

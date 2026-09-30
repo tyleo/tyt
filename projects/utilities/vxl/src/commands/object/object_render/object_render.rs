@@ -303,7 +303,7 @@ pub struct ObjectRender {
     light_orbit: Vec<String>,
 
     /// The indexed light's shadow granularity, `none`, `per-pixel`,
-    /// `per-face`, or `per-corner`. Repeatable.
+    /// `per-face`, or `per-corner`, defaulting to `per-corner`. Repeatable.
     #[arg(
         value_names = ["light-index", "shadow"],
         long,
@@ -979,7 +979,7 @@ mod tests {
                         elevation: 30.0
                     }
                 },
-                shadow: RenderShadow::PerPixel,
+                shadow: RenderShadow::PerCorner,
                 ..
             }
         ));
@@ -1382,7 +1382,7 @@ mod tests {
                 distance: 4.0,
             }
         );
-        assert_eq!(*shadow, RenderShadow::PerPixel);
+        assert_eq!(*shadow, RenderShadow::PerCorner);
         assert!(same_color(*color, TyLinSrgbF64::new(1.0, 1.0, 1.0)));
         assert_eq!(*strength, 1.0);
         assert_eq!(*range, Some(10.0));

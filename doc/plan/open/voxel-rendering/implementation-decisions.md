@@ -300,3 +300,28 @@ they land.
   chunk beside the pixels.
 - `test_utilities` is gated on `cpu` beside `test`, because the checker
   calls `render` and the fixtures have no other caller.
+
+## S12. Three-shadow renders
+
+- The four assets rendered under `turnaround` and `studio` at 512 by 512
+  with `--light-shadow 0` at each granularity, plus a 3x close-up of each
+  from the hero orbit, posed in the `subject` frame at a third of the fit
+  distance. The renders stayed in a scratch directory.
+- The close-ups tell the three apart. `per-pixel` draws the tall pivot's
+  shadow across the low one as a crisp diagonal. `per-face` snaps the same
+  edge to the voxel grid as a jagged step. `per-corner` spreads it over one
+  voxel as a gradient, the way the corner occlusion darkens the creases
+  beside it. On the dome of the mixed shapes `per-face` leaves each step's
+  shadow blocky where `per-corner` runs it smoothly down the flank. The
+  emissive row shows no difference because nothing in it casts a shadow.
+- `per-corner` is the pick. It reads as one look with the occlusion. The
+  standalone tier computes it exactly, where `per-pixel` needs a shadow map
+  that drifts from the reference.
+- The pick lives in the record builder's `DEFAULT_SHADOW`, which every
+  light without a granularity reads, so `studio` stays bare and takes it.
+  The README's schema note on an omitted shadow says `per-corner`.
+- The occlusion agrees with `object mesh` by construction. Both call
+  voxsurface's corner rule, and S1's test pins the mesh side. The renders
+  with and without occlusion show the creases of the reactor's base plate
+  darkening under `corner` and flat under `none`. The checklist's look at
+  the mesh in a viewer beside the render is still open.

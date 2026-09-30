@@ -286,7 +286,7 @@ type LightEntry =
       kind: "directional";
       /** Mirrors `--light-frame` and a rotation flag. */
       transform: RotationTransform;
-      /** Mirrors `--light-shadow`; omitted, `studio`'s value. */
+      /** Mirrors `--light-shadow`; omitted, `per-corner`. */
       shadow?: "none" | "per-pixel" | "per-face" | "per-corner";
       /** Mirrors `--light-color`. */
       color?: string;
@@ -441,9 +441,12 @@ grid cap of `2^27` cells bounds an object, never a scene.
 5. Occlusion in the first cut is the neighbor-occupancy rule, so the standalone
    tier can match the reference exactly.
 6. The shadow granularity is a switch, not a decision. The reference renders
-   all three. The review tool's first milestone renders all three over real
-   assets, and those renders pick the `studio` rig's value, which becomes the
-   game's default look.
+   all three. The review tool's first milestone rendered all three over real
+   assets on 2026-09-29 and picked `per-corner` as the default every light
+   without a granularity takes, `studio`'s included, and the game's default
+   look. Its soft staircase reads like the corner occlusion beside it. The
+   standalone tier computes it exactly, where `per-pixel` needs a shadow
+   map.
 7. The standalone tier lights at face granularity from grid rays, the same
    rays the reference casts, so the headset shows the light the PNG shows.
 8. The crate is `voxrender`, free on crates.io as of 2026-09-27. The GPU
