@@ -39,7 +39,7 @@ by the occlusion and `occlusionStrength`.
 ## Lights
 
 A scene lights with a list of lights, each with a color and a strength, plus
-one occlusion switch. There are three kinds:
+one occlusion switch. There are four kinds:
 
 1. A `directional` light is a rotation. It shines down its local -Z, as a
    light under glTF's `KHR_lights_punctual` does. It carries a shadow
@@ -49,7 +49,13 @@ one occlusion switch. There are three kinds:
    carries a shadow granularity too. Falloff runs in meters after the voxel
    size applies, so one rig lights a large voxel size differently from a
    small one
-3. A `hemisphere` light is the ambient term, a sky color above and a ground
+3. A `spot` light is a pose. It sits at a position and shines down its
+   local -Z with a point light's falloff, times glTF's cone falloff: full
+   strength inside an inner cone half-angle, none past an outer one, and a
+   smooth ramp between. The angles are in degrees, `0` and `45` by default.
+   The inner angle stays below the outer, which is at most `90`. It carries
+   a shadow granularity too
+4. A `hemisphere` light is the ambient term, a sky color above and a ground
    color below, about world +Y. It has no transform
 
 The occlusion switch is `none` or `corner`. `corner` is the
@@ -59,8 +65,8 @@ reference shades with it, `object mesh` bakes it, and a standalone tier stores
 it with its faces. Traced occlusion is a later value.
 
 A shadow is one grid ray toward the light. The ray runs to infinity for a
-directional light and ends at a point light. A light samples it at one of
-three granularities:
+directional light and ends at a point or spot light. A light samples it at
+one of three granularities:
 
 1. `per-pixel` casts the ray from the hit: a crisp diagonal edge across faces,
    the MagicaVoxel render and Teardown look
@@ -79,12 +85,13 @@ exactly where `per-pixel` needs a shadow map.
 
 Every view and light resolves to one world-space pose, a position and a unit
 quaternion. Object placements keep the full transform their nodes carry,
-because voxels scale and cameras do not. A view reads both parts of its pose.
-A directional light reads the rotation, and a point light reads the position.
-The configured form is three shapes named by what they carry: a pose for a
-view, a rotation for a directional light, and a position for a point light.
-An entity is never handed a part it has no use for. Each shape is a tagged
-union over the frame its values are read in:
+because voxels scale and cameras do not. A view and a spot light read both
+parts of their poses. A directional light reads the rotation, and a point
+light reads the position. The configured form is four shapes, one per entity,
+named by what it carries: a pose for a view, a rotation for a directional
+light, a position for a point light, and a spot pose, a pose over every frame,
+for a spot light. An entity is never handed a part or a frame it has no use
+for. Each shape is a tagged union over the frame its values are read in:
 
 1. `world` is the document's frame
 2. `subject` has world axes centered on the subject's bounds
@@ -101,7 +108,8 @@ union over the frame its values are read in:
    with the voxel size applied
 
 A view takes `world`, `subject`, `orbit`, or `node`. A directional light
-takes `world`, `camera`, or `node`. A point light takes all five.
+takes `world`, `camera`, or `node`. A point light and a spot light take all
+five.
 
 A rotation is one of four forms, shared by every shape:
 

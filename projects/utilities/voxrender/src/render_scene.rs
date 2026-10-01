@@ -8,7 +8,7 @@ use branded_id::{
 };
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
-    f64::consts::PI,
+    f64::consts::{FRAC_PI_2, PI},
 };
 use ty_math::{
     TyBoundsF64, TyLinSrgbF64, TyQuaternionExt, TyQuaternionF64, TyTransformF64, TyVector3F64,
@@ -638,6 +638,36 @@ fn check_transform(transform: &TyTransformF64) -> Result<()> {
     Ok(())
 }
 
+/// Errors unless a light at `position` with glTF's punctual falloff has
+/// finite values, a non-negative `color` and `strength`, and a positive
+/// `range` where it has one.
+fn check_falloff(
+    position: TyVector3F64,
+    color: TyLinSrgbF64,
+    strength: f64,
+    range: Option<f64>,
+) -> Result<()> {
+    if !position.is_finite()
+        || !is_finite_color(color)
+        || !strength.is_finite()
+        || range.is_some_and(|range| !range.is_finite())
+    {
+        return Err(Error::NonFiniteLight);
+    }
+
+    if !is_non_negative_color(color) || strength < 0.0 {
+        return Err(Error::NegativeLight);
+    }
+
+    if let Some(range) = range
+        && range <= 0.0
+    {
+        return Err(Error::NonPositiveLightRange { range });
+    }
+
+    Ok(())
+}
+
 fn check_light(light: &RenderLight) -> Result<()> {
     match *light {
         RenderLight::Directional {
@@ -665,23 +695,33 @@ fn check_light(light: &RenderLight) -> Result<()> {
             strength,
             range,
             ..
+        } => check_falloff(position, color, strength, range)?,
+
+        RenderLight::Spot {
+            position,
+            rotation,
+            color,
+            strength,
+            range,
+            inner_cone,
+            outer_cone,
+            ..
         } => {
-            if !position.is_finite()
-                || !is_finite_color(color)
-                || !strength.is_finite()
-                || range.is_some_and(|range| !range.is_finite())
-            {
+            if !inner_cone.is_finite() || !outer_cone.is_finite() {
                 return Err(Error::NonFiniteLight);
             }
 
-            if !is_non_negative_color(color) || strength < 0.0 {
-                return Err(Error::NegativeLight);
+            check_falloff(position, color, strength, range)?;
+
+            if !is_unit_rotation(rotation) {
+                return Err(Error::NonUnitLightRotation);
             }
 
-            if let Some(range) = range
-                && range <= 0.0
-            {
-                return Err(Error::NonPositiveLightRange { range });
+            if !(0.0 <= inner_cone && inner_cone < outer_cone && outer_cone <= FRAC_PI_2) {
+                return Err(Error::SpotCone {
+                    inner_cone,
+                    outer_cone,
+                });
             }
         }
 
@@ -893,7 +933,7 @@ mod tests {
         RenderProjection, RenderScene, RenderShadow, RenderView,
     };
     use branded_id::U32Id;
-    use std::f64::consts::PI;
+    use std::f64::consts::{FRAC_PI_2, PI};
     use ty_math::{
         TyLinSrgbF64, TyPoseF64, TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32,
         TyVector3U32,
@@ -1096,6 +1136,43 @@ mod tests {
             }),
             Err(Error::NonPositiveLightRange { range: 0.0 })
         );
+        let spot = |inner_cone: f64, outer_cone: f64| RenderLight::Spot {
+            position: TyVector3F64::ZERO,
+            rotation: TyQuaternionF64::IDENTITY,
+            color: white(),
+            strength: 1.0,
+            range: None,
+            inner_cone,
+            outer_cone,
+            shadow: RenderShadow::None,
+        };
+        assert_eq!(
+            scene.retain_light(spot(0.5, 0.5)),
+            Err(Error::SpotCone {
+                inner_cone: 0.5,
+                outer_cone: 0.5
+            })
+        );
+        assert_eq!(
+            scene.retain_light(spot(-0.1, 0.5)),
+            Err(Error::SpotCone {
+                inner_cone: -0.1,
+                outer_cone: 0.5
+            })
+        );
+        assert_eq!(
+            scene.retain_light(spot(0.5, 2.0)),
+            Err(Error::SpotCone {
+                inner_cone: 0.5,
+                outer_cone: 2.0
+            })
+        );
+        assert_eq!(
+            scene.retain_light(spot(f64::NAN, 0.5)),
+            Err(Error::NonFiniteLight)
+        );
+        let spot_id = scene.retain_light(spot(0.0, FRAC_PI_2)).unwrap();
+        scene.release_light(spot_id).unwrap();
         assert_eq!(
             scene.retain_light(RenderLight::Hemisphere {
                 sky: white(),

@@ -188,7 +188,7 @@ resample plan has one.
          two flags, and the profile language's schema gains the kind
       5. Tests: a view riding a translated, rotated, and scaled node, a glob
          matching two paths, and each flag error
-- [ ] **S15. Spot lights.** A fourth light kind. A `spot` light is a pose:
+- [x] **S15. Spot lights.** A fourth light kind. A `spot` light is a pose:
       it sits at a position and shines down its rotation's -Z. It falls off
       as a point light does, times glTF's cone falloff between an inner and
       an outer cone angle in degrees, `0` and `45` by default. The inner

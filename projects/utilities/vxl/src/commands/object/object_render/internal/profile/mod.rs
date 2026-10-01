@@ -11,6 +11,7 @@ mod render_profile;
 mod render_profile_stack;
 mod rotation_entry;
 mod rotation_transform_entry;
+mod spot_transform_entry;
 mod view_entry;
 
 pub(crate) use built_in_render_profiles::*;
@@ -24,4 +25,5 @@ pub(crate) use render_profile::*;
 pub(crate) use render_profile_stack::*;
 pub(crate) use rotation_entry::*;
 pub(crate) use rotation_transform_entry::*;
+pub(crate) use spot_transform_entry::*;
 pub(crate) use view_entry::*;

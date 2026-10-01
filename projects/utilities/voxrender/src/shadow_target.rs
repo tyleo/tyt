@@ -6,6 +6,6 @@ pub enum ShadowTarget {
     /// Toward a directional light, along a unit direction, without end.
     Direction(TyVector3F64),
 
-    /// Toward a point light at a position, ending there.
+    /// Toward a point or spot light at a position, ending there.
     Position(TyVector3F64),
 }

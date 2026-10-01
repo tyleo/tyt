@@ -345,3 +345,38 @@ they land.
   encoder.
 - The vxl-commands README's intro gained rendering, and `vxl object render`
   and `vxl profile object render list` joined its command list.
+
+## S15. Spot lights
+
+- `RenderLight::Spot` carries a position and a rotation beside the point
+  light's falloff values and the two cone half-angles in radians. The scene
+  checks the cones as glTF does: the inner angle is zero or more and below
+  the outer, which is at most a quarter turn. The cone falloff is glTF's
+  smooth ramp over the cosines, with glTF's floor of `0.001` under the gap
+  between them, which keeps a hard edge finite when two angles sit a
+  rounding apart.
+- The shader skips the shadow ray of a hit the cone leaves dark, because a
+  spot leaves most of a scene dark.
+- The spot's shape is a fourth voxsmith enum, `SpotTransform`, over all five
+  frames with a numeric orbit distance. Sharing `PoseTransform` with views
+  would hand a view the `camera` frame it never reads and a spot the `fit`
+  distance it cannot resolve, the silent no-op README decision 18 rules
+  out. `pose_in_frame` resolves the posed frames of both shapes through one
+  `TyTransformF64`: the identity for `world`, a translation for `subject`,
+  the view's pose for `camera`, and the node's world transform for `node`.
+- The cone angles are degrees in `LightRecord::Spot` and the profile, and
+  turn to radians where the record lowers into the scene, as the field of
+  view does.
+- `--light-cone` is one element holding both angles. A flag replaces a
+  profile's pair whole, where a profile's `innerCone` and `outerCone` fill
+  in one at a time. The record builder checks the pair after the defaults
+  fill, which makes a profile setting `innerCone` alone at `45` or more an
+  error.
+- `--light-orbit` on a spot sets the whole pose and clashes with a rotation
+  flag as it does with `--light-frame` and `--light-position`. The orbit
+  slot holds its three numbers until the kind picks the shape.
+- The room fixture's build moved into `lit_room`, which takes the key light,
+  so `room_scene` and `spot_room_scene` share the walls, the pillar, the
+  fill light, and the view. The spot golden aims the light at the pillar
+  from the point light's position at three times its strength, because the
+  cone lights the far floor alone and the walls beside the light go dark.

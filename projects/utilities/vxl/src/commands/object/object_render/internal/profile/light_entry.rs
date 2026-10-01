@@ -1,7 +1,8 @@
 use crate::{
     NamedCliValue, PositiveF64,
     commands::{
-        LightKind, NonNegativeF64, PositionTransformEntry, RotationTransformEntry, SrgbColor,
+        LightKind, NonNegativeF64, PositionTransformEntry, RotationTransformEntry,
+        SpotTransformEntry, SrgbColor,
     },
 };
 use serde::Deserialize;
@@ -43,6 +44,31 @@ pub enum LightEntry {
         range: Option<PositiveF64>,
     },
 
+    #[serde(rename_all = "camelCase")]
+    Spot {
+        /// Mirrors `--light-frame`, `--light-position`, and a rotation flag,
+        /// or `--light-orbit` for the whole element.
+        transform: Option<SpotTransformEntry>,
+
+        /// Mirrors `--light-shadow`.
+        shadow: Option<NamedCliValue<RenderShadow>>,
+
+        /// Mirrors `--light-color`.
+        color: Option<SrgbColor>,
+
+        /// Mirrors `--light-strength`.
+        strength: Option<NonNegativeF64>,
+
+        /// Mirrors `--light-range`, in meters. Without it, the light has no cutoff.
+        range: Option<PositiveF64>,
+
+        /// Mirrors `--light-cone`'s inner angle, in degrees. Without it, `0`.
+        inner_cone: Option<NonNegativeF64>,
+
+        /// Mirrors `--light-cone`'s outer angle, in degrees. Without it, `45`.
+        outer_cone: Option<NonNegativeF64>,
+    },
+
     Hemisphere {
         /// Mirrors `--light-sky`.
         sky: Option<SrgbColor>,
@@ -61,6 +87,7 @@ impl LightEntry {
         match self {
             LightEntry::Directional { .. } => LightKind::Directional,
             LightEntry::Point { .. } => LightKind::Point,
+            LightEntry::Spot { .. } => LightKind::Spot,
             LightEntry::Hemisphere { .. } => LightKind::Hemisphere,
         }
     }

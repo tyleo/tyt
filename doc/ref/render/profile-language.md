@@ -115,6 +115,21 @@ type LightEntry =
       range?: number;
     }
   | {
+      kind: "spot";
+      /** Mirrors `--light-frame`, `--light-position`, and a rotation flag,
+       *  or `--light-orbit` for the whole element. Omitted, the flags set
+       *  it. */
+      transform?: SpotTransform;
+      shadow?: "none" | "per-pixel" | "per-face" | "per-corner";
+      color?: string;
+      strength?: number;
+      range?: number;
+      /** Mirrors `--light-cone`'s inner angle, degrees; omitted, `0`. */
+      innerCone?: number;
+      /** Mirrors `--light-cone`'s outer angle, degrees; omitted, `45`. */
+      outerCone?: number;
+    }
+  | {
       kind: "hemisphere";
       /** Mirrors `--light-sky` and `--light-ground`; omitted, `#FFFFFF`. */
       sky?: string;
@@ -122,7 +137,7 @@ type LightEntry =
       strength?: number;
     };
 
-/** A position and a rotation. Views, and spot lights later. */
+/** A position and a rotation. Views. */
 type PoseTransform =
   | { kind: "world"; position: Vec3; rotation: Rotation }
   | { kind: "subject"; position: Vec3; rotation: Rotation }
@@ -148,6 +163,16 @@ type PositionTransform =
   | { kind: "orbit"; azimuth: number; elevation: number; distance: number }
   /** `path` mirrors `--light-node`. */
   | { kind: "node"; path: string; position: Vec3 };
+
+/** A position and a rotation in any frame. Spot lights. */
+type SpotTransform =
+  | { kind: "world"; position: Vec3; rotation: Rotation }
+  | { kind: "subject"; position: Vec3; rotation: Rotation }
+  | { kind: "camera"; position: Vec3; rotation: Rotation }
+  /** Degrees. `distance` is required. An orbit faces the center. */
+  | { kind: "orbit"; azimuth: number; elevation: number; distance: number }
+  /** `path` mirrors `--light-node`. */
+  | { kind: "node"; path: string; position: Vec3; rotation: Rotation };
 
 /** Shared by every shape. Each form mirrors the `--view-*` and `--light-*`
  *  flag of its name. */
@@ -240,6 +265,18 @@ a profile writes its names and values.
               "range": 12,
             },
             {
+              "kind": "spot",
+              // `node` adds "path": "<glob>".
+              "transform": {
+                "kind": "<world | subject | camera | node>",
+                "position": [0, 0, 0],
+                "rotation": { "kind": "angles", "azimuth": 0, "elevation": 0 },
+              },
+              "innerCone": 20,
+              "outerCone": 40,
+              "range": 12,
+            },
+            {
               "kind": "hemisphere",
               "sky": "#9FB4CC",
               "ground": "#4A3E33",
@@ -303,8 +340,8 @@ The checks split by when they run:
    1. each `.vxlconfig` parsing
    2. the schema's shape, an unknown key erroring rather than skipping
    3. each value's range: a positive `width`, `height`, `voxelSize`, `fov`,
-      `scale`, `range`, and orbit distance, a `strength` of zero or more,
-      and a `#RRGGBB` color
+      `scale`, `range`, and orbit distance, a `strength` and a cone angle of
+      zero or more, and a `#RRGGBB` color
 2. the profile stack applied whole
    1. every `--profile`, `--views-from`, and `--lights-from` name resolving,
       listed once per flag
@@ -312,13 +349,15 @@ The checks split by when they run:
    3. the stack merging, an element two members set erroring
 3. the record
    1. every view holding a transform, from the stack or the flags, and every
-      directional or point light likewise
+      directional, point, or spot light likewise
    2. each view's name non-empty and free of path separators
    3. a view's frame `world`, `subject`, or `node`, a directional light's
       `world`, `camera`, or `node`, and a node path only under the `node`
       frame, which needs one
    4. `fov` under `perspective` and below 180 degrees, and `scale` under
       `orthographic`
+   5. a spot light's inner cone angle below its outer, which is at most 90
+      degrees
 4. the render
    1. the selection matching objects, in a document holding some
    2. each view's `select` matching a rendered object

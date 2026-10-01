@@ -56,13 +56,15 @@ let brass = RenderMaterial {
 
 ## Lights
 
-A `RenderLight` is one of three kinds, each carrying the part of a pose it
+A `RenderLight` is one of four kinds, each carrying the part of a pose it
 reads. A directional light is a rotation and shines down its -Z. A point
 light is a position in meters with an inverse-square falloff and an
-optional range. A hemisphere light is a sky color above and a ground color
-below, mixed by a normal's world +Y. The two shadowing kinds carry a
-`RenderShadow`: none, one ray per pixel, one per face, or one per face
-corner.
+optional range. A spot light is a position and a rotation: it shines down
+its -Z with the point light's falloff, fading across a cone between an
+inner and an outer half-angle in radians. A hemisphere light is a sky color
+above and a ground color below, mixed by a normal's world +Y. The three
+shadowing kinds carry a `RenderShadow`: none, one ray per pixel, one per
+face, or one per face corner.
 
 ```rust
 let sun = RenderLight::Directional {
@@ -121,7 +123,9 @@ emissive term. The light kinds reach a hit differently:
 1. A directional light shines down its -Z
 2. A point light falls off by the inverse square, with glTF's smooth
    cutoff at its range
-3. A hemisphere light mixes sky and ground by the normal's +Y
+3. A spot light falls off as a point light does, times glTF's cone falloff
+   between its inner and outer angles
+4. A hemisphere light mixes sky and ground by the normal's +Y
 
 Under `RenderOcclusion::Corner`, the corner occlusion darkens the
 hemisphere light. A shadow is one grid ray toward the light. `RenderShadow`

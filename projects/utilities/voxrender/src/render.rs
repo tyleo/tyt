@@ -13,6 +13,10 @@ const MIN_ALPHA: f64 = 1e-3;
 /// The reflectance floor of a dielectric at normal incidence.
 const DIELECTRIC_F0: f64 = 0.04;
 
+/// glTF's floor under the gap between a spot's cone cosines. It keeps a cone
+/// whose angles sit a rounding apart finite.
+const MIN_CONE_WIDTH: f64 = 1e-3;
+
 /// How far a shadow ray's start sits out from its face, in grid units.
 const BIAS: f64 = 1e-4;
 
@@ -153,6 +157,43 @@ fn shade_hit(
                 color += radiance * light_color * (strength * reach * lit);
             }
 
+            RenderLight::Spot {
+                position,
+                rotation,
+                color: light_color,
+                strength,
+                range,
+                inner_cone,
+                outer_cone,
+                shadow,
+            } => {
+                let to_light = position - point;
+                let distance = to_light.length();
+
+                if distance == 0.0 {
+                    continue;
+                }
+
+                let toward = to_light / distance;
+                let radiance = direct_radiance(material, normal, view, toward);
+
+                if radiance == TyLinSrgbF64::new(0.0, 0.0, 0.0) {
+                    continue;
+                }
+
+                let axis = rotation * -TyVector3F64::Z;
+                let reach = point_attenuation(distance, range)
+                    * cone_attenuation(axis.dot(-toward), inner_cone, outer_cone);
+
+                if reach == 0.0 {
+                    continue;
+                }
+
+                let lit = shadow_factor(scene, hit, shadow, &ShadowTarget::Position(position));
+
+                color += radiance * light_color * (strength * reach * lit);
+            }
+
             RenderLight::Hemisphere {
                 sky,
                 ground,
@@ -257,6 +298,20 @@ fn point_attenuation(distance: f64, range: Option<f64>) -> f64 {
     };
 
     window / (distance * distance)
+}
+
+/// How much of a spot light reaches a point: glTF's smooth ramp from full
+/// inside `inner` to none past `outer`.
+///
+/// # Arguments
+/// * `cosine` - the cosine of the angle between the light's -Z and the
+///   direction from the light to the point.
+/// * `inner`, `outer` - the cone half-angles in radians.
+fn cone_attenuation(cosine: f64, inner: f64, outer: f64) -> f64 {
+    let scale = 1.0 / (inner.cos() - outer.cos()).max(MIN_CONE_WIDTH);
+    let offset = -outer.cos() * scale;
+
+    (cosine * scale + offset).clamp(0.0, 1.0).powi(2)
 }
 
 /// How lit `hit` is by a light at `target`, from `0` in shadow to `1` in
@@ -365,11 +420,12 @@ mod tests {
         RenderProjection, RenderRay, RenderScene, RenderShadow, RenderView, ShadowTarget, cast_ray,
         fit_distance, render,
         render::{
-            bilinear, direct_radiance, hemisphere_radiance, point_attenuation, shade_hit,
-            shadow_factor,
+            bilinear, cone_attenuation, direct_radiance, hemisphere_radiance, point_attenuation,
+            shade_hit, shadow_factor,
         },
         test_utilities::{
-            check_goldens, cube_scene, l_shape_scene, room_scene, two_placements_scene,
+            check_goldens, cube_scene, l_shape_scene, room_scene, solid_object, spot_room_scene,
+            two_placements_scene,
         },
     };
     use branded_id::U32Id;
@@ -652,6 +708,106 @@ mod tests {
         assert!(windowed > 0.0 && windowed < 0.25);
     }
 
+    #[test]
+    fn the_cone_holds_full_inside_the_inner_angle_and_fades_to_the_outer() {
+        let inner = 30f64.to_radians();
+        let outer = 45f64.to_radians();
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+
+        assert_eq!(cone_attenuation(1.0, inner, outer), 1.0);
+        assert!(close(cone_attenuation(inner.cos(), inner, outer), 1.0));
+        assert!(close(cone_attenuation(outer.cos(), inner, outer), 0.0));
+        assert_eq!(cone_attenuation(0.0, inner, outer), 0.0);
+        assert_eq!(cone_attenuation(-1.0, inner, outer), 0.0);
+
+        let between = cone_attenuation(37.5f64.to_radians().cos(), inner, outer);
+        assert!(between > 0.0 && between < 1.0, "{between}");
+
+        // A cone whose angles sit a rounding apart keeps a hard edge.
+        let edge = 45f64.to_radians();
+        assert_eq!(
+            cone_attenuation(44f64.to_radians().cos(), edge - 1e-12, edge),
+            1.0
+        );
+        assert_eq!(
+            cone_attenuation(46f64.to_radians().cos(), edge - 1e-12, edge),
+            0.0
+        );
+    }
+
+    /// A 9 by 5 by 9 grid: a floor across `y = 0` and a ceiling across
+    /// `y = 4`, lit by `light` between them.
+    fn roofed(light: RenderLight) -> RenderScene {
+        let mut scene = RenderScene::default();
+        let material_id = scene.retain_material(RenderMaterial::default()).unwrap();
+        let object_id = U32Id::from_u32(0);
+        scene
+            .retain_object(
+                object_id,
+                solid_object(
+                    "roofed",
+                    TyVector3U32::new(9, 5, 9),
+                    material_id,
+                    |position| position.y == 0 || position.y == 4,
+                ),
+            )
+            .unwrap();
+        scene
+            .retain_placement(RenderPlacement {
+                object_id,
+                transform: TyTransformF64::IDENTITY,
+            })
+            .unwrap();
+        scene.retain_light(light).unwrap();
+        scene
+    }
+
+    #[test]
+    fn a_spot_lights_a_disc_that_fades_between_the_cones_and_its_shadow_ends_at_the_light() {
+        let position = TyVector3F64::new(4.5, 3.0, 4.5);
+
+        let point = roofed(RenderLight::Point {
+            position,
+            color: TyLinSrgbF64::new(1.0, 1.0, 1.0),
+            strength: 1.0,
+            range: None,
+            shadow: RenderShadow::PerPixel,
+        });
+        let spot = roofed(RenderLight::Spot {
+            position,
+            rotation: TyQuaternionF64::from_look_direction(-TyVector3F64::Y, -TyVector3F64::Z)
+                .unwrap(),
+            color: TyLinSrgbF64::new(1.0, 1.0, 1.0),
+            strength: 1.0,
+            range: None,
+            inner_cone: 20f64.to_radians(),
+            outer_cone: 40f64.to_radians(),
+            shadow: RenderShadow::PerPixel,
+        });
+
+        // The floor's top at `x` under a ray down from the gap. A shadow ray
+        // running past the light would strike the ceiling above it.
+        let floor = |scene: &RenderScene, x: f64| {
+            let ray = RenderRay {
+                origin: TyVector3F64::new(x, 3.5, 4.5),
+                direction: -TyVector3F64::Y,
+            };
+            let hit = cast_ray(scene, &ray, f64::INFINITY).unwrap();
+            assert_eq!(hit.distance, 2.5);
+            shade_hit(scene, RenderOcclusion::None, &ray, &hit).red
+        };
+
+        // The light sits two units up, so the inner cone reaches 0.73 out
+        // and the outer 1.68.
+        let ratio = |x: f64| floor(&spot, x) / floor(&point, x);
+
+        assert!((ratio(4.5) - 1.0).abs() < 1e-9);
+        assert!((ratio(5.0) - 1.0).abs() < 1e-9);
+        let between = ratio(5.7);
+        assert!(between > 0.0 && between < 1.0, "{between}");
+        assert_eq!(ratio(6.5), 0.0);
+    }
+
     /// A 4 by 2 by 4 grid: a floor across `y = 0` and a wall one high along
     /// `x = 3` on top of it.
     fn walled() -> RenderScene {
@@ -833,6 +989,20 @@ mod tests {
                 include_bytes!("goldens/room-per-face.png"),
                 include_bytes!("goldens/room-per-corner.png"),
                 include_bytes!("goldens/room-unoccluded.png"),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_spot_room_matches_its_goldens() {
+        check_goldens(
+            "spot-room",
+            spot_room_scene,
+            [
+                include_bytes!("goldens/spot-room-per-pixel.png"),
+                include_bytes!("goldens/spot-room-per-face.png"),
+                include_bytes!("goldens/spot-room-per-corner.png"),
+                include_bytes!("goldens/spot-room-unoccluded.png"),
             ],
         );
     }

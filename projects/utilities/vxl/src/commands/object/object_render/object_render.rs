@@ -22,8 +22,8 @@ use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::object::{
-        BRenderView, FitOrFixed, PoseTransform, PositionTransform, RenderOcclusion, RenderRecord,
-        RenderShadow, RenderView, Rotation, ViewRecord, encode_render_png, render,
+        BRenderView, FitOrFixed, PoseTransform, RenderOcclusion, RenderRecord, RenderShadow,
+        RenderView, Rotation, ViewRecord, encode_render_png, render,
     },
 };
 
@@ -69,8 +69,8 @@ pub struct ObjectRender {
     occlusion: Option<RenderOcclusion>,
 
     /// The real-world edge length of one voxel in meters, defaulting to `1.0`
-    /// and applied as a uniform scale to the whole scene, so a point light's
-    /// falloff runs in meters after it applies.
+    /// and applied as a uniform scale to the whole scene, so a point or spot
+    /// light's falloff runs in meters after it applies.
     #[arg(value_name = "voxel-size", long)]
     voxel_size: Option<PositiveF64>,
 
@@ -223,7 +223,7 @@ pub struct ObjectRender {
     )]
     view_select: Vec<String>,
 
-    /// Declares the indexed light's kind, `directional`, `point`, or
+    /// Declares the indexed light's kind, `directional`, `point`, `spot`, or
     /// `hemisphere`. Lights number from `0` with no gaps. Any `--light`
     /// replaces a profile's rig whole. Repeatable.
     #[arg(
@@ -236,7 +236,7 @@ pub struct ObjectRender {
 
     /// The frame the indexed light's transform is read in: `world`,
     /// `camera`, or `node` for a directional light, and `world`, `subject`,
-    /// `camera`, or `node` for a point light. Repeatable.
+    /// `camera`, or `node` for a point or spot light. Repeatable.
     #[arg(
         value_names = ["light-index", "frame"],
         long,
@@ -256,7 +256,7 @@ pub struct ObjectRender {
     )]
     light_node: Vec<String>,
 
-    /// The indexed point light's position in its frame, in meters.
+    /// The indexed point or spot light's position in its frame, in meters.
     /// Repeatable.
     #[arg(
         value_names = ["light-index", "x", "y", "z"],
@@ -267,8 +267,8 @@ pub struct ObjectRender {
     )]
     light_position: Vec<String>,
 
-    /// The indexed directional light's rotation as a unit quaternion.
-    /// Repeatable.
+    /// The indexed directional or spot light's rotation as a unit
+    /// quaternion. Repeatable.
     #[arg(
         value_names = ["light-index", "x", "y", "z", "w"],
         long,
@@ -278,8 +278,8 @@ pub struct ObjectRender {
     )]
     light_quaternion: Vec<String>,
 
-    /// The indexed directional light's rotation as Euler angles in degrees
-    /// about the fixed x, y, then z axes. Repeatable.
+    /// The indexed directional or spot light's rotation as Euler angles in
+    /// degrees about the fixed x, y, then z axes. Repeatable.
     #[arg(
         value_names = ["light-index", "x", "y", "z"],
         long,
@@ -289,8 +289,8 @@ pub struct ObjectRender {
     )]
     light_euler: Vec<String>,
 
-    /// Aims the indexed directional light's -Z from its frame's origin at a
-    /// point in its frame. Repeatable.
+    /// Aims the indexed directional or spot light's -Z at a point in its
+    /// frame. A directional light aims from the frame's origin. Repeatable.
     #[arg(
         value_names = ["light-index", "x", "y", "z"],
         long,
@@ -300,8 +300,8 @@ pub struct ObjectRender {
     )]
     light_look_at: Vec<String>,
 
-    /// The direction the indexed directional light shines from, as an
-    /// azimuth from +Z toward +X and an elevation toward +Y, in degrees.
+    /// The direction the indexed directional or spot light shines from, as
+    /// an azimuth from +Z toward +X and an elevation toward +Y, in degrees.
     /// Repeatable.
     #[arg(
         value_names = ["light-index", "azimuth", "elevation"],
@@ -312,9 +312,10 @@ pub struct ObjectRender {
     )]
     light_angles: Vec<String>,
 
-    /// Places the indexed point light on a sphere about the subject's center
-    /// at an azimuth and elevation in degrees and a distance in meters.
-    /// Replaces the frame and position. Repeatable.
+    /// Places the indexed point or spot light on a sphere about the
+    /// subject's center at an azimuth and elevation in degrees and a
+    /// distance in meters. A spot faces the center. Replaces the frame,
+    /// position, and rotation. Repeatable.
     #[arg(
         value_names = ["light-index", "azimuth", "elevation", "distance"],
         long,
@@ -334,8 +335,8 @@ pub struct ObjectRender {
     )]
     light_shadow: Vec<String>,
 
-    /// The indexed directional or point light's color as a `#RRGGBB` hex,
-    /// defaulting to white. Repeatable.
+    /// The indexed directional, point, or spot light's color as a `#RRGGBB`
+    /// hex, defaulting to white. Repeatable.
     #[arg(
         value_names = ["light-index", "color"],
         long,
@@ -354,8 +355,8 @@ pub struct ObjectRender {
     )]
     light_strength: Vec<String>,
 
-    /// The distance the indexed point light reaches, in meters. Without it,
-    /// the light has no cutoff. Repeatable.
+    /// The distance the indexed point or spot light reaches, in meters.
+    /// Without it, the light has no cutoff. Repeatable.
     #[arg(
         value_names = ["light-index", "meters"],
         long,
@@ -363,6 +364,18 @@ pub struct ObjectRender {
         action = ArgAction::Append,
     )]
     light_range: Vec<String>,
+
+    /// The indexed spot light's inner and outer cone half-angles in degrees,
+    /// defaulting to `0` and `45`. Full strength holds inside the inner
+    /// angle and fades to nothing at the outer, which is at most `90`.
+    /// Repeatable.
+    #[arg(
+        value_names = ["light-index", "inner", "outer"],
+        long,
+        num_args = 3,
+        action = ArgAction::Append,
+    )]
+    light_cone: Vec<String>,
 
     /// The indexed hemisphere light's color from above as a `#RRGGBB` hex,
     /// defaulting to white. Repeatable.
@@ -706,13 +719,13 @@ impl ObjectRender {
         for [index, azimuth, elevation, distance] in flag_occurrences::<4>(&self.light_orbit) {
             let flag = "--light-orbit";
             let index = parse_flag_index(flag, index)?;
-            let orbit = PositionTransform::Orbit {
-                azimuth: parse_flag_f64(flag, azimuth)?,
-                elevation: parse_flag_f64(flag, elevation)?,
-                distance: parse_flag_from_str::<PositiveF64>(flag, distance)?.0,
-            };
+            let azimuth = parse_flag_f64(flag, azimuth)?;
+            let elevation = parse_flag_f64(flag, elevation)?;
+            let distance = parse_flag_from_str::<PositiveF64>(flag, distance)?.0;
 
-            lights.light(flag, index)?.set_orbit(flag, orbit)?;
+            lights
+                .light(flag, index)?
+                .set_orbit(flag, azimuth, elevation, distance)?;
         }
 
         for [index, shadow] in flag_occurrences::<2>(&self.light_shadow) {
@@ -745,6 +758,15 @@ impl ObjectRender {
             let range = parse_flag_from_str::<PositiveF64>(flag, range)?.0;
 
             lights.light(flag, index)?.set_range(flag, range)?;
+        }
+
+        for [index, inner, outer] in flag_occurrences::<3>(&self.light_cone) {
+            let flag = "--light-cone";
+            let index = parse_flag_index(flag, index)?;
+            let inner = parse_flag_from_str::<NonNegativeF64>(flag, inner)?.0;
+            let outer = parse_flag_from_str::<NonNegativeF64>(flag, outer)?.0;
+
+            lights.light(flag, index)?.set_cone(flag, inner, outer)?;
         }
 
         for [index, sky] in flag_occurrences::<2>(&self.light_sky) {
@@ -909,7 +931,7 @@ mod tests {
     use voxsmith::operations::object::{
         FitOrFixed, LightRecord, PoseTransform, PositionTransform, RenderOcclusion,
         RenderProjection, RenderRecord, RenderShadow, RenderView, Rotation, RotationTransform,
-        ViewProjection, ViewRecord,
+        SpotTransform, ViewProjection, ViewRecord,
     };
 
     /// The command parsed from `args` after the input.
@@ -1423,7 +1445,7 @@ mod tests {
 
         let error = error_of(&["--light", "0", "hemisphere", "--light-node", "0", "lamp"]);
         assert!(
-            error.contains("--light-node applies to a directional or point light"),
+            error.contains("--light-node applies to a directional, point, or spot light"),
             "{error}"
         );
     }
@@ -1668,6 +1690,203 @@ mod tests {
     }
 
     #[test]
+    fn a_spot_light_takes_a_pose_a_cone_and_a_range() {
+        let headlight = record(&[
+            "--light",
+            "0",
+            "spot",
+            "--light-frame",
+            "0",
+            "camera",
+            "--light-position",
+            "0",
+            "0",
+            "0",
+            "0",
+            "--light-angles",
+            "0",
+            "0",
+            "0",
+            "--light-cone",
+            "0",
+            "10",
+            "30",
+            "--light-range",
+            "0",
+            "5",
+        ]);
+        let LightRecord::Spot {
+            transform,
+            shadow,
+            color,
+            strength,
+            range,
+            inner_cone,
+            outer_cone,
+        } = light(&headlight)
+        else {
+            panic!("a spot light");
+        };
+        assert_eq!(
+            *transform,
+            SpotTransform::Camera {
+                position: TyVector3F64::ZERO,
+                rotation: Rotation::Angles {
+                    azimuth: 0.0,
+                    elevation: 0.0,
+                },
+            }
+        );
+        assert_eq!(*shadow, RenderShadow::PerCorner);
+        assert!(same_color(*color, TyLinSrgbF64::new(1.0, 1.0, 1.0)));
+        assert_eq!(*strength, 1.0);
+        assert_eq!(*range, Some(5.0));
+        assert_eq!((*inner_cone, *outer_cone), (10.0, 30.0));
+
+        // An orbit faces the center. The cone defaults to glTF's.
+        let orbited = record(&["--light", "0", "spot", "--light-orbit", "0", "0", "45", "4"]);
+        assert!(matches!(
+            light(&orbited),
+            LightRecord::Spot {
+                transform: SpotTransform::Orbit {
+                    azimuth: 0.0,
+                    elevation: 45.0,
+                    distance: 4.0,
+                },
+                range: None,
+                inner_cone: 0.0,
+                outer_cone: 45.0,
+                ..
+            }
+        ));
+
+        let riding = record(&[
+            "--light",
+            "0",
+            "spot",
+            "--light-frame",
+            "0",
+            "node",
+            "--light-node",
+            "0",
+            "lamp",
+            "--light-position",
+            "0",
+            "0",
+            "1",
+            "0",
+            "--light-look-at",
+            "0",
+            "0",
+            "0",
+            "0",
+        ]);
+        assert!(matches!(
+            light(&riding),
+            LightRecord::Spot {
+                transform: SpotTransform::Node { path, .. },
+                ..
+            } if path == "lamp"
+        ));
+
+        // A profile's cone angles fill in one at a time.
+        let profiles = built_ins_under(&[(
+            "lamp",
+            r#"{ "lights": [{ "kind": "spot", "transform": { "kind": "orbit", "azimuth": 0, "elevation": 60, "distance": 3 }, "outerCone": 60 }] }"#,
+        )]);
+        let widened = try_record_over(&profiles, &["--profile", "lamp"]).unwrap();
+        assert!(matches!(
+            light(&widened),
+            LightRecord::Spot {
+                inner_cone: 0.0,
+                outer_cone: 60.0,
+                ..
+            }
+        ));
+        let flagged = try_record_over(
+            &profiles,
+            &["--profile", "lamp", "--light-cone", "0", "20", "25"],
+        )
+        .unwrap();
+        assert!(matches!(
+            light(&flagged),
+            LightRecord::Spot {
+                inner_cone: 20.0,
+                outer_cone: 25.0,
+                ..
+            }
+        ));
+
+        let error = error_of(&["--light", "0", "spot", "--light-frame", "0", "world"]);
+        assert!(
+            error.contains(
+                "light 0's transform lacks --light-position and a rotation flag; a posed spot \
+                 light takes --light-frame, --light-position, and a rotation flag"
+            ),
+            "{error}"
+        );
+
+        let error = error_of(&["--light", "0", "spot"]);
+        assert!(
+            error.contains("light 0 has no transform; give it --light-orbit"),
+            "{error}"
+        );
+
+        let error = error_of(&[
+            "--light",
+            "0",
+            "spot",
+            "--light-orbit",
+            "0",
+            "0",
+            "0",
+            "1",
+            "--light-angles",
+            "0",
+            "0",
+            "0",
+        ]);
+        assert!(error.contains("sets light 0's transform, which"), "{error}");
+
+        let error = error_of(&["--light", "0", "point", "--light-cone", "0", "0", "45"]);
+        assert!(
+            error.contains("--light-cone applies to a spot light, and light 0 is point"),
+            "{error}"
+        );
+
+        let cone = |inner: &str, outer: &str| {
+            error_of(&[
+                "--light",
+                "0",
+                "spot",
+                "--light-orbit",
+                "0",
+                "0",
+                "0",
+                "1",
+                "--light-cone",
+                "0",
+                inner,
+                outer,
+            ])
+        };
+        let reversed = cone("40", "30");
+        assert!(
+            reversed.contains(
+                "light 0's cone runs from 40 to 30 degrees, and the inner angle is below the \
+                 outer, which is at most 90"
+            ),
+            "{reversed}"
+        );
+        assert!(cone("30", "30").contains("runs from 30 to 30"));
+        assert!(cone("0", "91").contains("runs from 0 to 91"));
+        assert!(
+            ObjectRender::try_parse_from(["render", "m.voxj", "--light-cone", "0", "-1", "45"])
+                .is_err()
+        );
+    }
+
+    #[test]
     fn a_light_declaration_replaces_the_rig_and_an_index_flag_fills_it() {
         let replaced = record(&["--profile", "studio", "--light", "0", "hemisphere"]);
         assert!(matches!(light(&replaced), LightRecord::Hemisphere { .. }));
@@ -1705,7 +1924,9 @@ mod tests {
     fn a_light_takes_the_elements_its_kind_reads() {
         let error = error_of(&["--light", "0", "directional", "--light-range", "0", "1"]);
         assert!(
-            error.contains("--light-range applies to a point light, and light 0 is directional"),
+            error.contains(
+                "--light-range applies to a point or spot light, and light 0 is directional"
+            ),
             "{error}"
         );
 
@@ -1718,12 +1939,15 @@ mod tests {
             "#FFFFFF",
         ]);
         assert!(
-            error.contains("applies to a directional or point light"),
+            error.contains("applies to a directional, point, or spot light"),
             "{error}"
         );
 
         let error = error_of(&["--light", "0", "point", "--light-angles", "0", "0", "0"]);
-        assert!(error.contains("applies to a directional light"), "{error}");
+        assert!(
+            error.contains("applies to a directional or spot light"),
+            "{error}"
+        );
 
         let error = error_of(&["--light", "0", "point", "--light-sky", "0", "#FFFFFF"]);
         assert!(error.contains("applies to a hemisphere light"), "{error}");

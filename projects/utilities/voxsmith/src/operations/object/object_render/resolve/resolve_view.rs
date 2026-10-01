@@ -2,10 +2,10 @@ use crate::{
     Error, Result,
     operations::object::{
         FitOrFixed, NodeFrames, PoseTransform, RenderElement, ViewProjection, look_rotation,
-        resolve_rotation,
+        pose_in_frame,
     },
 };
-use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64, TyVector3Ext, TyVector3F64};
+use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64, TyTransformF64, TyVector3Ext, TyVector3F64};
 use voxrender::{RenderProjection, RenderView, fit_distance, fit_scale};
 
 /// Resolves a view's `transform` and `projection` to world space. Errors if a
@@ -35,12 +35,13 @@ pub fn resolve_view(
 
     let (position, rotation) = match transform {
         PoseTransform::World { position, rotation } => {
-            (*position, resolve_rotation(rotation, *position))
+            pose_in_frame(&TyTransformF64::IDENTITY, *position, rotation)
         }
 
-        PoseTransform::Subject { position, rotation } => (
-            subject()?.center + *position,
-            resolve_rotation(rotation, *position),
+        PoseTransform::Subject { position, rotation } => pose_in_frame(
+            &TyTransformF64::from_translation(subject()?.center),
+            *position,
+            rotation,
         ),
 
         PoseTransform::Orbit {
@@ -77,14 +78,7 @@ pub fn resolve_view(
             path,
             position,
             rotation,
-        } => {
-            let frame = node_frames.frame(element, path)?;
-
-            (
-                frame.transform_point(*position),
-                resolve_rotation(rotation, *position).map(|rotation| frame.rotation * rotation),
-            )
-        }
+        } => pose_in_frame(&node_frames.frame(element, path)?, *position, rotation),
     };
 
     let rotation = rotation

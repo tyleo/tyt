@@ -87,18 +87,23 @@ pub enum Error {
     /// A placement's rotation is not unit length.
     NonUnitPlacementRotation,
 
-    /// A light's position, color, strength, or range is not finite.
+    /// A light's position, color, strength, range, or cone angle is not
+    /// finite.
     NonFiniteLight,
 
-    /// A directional light's rotation is not unit length.
+    /// A directional or spot light's rotation is not unit length.
     NonUnitLightRotation,
 
     /// A light's color has a negative component or its strength is
     /// negative.
     NegativeLight,
 
-    /// A point light's range is not positive.
+    /// A point or spot light's range is not positive.
     NonPositiveLightRange { range: f64 },
+
+    /// A spot light's cone angles are not ordered from zero, through the
+    /// inner angle, to an outer angle of at most a quarter turn.
+    SpotCone { inner_cone: f64, outer_cone: f64 },
 
     /// A view's position is not finite.
     NonFiniteView,
@@ -230,6 +235,15 @@ impl Display for Error {
             Error::NonPositiveLightRange { range } => {
                 write!(f, "light range {range} is not positive")
             }
+
+            Error::SpotCone {
+                inner_cone,
+                outer_cone,
+            } => write!(
+                f,
+                "spot cone angles {inner_cone} and {outer_cone} radians are not ordered from 0 \
+                 through the inner to an outer of at most pi/2"
+            ),
 
             Error::NonFiniteView => write!(f, "a view's position is not finite"),
 

@@ -55,7 +55,7 @@ mod tests {
         commands::{
             Background, DistanceEntry, LightEntry, NonNegativeF64, PoseTransformEntry,
             PositionTransformEntry, ProjectionKind, RenderProfile, RotationEntry,
-            RotationTransformEntry, SrgbColor,
+            RotationTransformEntry, SpotTransformEntry, SrgbColor,
         },
     };
     use ty_math::{TyAngleUnit, TySrgbU8};
@@ -283,6 +283,79 @@ mod tests {
     }
 
     #[test]
+    fn a_spot_entry_carries_its_pose_cone_and_range() {
+        let profile: RenderProfile = serde_json::from_str(
+            r#"{
+                "lights": [
+                    {
+                        "kind": "spot",
+                        "transform": {
+                            "kind": "camera",
+                            "position": [0, 0, 0],
+                            "rotation": { "kind": "angles", "azimuth": 0, "elevation": 0 }
+                        },
+                        "innerCone": 10,
+                        "outerCone": 30,
+                        "range": 5
+                    },
+                    {
+                        "kind": "spot",
+                        "transform": { "kind": "orbit", "azimuth": 45, "elevation": 30, "distance": 4 }
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let [headlight, orbiting] = profile.lights.as_slice() else {
+            panic!("two lights");
+        };
+        assert_eq!(
+            *headlight,
+            LightEntry::Spot {
+                transform: Some(SpotTransformEntry::Camera {
+                    position: [0.0, 0.0, 0.0],
+                    rotation: RotationEntry::Angles {
+                        azimuth: 0.0,
+                        elevation: 0.0,
+                    },
+                }),
+                shadow: None,
+                color: None,
+                strength: None,
+                range: Some(PositiveF64(5.0)),
+                inner_cone: Some(NonNegativeF64(10.0)),
+                outer_cone: Some(NonNegativeF64(30.0)),
+            }
+        );
+        assert!(matches!(
+            orbiting,
+            LightEntry::Spot {
+                transform: Some(SpotTransformEntry::Orbit {
+                    distance: PositiveF64(4.0),
+                    ..
+                }),
+                inner_cone: None,
+                outer_cone: None,
+                ..
+            }
+        ));
+
+        assert!(
+            serde_json::from_str::<RenderProfile>(
+                r#"{ "lights": [{ "kind": "spot", "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 } }] }"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<RenderProfile>(
+                r#"{ "lights": [{ "kind": "spot", "innerCone": -1 }] }"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn the_empty_profile_takes_every_default() {
         assert_eq!(
             serde_json::from_str::<RenderProfile>("{}").unwrap(),
@@ -321,7 +394,7 @@ mod tests {
     #[test]
     fn a_kind_outside_the_vocabulary_errors() {
         assert!(
-            serde_json::from_str::<RenderProfile>(r#"{ "lights": [{ "kind": "spot" }] }"#).is_err()
+            serde_json::from_str::<RenderProfile>(r#"{ "lights": [{ "kind": "area" }] }"#).is_err()
         );
         assert!(
             serde_json::from_str::<RenderProfile>(

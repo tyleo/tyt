@@ -97,7 +97,8 @@ mesh. A document with no objects errors. See
    - Repeatable: no
 
    The edge length of one voxel, applied as a uniform scale to the whole
-   scene. A point light's falloff and `range` run in meters after it applies.
+   scene. A point or spot light's falloff and `range` run in meters after it
+   applies.
 
 9. `--profile <profile>`
    - Repeatable: yes
@@ -211,7 +212,7 @@ mesh. A document with no objects errors. See
     on one view, the globs union. Every placement of a matched object joins
     the subject, and a glob matching nothing errors.
 
-24. `--light <light-index> <directional | point | hemisphere>`
+24. `--light <light-index> <directional | point | spot | hemisphere>`
     - Default: the profile stack's rig
     - Repeatable: yes
 
@@ -223,15 +224,17 @@ mesh. A document with no objects errors. See
     errors, as does one setting an element set already. A directional light
     takes `--light-frame` and one rotation flag. A point light takes
     `--light-frame` and `--light-position`, or `--light-orbit` for the whole
-    transform. A hemisphere light has no transform. A directional or point
-    light whose transform neither the flags nor the rig sets errors.
+    transform. A spot light takes `--light-frame`, `--light-position`, and
+    one rotation flag, or `--light-orbit`. A hemisphere light has no
+    transform. A directional, point, or spot light whose transform neither
+    the flags nor the rig sets errors.
 
 25. `--light-frame <light-index> <frame>`
     - Repeatable: yes
 
     The frame the indexed light's transform is read in: `world`, `camera`,
     or `node` for a directional light, and `world`, `subject`, `camera`, or
-    `node` for a point light.
+    `node` for a point or spot light.
 
 26. `--light-node <light-index> <path>`
     - Repeatable: yes
@@ -243,52 +246,54 @@ mesh. A document with no objects errors. See
 27. `--light-position <light-index> <x> <y> <z>`
     - Repeatable: yes
 
-    The indexed point light's position in its frame, in meters.
+    The indexed point or spot light's position in its frame, in meters.
 
 28. `--light-quaternion <light-index> <x> <y> <z> <w>`
     - Repeatable: yes
 
-    The indexed directional light's rotation as a unit quaternion. The four
-    rotation flags share a light's one rotation, so two on one light error.
+    The indexed directional or spot light's rotation as a unit quaternion.
+    The four rotation flags share a light's one rotation, so two on one
+    light error.
 
 29. `--light-euler <light-index> <x> <y> <z>`
     - Repeatable: yes
 
-    The indexed directional light's rotation as Euler angles in degrees about
-    the fixed x, y, then z axes.
+    The indexed directional or spot light's rotation as Euler angles in
+    degrees about the fixed x, y, then z axes.
 
 30. `--light-look-at <light-index> <x> <y> <z>`
     - Repeatable: yes
 
-    Aims the indexed directional light's -Z from its frame's origin at a
-    point in its frame. A target at the origin errors.
+    Aims the indexed directional or spot light's -Z at a point in its frame,
+    a directional light from the frame's origin. A target at the light
+    errors.
 
 31. `--light-angles <light-index> <azimuth> <elevation>`
     - Repeatable: yes
 
-    The direction the indexed directional light shines from, as an azimuth
-    from +Z toward +X and an elevation toward +Y, in degrees.
+    The direction the indexed directional or spot light shines from, as an
+    azimuth from +Z toward +X and an elevation toward +Y, in degrees.
 
 32. `--light-orbit <light-index> <azimuth> <elevation> <distance>`
     - Repeatable: yes
 
-    Places the indexed point light on a sphere about the subject's center at
-    an azimuth and elevation in degrees and a distance in meters. It sets the
-    whole transform, so it errors beside `--light-frame` or
-    `--light-position`.
+    Places the indexed point or spot light on a sphere about the subject's
+    center at an azimuth and elevation in degrees and a distance in meters,
+    a spot facing the center. It sets the whole transform, so it errors
+    beside `--light-frame`, `--light-position`, or a rotation flag.
 
 33. `--light-shadow <light-index> <none | per-pixel | per-face | per-corner>`
     - Default: `per-corner`
     - Repeatable: yes
 
-    The indexed directional or point light's shadow granularity; see
+    The indexed directional, point, or spot light's shadow granularity; see
     [Lights](contract.md#lights).
 
 34. `--light-color <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
-    The indexed directional or point light's color, an sRGB hex.
+    The indexed directional, point, or spot light's color, an sRGB hex.
 
 35. `--light-strength <light-index> <strength>`
     - Default: `1`
@@ -300,22 +305,32 @@ mesh. A document with no objects errors. See
 36. `--light-range <light-index> <meters>`
     - Repeatable: yes
 
-    The distance the indexed point light reaches. Without it, the light has
-    no cutoff.
+    The distance the indexed point or spot light reaches. Without it, the
+    light has no cutoff.
 
-37. `--light-sky <light-index> <#RRGGBB>`
+37. `--light-cone <light-index> <inner> <outer>`
+    - Default: `0 45`
+    - Repeatable: yes
+
+    The indexed spot light's cone as two half-angles in degrees. Full
+    strength holds inside the inner angle and fades to nothing at the outer,
+    glTF's cone falloff. The inner angle is zero or more and below the
+    outer, which is at most `90`. Any other pair errors, as does the flag
+    on another kind.
+
+38. `--light-sky <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed hemisphere light's color from above.
 
-38. `--light-ground <light-index> <#RRGGBB>`
+39. `--light-ground <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed hemisphere light's color from below.
 
-39. `--select <glob>`
+40. `--select <glob>`
     - Default: `*`, selecting every object
     - Repeatable: yes
 
@@ -324,13 +339,13 @@ mesh. A document with no objects errors. See
     default, so `--select-index` alone never unions with `*`. See
     [Object selectors](../../plan/open/vxl-commands/reference/conventions.md#object-selectors).
 
-40. `--select-index <index>`
+41. `--select-index <index>`
     - Repeatable: yes
 
     Chooses objects by position, an integer or an `a-b` range. Unions with
     `--select`.
 
-41. `--print-camera`
+42. `--print-camera`
     - Default: off
     - Repeatable: no
 

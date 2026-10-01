@@ -1,14 +1,14 @@
 use crate::{
     Error, Result,
     operations::object::{
-        LightRecord, NodeFrames, RenderElement, RenderRecord, RenderedView, resolve_light_position,
-        resolve_light_rotation, resolve_view,
+        LightRecord, NodeFrames, RenderElement, RenderRecord, RenderedView, resolve_light_pose,
+        resolve_light_position, resolve_light_rotation, resolve_view,
     },
     utilities::select_objects,
 };
 use branded_id::{IdVec, U32Id};
 use std::collections::HashSet;
-use ty_math::{TyBoundsF64, TyPoseF64};
+use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64};
 use voxcore::{BVoxObject, Error as VoxError, VoxExt, VoxMain};
 use voxrender::{
     BRenderLight, BRenderPlacement, BRenderView, RenderLight, RenderOutput, RenderScene,
@@ -241,6 +241,29 @@ fn resolve_light(
             shadow: *shadow,
         },
 
+        LightRecord::Spot {
+            transform,
+            shadow,
+            color,
+            strength,
+            range,
+            inner_cone,
+            outer_cone,
+        } => {
+            let pose = resolve_light_pose(&element, transform, subject, node_frames, view)?;
+
+            RenderLight::Spot {
+                position: pose.position,
+                rotation: pose.rotation,
+                color: *color,
+                strength: *strength,
+                range: *range,
+                inner_cone: TyAngleUnit::Degrees.to_radians(*inner_cone),
+                outer_cone: TyAngleUnit::Degrees.to_radians(*outer_cone),
+                shadow: *shadow,
+            }
+        }
+
         LightRecord::Hemisphere {
             sky,
             ground,
@@ -259,7 +282,7 @@ mod tests {
         Error, Result,
         operations::object::{
             FitOrFixed, LightRecord, PoseTransform, RenderElement, RenderRecord, RenderedView,
-            Rotation, RotationTransform, ViewProjection, ViewRecord, render,
+            Rotation, RotationTransform, SpotTransform, ViewProjection, ViewRecord, render,
         },
         test_utilities::{HookRecorder, two_material_scene},
     };
@@ -401,6 +424,41 @@ mod tests {
         assert!(red > blue);
         let [red, _, blue, _] = leftmost_hit(&output(&outputs, 1).image);
         assert!(blue > 100 && red < 20, "{red} {blue}");
+    }
+
+    #[test]
+    fn a_subject_spot_lights_the_bar_inside_its_cone_alone() {
+        let main = bar();
+
+        // The spot sits 3.5 past the bar's front face, which it aims at. The
+        // bar's left end is 16 degrees off its axis.
+        let spot = |inner_cone, outer_cone| LightRecord::Spot {
+            transform: SpotTransform::Subject {
+                position: TyVector3F64::new(0.0, 0.0, 4.0),
+                rotation: Rotation::LookAt { target: None },
+            },
+            shadow: RenderShadow::None,
+            color: TyLinSrgbF64::new(1.0, 1.0, 1.0),
+            strength: PI * 3.5 * 3.5,
+            range: None,
+            inner_cone,
+            outer_cone,
+        };
+
+        let mut wide = record(vec![orbit("front", 0.0)]);
+        wide.lights = IdVec::from(vec![spot(30.0, 60.0)]);
+        let outputs = render(&main, &[U32Id::from_u32(0)], &wide).unwrap();
+        let [red, green, blue, _] = leftmost_hit(&output(&outputs, 0).image);
+        assert!(red > 100 && green < 20 && blue < 20, "{red} {green} {blue}");
+
+        let mut narrow = record(vec![orbit("front", 0.0)]);
+        narrow.lights = IdVec::from(vec![spot(1.0, 2.0)]);
+        let outputs = render(&main, &[U32Id::from_u32(0)], &narrow).unwrap();
+        assert_eq!(leftmost_hit(&output(&outputs, 0).image), [0, 0, 0, 255]);
+
+        let mut reversed = record(vec![orbit("front", 0.0)]);
+        reversed.lights = IdVec::from(vec![spot(60.0, 30.0)]);
+        assert!(render(&main, &[U32Id::from_u32(0)], &reversed).is_err());
     }
 
     #[test]

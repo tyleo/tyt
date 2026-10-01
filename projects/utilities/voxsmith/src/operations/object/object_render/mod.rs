@@ -9,6 +9,7 @@ mod render;
 mod rendered_view;
 mod rotation;
 mod rotation_transform;
+mod spot_transform;
 mod view_projection;
 
 pub use encode_render_png::*;
@@ -20,6 +21,7 @@ pub use render::*;
 pub use rendered_view::*;
 pub use rotation::*;
 pub use rotation_transform::*;
+pub use spot_transform::*;
 pub use view_projection::*;
 pub use voxrender::{
     BRenderLight, BRenderView, RenderOcclusion, RenderOutput, RenderProjection, RenderShadow,
