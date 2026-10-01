@@ -1,9 +1,9 @@
 use crate::{Components, Value};
 
-/// Asserts two `f32` lists agree within a small tolerance.
-pub fn assert_close(found: &Value, expected: &[f32]) {
-    let Components::F32(found) = found.components() else {
-        panic!("{found:?} is not f32");
+/// Asserts two `f64` lists agree within a small tolerance.
+pub fn assert_close(found: &Value, expected: &[f64]) {
+    let Components::F64(found) = found.components() else {
+        panic!("{found:?} is not f64");
     };
 
     assert_eq!(

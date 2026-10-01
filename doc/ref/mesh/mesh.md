@@ -171,7 +171,7 @@ object and errors in a mesh holding several. See
     - Repeatable: yes
 
     Computes occlusion from the voxel geometry and binds it to `dst-name` as a
-    per-corner `f32` vec1 in `[0, 1]`: `0` is fully occluded and `1` is fully
+    per-corner `f64` vec1 in `[0, 1]`: `0` is fully occluded and `1` is fully
     open. See [Computed occlusion](value-language.md#computed-occlusion).
 
 13. `--compute-voxel-position <dst-name>`
@@ -360,7 +360,7 @@ object and errors in a mesh holding several. See
     Writes a value to a custom vertex attribute on the indexed primitive.
     `<dst-name>` carries the leading underscore glTF requires of
     application-specific attributes: `_MY_COLOR` lands exactly as written, and a
-    bare name errors. An `f32` value takes `linear` or `srgb`. A `u8` or `u16`
+    bare name errors. An `f64` value takes `linear` or `srgb`. A `u8` or `u16`
     value takes `linear` and writes an integer accessor of its width; `srgb` on
     an integer errors. A `u32` value errors, glTF forbidding the width on an
     attribute; see [Vertex attributes](value-language.md#vertex-attributes).
@@ -546,7 +546,7 @@ them:
 vxl object mesh turret.voxj
   --compute-voxel-position voxelPosition
   --value "bands = mod(voxelPosition.y, 2)"
-  --value "albedo = baseColor * lerp(0.8, 1, f32(bands))"
+  --value "albedo = baseColor * lerp(0.8, 1, f64(bands))"
   --write-material-slot-value 0 baseColorTexture albedo
 ```
 

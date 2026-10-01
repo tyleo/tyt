@@ -1,6 +1,6 @@
 use crate::NumberSuffix;
 
-/// A number token: its digits, whether a decimal point made it an `f32`,
+/// A number token: its digits, whether a decimal point made it an `f64`,
 /// and the suffix that pinned a type.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NumberLiteral {

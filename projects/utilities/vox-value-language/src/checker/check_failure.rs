@@ -48,8 +48,8 @@ pub enum CheckFailure {
         found: Dimension,
     },
 
-    /// The operation takes `f32` alone.
-    RequiresF32 { operation: String, found: Scalar },
+    /// The operation takes `f64` alone.
+    RequiresF64 { operation: String, found: Scalar },
 
     /// An array met an operation that takes a plain value.
     RequiresPlain { operation: String, found: Domain },
@@ -133,8 +133,8 @@ impl Display for CheckFailure {
                 found,
             } => write!(formatter, "`{operation}` takes {expected}, not {found}"),
 
-            CheckFailure::RequiresF32 { operation, found } => {
-                write!(formatter, "`{operation}` takes f32 alone, not {found}")
+            CheckFailure::RequiresF64 { operation, found } => {
+                write!(formatter, "`{operation}` takes f64 alone, not {found}")
             }
 
             CheckFailure::RequiresPlain { operation, found } => write!(

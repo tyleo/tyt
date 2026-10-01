@@ -1014,7 +1014,7 @@ mod tests {
 
         let half = attribute("_HALF");
         let MeshAttributeComponents::F64(halves) = &half.components else {
-            panic!("an f32 value lands as f64");
+            panic!("an f64 value lands as f64");
         };
         assert!(
             halves
@@ -1055,6 +1055,7 @@ mod tests {
             custom("_PALETTE", "u8(swatchIndex)", Transfer::Srgb),
             custom("_SHINY", "metallic > 0", Transfer::Linear),
             custom("_TINT", "metallic * 2.0", Transfer::Srgb),
+            custom("_HUGE", "metallic + pow(10, 39)", Transfer::Linear),
         ] {
             let name = attribute.name().to_owned();
 
@@ -1495,6 +1496,10 @@ mod tests {
         assert_eq!(
             failing(vec![value_slot("metallicFactor", "2")], vec![]),
             slot_element("metallicFactor")
+        );
+        assert_eq!(
+            failing(vec![value_slot("emissiveStrength", "pow(10, 39)")], vec![]),
+            slot_element("emissiveStrength")
         );
         assert_eq!(
             failing(vec![value_slot("doubleSided", "1")], vec![]),

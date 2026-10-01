@@ -154,7 +154,7 @@ impl Checker<'_> {
                     ));
                 }
 
-                f32_call(function, checked, domain, dimension)
+                f64_call(function, checked, domain, dimension)
             }
 
             // The elementwise functions over one type.
@@ -162,14 +162,14 @@ impl Checker<'_> {
             | Function::Ceil
             | Function::Floor
             | Function::Normalize
-            | Function::Round => f32_call(function, checked, domain, dimensions[0]),
+            | Function::Round => f64_call(function, checked, domain, dimensions[0]),
 
-            Function::Length => f32_call(function, checked, domain, Dimension::Vec1),
+            Function::Length => f64_call(function, checked, domain, Dimension::Vec1),
 
             Function::Dot | Function::Distance => {
                 same(dimensions[0], dimensions[1]).ok_or_else(mismatched)?;
 
-                f32_call(function, checked, domain, Dimension::Vec1)
+                f64_call(function, checked, domain, Dimension::Vec1)
             }
 
             Function::Cross
@@ -179,13 +179,13 @@ impl Checker<'_> {
             | Function::RgbFromOklch => {
                 require_each(operation, Dimension::Vec3, &dimensions)?;
 
-                f32_call(function, checked, domain, Dimension::Vec3)
+                f64_call(function, checked, domain, Dimension::Vec3)
             }
 
             Function::Pow => {
                 let dimension = right_vec1(dimensions[0], dimensions[1]).ok_or_else(mismatched)?;
 
-                f32_call(function, checked, domain, dimension)
+                f64_call(function, checked, domain, dimension)
             }
 
             Function::Mod => {
@@ -199,7 +199,7 @@ impl Checker<'_> {
                     .and_then(|bound| bounds(dimensions[0], bound))
                     .ok_or_else(mismatched)?;
 
-                f32_call(function, checked, domain, dimension)
+                f64_call(function, checked, domain, dimension)
             }
 
             Function::Smoothstep => {
@@ -207,7 +207,7 @@ impl Checker<'_> {
                     .and_then(|bound| bounds(dimensions[2], bound))
                     .ok_or_else(mismatched)?;
 
-                f32_call(function, checked, domain, dimension)
+                f64_call(function, checked, domain, dimension)
             }
 
             Function::Lerp => {
@@ -215,13 +215,13 @@ impl Checker<'_> {
                     .and_then(|pair| bounds(pair, dimensions[2]))
                     .ok_or_else(mismatched)?;
 
-                f32_call(function, checked, domain, dimension)
+                f64_call(function, checked, domain, dimension)
             }
 
             Function::Step => {
                 let dimension = bounds(dimensions[1], dimensions[0]).ok_or_else(mismatched)?;
 
-                f32_call(function, checked, domain, dimension)
+                f64_call(function, checked, domain, dimension)
             }
 
             Function::Max if checked.len() == 1 => {
@@ -279,7 +279,7 @@ impl Checker<'_> {
             Function::Corner => climb(operation, Domain::Corner, only(checked)),
 
             // The conversions.
-            Function::F32 => convert(operation, Scalar::F32, None, only(checked)),
+            Function::F64 => convert(operation, Scalar::F64, None, only(checked)),
 
             Function::U8 => convert(operation, Scalar::U8, None, only(checked)),
 
@@ -354,7 +354,7 @@ impl Checker<'_> {
         let fallback = self.node(fallback)?;
 
         let Some(existing) = self.scope.get(name).copied() else {
-            let fallback = fallback.resolve(Scalar::F32)?;
+            let fallback = fallback.resolve(Scalar::F64)?;
             let output = fallback.output;
 
             return Ok(Checked::Typed(CheckedNode {
@@ -381,7 +381,7 @@ impl Checker<'_> {
             found => {
                 return Err(CheckFailure::MixedScalars {
                     operation: operation.to_owned(),
-                    found: vec![existing.scalar, found.unwrap_or(Scalar::F32)],
+                    found: vec![existing.scalar, found.unwrap_or(Scalar::F64)],
                 });
             }
         };
@@ -529,7 +529,7 @@ impl Checker<'_> {
         let domain = operand.domain();
         let dimension = operand.dimension();
         let (operand, scalar) = match operator {
-            UnaryOperator::Negate => (only(f32_only(&operation, vec![operand])?), Scalar::F32),
+            UnaryOperator::Negate => (only(f64_only(&operation, vec![operand])?), Scalar::F64),
             UnaryOperator::Not => (bool_operand(&operation, operand)?, Scalar::Bool),
         };
 
@@ -696,14 +696,14 @@ fn settled(operation: &str, operands: Vec<Checked>) -> CheckResult<(Scalar, Vec<
     }
 }
 
-/// Takes numeric operands as `f32` alone, typing pending literals `f32`.
-fn f32_only(operation: &str, operands: Vec<Checked>) -> CheckResult<Vec<CheckedNode>> {
+/// Takes numeric operands as `f64` alone, typing pending literals `f64`.
+fn f64_only(operation: &str, operands: Vec<Checked>) -> CheckResult<Vec<CheckedNode>> {
     operands
         .into_iter()
         .map(|operand| match operand.scalar() {
-            None | Some(Scalar::F32) => operand.resolve(Scalar::F32),
+            None | Some(Scalar::F64) => operand.resolve(Scalar::F64),
 
-            Some(found) if found.is_numeric() => Err(CheckFailure::RequiresF32 {
+            Some(found) if found.is_numeric() => Err(CheckFailure::RequiresF64 {
                 operation: operation.to_owned(),
                 found,
             }),
@@ -815,7 +815,7 @@ fn mix(arguments: Vec<Checked>, domain: Domain) -> CheckResult<Checked> {
 }
 
 /// Checks a reduction. The source sits above the destination. `avg`
-/// answers `f32`; the others keep the type.
+/// answers `f64`; the others keep the type.
 fn reduce(
     operation: &str,
     reduction: Reduction,
@@ -852,7 +852,7 @@ fn reduce(
                 output: Type {
                     domain: target,
                     dimension,
-                    scalar: Scalar::F32,
+                    scalar: Scalar::F64,
                 },
             }))
         }
@@ -890,7 +890,7 @@ fn climb(operation: &str, target: Domain, operand: Checked) -> CheckResult<Check
     }))
 }
 
-/// Checks a conversion. The rounding forms take `f32`; the exact forms
+/// Checks a conversion. The rounding forms take `f64`; the exact forms
 /// take any settled number.
 fn convert(
     operation: &str,
@@ -902,7 +902,7 @@ fn convert(
     let dimension = operand.dimension();
     let operand = match rounding {
         None => only(settled(operation, vec![operand])?.1),
-        Some(_) => only(f32_only(operation, vec![operand])?),
+        Some(_) => only(f64_only(operation, vec![operand])?),
     };
 
     Ok(Checked::Typed(CheckedNode {
@@ -919,14 +919,14 @@ fn convert(
     }))
 }
 
-/// Builds an elementwise call over `f32` arguments.
-fn f32_call(
+/// Builds an elementwise call over `f64` arguments.
+fn f64_call(
     function: Function,
     arguments: Vec<Checked>,
     domain: Domain,
     dimension: Dimension,
 ) -> CheckResult<Checked> {
-    let arguments = f32_only(function.name(), arguments)?;
+    let arguments = f64_only(function.name(), arguments)?;
 
     Ok(Checked::Typed(CheckedNode {
         kind: CheckedKind::Call {
@@ -936,7 +936,7 @@ fn f32_call(
         output: Type {
             domain,
             dimension,
-            scalar: Scalar::F32,
+            scalar: Scalar::F64,
         },
     }))
 }
@@ -967,11 +967,11 @@ fn keep_call(
 fn number(literal: &NumberLiteral) -> CheckResult<Checked> {
     let text = literal.text.clone();
     let pinned = match literal.suffix {
-        Some(NumberSuffix::F32) => Some(Scalar::F32),
+        Some(NumberSuffix::F64) => Some(Scalar::F64),
         Some(NumberSuffix::U8) => Some(Scalar::U8),
         Some(NumberSuffix::U16) => Some(Scalar::U16),
         Some(NumberSuffix::U32) => Some(Scalar::U32),
-        None if literal.fraction => Some(Scalar::F32),
+        None if literal.fraction => Some(Scalar::F64),
         None => None,
     };
 
@@ -1145,15 +1145,15 @@ mod tests {
 
     fn environment() -> TypeEnvironment {
         let names = [
-            ("color", Domain::Swatch, Dimension::Vec4, Scalar::F32),
-            ("rough", Domain::Swatch, Dimension::Vec1, Scalar::F32),
+            ("color", Domain::Swatch, Dimension::Vec4, Scalar::F64),
+            ("rough", Domain::Swatch, Dimension::Vec1, Scalar::F64),
             ("tag", Domain::Swatch, Dimension::Vec1, Scalar::String),
             ("glowing", Domain::Swatch, Dimension::Vec1, Scalar::Bool),
             ("count", Domain::Swatch, Dimension::Vec1, Scalar::U32),
             ("position", Domain::Voxel, Dimension::Vec3, Scalar::U32),
-            ("occlusion", Domain::Corner, Dimension::Vec1, Scalar::F32),
-            ("faceValue", Domain::Face, Dimension::Vec1, Scalar::F32),
-            ("plain3", Domain::Plain, Dimension::Vec3, Scalar::F32),
+            ("occlusion", Domain::Corner, Dimension::Vec1, Scalar::F64),
+            ("faceValue", Domain::Face, Dimension::Vec1, Scalar::F64),
+            ("plain3", Domain::Plain, Dimension::Vec3, Scalar::F64),
             ("plainCount", Domain::Plain, Dimension::Vec1, Scalar::U32),
             ("wide", Domain::Voxel, Dimension::Vec2, Scalar::U8),
         ];
@@ -1204,8 +1204,8 @@ mod tests {
         }
     }
 
-    fn requires_f32(operation: &str, found: Scalar) -> CheckFailure {
-        CheckFailure::RequiresF32 {
+    fn requires_f64(operation: &str, found: Scalar) -> CheckFailure {
+        CheckFailure::RequiresF64 {
             operation: operation.to_owned(),
             found,
         }
@@ -1236,10 +1236,10 @@ mod tests {
 
     #[test]
     fn a_decimal_point_or_suffix_fixes_a_literal() {
-        assert_eq!(rendered("0.5"), "0.5f32");
-        assert_eq!(rendered(".5"), "0.5f32");
-        assert_eq!(rendered("2."), "2f32");
-        assert_eq!(rendered("2f32"), "2f32");
+        assert_eq!(rendered("0.5"), "0.5f64");
+        assert_eq!(rendered(".5"), "0.5f64");
+        assert_eq!(rendered("2."), "2f64");
+        assert_eq!(rendered("2f64"), "2f64");
         assert_eq!(rendered("2u8"), "2u8");
         assert_eq!(rendered("2u16"), "2u16");
         assert_eq!(rendered("2u32"), "2u32");
@@ -1250,7 +1250,7 @@ mod tests {
     fn a_bare_literal_takes_the_type_beside_it() {
         assert_eq!(rendered("count * 2"), "(* `count` 2u32)");
         assert_eq!(rendered("2 * count"), "(* 2u32 `count`)");
-        assert_eq!(rendered("rough + 1"), "(+ `rough` 1f32)");
+        assert_eq!(rendered("rough + 1"), "(+ `rough` 1f64)");
         assert_eq!(
             rendered("position.y * 2 + 1"),
             "(+ (* (. `position` 1) 2u32) 1u32)"
@@ -1260,7 +1260,7 @@ mod tests {
             rendered("mod(position.y, 2)"),
             "(mod (. `position` 1) 2u32)"
         );
-        assert_eq!(rendered("rough < 1"), "(< `rough` 1f32)");
+        assert_eq!(rendered("rough < 1"), "(< `rough` 1f64)");
         assert_eq!(rendered("count == 2"), "(== `count` 2u32)");
     }
 
@@ -1270,7 +1270,7 @@ mod tests {
             "1",
             "1 + 2",
             "(1 + 2) * 3",
-            "f32(1)",
+            "f64(1)",
             "u8(1)",
             "face(1)",
             "1 < 2",
@@ -1312,22 +1312,22 @@ mod tests {
     }
 
     #[test]
-    fn f32_alone_functions_type_their_literals() {
-        assert_eq!(rendered("rgb(1, 1, 1)"), "(rgb 1f32 1f32 1f32)");
-        assert_eq!(rendered("pow(rough, 2)"), "(pow `rough` 2f32)");
+    fn f64_alone_functions_type_their_literals() {
+        assert_eq!(rendered("rgb(1, 1, 1)"), "(rgb 1f64 1f64 1f64)");
+        assert_eq!(rendered("pow(rough, 2)"), "(pow `rough` 2f64)");
         assert_eq!(
             rendered("lerp(0.8, 1, rough)"),
-            "(lerp 0.8f32 1f32 `rough`)"
+            "(lerp 0.8f64 1f64 `rough`)"
         );
-        assert_eq!(rendered("clamp(rough, 0, 1)"), "(clamp `rough` 0f32 1f32)");
+        assert_eq!(rendered("clamp(rough, 0, 1)"), "(clamp `rough` 0f64 1f64)");
         assert_eq!(
-            rendered("mix(0f32, 1, glowing)"),
-            "(mix 0f32 1f32 `glowing`)"
+            rendered("mix(0f64, 1, glowing)"),
+            "(mix 0f64 1f64 `glowing`)"
         );
-        assert_eq!(rendered("-1"), "(- 1f32)");
+        assert_eq!(rendered("-1"), "(- 1f64)");
         assert_eq!(
             rendered("round_u8(rough * 255)"),
-            "(round_u8 (* `rough` 255f32))"
+            "(round_u8 (* `rough` 255f64))"
         );
     }
 
@@ -1344,10 +1344,10 @@ mod tests {
             "(* (swatchSum (face 1u32)) `count`)"
         );
         assert_eq!(rendered("max(2, 3) + count"), "(+ (max 2u32 3u32) `count`)");
-        assert_eq!(rendered("mod(4, 3) * rough"), "(* (mod 4f32 3f32) `rough`)");
+        assert_eq!(rendered("mod(4, 3) * rough"), "(* (mod 4f64 3f64) `rough`)");
         assert_eq!(
             rendered("2.rr + rg(1, 2)"),
-            "(+ (. 2f32 00) (rg 1f32 2f32))"
+            "(+ (. 2f64 00) (rg 1f64 2f64))"
         );
         assert_eq!(rendered("(1 + 2) * wide"), "(* (+ 1u8 2u8) `wide`)");
         assert_eq!(
@@ -1362,27 +1362,27 @@ mod tests {
     fn numeric_types_never_mix() {
         assert_eq!(
             failure("position.y * 0.5"),
-            mixed("*", &[Scalar::U32, Scalar::F32])
+            mixed("*", &[Scalar::U32, Scalar::F64])
         );
         assert_eq!(
             failure("count + rough"),
-            mixed("+", &[Scalar::U32, Scalar::F32])
+            mixed("+", &[Scalar::U32, Scalar::F64])
         );
         assert_eq!(
             failure("count < rough"),
-            mixed("<", &[Scalar::U32, Scalar::F32])
+            mixed("<", &[Scalar::U32, Scalar::F64])
         );
         assert_eq!(
             failure("max(count, rough)"),
-            mixed("max", &[Scalar::U32, Scalar::F32])
+            mixed("max", &[Scalar::U32, Scalar::F64])
         );
         assert_eq!(
             failure("wide.x + count"),
             mixed("+", &[Scalar::U8, Scalar::U32])
         );
         assert_eq!(
-            typed("f32(position.y) * 0.5"),
-            ty(Domain::Voxel, Dimension::Vec1, Scalar::F32)
+            typed("f64(position.y) * 0.5"),
+            ty(Domain::Voxel, Dimension::Vec1, Scalar::F64)
         );
     }
 
@@ -1427,64 +1427,64 @@ mod tests {
     }
 
     #[test]
-    fn every_average_returns_f32() {
+    fn every_average_returns_f64() {
         assert_eq!(
             typed("avg(count)"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("swatchAvg(position)"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("voxelAvg(face(wide))"),
-            ty(Domain::Voxel, Dimension::Vec2, Scalar::F32)
+            ty(Domain::Voxel, Dimension::Vec2, Scalar::F64)
         );
     }
 
     #[test]
-    fn the_f32_alone_functions_reject_unsigned() {
-        assert_eq!(failure("pow(count, 2)"), requires_f32("pow", Scalar::U32));
-        assert_eq!(failure("abs(count)"), requires_f32("abs", Scalar::U32));
-        assert_eq!(failure("floor(wide)"), requires_f32("floor", Scalar::U8));
-        assert_eq!(failure("ceil(count)"), requires_f32("ceil", Scalar::U32));
-        assert_eq!(failure("round(count)"), requires_f32("round", Scalar::U32));
+    fn the_f64_alone_functions_reject_unsigned() {
+        assert_eq!(failure("pow(count, 2)"), requires_f64("pow", Scalar::U32));
+        assert_eq!(failure("abs(count)"), requires_f64("abs", Scalar::U32));
+        assert_eq!(failure("floor(wide)"), requires_f64("floor", Scalar::U8));
+        assert_eq!(failure("ceil(count)"), requires_f64("ceil", Scalar::U32));
+        assert_eq!(failure("round(count)"), requires_f64("round", Scalar::U32));
         assert_eq!(
             failure("lerp(count, count, 0.5)"),
-            requires_f32("lerp", Scalar::U32)
+            requires_f64("lerp", Scalar::U32)
         );
-        assert_eq!(failure("-count"), requires_f32("-", Scalar::U32));
+        assert_eq!(failure("-count"), requires_f64("-", Scalar::U32));
         assert_eq!(
             failure("length(position)"),
-            requires_f32("length", Scalar::U32)
+            requires_f64("length", Scalar::U32)
         );
         assert_eq!(
             failure("clamp(count, 0, 1)"),
-            requires_f32("clamp", Scalar::U32)
+            requires_f64("clamp", Scalar::U32)
         );
         assert_eq!(
             failure("step(0.5, count)"),
-            requires_f32("step", Scalar::U32)
+            requires_f64("step", Scalar::U32)
         );
         assert_eq!(
             failure("rgb(count, 1, 1)"),
-            requires_f32("rgb", Scalar::U32)
+            requires_f64("rgb", Scalar::U32)
         );
         assert_eq!(
             failure("smoothstep(0, 1, count)"),
-            requires_f32("smoothstep", Scalar::U32)
+            requires_f64("smoothstep", Scalar::U32)
         );
     }
 
     #[test]
     fn conversions_change_the_type() {
         assert_eq!(
-            typed("f32(count)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            typed("f64(count)"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
-            typed("f32(rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            typed("f64(rough)"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("u8(rough)"),
@@ -1516,17 +1516,17 @@ mod tests {
         );
         assert_eq!(
             failure("round_u8(count)"),
-            requires_f32("round_u8", Scalar::U32)
+            requires_f64("round_u8", Scalar::U32)
         );
         assert_eq!(
             failure("ceil_u32(wide)"),
-            requires_f32("ceil_u32", Scalar::U8)
+            requires_f64("ceil_u32", Scalar::U8)
         );
         assert_eq!(
             failure("floor_u16(count)"),
-            requires_f32("floor_u16", Scalar::U32)
+            requires_f64("floor_u16", Scalar::U32)
         );
-        assert_eq!(failure("f32(glowing)"), non_numeric("f32", Scalar::Bool));
+        assert_eq!(failure("f64(glowing)"), non_numeric("f64", Scalar::Bool));
         assert_eq!(failure("u32(tag)"), non_numeric("u32", Scalar::String));
     }
 
@@ -1534,27 +1534,27 @@ mod tests {
     fn arithmetic_pairs_dimensions_under_each_operators_rule() {
         assert_eq!(
             typed("color + color"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("color - color"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("color * rough"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("rough * color"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("color / rough"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("color * color"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             failure("color + color.rgb"),
@@ -1589,15 +1589,15 @@ mod tests {
     fn elementwise_operations_climb_the_lower_domain() {
         assert_eq!(
             typed("0.5 * rough"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("color * occlusion"),
-            ty(Domain::Corner, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("rough + faceValue"),
-            ty(Domain::Face, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Face, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("position.x + count"),
@@ -1605,11 +1605,11 @@ mod tests {
         );
         assert_eq!(
             typed("plain3 + color.rgb"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("lerp(1, occlusion, 0.8)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("glowing && faceValue > 0.5"),
@@ -1617,7 +1617,7 @@ mod tests {
         );
         assert_eq!(
             typed("mix(0.5, 1, occlusion < 0.5)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
     }
 
@@ -1625,19 +1625,19 @@ mod tests {
     fn climbs_lift_and_never_step_down() {
         assert_eq!(
             typed("face(rough)"),
-            ty(Domain::Face, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Face, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("corner(0.5)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("swatch(rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("voxel(color)"),
-            ty(Domain::Voxel, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Voxel, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("face(glowing)"),
@@ -1678,31 +1678,31 @@ mod tests {
     fn reductions_step_down_from_above_their_destination() {
         assert_eq!(
             typed("faceAvg(occlusion)"),
-            ty(Domain::Face, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Face, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("faceSum(occlusion)"),
-            ty(Domain::Face, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Face, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("faceMin(occlusion)"),
-            ty(Domain::Face, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Face, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("faceMax(occlusion)"),
-            ty(Domain::Face, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Face, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("voxelAvg(faceValue)"),
-            ty(Domain::Voxel, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Voxel, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("voxelMin(occlusion)"),
-            ty(Domain::Voxel, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Voxel, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("swatchAvg(occlusion)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("swatchSum(face(1u32))"),
@@ -1710,7 +1710,7 @@ mod tests {
         );
         assert_eq!(
             typed("swatchMin(voxelMin(occlusion))"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
 
         let source = |operation: &str, found: Domain| CheckFailure::ReductionSource {
@@ -1748,23 +1748,23 @@ mod tests {
     fn the_plain_reductions_take_an_array() {
         assert_eq!(
             typed("max(rough)"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("min(color)"),
-            ty(Domain::Plain, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("sum(occlusion)"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("avg(rough + 1)"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("avg(position)"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
 
         for text in ["max(0.5)", "min(plain3)", "sum(plainCount)", "avg(0.5)"] {
@@ -1779,15 +1779,15 @@ mod tests {
     fn indexing_samples_an_array_into_a_plain_value() {
         assert_eq!(
             typed("color[0]"),
-            ty(Domain::Plain, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("color[0].rgb"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("color.rgb[0]"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("tag[1u8]"),
@@ -1803,7 +1803,7 @@ mod tests {
         );
         assert_eq!(
             typed("occlusion[3u16]"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             failure("0.5[0]"),
@@ -1820,7 +1820,7 @@ mod tests {
         );
         assert_eq!(
             failure("color[0.5]"),
-            CheckFailure::IndexScalar { found: Scalar::F32 }
+            CheckFailure::IndexScalar { found: Scalar::F64 }
         );
         assert_eq!(
             failure("color[true]"),
@@ -1999,13 +1999,13 @@ mod tests {
         );
         assert_eq!(
             rendered("all(color.rgb > 0.9)"),
-            "(all (> (. `color` 012) 0.9f32))"
+            "(all (> (. `color` 012) 0.9f64))"
         );
         assert_eq!(
             failure("any(color.rg > color.rgb)"),
             dimensions(">", &[Dimension::Vec2, Dimension::Vec3])
         );
-        assert_eq!(failure("all(rough)"), non_bool("all", Scalar::F32));
+        assert_eq!(failure("all(rough)"), non_bool("all", Scalar::F64));
         assert_eq!(failure("any(tag)"), non_bool("any", Scalar::String));
         assert_eq!(
             failure("any(tag < \"x\")"),
@@ -2060,10 +2060,10 @@ mod tests {
             failure("color.rg > 0.5 && color.rgb > 0.5"),
             dimensions("&&", &[Dimension::Vec2, Dimension::Vec3])
         );
-        assert_eq!(failure("!rough"), non_bool("!", Scalar::F32));
+        assert_eq!(failure("!rough"), non_bool("!", Scalar::F64));
         assert_eq!(failure("!tag"), non_bool("!", Scalar::String));
         assert_eq!(failure("glowing || tag"), non_bool("||", Scalar::String));
-        assert_eq!(failure("rough && glowing"), non_bool("&&", Scalar::F32));
+        assert_eq!(failure("rough && glowing"), non_bool("&&", Scalar::F64));
         assert_eq!(failure("glowing ^ count"), non_bool("^", Scalar::U32));
         assert_eq!(failure("glowing && 1"), CheckFailure::UntypedLiteral);
         assert_eq!(failure("!1"), CheckFailure::UntypedLiteral);
@@ -2098,12 +2098,12 @@ mod tests {
     #[test]
     fn mix_bridges_a_bool_to_values_of_one_type() {
         assert_eq!(
-            typed("mix(0f32, 1, glowing)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            typed("mix(0f64, 1, glowing)"),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("mix(1, 2, glowing) * rough"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             rendered("mix(1, 2, glowing) * count"),
@@ -2111,11 +2111,11 @@ mod tests {
         );
         assert_eq!(
             typed("mix(color, color, glowing)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("mix(plain3, plain3, true)"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("mix(count, 0, glowing)"),
@@ -2139,11 +2139,11 @@ mod tests {
         );
         assert_eq!(
             typed("mix(0.5, 1, occlusion < 0.5)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("mix(color, 0.rrrr, color > 0.5)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("mix(position, position * 0, position > 2)"),
@@ -2163,7 +2163,7 @@ mod tests {
         );
         assert_eq!(
             failure("mix(count, 1.5, glowing)"),
-            mixed("mix", &[Scalar::U32, Scalar::F32])
+            mixed("mix", &[Scalar::U32, Scalar::F64])
         );
         assert_eq!(
             failure("mix(\"a\", true, glowing)"),
@@ -2177,7 +2177,7 @@ mod tests {
             failure("mix(glowing, 1, glowing)"),
             non_numeric("mix", Scalar::Bool)
         );
-        assert_eq!(failure("mix(1, 2, rough)"), non_bool("mix", Scalar::F32));
+        assert_eq!(failure("mix(1, 2, rough)"), non_bool("mix", Scalar::F64));
         assert_eq!(failure("mix(1, 2, tag)"), non_bool("mix", Scalar::String));
         assert_eq!(failure("mix(1, 2, 3)"), CheckFailure::UntypedLiteral);
         assert_eq!(failure("mix(1, 2, glowing)"), CheckFailure::UntypedLiteral);
@@ -2226,7 +2226,7 @@ mod tests {
             failure("rgb(tag, 1, 1)"),
             non_numeric("rgb", Scalar::String)
         );
-        assert_eq!(failure("f32(\"1\")"), non_numeric("f32", Scalar::String));
+        assert_eq!(failure("f64(\"1\")"), non_numeric("f64", Scalar::String));
     }
 
     // Swizzles.
@@ -2277,43 +2277,43 @@ mod tests {
     fn a_swizzle_draws_from_one_alphabet_within_its_source() {
         assert_eq!(
             typed("color.rgb"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("color.xyz"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("color.a"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("color.wzyx"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("rough.r"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("rough.rr"),
-            ty(Domain::Swatch, Dimension::Vec2, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec2, Scalar::F64)
         );
         assert_eq!(
             typed("rough.xxxx"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("0.5.rrr"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("color.rrgg"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("plain3.zy"),
-            ty(Domain::Plain, Dimension::Vec2, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec2, Scalar::F64)
         );
         assert_eq!(
             typed("2.rr * count"),
@@ -2321,7 +2321,7 @@ mod tests {
         );
         assert_eq!(
             typed("(color + color).x"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(rendered("color.wzyx"), "(. `color` 3210)");
         assert_eq!(
@@ -2367,19 +2367,19 @@ mod tests {
     fn the_constructors_take_vec1_parts() {
         assert_eq!(
             typed("r(rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("rg(rough, 0.5)"),
-            ty(Domain::Swatch, Dimension::Vec2, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec2, Scalar::F64)
         );
         assert_eq!(
             typed("rgb(rough, rough, occlusion)"),
-            ty(Domain::Corner, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("rgba(1, 1, 1, 1)"),
-            ty(Domain::Plain, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             failure("rgb(color.rg, 1, 1)"),
@@ -2403,15 +2403,15 @@ mod tests {
     fn binary_min_and_max_broadcast_from_either_side() {
         assert_eq!(
             typed("max(color, 0.5)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("min(0.5, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("max(color, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("max(count, 2)"),
@@ -2419,7 +2419,7 @@ mod tests {
         );
         assert_eq!(
             typed("max(occlusion, 0.2)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             failure("min(color, color.rgb)"),
@@ -2431,11 +2431,11 @@ mod tests {
     fn pow_and_mod_broadcast_their_right_side_alone() {
         assert_eq!(
             typed("pow(color, 2)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("pow(color, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("mod(position, 2)"),
@@ -2443,7 +2443,7 @@ mod tests {
         );
         assert_eq!(
             typed("mod(rough + 0.618, 1)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             failure("pow(2, color)"),
@@ -2459,19 +2459,19 @@ mod tests {
     fn clamp_and_smoothstep_pair_their_bounds() {
         assert_eq!(
             typed("clamp(color, 0, 1)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("clamp(color, color, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("smoothstep(0.2, 0.8, occlusion)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("smoothstep(color, color, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             failure("clamp(color, 0, color)"),
@@ -2500,19 +2500,19 @@ mod tests {
     fn lerp_and_step_broadcast_one_argument() {
         assert_eq!(
             typed("lerp(color, color, 0.5)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("lerp(color, color, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("step(0.5, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("step(color, color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             failure("lerp(color, rough, 0.5)"),
@@ -2532,31 +2532,31 @@ mod tests {
     fn the_vector_functions_fold_components_and_never_broadcast() {
         assert_eq!(
             typed("dot(color, color)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("dot(rough, rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("length(color)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("length(rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("distance(color.rgb, plain3)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("normalize(color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("cross(color.rgb, plain3)"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             failure("dot(color, rough)"),
@@ -2580,19 +2580,19 @@ mod tests {
     fn the_color_conversions_take_vec3() {
         assert_eq!(
             typed("oklabFromRgb(color.rgb)"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("rgbFromOklab(plain3)"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("oklchFromRgb(color.rgb).z"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("rgbFromOklch(oklchFromRgb(color.rgb) + rgb(0, 0, 0.1))"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             failure("oklchFromRgb(color)"),
@@ -2604,31 +2604,31 @@ mod tests {
         );
         assert_eq!(
             failure("rgbFromOklch(position)"),
-            requires_f32("rgbFromOklch", Scalar::U32)
+            requires_f64("rgbFromOklch", Scalar::U32)
         );
     }
 
     #[test]
-    fn rounding_and_abs_keep_f32_and_dimension() {
+    fn rounding_and_abs_keep_f64_and_dimension() {
         assert_eq!(
             typed("abs(color)"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("floor(rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("ceil(occlusion)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("round(plain3)"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("round(rough * 4) / 4"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
     }
 
@@ -2636,12 +2636,12 @@ mod tests {
     fn default_fills_an_unbound_name_from_its_fallback() {
         assert_eq!(
             typed("default(missing, 1)"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
-        assert_eq!(rendered("default(missing, 1)"), "(default `missing`? 1f32)");
+        assert_eq!(rendered("default(missing, 1)"), "(default `missing`? 1f64)");
         assert_eq!(
             typed("default(missing, rgb(0, 0, 0))"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             typed("default(missing, \"x\")"),
@@ -2661,15 +2661,15 @@ mod tests {
         );
         assert_eq!(
             typed("default(missing, rough)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("swatch(default(missing, 1))"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             failure("default(missing, 1) * count"),
-            mixed("*", &[Scalar::F32, Scalar::U32])
+            mixed("*", &[Scalar::F64, Scalar::U32])
         );
     }
 
@@ -2677,9 +2677,9 @@ mod tests {
     fn default_reads_a_bound_name_beside_a_fallback_of_its_type() {
         assert_eq!(
             typed("default(rough, 1)"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
-        assert_eq!(rendered("default(rough, 1)"), "(default `rough` 1f32)");
+        assert_eq!(rendered("default(rough, 1)"), "(default `rough` 1f64)");
         assert_eq!(
             typed("default(count, 1)"),
             ty(Domain::Swatch, Dimension::Vec1, Scalar::U32)
@@ -2691,7 +2691,7 @@ mod tests {
         );
         assert_eq!(
             typed("default(color, rgba(1, 1, 1, 1))"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             typed("default(tag, \"x\")"),
@@ -2703,11 +2703,11 @@ mod tests {
         );
         assert_eq!(
             typed("default(rough, occlusion)"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("default(plain3, plain3)"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             failure("default(rough, color)"),
@@ -2715,19 +2715,19 @@ mod tests {
         );
         assert_eq!(
             failure("default(tag, 1)"),
-            mixed("default", &[Scalar::String, Scalar::F32])
+            mixed("default", &[Scalar::String, Scalar::F64])
         );
         assert_eq!(
             failure("default(glowing, 1)"),
-            mixed("default", &[Scalar::Bool, Scalar::F32])
+            mixed("default", &[Scalar::Bool, Scalar::F64])
         );
         assert_eq!(
             failure("default(rough, \"x\")"),
-            mixed("default", &[Scalar::F32, Scalar::String])
+            mixed("default", &[Scalar::F64, Scalar::String])
         );
         assert_eq!(
             failure("default(count, 1.5)"),
-            mixed("default", &[Scalar::U32, Scalar::F32])
+            mixed("default", &[Scalar::U32, Scalar::F64])
         );
         assert_eq!(
             failure("default(count, 1u8)"),
@@ -2735,7 +2735,7 @@ mod tests {
         );
         assert_eq!(
             failure("default(rough, glowing)"),
-            mixed("default", &[Scalar::F32, Scalar::Bool])
+            mixed("default", &[Scalar::F64, Scalar::Bool])
         );
         assert_eq!(
             failure("default(count, 5000000000)"),
@@ -2772,7 +2772,7 @@ mod tests {
     fn parentheses_group_without_changing_the_type() {
         assert_eq!(
             typed("(rough + 1) * 2"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             typed("((glowing))"),

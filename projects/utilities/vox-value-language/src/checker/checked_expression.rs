@@ -119,7 +119,7 @@ mod tests {
         let kind = |domain, dimension| Type {
             domain,
             dimension,
-            scalar: Scalar::F32,
+            scalar: Scalar::F64,
         };
         let environment = TypeEnvironment {
             types: [
@@ -150,15 +150,15 @@ mod tests {
         assert!(climbs("albedo.a * metallic").is_empty());
         assert_eq!(climbs("albedo.a * ao"), ["swatch (. `albedo` 3)"]);
         assert_eq!(
-            climbs("lerp(albedo.a, 1.0, f32(bands)) * occlusion"),
+            climbs("lerp(albedo.a, 1.0, f64(bands)) * occlusion"),
             [
-                "voxel (lerp (. `albedo` 3) 1f32 (f32 `bands`))",
+                "voxel (lerp (. `albedo` 3) 1f64 (f64 `bands`))",
                 "swatch (. `albedo` 3)"
             ]
         );
         assert_eq!(
             climbs("metallic > 0.5 && bands == 1.0"),
-            ["swatch (> `metallic` 0.5f32)"]
+            ["swatch (> `metallic` 0.5f64)"]
         );
     }
 
@@ -171,7 +171,7 @@ mod tests {
         );
         assert_eq!(
             climbs("default(metallic, 0.5) * ao"),
-            ["swatch (default `metallic` 0.5f32)"]
+            ["swatch (default `metallic` 0.5f64)"]
         );
         assert_eq!(climbs("default(metallic, ao)"), ["swatch `metallic`"]);
         assert!(climbs("default(missing, 0.5) * ao").is_empty());
@@ -180,7 +180,7 @@ mod tests {
         assert!(climbs("face(metallic[1u32]) + max(bands)").is_empty());
         assert_eq!(
             climbs("face(max(metallic, 0.5))"),
-            ["swatch (max `metallic` 0.5f32)"]
+            ["swatch (max `metallic` 0.5f64)"]
         );
     }
 }

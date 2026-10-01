@@ -2,7 +2,7 @@
 
 mod assert_close;
 mod bools;
-mod f32s;
+mod f64s;
 mod groupings;
 mod lamp;
 mod run;
@@ -15,7 +15,7 @@ mod u8s;
 
 pub(crate) use assert_close::*;
 pub(crate) use bools::*;
-pub(crate) use f32s::*;
+pub(crate) use f64s::*;
 pub(crate) use groupings::*;
 pub(crate) use lamp::*;
 pub(crate) use run::*;

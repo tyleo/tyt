@@ -53,27 +53,27 @@ mod tests {
     /// the computed values.
     fn palette() -> TypeEnvironment {
         environment(&[
-            ("baseColor", Domain::Swatch, Dimension::Vec4, Scalar::F32),
-            ("roughness", Domain::Swatch, Dimension::Vec1, Scalar::F32),
-            ("metallic", Domain::Swatch, Dimension::Vec1, Scalar::F32),
+            ("baseColor", Domain::Swatch, Dimension::Vec4, Scalar::F64),
+            ("roughness", Domain::Swatch, Dimension::Vec1, Scalar::F64),
+            ("metallic", Domain::Swatch, Dimension::Vec1, Scalar::F64),
             (
                 "emissiveColor",
                 Domain::Swatch,
                 Dimension::Vec3,
-                Scalar::F32,
+                Scalar::F64,
             ),
             (
                 "emissiveStrength",
                 Domain::Swatch,
                 Dimension::Vec1,
-                Scalar::F32,
+                Scalar::F64,
             ),
             ("tag", Domain::Swatch, Dimension::Vec1, Scalar::String),
             (
                 "computedOcclusion",
                 Domain::Corner,
                 Dimension::Vec1,
-                Scalar::F32,
+                Scalar::F64,
             ),
             ("voxelPosition", Domain::Voxel, Dimension::Vec3, Scalar::U32),
             ("swatchIndex", Domain::Swatch, Dimension::Vec1, Scalar::U32),
@@ -102,11 +102,11 @@ mod tests {
 
         assert_eq!(
             get(&program, "tint"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "dim"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "dark"),
@@ -126,17 +126,17 @@ mod tests {
     #[test]
     fn a_binding_redefines_a_name_let_style() {
         let program = checked(
-            "roughness = pow(roughness, 2); count = 1u32; count = f32(count) * 0.5;",
+            "roughness = pow(roughness, 2); count = 1u32; count = f64(count) * 0.5;",
             &palette(),
         );
 
         assert_eq!(
             get(&program, "roughness"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "count"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(program.bindings.len(), 3);
     }
@@ -147,7 +147,7 @@ mod tests {
 
         assert_eq!(
             get(&program, "baseColor"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(program.get("missing"), None);
         assert!(program.bindings.is_empty());
@@ -227,23 +227,23 @@ mod tests {
 
         assert_eq!(
             get(&program, "baseColor"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             get(&program, "occlusionStrength"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "emissiveColor"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             program.bindings[1].expression.render(),
-            "(swatch (default `occlusionStrength`? 1f32))"
+            "(swatch (default `occlusionStrength`? 1f64))"
         );
         assert_eq!(
             program.bindings[2].expression.render(),
-            "(swatch (default `roughness` 1f32))"
+            "(swatch (default `roughness` 1f64))"
         );
     }
 
@@ -261,23 +261,23 @@ mod tests {
 
         assert_eq!(
             get(&program, "albedo"),
-            ty(Domain::Swatch, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             get(&program, "orm"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "maxStrength"),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "emissive"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "white"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
     }
 
@@ -305,19 +305,19 @@ mod tests {
 
         assert_eq!(
             get(&program, "mse"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "heat"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "accent"),
-            ty(Domain::Plain, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "ao"),
-            ty(Domain::Corner, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Corner, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "solid"),
@@ -325,7 +325,7 @@ mod tests {
         );
         assert_eq!(
             get(&program, "opaqueWhite"),
-            ty(Domain::Plain, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Plain, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             get(&program, "crevice"),
@@ -350,12 +350,12 @@ mod tests {
         let program = checked(
             "crevice = faceAvg(computedOcclusion) < 0.7;
              bands = mod(voxelPosition.y, 2);
-             albedo = baseColor * lerp(0.8, 1, f32(bands));
+             albedo = baseColor * lerp(0.8, 1, f64(bands));
              rawEmissive = emissiveColor * emissiveStrength;
-             height = f32(voxelPosition.y) / f32(max(max(voxelPosition.y), 1));
+             height = f64(voxelPosition.y) / f64(max(max(voxelPosition.y), 1));
              aoFace = faceAvg(computedOcclusion);
              faceCount = swatchSum(face(1u32));
-             ao = swatchSum(aoFace) / f32(max(faceCount, 1));
+             ao = swatchSum(aoFace) / f64(max(faceCount, 1));
              lab = oklabFromRgb(baseColor.rgb);
              reddish = distance(lab, oklabFromRgb(rgb(1, 0, 0))) < 0.25;
              darker = rgbFromOklab(lab * rgb(0.8, 1, 1));
@@ -373,15 +373,15 @@ mod tests {
         );
         assert_eq!(
             get(&program, "albedo"),
-            ty(Domain::Voxel, Dimension::Vec4, Scalar::F32)
+            ty(Domain::Voxel, Dimension::Vec4, Scalar::F64)
         );
         assert_eq!(
             get(&program, "rawEmissive"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "height"),
-            ty(Domain::Voxel, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Voxel, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "faceCount"),
@@ -389,7 +389,7 @@ mod tests {
         );
         assert_eq!(
             get(&program, "ao"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
         assert_eq!(
             get(&program, "reddish"),
@@ -397,11 +397,11 @@ mod tests {
         );
         assert_eq!(
             get(&program, "darker"),
-            ty(Domain::Swatch, Dimension::Vec3, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec3, Scalar::F64)
         );
         assert_eq!(
             get(&program, "hue"),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32)
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64)
         );
     }
 }

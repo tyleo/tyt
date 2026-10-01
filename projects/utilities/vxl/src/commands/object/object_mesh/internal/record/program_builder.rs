@@ -223,7 +223,7 @@ mod tests {
         let swatch = |dimension| Type {
             domain: Domain::Swatch,
             dimension,
-            scalar: Scalar::F32,
+            scalar: Scalar::F64,
         };
         let environment = TypeEnvironment {
             types: [

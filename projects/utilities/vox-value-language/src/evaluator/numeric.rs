@@ -9,13 +9,13 @@ pub trait Numeric: Copy + PartialOrd {
     fn sum(values: impl Iterator<Item = Self>, operation: &str) -> EvalResult<Self>;
 }
 
-impl Numeric for f32 {
+impl Numeric for f64 {
     fn to_f64(self) -> f64 {
-        f64::from(self)
+        self
     }
 
     fn sum(values: impl Iterator<Item = Self>, operation: &str) -> EvalResult<Self> {
-        let total = values.map(f64::from).sum::<f64>() as f32;
+        let total = values.sum::<f64>();
 
         if total.is_finite() {
             Ok(total)

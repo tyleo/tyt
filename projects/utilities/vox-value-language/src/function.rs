@@ -29,7 +29,7 @@ pub enum Function {
 
     Dot,
 
-    F32,
+    F64,
 
     Face,
 
@@ -146,7 +146,7 @@ impl Function {
         Function::Floor,
         Function::Ceil,
         Function::Round,
-        Function::F32,
+        Function::F64,
         Function::U8,
         Function::U16,
         Function::U32,
@@ -211,7 +211,7 @@ impl Function {
             Function::Default => "default",
             Function::Distance => "distance",
             Function::Dot => "dot",
-            Function::F32 => "f32",
+            Function::F64 => "f64",
             Function::Face => "face",
             Function::FaceAvg => "faceAvg",
             Function::FaceMax => "faceMax",

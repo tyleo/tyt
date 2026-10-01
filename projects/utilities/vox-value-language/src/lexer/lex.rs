@@ -365,11 +365,11 @@ mod tests {
             vec![number("2", false, Some(NumberSuffix::U8))]
         );
         assert_eq!(
-            kinds("2u16 2u32 2f32"),
+            kinds("2u16 2u32 2f64"),
             vec![
                 number("2", false, Some(NumberSuffix::U16)),
                 number("2", false, Some(NumberSuffix::U32)),
-                number("2", false, Some(NumberSuffix::F32)),
+                number("2", false, Some(NumberSuffix::F64)),
             ]
         );
     }
@@ -440,11 +440,11 @@ mod tests {
             )
         );
         assert_eq!(
-            failure(".5f32"),
+            failure(".5f64"),
             (
                 2..5,
                 ParseFailure::SuffixOnFraction {
-                    suffix: "f32".to_owned()
+                    suffix: "f64".to_owned()
                 }
             )
         );

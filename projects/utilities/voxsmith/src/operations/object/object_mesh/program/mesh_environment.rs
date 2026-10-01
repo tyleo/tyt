@@ -127,7 +127,7 @@ fn property_value(
 
         VoxValuePoolKind::Float(_) => (
             Dimension::Vec1,
-            f32s(values, |value| match value {
+            f64s(values, |value| match value {
                 VoxValuePoolValueRef::Float(value) => slice::from_ref(value),
                 _ => unreachable!("a pool's values share its kind"),
             }),
@@ -158,7 +158,7 @@ fn property_value(
 
         VoxValuePoolKind::Vec2Float(_) => (
             Dimension::Vec2,
-            f32s(values, |value| match value {
+            f64s(values, |value| match value {
                 VoxValuePoolValueRef::Vec2Float(components) => components.as_slice(),
                 _ => unreachable!("a pool's values share its kind"),
             }),
@@ -174,7 +174,7 @@ fn property_value(
 
         VoxValuePoolKind::Vec3Float(_) => (
             Dimension::Vec3,
-            f32s(values, |value| match value {
+            f64s(values, |value| match value {
                 VoxValuePoolValueRef::Vec3Float(components) => components.as_slice(),
                 _ => unreachable!("a pool's values share its kind"),
             }),
@@ -190,7 +190,7 @@ fn property_value(
 
         VoxValuePoolKind::Vec4Float(_) => (
             Dimension::Vec4,
-            f32s(values, |value| match value {
+            f64s(values, |value| match value {
                 VoxValuePoolValueRef::Vec4Float(components) => components.as_slice(),
                 _ => unreachable!("a pool's values share its kind"),
             }),
@@ -212,14 +212,14 @@ fn property_value(
 }
 
 /// The float components of `values` flattened, each read through `pick`.
-fn f32s<'a>(
+fn f64s<'a>(
     values: &[VoxValuePoolValueRef<'a>],
     pick: for<'b> fn(&'b VoxValuePoolValueRef<'a>) -> &'b [f64],
 ) -> Components {
-    Components::F32(
+    Components::F64(
         values
             .iter()
-            .flat_map(|value| pick(value).iter().map(|&component| component as f32))
+            .flat_map(|value| pick(value).iter().copied())
             .collect(),
     )
 }
@@ -284,12 +284,12 @@ fn compute_voxel_position(object: &VoxObject) -> Value {
         .expect("three components per voxel fill a vec3 array")
 }
 
-/// Each face corner's [`mesh_occlusion`] as a corner `f32` vec1 array.
+/// Each face corner's [`mesh_occlusion`] as a corner `f64` vec1 array.
 fn compute_occlusion(object: &VoxObject, geometry: &MeshGeometry) -> Value {
     Value::new(
         Domain::Corner,
         Dimension::Vec1,
-        Components::F32(mesh_occlusion(object, geometry)),
+        Components::F64(mesh_occlusion(object, geometry)),
     )
     .expect("one component per corner fills a vec1 array")
 }
@@ -358,7 +358,7 @@ mod tests {
 
         assert_eq!(value.domain(), Domain::Corner);
         assert_eq!(value.entries(), 24);
-        assert_eq!(value.components(), &Components::F32(vec![1.0; 24]));
+        assert_eq!(value.components(), &Components::F64(vec![1.0; 24]));
     }
 
     #[test]
@@ -393,7 +393,7 @@ mod tests {
             (
                 VoxValuePool::float(vec![0.5]).unwrap(),
                 Dimension::Vec1,
-                Scalar::F32,
+                Scalar::F64,
                 1,
             ),
             (
@@ -417,7 +417,7 @@ mod tests {
             (
                 VoxValuePool::vec_4_float(vec![[0.0, 0.5, 1.0, 1.0]]).unwrap(),
                 Dimension::Vec4,
-                Scalar::F32,
+                Scalar::F64,
                 4,
             ),
         ];
@@ -445,7 +445,7 @@ mod tests {
         assert_eq!(value.entries(), 2);
         assert_eq!(
             value.components(),
-            &Components::F32(vec![1.0, 2.0, 3.0, 4.0])
+            &Components::F64(vec![1.0, 2.0, 3.0, 4.0])
         );
     }
 

@@ -11,7 +11,7 @@ The design is in the [README](README.md). Check steps off as they land.
 
 ## Steps
 
-- [ ] **S1. f64 language.** In `vox-value-language`, rename `Scalar::F32`,
+- [x] **S1. f64 language.** In `vox-value-language`, rename `Scalar::F32`,
       `Components::F32`, and `NumberSuffix::F32` (`lexer/number_suffix.rs`)
       to `F64`. Rename the `f32` conversion in `function.rs` to `f64`. Drop
       the conversion's exactness error for unsigned input. Recheck

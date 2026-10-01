@@ -16,10 +16,10 @@ pub fn bake_png(
     bake: ArrayDomain,
     atlases: &Atlases<'_>,
 ) -> Result<PngImage> {
-    let Components::F32(components) = value.components() else {
+    let Components::F64(components) = value.components() else {
         return Err(Error::mesh_record(
             element.clone(),
-            format!("is a {}, and a png takes f32 components", value.to_type()),
+            format!("is a {}, and a png takes f64 components", value.to_type()),
         ));
     };
 

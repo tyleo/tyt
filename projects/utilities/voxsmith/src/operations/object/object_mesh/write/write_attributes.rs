@@ -1,7 +1,8 @@
 use crate::{
     Error, Result,
     operations::object::{
-        ArrayDomain, Atlases, AttributeWrite, MeshElement, ProgramRun, Transfer, encode_components,
+        ArrayDomain, Atlases, AttributeWrite, MeshElement, ProgramRun, Transfer, check_f32_range,
+        encode_components,
     },
 };
 use branded_id::U32Id;
@@ -104,7 +105,7 @@ fn entries_agree(value: &Value, left: usize, right: usize) -> bool {
     match value.components() {
         Components::Bool(components) => components[range(left)] == components[range(right)],
 
-        Components::F32(components) => components[range(left)]
+        Components::F64(components) => components[range(left)]
             .iter()
             .map(|component| component.to_bits())
             .eq(components[range(right)]
@@ -121,7 +122,7 @@ fn entries_agree(value: &Value, left: usize, right: usize) -> bool {
     }
 }
 
-/// One linear color per entry of `entries` from an f32 vec3 or vec4 `value`
+/// One linear color per entry of `entries` from an f64 vec3 or vec4 `value`
 /// in `[0, 1]`. A vec3 takes an alpha of one.
 fn vertex_colors(
     element: &MeshElement,
@@ -131,13 +132,13 @@ fn vertex_colors(
     let width = value.dimension().width();
 
     let components = match value.components() {
-        Components::F32(components) if width == 3 || width == 4 => components,
+        Components::F64(components) if width == 3 || width == 4 => components,
 
         _ => {
             return Err(Error::mesh_record(
                 element.clone(),
                 format!(
-                    "is a {}, and `COLOR_0` takes an f32 vec3 or vec4",
+                    "is a {}, and `COLOR_0` takes an f64 vec3 or vec4",
                     value.to_type()
                 ),
             ));
@@ -175,10 +176,10 @@ fn custom_components(
     let width = value.dimension().width();
     let range = |entry: usize| entry * width..(entry + 1) * width;
 
-    if transfer == Transfer::Srgb && value.scalar() != Scalar::F32 {
+    if transfer == Transfer::Srgb && value.scalar() != Scalar::F64 {
         return Err(Error::mesh_record(
             element.clone(),
-            format!("is a {kind}, and `srgb` transfers f32 alone"),
+            format!("is a {kind}, and `srgb` transfers f64 alone"),
         ));
     }
 
@@ -186,18 +187,21 @@ fn custom_components(
         Components::Bool(_) | Components::String(_) => {
             return Err(Error::mesh_record(
                 element.clone(),
-                format!("is a {kind}, and an attribute takes f32, u8, or u16"),
+                format!("is a {kind}, and an attribute takes f64, u8, or u16"),
             ));
         }
 
-        Components::F32(components) => MeshAttributeComponents::F64(
+        Components::F64(components) => MeshAttributeComponents::F64(
             entries
                 .iter()
                 .map(|&entry| {
                     encode_components(element, &components[range(entry)], transfer, false)
                 })
                 .collect::<Result<Vec<_>>>()?
-                .concat(),
+                .concat()
+                .into_iter()
+                .map(|component| check_f32_range(element, component))
+                .collect::<Result<_>>()?,
         ),
 
         Components::U8(components) => MeshAttributeComponents::U8(

@@ -98,7 +98,7 @@ mod tests {
         let value = Value::new(
             Domain::Plain,
             Dimension::Vec3,
-            Components::F32(vec![1.0, 2.0, 3.0]),
+            Components::F64(vec![1.0, 2.0, 3.0]),
         )
         .unwrap();
 
@@ -108,14 +108,14 @@ mod tests {
             Type {
                 domain: Domain::Plain,
                 dimension: Dimension::Vec3,
-                scalar: Scalar::F32
+                scalar: Scalar::F64
             }
         );
         assert_eq!(
             Value::new(
                 Domain::Plain,
                 Dimension::Vec3,
-                Components::F32(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+                Components::F64(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
             ),
             Err(Error::ComponentCount {
                 domain: Domain::Plain,

@@ -103,7 +103,7 @@ mod tests {
         let kind = |domain| Type {
             domain,
             dimension: Dimension::Vec1,
-            scalar: Scalar::F32,
+            scalar: Scalar::F64,
         };
         let environment = TypeEnvironment {
             types: [

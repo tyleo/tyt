@@ -48,7 +48,7 @@ pub enum Error {
     /// The type environment holds a name the value environment lacks.
     MissingValue { name: String },
 
-    /// An environment `f32` array holds a NaN or infinite component.
+    /// An environment `f64` array holds a NaN or infinite component.
     NonFiniteInput { name: String },
 
     /// The text broke a token or grammar rule over the named byte range.

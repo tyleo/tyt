@@ -1,4 +1,4 @@
-use crate::{Dimension, Domain, ValueEnvironment, f32s, groupings};
+use crate::{Dimension, Domain, ValueEnvironment, f64s, groupings};
 use std::collections::HashMap;
 
 /// The step: one stone swatch, three voxels in an L, and ten greedy faces,
@@ -27,26 +27,26 @@ pub fn step() -> ValueEnvironment {
     environment.values = [
         (
             "baseColor",
-            f32s(Domain::Swatch, Dimension::Vec4, &[0.55, 0.5, 0.45, 1.0]),
+            f64s(Domain::Swatch, Dimension::Vec4, &[0.55, 0.5, 0.45, 1.0]),
         ),
         (
             "height",
-            f32s(Domain::Voxel, Dimension::Vec1, &[0.0, 0.0, 1.0]),
+            f64s(Domain::Voxel, Dimension::Vec1, &[0.0, 0.0, 1.0]),
         ),
         (
             "faceValue",
-            f32s(
+            f64s(
                 Domain::Face,
                 Dimension::Vec1,
-                &(0..10).map(|face| face as f32).collect::<Vec<_>>(),
+                &(0..10).map(|face| face as f64).collect::<Vec<_>>(),
             ),
         ),
         (
             "computedOcclusion",
-            f32s(
+            f64s(
                 Domain::Corner,
                 Dimension::Vec1,
-                &(0..40).map(|corner| corner as f32).collect::<Vec<_>>(),
+                &(0..40).map(|corner| corner as f64).collect::<Vec<_>>(),
             ),
         ),
     ]

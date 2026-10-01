@@ -140,7 +140,7 @@ pub struct ObjectMesh {
     compute_index: Vec<String>,
 
     /// Computes occlusion from the voxel geometry and binds it to the name as
-    /// a per-corner `f32` in `[0, 1]`, with `0` fully occluded. Repeatable.
+    /// a per-corner `f64` in `[0, 1]`, with `0` fully occluded. Repeatable.
     #[arg(value_name = "dst-name", long, action = ArgAction::Append)]
     compute_occlusion: Vec<String>,
 

@@ -132,10 +132,10 @@ fn json_object(entries: &[(String, String)]) -> String {
 /// object. An entry of two or more components writes as a row, and an array
 /// writes one row per entry.
 fn json_text(element: &MeshElement, value: &Value, transfer: Transfer) -> Result<String> {
-    if transfer == Transfer::Srgb && value.scalar() != Scalar::F32 {
+    if transfer == Transfer::Srgb && value.scalar() != Scalar::F64 {
         return Err(Error::mesh_record(
             element.clone(),
-            format!("is a {}, and `srgb` transfers f32 alone", value.to_type()),
+            format!("is a {}, and `srgb` transfers f64 alone", value.to_type()),
         ));
     }
 
@@ -144,7 +144,7 @@ fn json_text(element: &MeshElement, value: &Value, transfer: Transfer) -> Result
     let entries: Vec<String> = match value.components() {
         Components::Bool(components) => rows(components, width, |flag| flag.to_string()),
 
-        Components::F32(components) => components
+        Components::F64(components) => components
             .chunks_exact(width)
             .map(|entry| {
                 let encoded = encode_components(element, entry, transfer, false)?;
@@ -152,8 +152,7 @@ fn json_text(element: &MeshElement, value: &Value, transfer: Transfer) -> Result
                 Ok(row(encoded
                     .iter()
                     .map(|&component| {
-                        serde_json::to_string(&(component as f32))
-                            .expect("a finite float serializes")
+                        serde_json::to_string(&component).expect("a finite float serializes")
                     })
                     .collect()))
             })
@@ -225,13 +224,21 @@ mod tests {
 
     #[test]
     fn a_plain_value_writes_bare_and_an_array_writes_rows() {
-        let plain = Value::new(Domain::Plain, Dimension::Vec1, Components::F32(vec![0.4])).unwrap();
+        let plain = Value::new(Domain::Plain, Dimension::Vec1, Components::F64(vec![0.4])).unwrap();
         assert_eq!(text(plain, Transfer::Linear), "0.4");
+
+        let third = Value::new(
+            Domain::Plain,
+            Dimension::Vec1,
+            Components::F64(vec![1.0 / 3.0]),
+        )
+        .unwrap();
+        assert_eq!(text(third, Transfer::Linear), "0.3333333333333333");
 
         let color = Value::new(
             Domain::Plain,
             Dimension::Vec4,
-            Components::F32(vec![1.0, 0.0, 0.0, 1.0]),
+            Components::F64(vec![1.0, 0.0, 0.0, 1.0]),
         )
         .unwrap();
         assert_eq!(text(color, Transfer::Linear), "[1.0, 0.0, 0.0, 1.0]");
@@ -272,8 +279,8 @@ mod tests {
 
     #[test]
     fn srgb_curves_the_floats_and_refuses_every_other_scalar() {
-        let grey = Value::new(Domain::Plain, Dimension::Vec1, Components::F32(vec![0.5])).unwrap();
-        let curved: f32 = text(grey, Transfer::Srgb).parse().unwrap();
+        let grey = Value::new(Domain::Plain, Dimension::Vec1, Components::F64(vec![0.5])).unwrap();
+        let curved: f64 = text(grey, Transfer::Srgb).parse().unwrap();
         assert!((curved - 0.7354).abs() < 1e-4);
 
         let flag =

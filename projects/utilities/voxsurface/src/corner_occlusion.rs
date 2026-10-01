@@ -5,7 +5,7 @@ use crate::{SurfaceGrid, SurfaceSpan};
 /// cells beside the corner in the layer the face looks into closes a third.
 /// Both cells along the face's edges together close it fully. So does a
 /// solid cell over the corner. Only a naive mesh emits a face under one.
-pub fn corner_occlusion<G: SurfaceGrid>(grid: &G, span: &SurfaceSpan) -> [f32; 4] {
+pub fn corner_occlusion<G: SurfaceGrid>(grid: &G, span: &SurfaceSpan) -> [f64; 4] {
     let (u, v) = (span.u(), span.v());
 
     let layer = i64::from(span.s) + i64::from(span.sign);
@@ -43,7 +43,7 @@ pub fn corner_occlusion<G: SurfaceGrid>(grid: &G, span: &SurfaceSpan) -> [f32; 4
             3 - u8::from(side_u) - u8::from(side_v) - u8::from(diagonal)
         };
 
-        f32::from(open) / 3.0
+        f64::from(open) / 3.0
     })
 }
 

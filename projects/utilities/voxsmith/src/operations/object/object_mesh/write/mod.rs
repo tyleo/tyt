@@ -1,6 +1,7 @@
 // Internal API
 
 mod bake_png;
+mod check_f32_range;
 mod encode_components;
 mod face_partition;
 mod images;
@@ -13,6 +14,7 @@ mod write_materials;
 mod write_primitive;
 
 pub(crate) use bake_png::*;
+pub(crate) use check_f32_range::*;
 pub(crate) use encode_components::*;
 pub(crate) use face_partition::*;
 pub(crate) use images::*;

@@ -18,14 +18,13 @@ The build bent from the design where the landed crates decided:
    list has to hold that domain
 5. A mesh image extra samples through a stream some primitive writes at its
    bake domain, and every primitive writing it places it at one position
-6. JSON and extras floats narrow to `f32` after the transfer runs in `f64`
-7. `srgb` on an unsigned value errors wherever it errors on a bool or a string
-8. A vec3 `COLOR_0` lands as VEC4 with an alpha of one, the document's one
+6. `srgb` on an unsigned value errors wherever it errors on a bool or a string
+7. A vec3 `COLOR_0` lands as VEC4 with an alpha of one, the document's one
    vertex color shape
-9. A profile with no `materials` declares count 0, and its compute keys
+8. A profile with no `materials` declares count 0, and its compute keys
    travel with `--values-from`
-10. The bridge fixes the rest of the output: `u32` indices, one sampler per
-    texture, explicit defaults, and key-ordered extras
+9. The bridge fixes the rest of the output: `u32` indices, one sampler per
+   texture, explicit defaults, and key-ordered extras
 
 This plan rewrites [`vxl object mesh`](mesh.md) which makes geometry and
 palette-atlas textures. The plan keeps the geometry core and redoes everything

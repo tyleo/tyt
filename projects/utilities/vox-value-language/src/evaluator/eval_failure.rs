@@ -8,7 +8,7 @@ pub enum EvalFailure {
     BelowZero { left: u64, right: u64 },
 
     /// `rgbFromOklch` took a negative chroma.
-    Chroma { chroma: f32 },
+    Chroma { chroma: f64 },
 
     /// A climb onto a merged face found its pieces disagreeing.
     ClimbDisagreement { target: Domain, entry: usize },
@@ -26,28 +26,25 @@ pub enum EvalFailure {
         entry: usize,
     },
 
-    /// An exact conversion took an `f32` with a fractional part.
-    Fraction { value: f32, target: Scalar },
+    /// An exact conversion took an `f64` with a fractional part.
+    Fraction { value: f64, target: Scalar },
 
     /// `rgbFromOklch` took a hue outside `[0, 1]`.
-    HueRange { hue: f32 },
+    HueRange { hue: f64 },
 
     /// An index reached past the array's entries.
     IndexOutOfRange { index: u32, entries: usize },
-
-    /// `f32` holds no exact image of the `u32`.
-    Inexact { value: u32 },
 
     /// A clamp or ramp took bounds in the wrong order.
     InvertedBounds {
         operation: String,
 
-        low: f32,
+        low: f64,
 
-        high: f32,
+        high: f64,
     },
 
-    /// An `f32` result came out NaN or infinite.
+    /// An `f64` result came out NaN or infinite.
     NonFinite { operation: String },
 
     /// A converted value falls outside the target type's range.
@@ -100,10 +97,6 @@ impl Display for EvalFailure {
 
             EvalFailure::IndexOutOfRange { index, entries } => {
                 write!(formatter, "index {index} reaches past {entries} entries")
-            }
-
-            EvalFailure::Inexact { value } => {
-                write!(formatter, "f32 holds no exact image of {value}")
             }
 
             EvalFailure::InvertedBounds {

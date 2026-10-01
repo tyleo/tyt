@@ -1,4 +1,4 @@
-use crate::{Dimension, Domain, ValueEnvironment, bools, f32s, groupings, strings, u8s, u32s};
+use crate::{Dimension, Domain, ValueEnvironment, bools, f64s, groupings, strings, u8s, u32s};
 use std::collections::HashMap;
 
 /// The lamp: two swatches, a steel base under a glowing glass bulb, two
@@ -15,7 +15,7 @@ pub fn lamp() -> ValueEnvironment {
     environment.values = [
         (
             "baseColor",
-            f32s(
+            f64s(
                 Domain::Swatch,
                 Dimension::Vec4,
                 &[0.5, 0.5, 0.5, 1.0, 1.0, 0.9, 0.6, 0.6],
@@ -23,15 +23,15 @@ pub fn lamp() -> ValueEnvironment {
         ),
         (
             "roughness",
-            f32s(Domain::Swatch, Dimension::Vec1, &[0.9, 0.4]),
+            f64s(Domain::Swatch, Dimension::Vec1, &[0.9, 0.4]),
         ),
         (
             "metallic",
-            f32s(Domain::Swatch, Dimension::Vec1, &[1.0, 0.0]),
+            f64s(Domain::Swatch, Dimension::Vec1, &[1.0, 0.0]),
         ),
         (
             "emissiveColor",
-            f32s(
+            f64s(
                 Domain::Swatch,
                 Dimension::Vec3,
                 &[0.0, 0.0, 0.0, 1.0, 0.9, 0.6],
@@ -39,7 +39,7 @@ pub fn lamp() -> ValueEnvironment {
         ),
         (
             "emissiveStrength",
-            f32s(Domain::Swatch, Dimension::Vec1, &[0.0, 4.0]),
+            f64s(Domain::Swatch, Dimension::Vec1, &[0.0, 4.0]),
         ),
         ("tag", strings(Domain::Swatch, &["steel", "glass"])),
         ("flag", bools(Domain::Swatch, &[false, true])),
@@ -54,25 +54,25 @@ pub fn lamp() -> ValueEnvironment {
         ),
         (
             "faceValue",
-            f32s(
+            f64s(
                 Domain::Face,
                 Dimension::Vec1,
-                &(0..10).map(|face| face as f32).collect::<Vec<_>>(),
+                &(0..10).map(|face| face as f64).collect::<Vec<_>>(),
             ),
         ),
         (
             "computedOcclusion",
-            f32s(
+            f64s(
                 Domain::Corner,
                 Dimension::Vec1,
                 &(0..40)
-                    .map(|corner| corner as f32 / 40.0)
+                    .map(|corner| corner as f64 / 40.0)
                     .collect::<Vec<_>>(),
             ),
         ),
         (
             "unit",
-            f32s(Domain::Plain, Dimension::Vec3, &[1.0, 0.0, 0.0]),
+            f64s(Domain::Plain, Dimension::Vec3, &[1.0, 0.0, 0.0]),
         ),
     ]
     .into_iter()

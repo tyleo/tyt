@@ -418,8 +418,8 @@ pub enum Dimension {
 
 /// A component's type.
 pub enum Scalar {
-    /// A 32-bit float.
-    F32,
+    /// A 64-bit float.
+    F64,
 
     /// An unsigned 8-bit integer.
     U8,
@@ -458,8 +458,8 @@ pub struct TypeEnvironment {
 /// A value's entries, flattened component by component; a plain value holds
 /// one entry.
 pub enum Components {
-    /// `f32` components.
-    F32(Vec<f32>),
+    /// `f64` components.
+    F64(Vec<f64>),
 
     /// `u8` components.
     U8(Vec<u8>),

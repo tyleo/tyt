@@ -151,9 +151,9 @@ impl Evaluator<'_> {
         let entries = self.lengths.of(output.domain);
         let width = output.dimension.width();
         let components = match output.scalar {
-            Scalar::F32 => {
+            Scalar::F64 => {
                 let values =
-                    componentwise([f32s(&left), f32s(&right)], entries, width, |[a, b]| {
+                    componentwise([f64s(&left), f64s(&right)], entries, width, |[a, b]| {
                         Ok(match operator {
                             BinaryOperator::Add => a + b,
                             BinaryOperator::Divide => a / b,
@@ -162,7 +162,7 @@ impl Evaluator<'_> {
                         })
                     })?;
 
-                Components::F32(finite(values, &operator.to_string())?)
+                Components::F64(finite(values, &operator.to_string())?)
             }
 
             Scalar::U8 => Components::U8(unsigned_binary(
@@ -223,8 +223,8 @@ impl Evaluator<'_> {
                 Components::Bool(packed)
             }
 
-            _ => Components::F32(finite(
-                f32_call(function, &values, entries, width)?,
+            _ => Components::F64(finite(
+                f64_call(function, &values, entries, width)?,
                 function.to_function().name(),
             )?),
         };
@@ -315,8 +315,8 @@ impl Evaluator<'_> {
     ) -> EvalResult<Value> {
         let operand = self.node(operand)?;
         let components = match operator {
-            UnaryOperator::Negate => Components::F32(
-                f32s(&operand)
+            UnaryOperator::Negate => Components::F64(
+                f64s(&operand)
                     .components
                     .iter()
                     .map(|value| -value)
@@ -442,14 +442,14 @@ fn index_entry(source: &Value, index: &Value, output: Type) -> EvalResult<Value>
     ))
 }
 
-/// Runs an `f32` function over lifted arguments.
-fn f32_call(
+/// Runs an `f64` function over lifted arguments.
+fn f64_call(
     function: ElementwiseFunction,
     values: &[Value],
     entries: usize,
     width: usize,
-) -> EvalResult<Vec<f32>> {
-    let operands = values.iter().map(f32s).collect::<Vec<_>>();
+) -> EvalResult<Vec<f64>> {
+    let operands = values.iter().map(f64s).collect::<Vec<_>>();
 
     match function {
         ElementwiseFunction::R
@@ -592,17 +592,17 @@ fn keep_call(
     let operation = function.to_function().name();
 
     Ok(match scalar {
-        Scalar::F32 => {
-            let output = componentwise([f32s(first), f32s(second)], entries, width, |[a, b]| {
+        Scalar::F64 => {
+            let output = componentwise([f64s(first), f64s(second)], entries, width, |[a, b]| {
                 Ok(match function {
                     ElementwiseFunction::Max => a.max(*b),
                     ElementwiseFunction::Min => a.min(*b),
                     ElementwiseFunction::Mod => a - b * (a / b).floor(),
-                    _ => unreachable!("the f32 calls take their own path"),
+                    _ => unreachable!("the f64 calls take their own path"),
                 })
             })?;
 
-            Components::F32(finite(output, operation)?)
+            Components::F64(finite(output, operation)?)
         }
 
         Scalar::U8 => Components::U8(unsigned_keep(
@@ -655,7 +655,7 @@ fn unsigned_keep<T: Unsigned>(
                 T::from_u64(a.to_u64() % b.to_u64()).expect("a remainder fits its type")
             }
 
-            _ => unreachable!("the f32 calls take their own path"),
+            _ => unreachable!("the f64 calls take their own path"),
         })
     })
 }
@@ -704,7 +704,7 @@ fn compare_values(
     width: usize,
 ) -> EvalResult<Vec<bool>> {
     match left.scalar() {
-        Scalar::F32 => componentwise([f32s(left), f32s(right)], entries, width, |[a, b]| {
+        Scalar::F64 => componentwise([f64s(left), f64s(right)], entries, width, |[a, b]| {
             Ok(compare(operator, a, b))
         }),
 
@@ -747,7 +747,7 @@ fn compare<T: PartialOrd>(operator: ComparisonOperator, a: &T, b: &T) -> bool {
 /// The literal as components.
 fn number(value: NumberValue) -> Components {
     match value {
-        NumberValue::F32(value) => Components::F32(vec![value]),
+        NumberValue::F64(value) => Components::F64(vec![value]),
         NumberValue::U8(value) => Components::U8(vec![value]),
         NumberValue::U16(value) => Components::U16(vec![value]),
         NumberValue::U32(value) => Components::U32(vec![value]),
@@ -761,7 +761,7 @@ fn build(output: Type, components: Components) -> Value {
 }
 
 /// The values, erroring where any is NaN or infinite.
-fn finite(values: Vec<f32>, operation: &str) -> EvalResult<Vec<f32>> {
+fn finite(values: Vec<f64>, operation: &str) -> EvalResult<Vec<f64>> {
     if values.iter().all(|value| value.is_finite()) {
         Ok(values)
     } else {
@@ -772,17 +772,17 @@ fn finite(values: Vec<f32>, operation: &str) -> EvalResult<Vec<f32>> {
 }
 
 /// The vector's length.
-fn magnitude(vector: &[f32]) -> f32 {
+fn magnitude(vector: &[f64]) -> f64 {
     dot(vector, vector).sqrt()
 }
 
 /// The dot product.
-fn dot(a: &[f32], b: &[f32]) -> f32 {
+fn dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
 
 /// A vec3 entry as an array.
-fn triple(components: &[f32]) -> [f32; 3] {
+fn triple(components: &[f64]) -> [f64; 3] {
     components.try_into().expect("the checker requires a vec3")
 }
 
@@ -916,23 +916,23 @@ fn reduce(
     let operation = reduction.name(target);
     let width = value.dimension().width();
     let components = match (reduction, value.components()) {
-        (Reduction::Avg, Components::F32(components)) => {
-            Components::F32(average(components, width, &groups, &operation, target)?)
+        (Reduction::Avg, Components::F64(components)) => {
+            Components::F64(average(components, width, &groups, &operation, target)?)
         }
 
         (Reduction::Avg, Components::U8(components)) => {
-            Components::F32(average(components, width, &groups, &operation, target)?)
+            Components::F64(average(components, width, &groups, &operation, target)?)
         }
 
         (Reduction::Avg, Components::U16(components)) => {
-            Components::F32(average(components, width, &groups, &operation, target)?)
+            Components::F64(average(components, width, &groups, &operation, target)?)
         }
 
         (Reduction::Avg, Components::U32(components)) => {
-            Components::F32(average(components, width, &groups, &operation, target)?)
+            Components::F64(average(components, width, &groups, &operation, target)?)
         }
 
-        (_, Components::F32(components)) => Components::F32(fold(
+        (_, Components::F64(components)) => Components::F64(fold(
             components, width, &groups, reduction, &operation, target,
         )?),
 
@@ -964,7 +964,7 @@ fn average<T: Numeric>(
     groups: &[Vec<usize>],
     operation: &str,
     target: Domain,
-) -> EvalResult<Vec<f32>> {
+) -> EvalResult<Vec<f64>> {
     let mut output = Vec::with_capacity(groups.len() * width);
 
     for (entry, group) in groups.iter().enumerate() {
@@ -981,7 +981,7 @@ fn average<T: Numeric>(
                 .iter()
                 .map(|&source| components[source * width + position].to_f64())
                 .sum::<f64>();
-            let mean = (total / group.len() as f64) as f32;
+            let mean = total / group.len() as f64;
 
             if !mean.is_finite() {
                 return Err(EvalFailure::NonFinite {
@@ -1103,40 +1103,31 @@ fn groups(
 /// named rounding.
 fn convert(value: &Value, target: Scalar, rounding: Option<Rounding>) -> EvalResult<Value> {
     let components = match (value.components(), target) {
-        (Components::F32(components), Scalar::F32) => Components::F32(components.clone()),
+        (Components::F64(components), Scalar::F64) => Components::F64(components.clone()),
 
-        (Components::F32(components), Scalar::U8) => {
-            Components::U8(from_f32(components, rounding, target)?)
+        (Components::F64(components), Scalar::U8) => {
+            Components::U8(from_f64(components, rounding, target)?)
         }
 
-        (Components::F32(components), Scalar::U16) => {
-            Components::U16(from_f32(components, rounding, target)?)
+        (Components::F64(components), Scalar::U16) => {
+            Components::U16(from_f64(components, rounding, target)?)
         }
 
-        (Components::F32(components), Scalar::U32) => {
-            Components::U32(from_f32(components, rounding, target)?)
+        (Components::F64(components), Scalar::U32) => {
+            Components::U32(from_f64(components, rounding, target)?)
         }
 
-        (Components::U8(components), Scalar::F32) => {
-            Components::F32(components.iter().map(|&value| f32::from(value)).collect())
+        (Components::U8(components), Scalar::F64) => {
+            Components::F64(components.iter().map(|&value| f64::from(value)).collect())
         }
 
-        (Components::U16(components), Scalar::F32) => {
-            Components::F32(components.iter().map(|&value| f32::from(value)).collect())
+        (Components::U16(components), Scalar::F64) => {
+            Components::F64(components.iter().map(|&value| f64::from(value)).collect())
         }
 
-        (Components::U32(components), Scalar::F32) => Components::F32(
-            components
-                .iter()
-                .map(|&value| {
-                    if value <= 1 << 24 {
-                        Ok(value as f32)
-                    } else {
-                        Err(EvalFailure::Inexact { value })
-                    }
-                })
-                .collect::<EvalResult<_>>()?,
-        ),
+        (Components::U32(components), Scalar::F64) => {
+            Components::F64(components.iter().map(|&value| f64::from(value)).collect())
+        }
 
         (Components::U8(components), Scalar::U8) => Components::U8(components.clone()),
 
@@ -1165,10 +1156,10 @@ fn convert(value: &Value, target: Scalar, rounding: Option<Rounding>) -> EvalRes
         .expect("a conversion keeps every entry"))
 }
 
-/// Converts `f32` components into an unsigned type, exactly or by the named
+/// Converts `f64` components into an unsigned type, exactly or by the named
 /// rounding, then checks the range.
-fn from_f32<T: Unsigned>(
-    components: &[f32],
+fn from_f64<T: Unsigned>(
+    components: &[f64],
     rounding: Option<Rounding>,
     target: Scalar,
 ) -> EvalResult<Vec<T>> {
@@ -1189,11 +1180,11 @@ fn from_f32<T: Unsigned>(
                 Some(Rounding::Round) => value.round(),
             };
             let out_of_range = || EvalFailure::OutOfRange {
-                value: f64::from(whole),
+                value: whole,
                 target,
             };
 
-            if whole < 0.0 || f64::from(whole) > T::max_value().to_f64() {
+            if whole < 0.0 || whole > T::max_value().to_f64() {
                 return Err(out_of_range());
             }
 
@@ -1261,7 +1252,7 @@ fn transform_entries(
     transform: &impl EntryTransform,
 ) -> EvalResult<Components> {
     Ok(match components {
-        Components::F32(components) => Components::F32(transform.apply(components)?),
+        Components::F64(components) => Components::F64(transform.apply(components)?),
         Components::U8(components) => Components::U8(transform.apply(components)?),
         Components::U16(components) => Components::U16(transform.apply(components)?),
         Components::U32(components) => Components::U32(transform.apply(components)?),
@@ -1277,8 +1268,8 @@ fn transform_entry_pairs(
     transform: &impl EntryPairTransform,
 ) -> Components {
     match (first, second) {
-        (Components::F32(first), Components::F32(second)) => {
-            Components::F32(transform.apply(first, second))
+        (Components::F64(first), Components::F64(second)) => {
+            Components::F64(transform.apply(first, second))
         }
 
         (Components::U8(first), Components::U8(second)) => {
@@ -1307,9 +1298,8 @@ fn transform_entry_pairs(
 
 /// Converts linear RGB to Oklch, with hue a turn in `[0, 1)` and 0 where
 /// the chroma reads as zero.
-fn oklch_from_rgb(rgb: [f32; 3]) -> [f32; 3] {
+fn oklch_from_rgb(rgb: [f64; 3]) -> [f64; 3] {
     let [lightness, a, b] = oklab_from_rgb(rgb);
-    let (a, b) = (f64::from(a), f64::from(b));
     let chroma = a.hypot(b);
 
     if chroma < CHROMA_FLOOR {
@@ -1319,7 +1309,7 @@ fn oklch_from_rgb(rgb: [f32; 3]) -> [f32; 3] {
     let turn = b.atan2(a) / TAU;
     let hue = if turn < 0.0 { turn + 1.0 } else { turn };
 
-    [lightness, chroma as f32, hue as f32]
+    [lightness, chroma, hue]
 }
 
 /// The chroma below which a color reads as gray, because the rounded
@@ -1328,7 +1318,7 @@ const CHROMA_FLOOR: f64 = 1e-6;
 
 /// Converts Oklch to linear RGB, erroring on a hue outside `[0, 1]` or a
 /// negative chroma.
-fn rgb_from_oklch([lightness, chroma, hue]: [f32; 3]) -> EvalResult<[f32; 3]> {
+fn rgb_from_oklch([lightness, chroma, hue]: [f64; 3]) -> EvalResult<[f64; 3]> {
     if !(0.0..=1.0).contains(&hue) {
         return Err(EvalFailure::HueRange { hue });
     }
@@ -1337,48 +1327,45 @@ fn rgb_from_oklch([lightness, chroma, hue]: [f32; 3]) -> EvalResult<[f32; 3]> {
         return Err(EvalFailure::Chroma { chroma });
     }
 
-    let angle = f64::from(hue) * TAU;
-    let chroma = f64::from(chroma);
+    let angle = hue * TAU;
 
     Ok(rgb_from_oklab([
         lightness,
-        (chroma * angle.cos()) as f32,
-        (chroma * angle.sin()) as f32,
+        chroma * angle.cos(),
+        chroma * angle.sin(),
     ]))
 }
 
-/// Converts linear RGB to Oklab in `f64` through the LMS cube roots.
-fn oklab_from_rgb([red, green, blue]: [f32; 3]) -> [f32; 3] {
-    let (red, green, blue) = (f64::from(red), f64::from(green), f64::from(blue));
+/// Converts linear RGB to Oklab through the LMS cube roots.
+fn oklab_from_rgb([red, green, blue]: [f64; 3]) -> [f64; 3] {
     let long = (0.412_221_470_8 * red + 0.536_332_536_3 * green + 0.051_445_992_9 * blue).cbrt();
     let medium = (0.211_903_498_2 * red + 0.680_699_545_1 * green + 0.107_396_956_6 * blue).cbrt();
     let short = (0.088_302_461_9 * red + 0.281_718_837_6 * green + 0.629_978_700_5 * blue).cbrt();
 
     [
-        (0.210_454_255_3 * long + 0.793_617_785_0 * medium - 0.004_072_046_8 * short) as f32,
-        (1.977_998_495_1 * long - 2.428_592_205_0 * medium + 0.450_593_709_9 * short) as f32,
-        (0.025_904_037_1 * long + 0.782_771_766_2 * medium - 0.808_675_766_0 * short) as f32,
+        0.210_454_255_3 * long + 0.793_617_785_0 * medium - 0.004_072_046_8 * short,
+        1.977_998_495_1 * long - 2.428_592_205_0 * medium + 0.450_593_709_9 * short,
+        0.025_904_037_1 * long + 0.782_771_766_2 * medium - 0.808_675_766_0 * short,
     ]
 }
 
-/// Converts Oklab to linear RGB in `f64`, undoing the cube roots.
-fn rgb_from_oklab([lightness, a, b]: [f32; 3]) -> [f32; 3] {
-    let (lightness, a, b) = (f64::from(lightness), f64::from(a), f64::from(b));
+/// Converts Oklab to linear RGB, undoing the cube roots.
+fn rgb_from_oklab([lightness, a, b]: [f64; 3]) -> [f64; 3] {
     let long = (lightness + 0.396_337_777_4 * a + 0.215_803_757_3 * b).powi(3);
     let medium = (lightness - 0.105_561_345_8 * a - 0.063_854_172_8 * b).powi(3);
     let short = (lightness - 0.089_484_177_5 * a - 1.291_485_548_0 * b).powi(3);
 
     [
-        (4.076_741_662_1 * long - 3.307_711_591_3 * medium + 0.230_969_929_2 * short) as f32,
-        (-1.268_438_004_6 * long + 2.609_757_401_1 * medium - 0.341_319_396_5 * short) as f32,
-        (-0.004_196_086_3 * long - 0.703_418_614_7 * medium + 1.707_614_701_0 * short) as f32,
+        4.076_741_662_1 * long - 3.307_711_591_3 * medium + 0.230_969_929_2 * short,
+        -1.268_438_004_6 * long + 2.609_757_401_1 * medium - 0.341_319_396_5 * short,
+        -0.004_196_086_3 * long - 0.703_418_614_7 * medium + 1.707_614_701_0 * short,
     ]
 }
 
-/// The value's `f32` components.
-fn f32s(value: &Value) -> Operand<'_, f32> {
-    let Components::F32(components) = value.components() else {
-        unreachable!("the checker settled f32");
+/// The value's `f64` components.
+fn f64s(value: &Value) -> Operand<'_, f64> {
+    let Components::F64(components) = value.components() else {
+        unreachable!("the checker settled f64");
     };
 
     operand(components, value)
@@ -1441,7 +1428,7 @@ fn operand<'a, T>(components: &'a [T], value: &Value) -> Operand<'a, T> {
 mod tests {
     use crate::{
         Components, Dimension, Domain, Error, EvalFailure, Groupings, Result, Scalar, Value,
-        ValueEnvironment, assert_close, bools, check_expression, eval_expression, f32s, groupings,
+        ValueEnvironment, assert_close, bools, check_expression, eval_expression, f64s, groupings,
         lamp, parse_expression, run, step, strings, u8s, u32s,
     };
     use std::collections::HashMap;
@@ -1460,11 +1447,11 @@ mod tests {
         }
     }
 
-    fn close(text: &str, expected: &[f32]) {
+    fn close(text: &str, expected: &[f64]) {
         assert_close(&value(text), expected);
     }
 
-    fn close_in(text: &str, environment: &ValueEnvironment, expected: &[f32]) {
+    fn close_in(text: &str, environment: &ValueEnvironment, expected: &[f64]) {
         assert_close(&value_in(text, environment), expected);
     }
 
@@ -1498,7 +1485,7 @@ mod tests {
 
         environment.values = [(
             "faceValue".to_owned(),
-            f32s(Domain::Face, Dimension::Vec1, &[1.0, 2.0, 3.0]),
+            f64s(Domain::Face, Dimension::Vec1, &[1.0, 2.0, 3.0]),
         )]
         .into_iter()
         .collect();
@@ -1511,7 +1498,7 @@ mod tests {
         ValueEnvironment {
             values: [(
                 "faceValue".to_owned(),
-                f32s(Domain::Face, Dimension::Vec1, &[]),
+                f64s(Domain::Face, Dimension::Vec1, &[]),
             )]
             .into_iter()
             .collect(),
@@ -1541,7 +1528,7 @@ mod tests {
 
     #[test]
     fn literals_and_names_answer_their_values() {
-        assert_eq!(value("0.5"), f32s(Domain::Plain, Dimension::Vec1, &[0.5]));
+        assert_eq!(value("0.5"), f64s(Domain::Plain, Dimension::Vec1, &[0.5]));
         assert_eq!(value("2u8"), u8s(Domain::Plain, Dimension::Vec1, &[2]));
         assert_eq!(
             value("count"),
@@ -1555,7 +1542,7 @@ mod tests {
     // Arithmetic.
 
     #[test]
-    fn f32_arithmetic_pairs_entries_and_broadcasts() {
+    fn f64_arithmetic_pairs_entries_and_broadcasts() {
         close("roughness + 0.1", &[1.0, 0.5]);
         close("1 - roughness", &[0.1, 0.6]);
         close("baseColor * 2", &[1.0, 1.0, 1.0, 2.0, 2.0, 1.8, 1.2, 1.2]);
@@ -1579,7 +1566,7 @@ mod tests {
     }
 
     #[test]
-    fn a_non_finite_f32_result_errors() {
+    fn a_non_finite_f64_result_errors() {
         assert_eq!(failure("roughness / 0"), non_finite("/"));
         assert_eq!(failure("0 / emissiveStrength"), non_finite("/"));
         assert_eq!(
@@ -1589,7 +1576,7 @@ mod tests {
         assert_eq!(failure("pow(-1, 0.5)"), non_finite("pow"));
         assert_eq!(failure("normalize(rgb(0, 0, 0))"), non_finite("normalize"));
         assert_eq!(failure("mod(roughness, 0)"), non_finite("mod"));
-        assert_eq!(failure("pow(10, 100)"), non_finite("pow"));
+        assert_eq!(failure("pow(10, 400)"), non_finite("pow"));
     }
 
     #[test]
@@ -1708,7 +1695,7 @@ mod tests {
                     if corner < 20 {
                         0.0
                     } else {
-                        corner as f32 / 10.0
+                        corner as f64 / 10.0
                     }
                 })
                 .collect::<Vec<_>>(),
@@ -1776,25 +1763,25 @@ mod tests {
         close(
             "faceAvg(computedOcclusion)",
             &(0..10)
-                .map(|face| (4 * face) as f32 / 40.0 + 1.5 / 40.0)
+                .map(|face| (4 * face) as f64 / 40.0 + 1.5 / 40.0)
                 .collect::<Vec<_>>(),
         );
         close(
             "faceSum(computedOcclusion)",
             &(0..10)
-                .map(|face| (16 * face + 6) as f32 / 40.0)
+                .map(|face| (16 * face + 6) as f64 / 40.0)
                 .collect::<Vec<_>>(),
         );
         close(
             "faceMin(computedOcclusion)",
             &(0..10)
-                .map(|face| (4 * face) as f32 / 40.0)
+                .map(|face| (4 * face) as f64 / 40.0)
                 .collect::<Vec<_>>(),
         );
         close(
             "faceMax(computedOcclusion)",
             &(0..10)
-                .map(|face| (4 * face + 3) as f32 / 40.0)
+                .map(|face| (4 * face + 3) as f64 / 40.0)
                 .collect::<Vec<_>>(),
         );
     }
@@ -2168,7 +2155,7 @@ mod tests {
 
     #[test]
     fn mix_picks_per_entry_by_the_bool() {
-        close("mix(0f32, 1, flag)", &[0.0, 1.0]);
+        close("mix(0f64, 1, flag)", &[0.0, 1.0]);
         close(
             "mix(baseColor, 0.5.rrrr, flag)",
             &[0.5, 0.5, 0.5, 1.0, 0.5, 0.5, 0.5, 0.5],
@@ -2299,12 +2286,12 @@ mod tests {
         close("length(-2)", &[2.0]);
         close(
             "length(baseColor.rg)",
-            &[0.5f32.hypot(0.5), 1.0f32.hypot(0.9)],
+            &[0.5f64.hypot(0.5), 1.0f64.hypot(0.9)],
         );
         close("distance(unit, rgb(0, 0, 0))", &[1.0]);
         close(
             "distance(baseColor.rgb, unit)",
-            &[(0.25f32 + 0.25 + 0.25).sqrt(), (0.81f32 + 0.36).sqrt()],
+            &[(0.25f64 + 0.25 + 0.25).sqrt(), (0.81f64 + 0.36).sqrt()],
         );
         close("normalize(rgb(3, 4, 0))", &[0.6, 0.8, 0.0]);
         close("normalize(unit * 5)", &[1.0, 0.0, 0.0]);
@@ -2362,10 +2349,13 @@ mod tests {
 
     #[test]
     fn exact_conversions_error_on_a_fraction_or_a_range_miss() {
-        close("f32(count)", &[3.0, 7.0]);
-        close("f32(wide)", &[200.0, 100.0, 50.0, 25.0]);
-        close("f32(16777216u32)", &[16777216.0]);
-        close("f32(voxelPosition.y) * 0.5", &[0.0, 0.5]);
+        close("f64(count)", &[3.0, 7.0]);
+        close("f64(wide)", &[200.0, 100.0, 50.0, 25.0]);
+        assert_eq!(
+            value("f64(4294967295u32)"),
+            f64s(Domain::Plain, Dimension::Vec1, &[4294967295.0])
+        );
+        close("f64(voxelPosition.y) * 0.5", &[0.0, 0.5]);
         assert_eq!(
             value("u8(emissiveStrength)"),
             u8s(Domain::Swatch, Dimension::Vec1, &[0, 4])
@@ -2389,10 +2379,6 @@ mod tests {
         assert_eq!(
             value("u8(255.0)"),
             u8s(Domain::Plain, Dimension::Vec1, &[255])
-        );
-        assert_eq!(
-            failure("f32(16777217u32)"),
-            EvalFailure::Inexact { value: 16777217 }
         );
         assert_eq!(
             failure("u8(roughness)"),
@@ -2502,7 +2488,7 @@ mod tests {
     #[test]
     fn the_color_conversions_visit_oklab_and_oklch() {
         let white = value("oklabFromRgb(rgb(1, 1, 1))");
-        let Components::F32(white) = white.components() else {
+        let Components::F64(white) = white.components() else {
             panic!()
         };
 
@@ -2511,7 +2497,7 @@ mod tests {
         close("oklabFromRgb(rgb(0, 0, 0))", &[0.0, 0.0, 0.0]);
 
         let red = value("oklabFromRgb(unit)");
-        let Components::F32(red) = red.components() else {
+        let Components::F64(red) = red.components() else {
             panic!()
         };
 
@@ -2526,7 +2512,7 @@ mod tests {
         close("oklchFromRgb(rgb(0, 0, 0))", &[0.0, 0.0, 0.0]);
 
         let red = value("oklchFromRgb(unit)");
-        let Components::F32(red) = red.components() else {
+        let Components::F64(red) = red.components() else {
             panic!()
         };
 
@@ -2538,7 +2524,7 @@ mod tests {
         assert_close(&round_trip, &[0.5, 0.5, 0.5, 1.0, 0.9, 0.6]);
 
         let blue = value("oklchFromRgb(rgb(0, 0, 1)).z");
-        let Components::F32(blue) = blue.components() else {
+        let Components::F64(blue) = blue.components() else {
             panic!()
         };
 

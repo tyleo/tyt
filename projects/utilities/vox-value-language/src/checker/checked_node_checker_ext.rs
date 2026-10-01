@@ -93,7 +93,7 @@ impl CheckedNode {
             CheckedKind::Name(name) => format!("`{name}`"),
 
             CheckedKind::Number(value) => match value {
-                NumberValue::F32(value) => format!("{value}f32"),
+                NumberValue::F64(value) => format!("{value}f64"),
                 NumberValue::U8(value) => format!("{value}u8"),
                 NumberValue::U16(value) => format!("{value}u16"),
                 NumberValue::U32(value) => format!("{value}u32"),

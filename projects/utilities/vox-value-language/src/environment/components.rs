@@ -4,8 +4,8 @@ use crate::Scalar;
 /// one entry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Components {
-    /// `f32` components.
-    F32(Vec<f32>),
+    /// `f64` components.
+    F64(Vec<f64>),
 
     /// `u8` components.
     U8(Vec<u8>),
@@ -32,7 +32,7 @@ impl Components {
     /// The component count.
     pub fn len(&self) -> usize {
         match self {
-            Components::F32(components) => components.len(),
+            Components::F64(components) => components.len(),
             Components::U8(components) => components.len(),
             Components::U16(components) => components.len(),
             Components::U32(components) => components.len(),
@@ -44,7 +44,7 @@ impl Components {
     /// The component type.
     pub fn scalar(&self) -> Scalar {
         match self {
-            Components::F32(_) => Scalar::F32,
+            Components::F64(_) => Scalar::F64,
             Components::U8(_) => Scalar::U8,
             Components::U16(_) => Scalar::U16,
             Components::U32(_) => Scalar::U32,

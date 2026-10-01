@@ -96,9 +96,9 @@ mod tests {
         };
         let environment = TypeEnvironment {
             types: [
-                ("ao", kind(Domain::Corner, Scalar::F32)),
+                ("ao", kind(Domain::Corner, Scalar::F64)),
                 ("cornerIndex", kind(Domain::Corner, Scalar::U32)),
-                ("metallic", kind(Domain::Swatch, Scalar::F32)),
+                ("metallic", kind(Domain::Swatch, Scalar::F64)),
             ]
             .into_iter()
             .map(|(name, kind)| (name.to_owned(), kind))

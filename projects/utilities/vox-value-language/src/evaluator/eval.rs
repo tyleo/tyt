@@ -64,7 +64,7 @@ fn validate_environment(
             });
         }
 
-        if let Components::F32(components) = value.components()
+        if let Components::F64(components) = value.components()
             && components.iter().any(|component| !component.is_finite())
         {
             return Err(Error::NonFiniteInput { name: name.clone() });
@@ -87,7 +87,7 @@ mod tests {
     use crate::{
         BFace, BSwatch, BVoxel, CheckedProgram, Components, Dimension, Domain, Error, EvalFailure,
         Groupings, Scalar, TypeEnvironment, ValueEnvironment, assert_close, bools, check, eval,
-        f32s, groupings, lamp, parse, run, step, strings, ty, types_of, u8s, u32s,
+        f64s, groupings, lamp, parse, run, step, strings, ty, types_of, u8s, u32s,
     };
     use branded_id::{IdVec, U32Id};
     use std::collections::HashMap;
@@ -206,12 +206,12 @@ mod tests {
             "ao = faceAvg(computedOcclusion);
              aoVoxel = voxelAvg(ao);
              faceCount = swatchSum(face(1u32));
-             aoSwatch = swatchSum(ao) / f32(max(faceCount, 1));
+             aoSwatch = swatchSum(ao) / f64(max(faceCount, 1));
              crevice = ao < 10;
              open = !crevice;
-             height = f32(voxelHeight) / f32(max(max(voxelHeight), 1));
+             height = f64(voxelHeight) / f64(max(max(voxelHeight), 1));
              bands = mod(voxelHeight, 2);
-             albedo = baseColor * lerp(0.8, 1, f32(bands));",
+             albedo = baseColor * lerp(0.8, 1, f64(bands));",
             &with_voxel_height(step()),
         )
         .unwrap();
@@ -220,7 +220,7 @@ mod tests {
         assert_close(
             get("ao"),
             &(0..10)
-                .map(|face| (4 * face) as f32 + 1.5)
+                .map(|face| (4 * face) as f64 + 1.5)
                 .collect::<Vec<_>>(),
         );
         assert_close(
@@ -238,7 +238,7 @@ mod tests {
         assert_close(
             get("aoSwatch"),
             &[
-                (0..10).map(|face| (4 * face) as f32 + 1.5).sum::<f32>() / 14.0
+                (0..10).map(|face| (4 * face) as f64 + 1.5).sum::<f64>() / 14.0
                     + (5.5 + 9.5 + 17.5 + 1.5) / 14.0,
             ],
         );
@@ -304,7 +304,7 @@ mod tests {
 
         types.types.insert(
             "extra".to_owned(),
-            ty(Domain::Plain, Dimension::Vec1, Scalar::F32),
+            ty(Domain::Plain, Dimension::Vec1, Scalar::F64),
         );
         assert_eq!(
             eval(&checked_lamp(&types), &environment),
@@ -317,13 +317,13 @@ mod tests {
 
         types.types.insert(
             "count".to_owned(),
-            ty(Domain::Swatch, Dimension::Vec1, Scalar::F32),
+            ty(Domain::Swatch, Dimension::Vec1, Scalar::F64),
         );
         assert_eq!(
             eval(&checked_lamp(&types), &environment),
             Err(Error::ValueType {
                 name: "count".to_owned(),
-                expected: ty(Domain::Swatch, Dimension::Vec1, Scalar::F32),
+                expected: ty(Domain::Swatch, Dimension::Vec1, Scalar::F64),
                 found: ty(Domain::Swatch, Dimension::Vec1, Scalar::U32)
             })
         );
@@ -360,7 +360,7 @@ mod tests {
 
         environment.values.insert(
             "computedOcclusion".to_owned(),
-            f32s(Domain::Corner, Dimension::Vec1, &[0.5; 36]),
+            f64s(Domain::Corner, Dimension::Vec1, &[0.5; 36]),
         );
         assert_eq!(
             eval(&checked_lamp(&types_of(&environment)), &environment),
@@ -373,12 +373,12 @@ mod tests {
     }
 
     #[test]
-    fn an_f32_input_must_be_finite() {
+    fn an_f64_input_must_be_finite() {
         let mut environment = lamp();
 
         environment.values.insert(
             "roughness".to_owned(),
-            f32s(Domain::Swatch, Dimension::Vec1, &[0.5, f32::NAN]),
+            f64s(Domain::Swatch, Dimension::Vec1, &[0.5, f64::NAN]),
         );
         assert_eq!(
             eval(&checked_lamp(&types_of(&environment)), &environment),
@@ -413,7 +413,7 @@ mod tests {
         let environment = ValueEnvironment {
             values: [(
                 "sparse".to_owned(),
-                f32s(
+                f64s(
                     Domain::Swatch,
                     Dimension::Vec1,
                     &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -439,7 +439,7 @@ mod tests {
         assert_close(evaluated.get("n").unwrap(), &[6.0]);
         assert_eq!(
             evaluated.get("sparse").unwrap().components(),
-            &Components::F32(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+            &Components::F64(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
         );
     }
 }

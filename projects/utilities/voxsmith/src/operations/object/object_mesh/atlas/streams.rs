@@ -498,7 +498,7 @@ mod tests {
                     Type {
                         domain,
                         dimension: Dimension::Vec1,
-                        scalar: Scalar::F32,
+                        scalar: Scalar::F64,
                     },
                 )
             })

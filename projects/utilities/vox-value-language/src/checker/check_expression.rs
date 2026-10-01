@@ -31,7 +31,7 @@ mod tests {
                 Type {
                     domain: Domain::Corner,
                     dimension: Dimension::Vec1,
-                    scalar: Scalar::F32,
+                    scalar: Scalar::F64,
                 },
             )]
             .into_iter()
@@ -50,7 +50,7 @@ mod tests {
             Type {
                 domain: Domain::Corner,
                 dimension: Dimension::Vec1,
-                scalar: Scalar::F32
+                scalar: Scalar::F64
             }
         );
     }

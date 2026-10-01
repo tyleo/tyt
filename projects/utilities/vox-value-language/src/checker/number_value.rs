@@ -3,7 +3,7 @@ use crate::{CheckFailure, CheckResult, Scalar};
 /// A literal settled to its type.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NumberValue {
-    F32(f32),
+    F64(f64),
 
     U8(u8),
 
@@ -26,11 +26,11 @@ impl NumberValue {
         };
 
         match scalar {
-            Scalar::F32 => text
-                .parse::<f32>()
+            Scalar::F64 => text
+                .parse::<f64>()
                 .ok()
                 .filter(|value| value.is_finite())
-                .map(NumberValue::F32)
+                .map(NumberValue::F64)
                 .ok_or_else(out_of_range),
 
             Scalar::U8 => text

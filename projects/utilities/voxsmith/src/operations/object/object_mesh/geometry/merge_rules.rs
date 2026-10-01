@@ -14,7 +14,7 @@ use vox_value_language::{
 use voxcore::{BVoxVoxel, VoxObject};
 
 /// The slack a corner value may keep from the blend that reproduces it.
-/// `f32` thirds blend within it.
+/// Occlusion thirds blend within it over `f32` positions.
 const BLEND_TOLERANCE: f64 = 1e-4;
 
 /// What greedy meshing may merge, read off the run's values over the culled
@@ -333,14 +333,16 @@ fn entry_key(value: &Value, entry: usize, strings: &mut HashMap<String, u32>) ->
     let range = entry * width..(entry + 1) * width;
 
     match value.components() {
-        Components::F32(components) => components[range]
+        Components::F64(components) => components[range]
             .iter()
-            .map(|&component| {
-                if component == 0.0 {
+            .flat_map(|&component| {
+                let bits = if component == 0.0 {
                     0
                 } else {
                     component.to_bits()
-                }
+                };
+
+                [(bits >> 32) as u32, bits as u32]
             })
             .collect(),
 
@@ -374,7 +376,7 @@ fn entry_key(value: &Value, entry: usize, strings: &mut HashMap<String, u32>) ->
 
 fn component_f64(components: &Components, index: usize) -> f64 {
     match components {
-        Components::F32(components) => f64::from(components[index]),
+        Components::F64(components) => components[index],
 
         Components::U8(components) => f64::from(components[index]),
 

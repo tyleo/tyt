@@ -141,10 +141,10 @@ fn extra_property_value(
     value: &Value,
     transfer: Transfer,
 ) -> Result<MeshPropertyValue> {
-    if transfer == Transfer::Srgb && value.scalar() != Scalar::F32 {
+    if transfer == Transfer::Srgb && value.scalar() != Scalar::F64 {
         return Err(Error::mesh_record(
             element.clone(),
-            format!("is a {}, and `srgb` transfers f32 alone", value.to_type()),
+            format!("is a {}, and `srgb` transfers f64 alone", value.to_type()),
         ));
     }
 
@@ -170,14 +170,13 @@ fn extra_property_value(
             MeshPropertyValue::BoolRows,
         ),
 
-        Components::F32(components) => {
+        Components::F64(components) => {
             let encoded: Vec<f64> = components
                 .chunks_exact(shape.width)
                 .map(|entry| encode_components(element, entry, transfer, false))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .flatten()
-                .map(narrow)
                 .collect();
 
             shape.land(
@@ -242,15 +241,6 @@ impl Shape {
     }
 }
 
-/// `component` narrowed to f32 and widened back through its shortest
-/// decimal, so a property prints the f32's digits.
-fn narrow(component: f64) -> f64 {
-    (component as f32)
-        .to_string()
-        .parse()
-        .expect("a finite float's text parses")
-}
-
 #[cfg(test)]
 mod tests {
     use crate::operations::object::{
@@ -273,14 +263,22 @@ mod tests {
     #[test]
     fn a_plain_vec1_lands_as_a_leaf_and_wider_shapes_as_lists_and_rows() {
         assert_eq!(
-            landed(Domain::Plain, Dimension::Vec1, Components::F32(vec![0.4])),
+            landed(Domain::Plain, Dimension::Vec1, Components::F64(vec![0.4])),
             MeshPropertyValue::Float(0.4)
         );
         assert_eq!(
             landed(
                 Domain::Plain,
+                Dimension::Vec2,
+                Components::F64(vec![1.0 / 3.0, 1e39])
+            ),
+            MeshPropertyValue::Floats(vec![1.0 / 3.0, 1e39])
+        );
+        assert_eq!(
+            landed(
+                Domain::Plain,
                 Dimension::Vec3,
-                Components::F32(vec![1.0, 0.5, 0.0])
+                Components::F64(vec![1.0, 0.5, 0.0])
             ),
             MeshPropertyValue::Floats(vec![1.0, 0.5, 0.0])
         );
@@ -288,7 +286,7 @@ mod tests {
             landed(
                 Domain::Swatch,
                 Dimension::Vec1,
-                Components::F32(vec![1.0, 0.0])
+                Components::F64(vec![1.0, 0.0])
             ),
             MeshPropertyValue::Floats(vec![1.0, 0.0])
         );
@@ -296,7 +294,7 @@ mod tests {
             landed(
                 Domain::Swatch,
                 Dimension::Vec2,
-                Components::F32(vec![1.0, 0.0, 0.5, 0.5])
+                Components::F64(vec![1.0, 0.0, 0.5, 0.5])
             ),
             MeshPropertyValue::FloatRows(vec![vec![1.0, 0.0], vec![0.5, 0.5]])
         );
@@ -356,7 +354,7 @@ mod tests {
 
     #[test]
     fn srgb_curves_the_floats_and_errors_on_a_non_float() {
-        let grey = Value::new(Domain::Plain, Dimension::Vec1, Components::F32(vec![0.5])).unwrap();
+        let grey = Value::new(Domain::Plain, Dimension::Vec1, Components::F64(vec![0.5])).unwrap();
         let MeshPropertyValue::Float(curved) =
             extra_property_value(&element(), &grey, Transfer::Srgb).unwrap()
         else {

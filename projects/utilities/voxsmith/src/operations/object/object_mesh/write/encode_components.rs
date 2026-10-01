@@ -9,7 +9,7 @@ use ty_math::{TyLinSrgbF64, TySrgbF64};
 /// take components in `[0, 1]`.
 pub fn encode_components(
     element: &MeshElement,
-    entry: &[f32],
+    entry: &[f64],
     transfer: Transfer,
     unit: bool,
 ) -> Result<Vec<f64>> {
@@ -22,8 +22,6 @@ pub fn encode_components(
         .iter()
         .enumerate()
         .map(|(index, &component)| {
-            let component = f64::from(component);
-
             if !component.is_finite() {
                 return Err(Error::mesh_record(
                     element.clone(),
@@ -85,6 +83,6 @@ mod tests {
         );
         assert!(encode_components(&element(), &[1.5], Transfer::Linear, true).is_err());
         assert!(encode_components(&element(), &[1.5], Transfer::Srgb, false).is_err());
-        assert!(encode_components(&element(), &[f32::NAN], Transfer::Linear, false).is_err());
+        assert!(encode_components(&element(), &[f64::NAN], Transfer::Linear, false).is_err());
     }
 }

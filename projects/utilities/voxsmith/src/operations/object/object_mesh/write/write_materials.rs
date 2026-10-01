@@ -2,8 +2,8 @@ use crate::{
     Error, Result,
     dependencies::object::EncodePng,
     operations::object::{
-        FileForm, Images, MeshElement, SlotProperty, SlotSource, WriteContext, table_index,
-        write_extras,
+        FileForm, Images, MeshElement, SlotProperty, SlotSource, WriteContext, check_f32_range,
+        table_index, write_extras,
     },
 };
 use branded_id::{IdVec, U32Id};
@@ -173,15 +173,15 @@ fn set_factor(
     if value.domain() != Domain::Plain {
         return Err(wrong_shape(match property {
             SlotProperty::AlphaMode => "string",
-            SlotProperty::BaseColorFactor => "f32 vec4",
+            SlotProperty::BaseColorFactor => "f64 vec4",
             SlotProperty::DoubleSided => "bool",
-            SlotProperty::EmissiveFactor => "f32 vec3",
-            _ => "f32 vec1",
+            SlotProperty::EmissiveFactor => "f64 vec3",
+            _ => "f64 vec1",
         }));
     }
 
     let floats = |width: Dimension| match value.components() {
-        Components::F32(components) if value.dimension() == width => Some(components.as_slice()),
+        Components::F64(components) if value.dimension() == width => Some(components.as_slice()),
         _ => None,
     };
 
@@ -192,7 +192,7 @@ fn set_factor(
         };
 
         if range.contains(component) {
-            Ok(component)
+            check_f32_range(element, component)
         } else {
             Err(Error::mesh_record(
                 element.clone(),
@@ -224,10 +224,10 @@ fn set_factor(
         }
 
         SlotProperty::BaseColorFactor => {
-            let components = floats(Dimension::Vec4).ok_or_else(|| wrong_shape("f32 vec4"))?;
+            let components = floats(Dimension::Vec4).ok_or_else(|| wrong_shape("f64 vec4"))?;
 
             let [red, green, blue, alpha] = [0, 1, 2, 3]
-                .map(|index| in_range("color", f64::from(components[index])))
+                .map(|index| in_range("color", components[index]))
                 .into_iter()
                 .collect::<Result<Vec<_>>>()?
                 .try_into()
@@ -245,10 +245,10 @@ fn set_factor(
         }
 
         SlotProperty::EmissiveFactor => {
-            let components = floats(Dimension::Vec3).ok_or_else(|| wrong_shape("f32 vec3"))?;
+            let components = floats(Dimension::Vec3).ok_or_else(|| wrong_shape("f64 vec3"))?;
 
             let [red, green, blue] = [0, 1, 2]
-                .map(|index| in_range("color", f64::from(components[index])))
+                .map(|index| in_range("color", components[index]))
                 .into_iter()
                 .collect::<Result<Vec<_>>>()?
                 .try_into()
@@ -265,7 +265,7 @@ fn set_factor(
         | SlotProperty::OcclusionStrength
         | SlotProperty::RoughnessFactor
         | SlotProperty::TransmissionFactor => {
-            let components = floats(Dimension::Vec1).ok_or_else(|| wrong_shape("f32 vec1"))?;
+            let components = floats(Dimension::Vec1).ok_or_else(|| wrong_shape("f64 vec1"))?;
 
             let key = match property {
                 SlotProperty::AlphaCutoff => ALPHA_CUTOFF,
@@ -278,7 +278,7 @@ fn set_factor(
                 _ => TRANSMISSION,
             };
 
-            let scalar = in_range(key, f64::from(components[0]))?;
+            let scalar = in_range(key, components[0])?;
 
             assert!(
                 material.set_scalar(key, scalar),

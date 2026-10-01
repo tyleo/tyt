@@ -2,7 +2,7 @@ use crate::{SurfaceGrid, SurfaceMesh, corner_occlusion};
 
 /// The [`corner_occlusion`] of every quad of `mesh`, one value per vertex
 /// in vertex order.
-pub fn mesh_occlusion<G: SurfaceGrid>(grid: &G, mesh: &SurfaceMesh<G::Cell>) -> Vec<f32> {
+pub fn mesh_occlusion<G: SurfaceGrid>(grid: &G, mesh: &SurfaceMesh<G::Cell>) -> Vec<f64> {
     mesh.spans
         .iter()
         .flat_map(|span| corner_occlusion(grid, span))
@@ -16,7 +16,7 @@ mod tests {
 
     /// The occlusion at each vertex of the quads facing `normal`, as
     /// `(vertex position, occlusion)`.
-    fn facing(object: &VoxObject, method: SurfaceMethod, normal: [f32; 3]) -> Vec<([f32; 3], f32)> {
+    fn facing(object: &VoxObject, method: SurfaceMethod, normal: [f32; 3]) -> Vec<([f32; 3], f64)> {
         let mesh = mesh_grid(object, method);
         let occlusion = mesh_occlusion(object, &mesh);
 
@@ -56,7 +56,7 @@ mod tests {
     fn a_face_under_a_solid_cell_is_closed() {
         // Under naive the shared face between two voxels still emits.
         let pair = live_object([3, 3, 3], &[[0, 0, 0], [1, 0, 0]]);
-        let buried: Vec<f32> = facing(&pair, SurfaceMethod::Naive, [1.0, 0.0, 0.0])
+        let buried: Vec<f64> = facing(&pair, SurfaceMethod::Naive, [1.0, 0.0, 0.0])
             .iter()
             .filter(|(position, _)| position[0] == 1.0)
             .map(|(_, occlusion)| *occlusion)

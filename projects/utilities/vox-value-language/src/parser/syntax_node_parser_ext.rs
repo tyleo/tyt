@@ -50,7 +50,7 @@ impl SyntaxNode {
             SyntaxNode::Number(literal) => {
                 let suffix = match literal.suffix {
                     None => "",
-                    Some(NumberSuffix::F32) => "f32",
+                    Some(NumberSuffix::F64) => "f64",
                     Some(NumberSuffix::U8) => "u8",
                     Some(NumberSuffix::U16) => "u16",
                     Some(NumberSuffix::U32) => "u32",

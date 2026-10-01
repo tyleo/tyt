@@ -15,7 +15,7 @@ A value sits on three axes, each with a section below:
    domain
 2. [Domain](#domains): what an array runs over, the palette's swatches or the
    mesh's voxels, faces, or corners
-3. Type: a [number](#numbers), `f32` or unsigned, vec1 through vec4, or a
+3. Type: a [number](#numbers), `f64` or unsigned, vec1 through vec4, or a
    [bool](#booleans) or [string](#strings) with no components at all
 
 ## Programs
@@ -69,7 +69,7 @@ strength. An all-zero palette divides `0 / 0` and errors; guard with
 
 `e[i]` samples an array at entry index `i` into a plain value: `tint[0]` is the
 first material's tint. The index has to be a plain unsigned vec1, `u8`, `u16`,
-or `u32`, below the array's entry count; an `f32` index, an out-of-range index,
+or `u32`, below the array's entry count; an `f64` index, an out-of-range index,
 or an array index errors. Indexing and swizzling commute:
 `baseColor[0].rgb` and `baseColor.rgb[0]` name the same value.
 
@@ -147,7 +147,7 @@ buried swatch then reads the value the author wrote for it:
 --value "aoFace = faceAvg(computedOcclusion)"
 --value "faceCount = swatchSum(face(1u32))"
 # a buried swatch reads 0
---value "ao = swatchSum(aoFace) / f32(max(faceCount, 1))"
+--value "ao = swatchSum(aoFace) / f64(max(faceCount, 1))"
 ```
 
 The destinations read the domain. A texture takes a swatch, voxel, face, or
@@ -159,37 +159,39 @@ takes a plain value alone.
 
 ## Numbers
 
-A number takes one of four types: `f32`, the 32-bit float, and the unsigned
+A number takes one of four types: `f64`, the 64-bit float, and the unsigned
 `u8`, `u16`, and `u32`. The types never mix, and nothing converts implicitly:
 every operator, comparison, and function takes one numeric type across its
 numeric operands, so `voxelPosition.y * 0.5` errors and
-`f32(voxelPosition.y) * 0.5` converts. Unsigned values come from an `int`-kind
+`f64(voxelPosition.y) * 0.5` converts. Unsigned values come from an `int`-kind
 palette property, read as `u32`, and from the computed [index](#computed-index)
 and [voxel position](#computed-voxel-position), both `u32`.
 
 A literal names its type or takes it from context. A decimal point makes an
-`f32`, a suffix pins any type, `2f32`, `2u8`, `2u16`, `2u32`, and a bare whole
+`f64`, a suffix pins any type, `2f64`, `2u8`, `2u16`, `2u32`, and a bare whole
 number infers from the expression around it, so `mod(voxelPosition.y, 2)` reads
 `2` as `u32`. A literal nothing types errors, and a suffix fixes it.
 
-The conversions are explicit and componentwise. `f32(e)` takes any unsigned
-value exactly, erroring where `f32` holds no exact image of it. `u8(e)`,
-`u16(e)`, and `u32(e)` widen an unsigned value losslessly, narrow one under a
-range check, and take an `f32` only at exact whole components, erroring on any
-fraction rather than rounding. The `ceil_u8` through `round_u32` forms round an
-`f32` by the named mode into the named range.
+The conversions are explicit and componentwise. `f64(e)` takes any unsigned
+value exactly. `u8(e)`, `u16(e)`, and `u32(e)` widen an unsigned value
+losslessly, narrow one under a range check, and take an `f64` only at exact
+whole components, erroring on any fraction rather than rounding. The `ceil_u8`
+through `round_u32` forms round an `f64` by the named mode into the named
+range.
 
 Arithmetic keeps its type. Unsigned `+`, `-`, and `*` error on overflow and on a
 difference below zero rather than wrapping, `/` floors with the floored `mod`
-completing it, and unary `-` takes `f32` alone because the unsigned types hold
+completing it, and unary `-` takes `f64` alone because the unsigned types hold
 no negatives. `min`, `max`, and the sums keep the operand type, and every
-average returns an `f32` because a mean is fractional.
+average returns an `f64` because a mean is fractional.
 
 The destinations read the type. JSON writes an unsigned value as an integer
 literal, and a `u8` or `u16` value writes an integer
 [vertex attribute](#vertex-attributes) of its width, though a `u32` never writes
-one because glTF forbids the width. Every other destination takes `f32` alone,
-with `f32(e)` carrying an unsigned value in.
+one because glTF forbids the width. Every other destination takes `f64` alone,
+with `f64(e)` carrying an unsigned value in. A glTF material factor or float
+vertex attribute holds `f32`, so a value written there rounds to the nearest
+`f32`. A value past the `f32` range errors.
 
 ## Booleans
 
@@ -211,7 +213,7 @@ through the constructors as a number does. A bool never mixes with a number,
 so there is no `0`/`1` coercion: `rgb(glowing, 0, 0)` errors, arithmetic on a
 bool errors, and every other function rejects one except `mix` and the domain
 climbs. `mix(x, y, cond)` is the deliberate bridge out, picking `x` or `y` by
-the bool, so `mix(0f32, 1, glowing)` makes the `0`/`1` mask; see
+the bool, so `mix(0f64, 1, glowing)` makes the `0`/`1` mask; see
 [Functions](#functions). The climbs move a bool's entries and never touch
 them, and beyond these only grouping parentheses and `e[i]` apply, the index
 sampling a bool array at an entry.
@@ -369,16 +371,16 @@ palette writes an array of those. An array of any [domain](#domains) lands, one
 row per entry in the order a [computed index](#computed-index) numbers. The
 token names the transfer the numbers take: `linear` writes them as evaluated,
 and `srgb` transfer-encodes them under the image rules, so an alpha component
-stays linear and a component outside `[0, 1]` errors. Both write `f32` floats
-after the curve runs in `f64`: an `srgb` JSON holds display-encoded floats where
-an `srgb` PNG holds display-encoded bytes. The token rides each flag, so one
+stays linear and a component outside `[0, 1]` errors. Both write `f64` floats:
+an `srgb` JSON holds display-encoded floats where an `srgb` PNG holds
+display-encoded bytes. The token rides each flag, so one
 file can mix encodings, each key taking its declared transfer, and nothing about
 the destination appears in an expression.
 
 A bool writes as itself, `true` or `false`, an array of them per entry. Its
 token is `linear`, the identity; `srgb` on a bool errors because the transfer
-curve belongs to `f32`. An unsigned value under `srgb` errors the same way. A
-runtime wanting `0`/`1` instead takes the written mask, `mix(0f32, 1, glowing)`.
+curve belongs to `f64`. An unsigned value under `srgb` errors the same way. A
+runtime wanting `0`/`1` instead takes the written mask, `mix(0f64, 1, glowing)`.
 A [string](#strings) writes its quoted JSON form the same way, `linear` its only
 token.
 
@@ -558,7 +560,7 @@ is the custom twin. glTF requires the underscore prefix on application-specific
 attributes, so the name is typed with it, `_MY_COLOR` landing exactly as written
 and a bare name erroring; an attribute only your shader reads can never collide
 with a defined name. Nothing fixes its encoding, so the value's type picks the
-accessor and the token picks the transfer. An `f32` value takes `linear` or
+accessor and the token picks the transfer. An `f64` value takes `linear` or
 `srgb`, the transfer the stored floats take. A `u8` or `u16` value takes
 `linear` and writes an integer accessor of its width; `srgb` on an integer
 errors. A `u32` value errors because glTF forbids the width on an attribute;
@@ -611,7 +613,7 @@ doubling as the width check: a palette past 256 swatches errors.
 ### Computed occlusion
 
 `--compute-occlusion <dst-name>` binds occlusion computed from the voxel
-geometry, each face corner reading the voxels that meet there: a corner `f32`
+geometry, each face corner reading the voxels that meet there: a corner `f64`
 vec1 in `[0, 1]`, `1` fully open. A corner is where neighbors crowd in, so the
 result is a [corner](#domains) value, the first value that varies across a
 surface: every palette property is per swatch, which is why the unwrap and
@@ -666,7 +668,7 @@ each:
 ```sh
 --compute-voxel-position voxelPosition
 # height runs 0 to 1 up the object; bands alternates layers
---value "height = f32(voxelPosition.y) / f32(max(max(voxelPosition.y), 1))"
+--value "height = f64(voxelPosition.y) / f64(max(max(voxelPosition.y), 1))"
 --value "bands = mod(voxelPosition.y, 2)"
 ```
 
@@ -806,7 +808,7 @@ dimensions, shapes, and numeric types.
     ```
 
 19. `floor(e)` and `ceil(e)` snap each component to the integer below or above,
-    and `round(e)` to the nearest, halves away from zero, `f32` in and `f32`
+    and `round(e)` to the nearest, halves away from zero, `f64` in and `f64`
     out; the [conversions](#numbers) round into a width:
 
     ```
@@ -818,7 +820,7 @@ dimensions, shapes, and numeric types.
 
     ```
     u8(swatchIndex)                  # the narrowed palette index
-    f32(voxelPosition.y)             # unsigned into f32 math
+    f64(voxelPosition.y)             # unsigned into f64 math
     round_u16(occlusion * 65535.0)   # a baked 16-bit channel
     ```
 
@@ -827,7 +829,7 @@ dimensions, shapes, and numeric types.
     the result takes it, and the chooser is the one place a bool meets numbers:
 
     ```
-    mix(0f32, 1, glowing)   # the deliberate 0/1 mask
+    mix(0f64, 1, glowing)   # the deliberate 0/1 mask
     ```
 
 22. `any(c)` and `all(c)` fold a comparison's component answers into one bool,
@@ -868,7 +870,7 @@ dimensions, shapes, and numeric types.
 
     ```
     swatchAvg(faceAvg(computedOcclusion))             # occlusion per material
-    swatchSum(faceAvg(computedOcclusion)) / f32(max(swatchSum(face(1u32)), 1))
+    swatchSum(faceAvg(computedOcclusion)) / f64(max(swatchSum(face(1u32)), 1))
     ```
 
 26. `swatch(e)`, `voxel(e)`, `face(e)`, and `corner(e)` lift a value to the
@@ -902,7 +904,7 @@ quotes, which it would strip.
 
 **Reserved names.** The function names `r`, `rg`, `rgb`, `rgba`, `min`, `max`,
 `sum`, `avg`, `any`, `all`, `abs`, `pow`, `mod`, `clamp`, `lerp`, `mix`, `step`,
-`smoothstep`, `floor`, `ceil`, `round`, `f32`, `u8`, `u16`, `u32`, `ceil_u8`,
+`smoothstep`, `floor`, `ceil`, `round`, `f64`, `u8`, `u16`, `u32`, `ceil_u8`,
 `ceil_u16`, `ceil_u32`, `floor_u8`, `floor_u16`, `floor_u32`, `round_u8`,
 `round_u16`, `round_u32`, `dot`, `length`, `distance`, `normalize`, `cross`,
 `oklabFromRgb`, `rgbFromOklab`, `oklchFromRgb`, `rgbFromOklch`, `faceAvg`,
@@ -961,7 +963,7 @@ attached dot then begins a swizzle, giving a vec2 splat. `2.5.rr` works the same
 way. The multi-character operators are single tokens under the same munch, `==`,
 `<=`, `>=`, and `!=`, so a binding's `=` is never carved out of one.
 
-**Linear evaluation.** `f32` math runs in linear space, and unsigned math is
+**Linear evaluation.** `f64` math runs in linear space, and unsigned math is
 exact. A color property decodes its stored form to linear on read; a non-color
 property reads as written. Transfer back to sRGB happens only at a writer's
 edge, per its token or its slot's fixed encoding, and quantization only where an
@@ -1493,19 +1495,19 @@ looser-binding operator gets an outer rule, and left recursion gives
 
 ; A conversion names its target type, the rounding forms their mode
 ; too; see Numbers.
-<convert>       ::= "f32" | "u8" | "u16" | "u32"
+<convert>       ::= "f64" | "u8" | "u16" | "u32"
                   | "ceil_u8" | "ceil_u16" | "ceil_u32"
                   | "floor_u8" | "floor_u16" | "floor_u32"
                   | "round_u8" | "round_u16" | "round_u32"
 
-; A suffix pins a literal's type; a decimal point makes an f32.
+; A suffix pins a literal's type; a decimal point makes an f64.
 <num>           ::= <digits>
                   | <digits> <num-suffix>
                   | <digits> "."
                   | <digits> "." <digits>
                   | "." <digits>
 
-<num-suffix>    ::= "f32" | "u8" | "u16" | "u32"
+<num-suffix>    ::= "f64" | "u8" | "u16" | "u32"
 
 <digits>        ::= <digit>
                   | <digit> <digits>
@@ -1672,7 +1674,7 @@ Dimension rules for an expression `e` with dimension written `dim(e)`:
 - `smoothstep(lo, hi, x)`: `dim(lo) = dim(hi)`, equal to `dim(x)` or 1; result
   `dim(x)`.
 - `floor(e)`, `ceil(e)`: any dimension; result `dim(e)`.
-- a conversion, `f32(e)` through `round_u32(e)`: any dimension; result `dim(e)`.
+- a conversion, `f64(e)` through `round_u32(e)`: any dimension; result `dim(e)`.
 - `<num>`: result 1.
 - `true`, `false`: result bool.
 - `<name>`: result the dimension of the value it names.
@@ -1742,21 +1744,21 @@ Shape rules, with a value either plain or an array over the effective palette
    string reaches an enum property plain, a JSON destination in either shape,
    and nothing else.
 
-Numeric type rules, with every number an `f32`, `u8`, `u16`, or `u32` (see
+Numeric type rules, with every number an `f64`, `u8`, `u16`, or `u32` (see
 [Numbers](#numbers)):
 
 1. Every operator, comparison, and function takes one numeric type across its
    numeric operands; nothing converts implicitly.
 2. A whole-number literal takes the type its context fixes, a suffix or a
    decimal point fixes one directly, and a literal nothing types errors.
-3. The conversions are `f32(e)`, `u8(e)`, `u16(e)`, `u32(e)`, and the
+3. The conversions are `f64(e)`, `u8(e)`, `u16(e)`, `u32(e)`, and the
    `ceil_`/`floor_`/`round_` forms, componentwise. The named modes round; every
-   other conversion is exact or errors, a fraction, a range overflow, and a
-   `u32` beyond `f32`'s exact range each named.
+   other conversion is exact or errors, a fraction and a range overflow each
+   named.
 4. Unsigned `+`, `-`, `*` error on overflow and below zero, `/` floors with the
-   floored `mod` completing it, and unary `-` takes `f32` alone.
+   floored `mod` completing it, and unary `-` takes `f64` alone.
 5. `min`, `max`, `sum`, and the `Min`/`Max`/`Sum` reductions keep the operand
-   type; `avg` and the `Avg` reductions return `f32`.
-6. `floor`, `ceil`, and `round` keep `f32`.
+   type; `avg` and the `Avg` reductions return `f64`.
+6. `floor`, `ceil`, and `round` keep `f64`.
 7. `e[i]` takes any unsigned index.
-8. Every function not named above takes `f32` alone on its numeric arguments.
+8. Every function not named above takes `f64` alone on its numeric arguments.

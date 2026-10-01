@@ -60,7 +60,7 @@ computing anything:
 1. Every name the type environment holds has a value of that type, and no
    other name has one
 2. Every array holds its domain's length
-3. Every `f32` input is finite
+3. Every `f64` input is finite
 4. Every face lists at least one voxel piece
 5. Every piece points into the voxel table
 
@@ -107,41 +107,40 @@ A step down loses entries, so it takes an explicit reduction naming its
 destination; see [Reductions](#reductions).
 
 `e[i]` samples an array at entry `i` into a plain value. The index is a plain
-unsigned vec1 below the array's entry count; an `f32` index, an out-of-range
+unsigned vec1 below the array's entry count; an `f64` index, an out-of-range
 index, or an array index errors. Indexing and swizzling commute:
 `color[0].rgb` and `color.rgb[0]` name the same value.
 
 ## Numbers
 
-A number has a dimension, vec1 through vec4, and one of four types: `f32` and
+A number has a dimension, vec1 through vec4, and one of four types: `f64` and
 the unsigned `u8`, `u16`, and `u32`. The types never mix, and nothing converts
 implicitly: every operator, comparison, and function takes one numeric type
 across its numeric operands, so `position.y * 0.5` errors where `position` is
-`u32` and `f32(position.y) * 0.5` converts.
+`u32` and `f64(position.y) * 0.5` converts.
 
 A literal names its type or takes it from context. A decimal point makes an
-`f32`, a suffix pins any type (`2f32`, `2u8`, `2u16`, `2u32`), and a bare whole
+`f64`, a suffix pins any type (`2f64`, `2u8`, `2u16`, `2u32`), and a bare whole
 number takes the type of the operands beside it, so `mod(position.y, 2)` reads
-`2` as `u32`. The functions that take `f32` alone type their bare literals as
-`f32`, so `rgb(1, 1, 1)` is an `f32` triple. A bare index literal reads as
-`u32`. A bare literal filling an unbound `default` reads as `f32`. A literal
+`2` as `u32`. The functions that take `f64` alone type their bare literals as
+`f64`, so `rgb(1, 1, 1)` is an `f64` triple. A bare index literal reads as
+`u32`. A bare literal filling an unbound `default` reads as `f64`. A literal
 nothing types errors, and a suffix fixes it: `x = 1` errors where `x = 1u32`
 does not.
 
 The conversions are explicit and componentwise:
 
-- `f32(e)` takes an unsigned value exactly, erroring where `f32` holds no exact
-  image of it.
+- `f64(e)` converts an unsigned value exactly.
 - `u8(e)`, `u16(e)`, and `u32(e)` widen an unsigned value losslessly, narrow
-  one under a range check, and take an `f32` only at exact whole components,
+  one under a range check, and take an `f64` only at exact whole components,
   erroring on a fraction rather than rounding.
-- `ceil_u8` through `round_u32` round an `f32` by the named mode into the named
+- `ceil_u8` through `round_u32` round an `f64` by the named mode into the named
   range, erroring where the rounded value falls outside it.
 
 Arithmetic keeps its type. Unsigned `+`, `-`, and `*` error on overflow and on
 a difference below zero rather than wrapping, `/` floors with the floored `mod`
-completing it, and unary `-` takes `f32` alone. `min`, `max`, and the sums keep
-the operand type; every average returns an `f32`. A non-finite `f32` result,
+completing it, and unary `-` takes `f64` alone. `min`, `max`, and the sums keep
+the operand type; every average returns an `f64`. A non-finite `f64` result,
 NaN or infinity as from `0 / 0`, errors wherever it appears, and nothing
 clamps: a bound is always the author's `clamp`.
 
@@ -164,12 +163,12 @@ answer, and the constructors pack bool parts, so `rgb(a, b, c)` over three
 bools is a vec3 bool.
 `mix(x, y, cond)` picks `x` or `y` by the bool, per entry
 from a vec1 and per component from a bool of the branches' dimension, so
-`mix(0f32, 1, glowing)` makes a `0`/`1` mask and `mix(color, 0.rrrr, color >
+`mix(0f64, 1, glowing)` makes a `0`/`1` mask and `mix(color, 0.rrrr, color >
 0.5)` zeroes the channels that pass.
 
 Shape follows the numeric rules: a comparison against a plain value broadcasts
 across an array, two arrays pair element by element, and the logical operators
-do the same. `==` and `!=` compare `f32` exactly.
+do the same. `==` and `!=` compare `f64` exactly.
 
 ## Strings
 
@@ -258,15 +257,15 @@ are errors.
 ## Functions
 
 The dimension rules use `dim(e)` for an expression's dimension. Every function
-below takes `f32` alone on its numeric arguments unless its entry says
+below takes `f64` alone on its numeric arguments unless its entry says
 otherwise, and every one pairs arrays element by element and broadcasts plain
 values, the result an array when any argument is.
 
 1. `r(x)`, `rg(x, y)`, `rgb(x, y, z)`, `rgba(x, y, z, w)` build a vector from
-   vec1 parts, `f32` or all bool.
+   vec1 parts, `f64` or all bool.
 2. `min(e)`, `max(e)`, `sum(e)`, `avg(e)` reduce an array across its whole
    domain, per component, to a plain value. `min`, `max`, and `sum` keep the
-   operand type and take any; `avg` takes any and returns `f32`.
+   operand type and take any; `avg` takes any and returns `f64`.
 3. `min(a, b)`, `max(a, b)` are elementwise, a vec1 broadcasting from either
    side, any numeric type kept.
 4. `abs(e)` is the componentwise magnitude.
@@ -291,13 +290,13 @@ values, the result an array when any argument is.
     outside; `dim(lo) = dim(hi)`, equal to `dim(x)` or 1; a component with
     `lo >= hi` errors.
 17. `floor(e)`, `ceil(e)`, `round(e)`: snap each component down, up, or to the
-    nearest with halves away from zero; `f32` in and out.
-18. `f32(e)`, `u8(e)`, `u16(e)`, `u32(e)`, and `ceil_u8` through `round_u32`:
+    nearest with halves away from zero; `f64` in and out.
+18. `f64(e)`, `u8(e)`, `u16(e)`, `u32(e)`, and `ceil_u8` through `round_u32`:
     the conversions, componentwise, under the rules in [Numbers](#numbers).
 19. `mix(x, y, cond)`: `x` where the bool is false and `y` where it is true.
     The branches share a dimension and a type, any number, bool, or string,
     and the result takes it; `dim(cond) = dim(x)` or 1. A numeric pair keeps
-    the type it is given: `mix(0f32, 1, glowing)` pins one branch to type the
+    the type it is given: `mix(0f64, 1, glowing)` pins one branch to type the
     other.
 20. `any(c)`, `all(c)`: fold a bool's components into one bool per entry,
     `any` with or and `all` with and; result vec1.
@@ -314,7 +313,7 @@ values, the result an array when any argument is.
     bound, `fallback` shares its dimension and type, any number, bool, or
     string. A bare literal takes the name's numeric type. Where the name is
     unbound, the fallback's type is the result. A bare literal there reads as
-    `f32`.
+    `f64`.
 
 The function set stays small: `sqrt(x)` is `pow(x, 0.5)`, `fract(x)` is
 `mod(x, 1)`, and a signed remap is `n * 0.5 + 0.5`.
@@ -340,7 +339,7 @@ reduction accepts any array above it:
 `min` and `max` compose exactly across the rungs, so `swatchMin(voxelMin(e))`
 is `swatchMin(e)`. The means and sums weigh their own rung:
 `swatchAvg(voxelAvg(e))` weighs voxels evenly where `swatchAvg(e)` weighs
-entries. `Min`, `Max`, and `Sum` keep the operand type; `Avg` returns `f32`.
+entries. `Min`, `Max`, and `Sum` keep the operand type; `Avg` returns `f64`.
 
 A destination entry can be empty: a voxel with no faces, or a swatch whose
 voxels have none. The avg, min, and max reductions error on an empty
@@ -350,7 +349,7 @@ empty entry is built from the sums:
 ```
 aoFace = faceAvg(occlusion);
 faceCount = swatchSum(face(1u32));
-ao = swatchSum(aoFace) / f32(max(faceCount, 1));
+ao = swatchSum(aoFace) / f64(max(faceCount, 1));
 ```
 
 ## Backtick quoting and reserved names

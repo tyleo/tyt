@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 /// A component's type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Scalar {
-    /// A 32-bit float.
-    F32,
+    /// A 64-bit float.
+    F64,
 
     /// An unsigned 8-bit integer.
     U8,
@@ -36,7 +36,7 @@ impl Scalar {
     /// The type's name.
     pub fn name(self) -> &'static str {
         match self {
-            Scalar::F32 => "f32",
+            Scalar::F64 => "f64",
             Scalar::U8 => "u8",
             Scalar::U16 => "u16",
             Scalar::U32 => "u32",
