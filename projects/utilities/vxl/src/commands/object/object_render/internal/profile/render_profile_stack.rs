@@ -133,9 +133,9 @@ impl<'a> RenderProfileStack<'a> {
         for (view_name, entry) in &profile.views {
             let entry_origin = format!("view `{view_name}`");
 
-            if let Some(transform) = entry.transform {
+            if let Some(transform) = &entry.transform {
                 self.claim(name, format!("{entry_origin}'s transform"))?;
-                self.view(view_name).transform = Some(transform);
+                self.view(view_name).transform = Some(transform.clone());
             }
 
             if let Some(projection) = entry.projection {

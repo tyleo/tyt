@@ -12,6 +12,10 @@ pub enum TransformFrame {
 
     /// The view being rendered, so a light follows every view.
     Camera,
+
+    /// One hierarchy node path's world transform, scale included, so a view
+    /// or a light rides the node.
+    Node,
 }
 
 impl CliValue for TransformFrame {
@@ -19,6 +23,7 @@ impl CliValue for TransformFrame {
         TransformFrame::World,
         TransformFrame::Subject,
         TransformFrame::Camera,
+        TransformFrame::Node,
     ];
 
     fn name(self) -> &'static str {
@@ -26,6 +31,7 @@ impl CliValue for TransformFrame {
             TransformFrame::World => "world",
             TransformFrame::Subject => "subject",
             TransformFrame::Camera => "camera",
+            TransformFrame::Node => "node",
         }
     }
 
@@ -34,6 +40,9 @@ impl CliValue for TransformFrame {
             TransformFrame::World => "The document's frame",
             TransformFrame::Subject => "World axes centered on the subject's bounds",
             TransformFrame::Camera => "The view being rendered, so a light follows every view",
+            TransformFrame::Node => {
+                "The node path a --view-node or --light-node gives, scale included"
+            }
         }
     }
 }

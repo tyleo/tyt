@@ -1,9 +1,9 @@
 use crate::{
     Result,
-    utilities::{IndexRange, node_paths},
+    utilities::{IndexRange, NodePath, is_node_path_match, node_paths},
 };
 use branded_id::U32Id;
-use pathspec::{GitIgnoreRegex, is_directory_match, is_directory_path_match};
+use pathspec::GitIgnoreRegex;
 use voxcore::{BVoxHierarchyNode, VoxExt, VoxMain};
 
 type NodeId = U32Id<BVoxHierarchyNode>;
@@ -40,7 +40,7 @@ pub fn select_nodes<T: VoxExt>(
     if !select.is_empty() {
         let patterns = GitIgnoreRegex::from_spans_ignore_inert(select)?;
 
-        for (node_id, path) in node_paths(main) {
+        for NodePath { node_id, path, .. } in node_paths(main) {
             if !is_node_path_match(&patterns, &path) {
                 continue;
             }
@@ -59,19 +59,6 @@ pub fn select_nodes<T: VoxExt>(
         .zip(chosen)
         .filter_map(|(node_id, chosen)| chosen.then_some(node_id))
         .collect())
-}
-
-/// A matched ancestor does not carry down as it does in
-/// [`is_directory_path_match`], so a match selects the node alone. An excluded
-/// ancestor still blocks the node.
-fn is_node_path_match(patterns: &[GitIgnoreRegex], path: &str) -> bool {
-    if let Some((parent, _)) = path.rsplit_once('/')
-        && is_directory_path_match(patterns, parent) == Some(false)
-    {
-        return false;
-    }
-
-    is_directory_match(patterns, path) == Some(true)
 }
 
 #[cfg(test)]

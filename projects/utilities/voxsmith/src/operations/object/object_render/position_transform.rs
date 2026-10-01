@@ -1,7 +1,7 @@
 use ty_math::TyVector3F64;
 
 /// The transform a point light takes: a position read in a frame.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PositionTransform {
     /// The document's frame.
     World {
@@ -31,5 +31,15 @@ pub enum PositionTransform {
 
         /// The sphere's radius, in meters.
         distance: f64,
+    },
+
+    /// One hierarchy node path's world transform, scale included, so the
+    /// light rides the node.
+    Node {
+        /// A glob over node paths that matches exactly one.
+        path: String,
+
+        /// The position from the node's origin, on its axes, in meters.
+        position: TyVector3F64,
     },
 }

@@ -1,5 +1,5 @@
 use crate::{
-    Error, Result,
+    CliValue, Error, Result,
     commands::{PoseTransformEntry, ProjectionKind, TransformFrame, ViewEntry},
 };
 use ty_math::TyVector3F64;
@@ -14,6 +14,8 @@ pub struct ViewElements {
     name: String,
 
     frame: Option<TransformFrame>,
+
+    node: Option<String>,
 
     position: Option<TyVector3F64>,
 
@@ -36,6 +38,7 @@ impl ViewElements {
         ViewElements {
             name,
             frame: None,
+            node: None,
             position: None,
             rotation: None,
             orbit: None,
@@ -54,6 +57,13 @@ impl ViewElements {
         claim(&mut self.frame, frame, flag, &self.name, "frame")
     }
 
+    /// Sets the node path the `node` frame reads, which `flag` gives.
+    pub(crate) fn set_node(&mut self, flag: &str, path: String) -> Result<()> {
+        self.check_posed(flag)?;
+
+        claim(&mut self.node, path, flag, &self.name, "node path")
+    }
+
     /// Sets the position, which `flag` gives.
     pub(crate) fn set_position(&mut self, flag: &str, position: TyVector3F64) -> Result<()> {
         self.check_posed(flag)?;
@@ -70,10 +80,10 @@ impl ViewElements {
 
     /// Sets the whole transform to the orbit `flag` gives.
     pub(crate) fn set_orbit(&mut self, flag: &str, orbit: PoseTransform) -> Result<()> {
-        if self.frame.is_some() || self.position.is_some() || self.rotation.is_some() {
+        if self.is_posed() {
             return Err(Error::usage(format!(
-                "{flag} sets view `{}`'s transform, which --view-frame, --view-position, or a \
-                 rotation flag sets already",
+                "{flag} sets view `{}`'s transform, which --view-frame, --view-node, \
+                 --view-position, or a rotation flag sets already",
                 self.name
             )));
         }
@@ -110,57 +120,77 @@ impl ViewElements {
     /// The view record the elements lower into over `entry`, the profile
     /// stack's view of the same name. A flag's element stands, and the entry
     /// fills the rest. Errors if the view has no transform, a posed transform
-    /// lacks a part, the frame is `camera`, or a length is set under the
-    /// projection that ignores it.
+    /// lacks a part, the frame is `camera`, a node path sits under another
+    /// frame, or a length is set under the projection that ignores it.
     pub(crate) fn finish(self, entry: Option<&ViewEntry>) -> Result<ViewRecord> {
+        let posed = self.is_posed();
         let name = self.name;
 
-        let transform = match (self.orbit, self.frame, self.position, self.rotation) {
-            (Some(orbit), ..) => orbit,
-
-            (None, None, None, None) => entry
-                .and_then(|entry| entry.transform)
-                .map(PoseTransformEntry::to_transform)
+        let transform = if let Some(orbit) = self.orbit {
+            orbit
+        } else if !posed {
+            entry
+                .and_then(|entry| entry.transform.clone())
+                .map(PoseTransformEntry::into_transform)
                 .ok_or_else(|| {
                     Error::usage(format!(
                         "view `{name}` has no transform; give it --view-orbit, or --view-frame \
                          with --view-position and a rotation flag"
                     ))
-                })?,
+                })?
+        } else {
+            let missing: Vec<&str> = [
+                (self.frame.is_none(), "--view-frame"),
+                (self.position.is_none(), "--view-position"),
+                (self.rotation.is_none(), "a rotation flag"),
+            ]
+            .into_iter()
+            .filter_map(|(missing, flag)| missing.then_some(flag))
+            .collect();
 
-            (None, frame, position, rotation) => {
-                let missing: Vec<&str> = [
-                    (frame.is_none(), "--view-frame"),
-                    (position.is_none(), "--view-position"),
-                    (rotation.is_none(), "a rotation flag"),
-                ]
-                .into_iter()
-                .filter_map(|(missing, flag)| missing.then_some(flag))
-                .collect();
+            if !missing.is_empty() {
+                return Err(Error::usage(format!(
+                    "view `{name}`'s transform lacks {}; a posed view takes --view-frame, \
+                     --view-position, and a rotation flag",
+                    missing.join(" and ")
+                )));
+            }
 
-                if !missing.is_empty() {
+            let frame = self.frame.expect("the check above found a frame");
+            let position = self.position.expect("the check above found a position");
+            let rotation = self.rotation.expect("the check above found a rotation");
+
+            if frame != TransformFrame::Node
+                && let Some(path) = self.node
+            {
+                return Err(Error::usage(format!(
+                    "view `{name}` reads the node path `{path}`, which applies under the node \
+                     frame, and its frame is {}",
+                    frame.name()
+                )));
+            }
+
+            match frame {
+                TransformFrame::World => PoseTransform::World { position, rotation },
+
+                TransformFrame::Subject => PoseTransform::Subject { position, rotation },
+
+                TransformFrame::Camera => {
                     return Err(Error::usage(format!(
-                        "view `{name}`'s transform lacks {}; a posed view takes --view-frame, \
-                         --view-position, and a rotation flag",
-                        missing.join(" and ")
+                        "view `{name}`'s frame is camera, and a view's frame is world, subject, \
+                         or node"
                     )));
                 }
 
-                let position = position.expect("the check above found a position");
-                let rotation = rotation.expect("the check above found a rotation");
-
-                match frame.expect("the check above found a frame") {
-                    TransformFrame::World => PoseTransform::World { position, rotation },
-
-                    TransformFrame::Subject => PoseTransform::Subject { position, rotation },
-
-                    TransformFrame::Camera => {
-                        return Err(Error::usage(format!(
-                            "view `{name}`'s frame is camera, and a view's frame is world or \
-                             subject"
-                        )));
-                    }
-                }
+                TransformFrame::Node => PoseTransform::Node {
+                    path: self.node.ok_or_else(|| {
+                        Error::usage(format!(
+                            "view `{name}`'s frame is node, and its transform lacks --view-node"
+                        ))
+                    })?,
+                    position,
+                    rotation,
+                },
             }
         };
 
@@ -228,6 +258,14 @@ impl ViewElements {
             projection,
             select,
         })
+    }
+
+    /// Whether a flag posed the view.
+    fn is_posed(&self) -> bool {
+        self.frame.is_some()
+            || self.node.is_some()
+            || self.position.is_some()
+            || self.rotation.is_some()
     }
 
     /// Errors when `flag` poses a view whose transform an orbit set already.

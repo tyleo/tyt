@@ -2,7 +2,7 @@ use crate::operations::object::{FitOrFixed, Rotation};
 use ty_math::TyVector3F64;
 
 /// The transform a view takes: a position and a rotation read in a frame.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PoseTransform {
     /// The document's frame.
     World {
@@ -32,5 +32,18 @@ pub enum PoseTransform {
 
         /// The sphere's radius.
         distance: FitOrFixed,
+    },
+
+    /// One hierarchy node path's world transform, scale included, so the
+    /// view rides the node.
+    Node {
+        /// A glob over node paths that matches exactly one.
+        path: String,
+
+        /// The position from the node's origin, on its axes, in meters.
+        position: TyVector3F64,
+
+        /// The rotation.
+        rotation: Rotation,
     },
 }

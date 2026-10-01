@@ -96,7 +96,7 @@ pub struct ObjectRender {
     lights_from: Vec<String>,
 
     /// The frame the named view's `--view-position` and rotation are read
-    /// in, `world` or `subject`. Repeatable.
+    /// in, `world`, `subject`, or `node`. Repeatable.
     #[arg(
         value_names = ["view", "frame"],
         long,
@@ -104,6 +104,17 @@ pub struct ObjectRender {
         action = ArgAction::Append,
     )]
     view_frame: Vec<String>,
+
+    /// The node path the named view's `node` frame reads its position and
+    /// rotation in: a glob over hierarchy node paths that matches exactly
+    /// one. Repeatable.
+    #[arg(
+        value_names = ["view", "path"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    view_node: Vec<String>,
 
     /// The named view's position in its frame, in meters. Repeatable.
     #[arg(
@@ -223,9 +234,9 @@ pub struct ObjectRender {
     )]
     light: Vec<String>,
 
-    /// The frame the indexed light's transform is read in: `world` or
-    /// `camera` for a directional light, and `world`, `subject`, or `camera`
-    /// for a point light. Repeatable.
+    /// The frame the indexed light's transform is read in: `world`,
+    /// `camera`, or `node` for a directional light, and `world`, `subject`,
+    /// `camera`, or `node` for a point light. Repeatable.
     #[arg(
         value_names = ["light-index", "frame"],
         long,
@@ -233,6 +244,17 @@ pub struct ObjectRender {
         action = ArgAction::Append,
     )]
     light_frame: Vec<String>,
+
+    /// The node path the indexed light's `node` frame reads its transform
+    /// in: a glob over hierarchy node paths that matches exactly one.
+    /// Repeatable.
+    #[arg(
+        value_names = ["light-index", "path"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    light_node: Vec<String>,
 
     /// The indexed point light's position in its frame, in meters.
     /// Repeatable.
@@ -510,6 +532,12 @@ impl ObjectRender {
             views.view(flag, name)?.set_frame(flag, frame)?;
         }
 
+        for [name, path] in flag_occurrences::<2>(&self.view_node) {
+            let flag = "--view-node";
+
+            views.view(flag, name)?.set_node(flag, path.clone())?;
+        }
+
         for [name, x, y, z] in flag_occurrences::<4>(&self.view_position) {
             let flag = "--view-position";
             let position = parse_flag_vector(flag, [x, y, z])?;
@@ -616,6 +644,13 @@ impl ObjectRender {
             let frame = parse_flag_value::<TransformFrame>(flag, frame)?;
 
             lights.light(flag, index)?.set_frame(flag, frame)?;
+        }
+
+        for [index, path] in flag_occurrences::<2>(&self.light_node) {
+            let flag = "--light-node";
+            let index = parse_flag_index(flag, index)?;
+
+            lights.light(flag, index)?.set_node(flag, path.clone())?;
         }
 
         for [index, x, y, z] in flag_occurrences::<4>(&self.light_position) {
@@ -1125,7 +1160,7 @@ mod tests {
             "0",
         ]);
         assert!(
-            camera.contains("a view's frame is world or subject"),
+            camera.contains("a view's frame is world, subject, or node"),
             "{camera}"
         );
 
@@ -1195,6 +1230,202 @@ mod tests {
 
         let near = error_of(&["--view-orbit", "cam", "0", "0", "near"]);
         assert!(near.contains("`fit` or a positive number"), "{near}");
+    }
+
+    #[test]
+    fn a_node_frame_takes_a_path_and_another_frame_refuses_one() {
+        let riding = record(&[
+            "--view-frame",
+            "cam",
+            "node",
+            "--view-node",
+            "cam",
+            "player/head",
+            "--view-position",
+            "cam",
+            "0",
+            "1",
+            "5",
+            "--view-look-at",
+            "cam",
+            "0",
+            "1",
+            "0",
+        ]);
+        assert_eq!(
+            view(&riding).transform,
+            PoseTransform::Node {
+                path: "player/head".to_owned(),
+                position: TyVector3F64::new(0.0, 1.0, 5.0),
+                rotation: Rotation::LookAt {
+                    target: Some(TyVector3F64::new(0.0, 1.0, 0.0)),
+                },
+            }
+        );
+
+        let pathless = error_of(&[
+            "--view-frame",
+            "cam",
+            "node",
+            "--view-position",
+            "cam",
+            "0",
+            "0",
+            "0",
+            "--view-angles",
+            "cam",
+            "0",
+            "0",
+        ]);
+        assert!(
+            pathless.contains("view `cam`'s frame is node, and its transform lacks --view-node"),
+            "{pathless}"
+        );
+
+        let misframed = error_of(&[
+            "--view-frame",
+            "cam",
+            "world",
+            "--view-node",
+            "cam",
+            "player",
+            "--view-position",
+            "cam",
+            "0",
+            "0",
+            "0",
+            "--view-angles",
+            "cam",
+            "0",
+            "0",
+        ]);
+        assert!(
+            misframed.contains(
+                "view `cam` reads the node path `player`, which applies under the node frame, \
+                 and its frame is world"
+            ),
+            "{misframed}"
+        );
+
+        // A path poses the view, so it clashes with an orbit and, alone, lacks
+        // the rest of the pose.
+        let orbited = error_of(&[
+            "--view-orbit",
+            "cam",
+            "0",
+            "0",
+            "fit",
+            "--view-node",
+            "cam",
+            "player",
+        ]);
+        assert!(
+            orbited.contains("sets view `cam`'s transform, which"),
+            "{orbited}"
+        );
+
+        let alone = error_of(&["--profile", "hero", "--view-node", "hero", "player"]);
+        assert!(
+            alone.contains(
+                "view `hero`'s transform lacks --view-frame and --view-position and a rotation \
+                 flag"
+            ),
+            "{alone}"
+        );
+
+        let sun = record(&[
+            "--light",
+            "0",
+            "directional",
+            "--light-frame",
+            "0",
+            "node",
+            "--light-node",
+            "0",
+            "lamp",
+            "--light-angles",
+            "0",
+            "0",
+            "90",
+        ]);
+        assert!(matches!(
+            light(&sun),
+            LightRecord::Directional {
+                transform: RotationTransform::Node { path, .. },
+                ..
+            } if path == "lamp"
+        ));
+
+        let lamp = record(&[
+            "--light",
+            "0",
+            "point",
+            "--light-frame",
+            "0",
+            "node",
+            "--light-node",
+            "0",
+            "lamp",
+            "--light-position",
+            "0",
+            "0",
+            "1",
+            "0",
+        ]);
+        assert!(matches!(
+            light(&lamp),
+            LightRecord::Point {
+                transform: PositionTransform::Node { path, position },
+                ..
+            } if path == "lamp" && *position == TyVector3F64::Y
+        ));
+
+        let error = error_of(&[
+            "--light",
+            "0",
+            "point",
+            "--light-frame",
+            "0",
+            "node",
+            "--light-position",
+            "0",
+            "0",
+            "0",
+            "0",
+        ]);
+        assert!(
+            error.contains("light 0's frame is node, and its transform lacks --light-node"),
+            "{error}"
+        );
+
+        let error = error_of(&[
+            "--light",
+            "0",
+            "directional",
+            "--light-frame",
+            "0",
+            "camera",
+            "--light-node",
+            "0",
+            "lamp",
+            "--light-angles",
+            "0",
+            "0",
+            "0",
+        ]);
+        assert!(
+            error.contains(
+                "light 0 reads the node path `lamp`, which applies under the node frame, and \
+                 its frame is camera"
+            ),
+            "{error}"
+        );
+
+        let error = error_of(&["--light", "0", "hemisphere", "--light-node", "0", "lamp"]);
+        assert!(
+            error.contains("--light-node applies to a directional or point light"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -1510,7 +1741,7 @@ mod tests {
             "0",
         ]);
         assert!(
-            error.contains("a directional light's frame is world or camera"),
+            error.contains("a directional light's frame is world, camera, or node"),
             "{error}"
         );
 

@@ -5,7 +5,7 @@ use voxsmith::operations::object::{FitOrFixed, PoseTransform};
 
 /// A profile's view transform. Its `kind` takes a `--view-frame` value or
 /// `orbit`.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PoseTransformEntry {
     World {
@@ -28,11 +28,20 @@ pub enum PoseTransformEntry {
 
         distance: Option<DistanceEntry>,
     },
+
+    /// `path` mirrors `--view-node`.
+    Node {
+        path: String,
+
+        position: [f64; 3],
+
+        rotation: RotationEntry,
+    },
 }
 
 impl PoseTransformEntry {
     /// The transform in voxsmith's shape.
-    pub(crate) fn to_transform(self) -> PoseTransform {
+    pub(crate) fn into_transform(self) -> PoseTransform {
         match self {
             PoseTransformEntry::World { position, rotation } => PoseTransform::World {
                 position: TyVector3F64::from_array(position),
@@ -52,6 +61,16 @@ impl PoseTransformEntry {
                 azimuth,
                 elevation,
                 distance: distance.map_or(FitOrFixed::Fit, |distance| distance.0),
+            },
+
+            PoseTransformEntry::Node {
+                path,
+                position,
+                rotation,
+            } => PoseTransform::Node {
+                path,
+                position: TyVector3F64::from_array(position),
+                rotation: rotation.to_rotation(),
             },
         }
     }

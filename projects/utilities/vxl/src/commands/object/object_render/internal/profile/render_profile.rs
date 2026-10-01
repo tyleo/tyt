@@ -213,6 +213,76 @@ mod tests {
     }
 
     #[test]
+    fn a_node_transform_carries_its_path() {
+        let profile: RenderProfile = serde_json::from_str(
+            r#"{
+                "views": {
+                    "ride": {
+                        "transform": {
+                            "kind": "node",
+                            "path": "player/head",
+                            "position": [0, 1, 5],
+                            "rotation": { "kind": "look-at" }
+                        }
+                    }
+                },
+                "lights": [
+                    {
+                        "kind": "directional",
+                        "transform": {
+                            "kind": "node",
+                            "path": "sun",
+                            "rotation": { "kind": "angles", "azimuth": 0, "elevation": 90 }
+                        }
+                    },
+                    {
+                        "kind": "point",
+                        "transform": { "kind": "node", "path": "lamp", "position": [0, 1, 0] }
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            profile.views["ride"].transform,
+            Some(PoseTransformEntry::Node {
+                path: "player/head".to_owned(),
+                position: [0.0, 1.0, 5.0],
+                rotation: RotationEntry::LookAt { target: None },
+            })
+        );
+
+        let [sun, lamp] = profile.lights.as_slice() else {
+            panic!("two lights");
+        };
+        assert!(matches!(
+            sun,
+            LightEntry::Directional {
+                transform: Some(RotationTransformEntry::Node { path, .. }),
+                ..
+            } if path == "sun"
+        ));
+        assert!(matches!(
+            lamp,
+            LightEntry::Point {
+                transform: Some(PositionTransformEntry::Node {
+                    path,
+                    position: [0.0, 1.0, 0.0]
+                }),
+                ..
+            } if path == "lamp"
+        ));
+
+        assert!(
+            serde_json::from_str::<RenderProfile>(
+                r#"{ "views": { "a": { "transform": { "kind": "node", "position": [0, 0, 0], "rotation": { "kind": "look-at" } } } } }"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn the_empty_profile_takes_every_default() {
         assert_eq!(
             serde_json::from_str::<RenderProfile>("{}").unwrap(),
@@ -255,7 +325,7 @@ mod tests {
         );
         assert!(
             serde_json::from_str::<RenderProfile>(
-                r#"{ "views": { "a": { "transform": { "kind": "node", "position": [0, 0, 0] } } } }"#
+                r#"{ "views": { "a": { "transform": { "kind": "rig", "position": [0, 0, 0] } } } }"#
             )
             .is_err()
         );

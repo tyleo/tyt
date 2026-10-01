@@ -26,6 +26,10 @@ pub use vector_component::*;
 
 // Internal API
 
+mod is_node_path_match;
+mod node_path;
 mod node_paths;
 
+pub(crate) use is_node_path_match::*;
+pub(crate) use node_path::*;
 pub(crate) use node_paths::*;

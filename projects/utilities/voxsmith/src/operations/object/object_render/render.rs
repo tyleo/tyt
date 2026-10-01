@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     operations::object::{
-        LightRecord, RenderElement, RenderRecord, RenderedView, resolve_light_position,
+        LightRecord, NodeFrames, RenderElement, RenderRecord, RenderedView, resolve_light_position,
         resolve_light_rotation, resolve_view,
     },
     utilities::select_objects,
@@ -37,6 +37,8 @@ pub fn render<T: VoxExt>(
 
     let mut scene = RenderScene::from_vox_main(main, object_ids, record.voxel_size)?;
 
+    let node_frames = NodeFrames::new(main, record.voxel_size);
+
     let mut outputs = IdVec::with_capacity(record.views.len());
 
     for view_record in record.views.iter() {
@@ -55,6 +57,7 @@ pub fn render<T: VoxExt>(
             &view_record.transform,
             &view_record.projection,
             subject.as_ref(),
+            &node_frames,
             record.width,
             record.height,
         )?;
@@ -64,8 +67,13 @@ pub fn render<T: VoxExt>(
         let light_ids = (0..)
             .zip(record.lights.iter())
             .map(|(index, light)| {
-                let light =
-                    resolve_light(U32Id::from_u32(index), light, subject.as_ref(), &view.pose)?;
+                let light = resolve_light(
+                    U32Id::from_u32(index),
+                    light,
+                    subject.as_ref(),
+                    &node_frames,
+                    &view.pose,
+                )?;
 
                 Ok(scene.retain_light(light)?)
             })
@@ -201,6 +209,7 @@ fn resolve_light(
     light_id: U32Id<BRenderLight>,
     light: &LightRecord,
     subject: Option<&TyBoundsF64>,
+    node_frames: &NodeFrames,
     view: &TyPoseF64,
 ) -> Result<RenderLight> {
     let element = RenderElement::LightTransform { light_id };
@@ -212,7 +221,7 @@ fn resolve_light(
             color,
             strength,
         } => RenderLight::Directional {
-            rotation: resolve_light_rotation(&element, transform, view)?,
+            rotation: resolve_light_rotation(&element, transform, node_frames, view)?,
             color: *color,
             strength: *strength,
             shadow: *shadow,
@@ -225,7 +234,7 @@ fn resolve_light(
             strength,
             range,
         } => RenderLight::Point {
-            position: resolve_light_position(&element, transform, subject, view)?,
+            position: resolve_light_position(&element, transform, subject, node_frames, view)?,
             color: *color,
             strength: *strength,
             range: *range,
@@ -257,10 +266,10 @@ mod tests {
     use branded_id::{IdVec, U32Id};
     use std::f64::consts::PI;
     use ty_math::{
-        TyLinSrgbF64, TyQuaternionExt, TyQuaternionF64, TySrgbU8, TyVector3F64, TyVector3I32,
-        TyVector3U32,
+        TyLinSrgbF64, TyQuaternionExt, TyQuaternionF64, TySrgbU8, TyTransformF64, TyVector3F64,
+        TyVector3I32, TyVector3U32,
     };
-    use voxcore::{BVoxObject, VoxMain, VoxObject};
+    use voxcore::{BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
     use voxrender::{BRenderView, RenderOcclusion, RenderOutput, RenderShadow};
 
     /// A red voxel at `x = 0` beside a blue one at `x = 1`.
@@ -331,6 +340,10 @@ mod tests {
             .map(|x| pixel(image, x, image.height() / 2))
             .find(|pixel| pixel[3] == 255)
             .expect("the bar crosses the middle row")
+    }
+
+    fn close(a: TyVector3F64, b: TyVector3F64) -> bool {
+        (a - b).length() < 1e-9
     }
 
     #[test]
@@ -425,6 +438,51 @@ mod tests {
     }
 
     #[test]
+    fn a_node_frame_view_rides_the_node_placing_the_bar() {
+        let mut main = bar();
+
+        // The node turns its +Z to world +X, doubles, and sits at x = 10.
+        let node_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "player".to_owned(),
+                transform: TyTransformF64::new(
+                    TyVector3F64::new(10.0, 0.0, 0.0),
+                    TyQuaternionF64::from_axis_angle(TyVector3F64::Y, 90f64.to_radians()),
+                    TyVector3F64::splat(2.0),
+                ),
+                child_object_ids: vec![U32Id::from_u32(0)],
+                ..Default::default()
+            })
+            .unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
+
+        let mut riding = orbit("ride", 0.0);
+        riding.transform = PoseTransform::Node {
+            path: "player".to_owned(),
+            position: TyVector3F64::new(0.0, 0.5, 5.0),
+            rotation: Rotation::LookAt {
+                target: Some(TyVector3F64::new(0.0, 0.5, 0.0)),
+            },
+        };
+
+        let outputs = render(&main, &[U32Id::from_u32(0)], &record(vec![riding])).unwrap();
+        let RenderedView { view, image } = output(&outputs, 0);
+
+        // The offset doubles and turns with the node: 5 along its +Z lands 10
+        // along world +X past its origin. The look back runs down -X.
+        assert!(close(view.pose.position, TyVector3F64::new(20.0, 1.0, 0.0)));
+        assert!(close(
+            view.pose.rotation * -TyVector3F64::Z,
+            -TyVector3F64::X
+        ));
+
+        // The bar rides the same node, so the view sees its red end.
+        let [red, green, blue, alpha] = leftmost_hit(image);
+        assert_eq!(alpha, 255);
+        assert!(red > 100 && green < 20 && blue < 20, "{red} {green} {blue}");
+    }
+
+    #[test]
     fn a_bad_selection_errors() {
         let main = bar();
         let record = record(vec![orbit("front", 0.0)]);
@@ -482,6 +540,19 @@ mod tests {
         };
         assert_eq!(
             element(render(&main, &object_ids, &record(vec![looking_inward]))),
+            RenderElement::ViewTransform {
+                name: "front".to_owned()
+            }
+        );
+
+        let mut unmounted = orbit("front", 0.0);
+        unmounted.transform = PoseTransform::Node {
+            path: "player".to_owned(),
+            position: TyVector3F64::ZERO,
+            rotation: Rotation::LookAt { target: None },
+        };
+        assert_eq!(
+            element(render(&main, &object_ids, &record(vec![unmounted]))),
             RenderElement::ViewTransform {
                 name: "front".to_owned()
             }

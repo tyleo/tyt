@@ -128,12 +128,16 @@ type PoseTransform =
   | { kind: "subject"; position: Vec3; rotation: Rotation }
   /** Degrees. `distance` omitted, `fit`. */
   | { kind: "orbit"; azimuth: number; elevation: number;
-      distance?: number | "fit" };
+      distance?: number | "fit" }
+  /** `path` mirrors `--view-node`. */
+  | { kind: "node"; path: string; position: Vec3; rotation: Rotation };
 
 /** A rotation only. A directional light sits at its frame's origin. */
 type RotationTransform =
   | { kind: "world"; rotation: Rotation }
-  | { kind: "camera"; rotation: Rotation };
+  | { kind: "camera"; rotation: Rotation }
+  /** `path` mirrors `--light-node`. */
+  | { kind: "node"; path: string; rotation: Rotation };
 
 /** A position only. Point lights. */
 type PositionTransform =
@@ -141,7 +145,9 @@ type PositionTransform =
   | { kind: "subject"; position: Vec3 }
   | { kind: "camera"; position: Vec3 }
   /** Degrees. `distance` is required. */
-  | { kind: "orbit"; azimuth: number; elevation: number; distance: number };
+  | { kind: "orbit"; azimuth: number; elevation: number; distance: number }
+  /** `path` mirrors `--light-node`. */
+  | { kind: "node"; path: string; position: Vec3 };
 
 /** Shared by every shape. Each form mirrors the `--view-*` and `--light-*`
  *  flag of its name. */
@@ -201,14 +207,23 @@ a profile writes its names and values.
               "projection": "orthographic",
               "scale": 8,
             },
+            "<node-view>": {
+              "transform": {
+                "kind": "node",
+                "path": "<glob>",
+                "position": [0, 1, 5],
+                "rotation": { "kind": "look-at" },
+              },
+            },
           },
 
           "lightsFrom": ["<profile>"],
           "lights": [
             {
               "kind": "directional",
+              // `node` adds "path": "<glob>".
               "transform": {
-                "kind": "<world | camera>",
+                "kind": "<world | camera | node>",
                 "rotation": { "kind": "angles", "azimuth": -30, "elevation": 30 },
               },
               "shadow": "<none | per-pixel | per-face | per-corner>",
@@ -217,8 +232,9 @@ a profile writes its names and values.
             },
             {
               "kind": "point",
+              // `node` adds "path": "<glob>".
               "transform": {
-                "kind": "<world | subject | camera>",
+                "kind": "<world | subject | camera | node>",
                 "position": [0, 4, 0],
               },
               "range": 12,
@@ -298,14 +314,16 @@ The checks split by when they run:
    1. every view holding a transform, from the stack or the flags, and every
       directional or point light likewise
    2. each view's name non-empty and free of path separators
-   3. a view's frame `world` or `subject`, and a directional light's `world`
-      or `camera`
+   3. a view's frame `world`, `subject`, or `node`, a directional light's
+      `world`, `camera`, or `node`, and a node path only under the `node`
+      frame, which needs one
    4. `fov` under `perspective` and below 180 degrees, and `scale` under
       `orthographic`
 4. the render
    1. the selection matching objects, in a document holding some
    2. each view's `select` matching a rendered object
-   3. each transform resolving, a look-at whose eye is its target erroring
+   3. each transform resolving: a look-at whose eye is its target errors, as
+      does a `node` path matching no node path or several
 
 ## Built-in profiles
 

@@ -167,7 +167,7 @@ resample plan has one.
 
 ## Phase 2
 
-- [ ] **S14. The `node` frame.** A fifth frame every shape takes: the values
+- [x] **S14. The `node` frame.** A fifth frame every shape takes: the values
       are read in one hierarchy node path's world transform, so a camera can
       ride a player. The entry carries a `path`, a glob over node paths with
       the object selectors' rules. The glob must match exactly one path. Zero

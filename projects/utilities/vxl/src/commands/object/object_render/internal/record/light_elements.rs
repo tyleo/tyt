@@ -25,6 +25,8 @@ pub struct LightElements {
 
     frame: Option<TransformFrame>,
 
+    node: Option<String>,
+
     position: Option<TyVector3F64>,
 
     rotation: Option<Rotation>,
@@ -52,6 +54,7 @@ impl LightElements {
             kind,
             entry: None,
             frame: None,
+            node: None,
             position: None,
             rotation: None,
             orbit: None,
@@ -78,6 +81,14 @@ impl LightElements {
         self.check_posed(flag)?;
 
         self.claim(flag, "frame", |elements| &mut elements.frame, frame)
+    }
+
+    /// Sets the node path the `node` frame reads, which `flag` gives.
+    pub(crate) fn set_node(&mut self, flag: &str, path: String) -> Result<()> {
+        self.check_kind(flag, &[LightKind::Directional, LightKind::Point])?;
+        self.check_posed(flag)?;
+
+        self.claim(flag, "node path", |elements| &mut elements.node, path)
     }
 
     /// Sets the position, which `flag` gives.
@@ -109,10 +120,10 @@ impl LightElements {
     pub(crate) fn set_orbit(&mut self, flag: &str, orbit: PositionTransform) -> Result<()> {
         self.check_kind(flag, &[LightKind::Point])?;
 
-        if self.frame.is_some() || self.position.is_some() {
+        if self.frame.is_some() || self.node.is_some() || self.position.is_some() {
             return Err(Error::usage(format!(
-                "{flag} sets light {}'s transform, which --light-frame or --light-position sets \
-                 already",
+                "{flag} sets light {}'s transform, which --light-frame, --light-node, or \
+                 --light-position sets already",
                 self.index
             )));
         }
@@ -169,11 +180,16 @@ impl LightElements {
     /// rig's entry fills the rest, and the standard defaults fill what
     /// neither sets: a white color at strength `1`, no range, and the default
     /// shadow granularity. Errors if a directional or point light has no
-    /// transform, a posed transform lacks a part, or a directional light's
-    /// frame is `subject`.
+    /// transform, a posed transform lacks a part, a directional light's frame
+    /// is `subject`, or a node path sits under another frame.
     pub(crate) fn finish(self) -> Result<LightRecord> {
         let index = self.index;
         let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
+
+        let node = self.node;
+        let has_node = node.is_some();
+
+        let node_path = |frame| node_path(index, frame, node);
 
         Ok(match self.kind {
             LightKind::Directional => {
@@ -190,8 +206,8 @@ impl LightElements {
                 };
 
                 let transform = match (self.frame, self.rotation) {
-                    (None, None) => entry_transform
-                        .map(|transform| transform.to_transform())
+                    (None, None) if !has_node => entry_transform
+                        .map(|transform| transform.into_transform())
                         .ok_or_else(|| {
                             Error::usage(format!(
                                 "light {index} has no transform; give it --light-frame and a \
@@ -199,15 +215,20 @@ impl LightElements {
                             ))
                         })?,
 
-                    (Some(frame), Some(rotation)) => match frame {
-                        TransformFrame::World => RotationTransform::World { rotation },
+                    (Some(frame), Some(rotation)) => match (frame, node_path(frame)?) {
+                        (TransformFrame::World, _) => RotationTransform::World { rotation },
 
-                        TransformFrame::Camera => RotationTransform::Camera { rotation },
+                        (TransformFrame::Camera, _) => RotationTransform::Camera { rotation },
 
-                        TransformFrame::Subject => {
+                        (TransformFrame::Node, path) => RotationTransform::Node {
+                            path: path.expect("the node frame found its path"),
+                            rotation,
+                        },
+
+                        (TransformFrame::Subject, _) => {
                             return Err(Error::usage(format!(
                                 "light {index}'s frame is subject, and a directional light's \
-                                 frame is world or camera"
+                                 frame is world, camera, or node"
                             )));
                         }
                     },
@@ -259,8 +280,8 @@ impl LightElements {
                 let transform = match (self.orbit, self.frame, self.position) {
                     (Some(orbit), ..) => orbit,
 
-                    (None, None, None) => entry_transform
-                        .map(|transform| transform.to_transform())
+                    (None, None, None) if !has_node => entry_transform
+                        .map(|transform| transform.into_transform())
                         .ok_or_else(|| {
                             Error::usage(format!(
                                 "light {index} has no transform; give it --light-orbit, or \
@@ -268,12 +289,17 @@ impl LightElements {
                             ))
                         })?,
 
-                    (None, Some(frame), Some(position)) => match frame {
-                        TransformFrame::World => PositionTransform::World { position },
+                    (None, Some(frame), Some(position)) => match (frame, node_path(frame)?) {
+                        (TransformFrame::World, _) => PositionTransform::World { position },
 
-                        TransformFrame::Subject => PositionTransform::Subject { position },
+                        (TransformFrame::Subject, _) => PositionTransform::Subject { position },
 
-                        TransformFrame::Camera => PositionTransform::Camera { position },
+                        (TransformFrame::Camera, _) => PositionTransform::Camera { position },
+
+                        (TransformFrame::Node, path) => PositionTransform::Node {
+                            path: path.expect("the node frame found its path"),
+                            position,
+                        },
                     },
 
                     (None, frame, _) => {
@@ -386,5 +412,26 @@ impl LightElements {
         *slot = Some(value);
 
         Ok(())
+    }
+}
+
+/// The node path light `index` reads under `frame`: the path given under the
+/// `node` frame, and none under another. Errors if a path sits under another
+/// frame or the `node` frame has none.
+fn node_path(index: u32, frame: TransformFrame, node: Option<String>) -> Result<Option<String>> {
+    match (frame, node) {
+        (TransformFrame::Node, Some(path)) => Ok(Some(path)),
+
+        (TransformFrame::Node, None) => Err(Error::usage(format!(
+            "light {index}'s frame is node, and its transform lacks --light-node"
+        ))),
+
+        (_, Some(path)) => Err(Error::usage(format!(
+            "light {index} reads the node path `{path}`, which applies under the node frame, and \
+             its frame is {}",
+            frame.name()
+        ))),
+
+        (_, None) => Ok(None),
     }
 }

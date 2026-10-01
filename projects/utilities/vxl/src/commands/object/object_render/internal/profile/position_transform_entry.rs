@@ -5,7 +5,7 @@ use voxsmith::operations::object::PositionTransform;
 
 /// A profile's point light transform. Its `kind` takes a `--light-frame`
 /// value or `orbit`.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PositionTransformEntry {
     World {
@@ -28,11 +28,17 @@ pub enum PositionTransformEntry {
 
         distance: PositiveF64,
     },
+
+    /// `path` mirrors `--light-node`.
+    Node {
+        path: String,
+        position: [f64; 3],
+    },
 }
 
 impl PositionTransformEntry {
     /// The transform in voxsmith's shape.
-    pub(crate) fn to_transform(self) -> PositionTransform {
+    pub(crate) fn into_transform(self) -> PositionTransform {
         match self {
             PositionTransformEntry::World { position } => PositionTransform::World {
                 position: TyVector3F64::from_array(position),
@@ -54,6 +60,11 @@ impl PositionTransformEntry {
                 azimuth,
                 elevation,
                 distance: distance.0,
+            },
+
+            PositionTransformEntry::Node { path, position } => PositionTransform::Node {
+                path,
+                position: TyVector3F64::from_array(position),
             },
         }
     }

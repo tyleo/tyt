@@ -1,11 +1,12 @@
 use crate::{
     Error, Result,
-    operations::object::{PositionTransform, RenderElement},
+    operations::object::{NodeFrames, PositionTransform, RenderElement},
 };
 use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64, TyVector3Ext, TyVector3F64};
 
 /// Resolves a point light's `transform` to a world position. Errors if a
-/// `subject` or `orbit` frame has no subject.
+/// `subject` or `orbit` frame has no subject, or a `node` frame's glob
+/// matches no node path or several.
 ///
 /// # Arguments
 /// * `element` - the light, which errors report.
@@ -16,6 +17,7 @@ pub fn resolve_light_position(
     element: &RenderElement,
     transform: &PositionTransform,
     subject: Option<&TyBoundsF64>,
+    node_frames: &NodeFrames,
     view: &TyPoseF64,
 ) -> Result<TyVector3F64> {
     let subject = || {
@@ -23,12 +25,12 @@ pub fn resolve_light_position(
             .ok_or_else(|| Error::render_record(element.clone(), "frames a subject with no voxel"))
     };
 
-    Ok(match *transform {
-        PositionTransform::World { position } => position,
+    Ok(match transform {
+        PositionTransform::World { position } => *position,
 
-        PositionTransform::Subject { position } => subject()?.center + position,
+        PositionTransform::Subject { position } => subject()?.center + *position,
 
-        PositionTransform::Camera { position } => view.position + view.rotation * position,
+        PositionTransform::Camera { position } => view.position + view.rotation * *position,
 
         PositionTransform::Orbit {
             azimuth,
@@ -37,18 +39,25 @@ pub fn resolve_light_position(
         } => {
             subject()?.center
                 + TyVector3F64::from_azimuth_elevation(
-                    TyAngleUnit::Degrees.to_radians(azimuth),
-                    TyAngleUnit::Degrees.to_radians(elevation),
-                ) * distance
+                    TyAngleUnit::Degrees.to_radians(*azimuth),
+                    TyAngleUnit::Degrees.to_radians(*elevation),
+                ) * *distance
+        }
+
+        PositionTransform::Node { path, position } => {
+            node_frames.frame(element, path)?.transform_point(*position)
         }
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::object::{PositionTransform, RenderElement, resolve_light_position};
+    use crate::operations::object::{
+        NodeFrames, PositionTransform, RenderElement, resolve_light_position,
+    };
     use branded_id::U32Id;
-    use ty_math::{TyBoundsF64, TyPoseF64, TyQuaternionF64, TyVector3F64};
+    use ty_math::{TyBoundsF64, TyPoseF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
+    use voxcore::{VoxHierarchyNode, VoxMain};
 
     fn element() -> RenderElement {
         RenderElement::LightTransform {
@@ -68,8 +77,24 @@ mod tests {
             TyQuaternionF64::from_axis_angle(TyVector3F64::Y, 90f64.to_radians()),
         );
 
-        let place =
-            |transform| resolve_light_position(&element(), &transform, Some(&subject), &view);
+        let mut main: VoxMain = VoxMain::default();
+        let lamp_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "lamp".to_owned(),
+                transform: TyTransformF64::new(
+                    TyVector3F64::new(0.0, 4.0, 0.0),
+                    TyQuaternionF64::IDENTITY,
+                    TyVector3F64::splat(3.0),
+                ),
+                ..Default::default()
+            })
+            .unwrap();
+        main.push_root_hierarchy_node_id(lamp_id).unwrap();
+        let frames = NodeFrames::new(&main, 1.0);
+
+        let place = |transform| {
+            resolve_light_position(&element(), &transform, Some(&subject), &frames, &view)
+        };
 
         assert_eq!(
             place(PositionTransform::World {
@@ -102,6 +127,15 @@ mod tests {
             .unwrap(),
             TyVector3F64::new(5.0, 2.0, 3.0)
         ));
+        // The node's scale triples the offset.
+        assert!(close(
+            place(PositionTransform::Node {
+                path: "lamp".to_owned(),
+                position: TyVector3F64::X,
+            })
+            .unwrap(),
+            TyVector3F64::new(3.0, 4.0, 0.0)
+        ));
 
         assert!(
             resolve_light_position(
@@ -110,8 +144,16 @@ mod tests {
                     position: TyVector3F64::X
                 },
                 None,
+                &frames,
                 &view
             )
+            .is_err()
+        );
+        assert!(
+            place(PositionTransform::Node {
+                path: "torch".to_owned(),
+                position: TyVector3F64::X,
+            })
             .is_err()
         );
     }

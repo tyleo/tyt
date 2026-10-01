@@ -90,9 +90,18 @@ union over the frame its values are read in:
 2. `subject` has world axes centered on the subject's bounds
 3. `camera` is the view being rendered, so a light in it follows every view
 4. `orbit` is a position on a sphere about the subject's center, facing it
+5. `node` is one hierarchy node path's world transform, scale included, so a
+   camera can ride a player. The entry carries a `path`, a glob over node
+   paths under the shared
+   [glob rules](../../plan/open/vxl-commands/reference/conventions.md#glob-patterns),
+   matched as `node list` matches them. The glob must match exactly one
+   path. Zero or several matches error, listing the paths that matched. The
+   position and rotation are read on the node's axes and compose with the
+   path's world transform, the one the flatten gives the path's placements
+   with the voxel size applied
 
-A view takes `world`, `subject`, or `orbit`. A directional light takes `world`
-or `camera`. A point light takes all four.
+A view takes `world`, `subject`, `orbit`, or `node`. A directional light
+takes `world`, `camera`, or `node`. A point light takes all five.
 
 A rotation is one of four forms, shared by every shape:
 

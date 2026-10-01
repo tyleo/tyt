@@ -1,13 +1,10 @@
 use crate::{
     Result,
-    utilities::{IndexRange, node_paths},
+    utilities::{IndexRange, NodePath, node_paths},
 };
 use branded_id::U32Id;
 use pathspec::{GitIgnoreRegex, is_file_path_match};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxExt, VoxMain};
-
-/// A hierarchy-node id.
-type NodeId = U32Id<BVoxHierarchyNode>;
+use voxcore::{BVoxObject, VoxExt, VoxMain};
 
 /// An object id.
 type ObjectId = U32Id<BVoxObject>;
@@ -88,13 +85,18 @@ fn select_by_path<T: VoxExt>(
 fn object_paths<T: VoxExt>(
     main: &VoxMain<T>,
     object_ids: &[ObjectId],
-    node_paths: &[(NodeId, String)],
+    node_paths: &[NodePath],
 ) -> Vec<(usize, String)> {
     let mut placed = vec![false; object_ids.len()];
 
     let mut paths = Vec::new();
 
-    for (node_id, node_path) in node_paths {
+    for NodePath {
+        node_id,
+        path: node_path,
+        ..
+    } in node_paths
+    {
         let Some(node) = main.hierarchy_node(*node_id) else {
             continue;
         };
@@ -134,10 +136,14 @@ fn object_paths<T: VoxExt>(
 mod tests {
     use crate::utilities::{
         IndexRange,
-        select_objects::{NodeId, ObjectId, select_objects},
+        select_objects::{ObjectId, select_objects},
     };
+    use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxHierarchyNode, VoxMain, VoxObject};
+    use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain, VoxObject};
+
+    /// A hierarchy-node id.
+    type NodeId = U32Id<BVoxHierarchyNode>;
 
     /// Adds an empty named object and returns its id.
     fn object_id(main: &mut VoxMain, name: &str) -> ObjectId {
