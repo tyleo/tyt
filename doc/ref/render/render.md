@@ -27,6 +27,9 @@ vxl object render turret.voxj
   --view-orbit iso -45 30 fit
   --view-projection iso orthographic
   --print-camera
+
+# the hero view under the studio rig, the emissive materials glowing
+vxl object render turret.voxj --profile glow
 ```
 
 The views show inline in the terminal one below another, each scaled to fit,
@@ -100,29 +103,51 @@ mesh. A document with no objects errors. See
    scene. A point or spot light's falloff and `range` run in meters after it
    applies.
 
-9. `--profile <profile>`
-   - Repeatable: yes
+9. `--bloom-strength <strength>`
+   - Default: `0`
+   - Repeatable: no
 
-   Applies a profile whole, expanding it into its flags with its `viewsFrom`
-   and `lightsFrom` imports first. An explicit flag replaces the profile
-   element it collides with. Repeated, the profiles stack in line order, the
-   views merging by name and the lights as one rig, and an element two of
-   them set errors; see the [profile language](profile-language.md#stacking).
-   `vxl profile object render list` lists the profiles a run can apply.
+   The factor scaling the bloom halo over the emissive term; see
+   [Bloom](contract.md#bloom). `0` skips the pass. The built-in `glow`
+   profile sets `1`. A negative strength errors.
 
-10. `--views-from <profile>`
+10. `--bloom-radius <fraction>`
+    - Default: `0.03`
+    - Repeatable: no
+
+    The halo's reach as a fraction of the shorter image side. Zero errors.
+
+11. `--bloom-threshold <luminance>`
+    - Default: `1`
+    - Repeatable: no
+
+    The luminance in linear light an emission must exceed to bloom. At `1`
+    a material at glTF's default emissive strength stays flat. A negative
+    threshold errors.
+
+12. `--profile <profile>`
+    - Repeatable: yes
+
+    Applies a profile whole, expanding it into its flags with its `viewsFrom`
+    and `lightsFrom` imports first. An explicit flag replaces the profile
+    element it collides with. Repeated, the profiles stack in line order, the
+    views merging by name and the lights as one rig, and an element two of
+    them set errors; see the [profile language](profile-language.md#stacking).
+    `vxl profile object render list` lists the profiles a run can apply.
+
+13. `--views-from <profile>`
     - Repeatable: yes
 
     Applies a profile's views alone, its `viewsFrom` imports first. The rig
     and the image elements stay behind.
 
-11. `--lights-from <profile>`
+14. `--lights-from <profile>`
     - Repeatable: yes
 
     Applies a profile's light rig alone, its `lightsFrom` imports first. The
     views and the image elements stay behind.
 
-12. `--view-frame <view> <world | subject | node>`
+15. `--view-frame <view> <world | subject | node>`
     - Repeatable: yes
 
     The frame the named view's `--view-position` and rotation are read in.
@@ -133,7 +158,7 @@ mesh. A document with no objects errors. See
     transform neither the flags nor a profile sets errors. A flag setting an
     element set already errors.
 
-13. `--view-node <view> <path>`
+16. `--view-node <view> <path>`
     - Repeatable: yes
 
     The node path the named view's `node` frame reads its position and
@@ -143,38 +168,38 @@ mesh. A document with no objects errors. See
     Zero or several matches error, listing the paths that matched. The flag
     errors under another frame, and a `node` frame without it errors.
 
-14. `--view-position <view> <x> <y> <z>`
+17. `--view-position <view> <x> <y> <z>`
     - Repeatable: yes
 
     The named view's position in its frame, in meters.
 
-15. `--view-quaternion <view> <x> <y> <z> <w>`
+18. `--view-quaternion <view> <x> <y> <z> <w>`
     - Repeatable: yes
 
     The named view's rotation as a unit quaternion, the form `--print-camera`
     prints. A quaternion off unit length errors. The four rotation flags share
     a view's one rotation, so two on one view error.
 
-16. `--view-euler <view> <x> <y> <z>`
+19. `--view-euler <view> <x> <y> <z>`
     - Repeatable: yes
 
     The named view's rotation as Euler angles in degrees about the fixed x,
     y, then z axes, as `node set rotation` takes them.
 
-17. `--view-look-at <view> <x> <y> <z>`
+20. `--view-look-at <view> <x> <y> <z>`
     - Repeatable: yes
 
     Aims the named view's -Z at a point in its frame, with the frame's +Y up.
     A target at the view's position errors.
 
-18. `--view-angles <view> <azimuth> <elevation>`
+21. `--view-angles <view> <azimuth> <elevation>`
     - Repeatable: yes
 
     The named view's rotation as the one facing its frame's origin from the
     direction at an azimuth from +Z toward +X and an elevation toward +Y, in
     degrees.
 
-19. `--view-orbit <view> <azimuth> <elevation> <distance | fit>`
+22. `--view-orbit <view> <azimuth> <elevation> <distance | fit>`
     - Repeatable: yes
 
     Places the named view on a sphere about the subject's center, facing it,
@@ -183,27 +208,27 @@ mesh. A document with no objects errors. See
     whole transform, so it errors beside `--view-frame`, `--view-position`,
     or a rotation flag.
 
-20. `--view-projection <view> <perspective | orthographic>`
+23. `--view-projection <view> <perspective | orthographic>`
     - Default: `perspective`
     - Repeatable: yes
 
     The named view's projection.
 
-21. `--view-fov <view> <degrees>`
+24. `--view-fov <view> <degrees>`
     - Default: `35`
     - Repeatable: yes
 
     The named view's vertical field of view under `perspective`. It errors
     under `orthographic`, and at 180 degrees or more.
 
-22. `--view-scale <view> <units | fit>`
+25. `--view-scale <view> <units | fit>`
     - Default: `fit`
     - Repeatable: yes
 
     The world units across the shorter image axis under `orthographic`. It
     errors under `perspective`.
 
-23. `--view-select <view> <glob>`
+26. `--view-select <view> <glob>`
     - Default: the rendered objects
     - Repeatable: yes
 
@@ -212,7 +237,7 @@ mesh. A document with no objects errors. See
     on one view, the globs union. Every placement of a matched object joins
     the subject, and a glob matching nothing errors.
 
-24. `--light <light-index> <directional | point | spot | hemisphere>`
+27. `--light <light-index> <directional | point | spot | hemisphere>`
     - Default: the profile stack's rig
     - Repeatable: yes
 
@@ -229,52 +254,52 @@ mesh. A document with no objects errors. See
     transform. A directional, point, or spot light whose transform neither
     the flags nor the rig sets errors.
 
-25. `--light-frame <light-index> <frame>`
+28. `--light-frame <light-index> <frame>`
     - Repeatable: yes
 
     The frame the indexed light's transform is read in: `world`, `camera`,
     or `node` for a directional light, and `world`, `subject`, `camera`, or
     `node` for a point or spot light.
 
-26. `--light-node <light-index> <path>`
+29. `--light-node <light-index> <path>`
     - Repeatable: yes
 
     The node path the indexed light's `node` frame reads its transform in, a
     glob as `--view-node` takes. The flag errors under another frame, and a
     `node` frame without it errors.
 
-27. `--light-position <light-index> <x> <y> <z>`
+30. `--light-position <light-index> <x> <y> <z>`
     - Repeatable: yes
 
     The indexed point or spot light's position in its frame, in meters.
 
-28. `--light-quaternion <light-index> <x> <y> <z> <w>`
+31. `--light-quaternion <light-index> <x> <y> <z> <w>`
     - Repeatable: yes
 
     The indexed directional or spot light's rotation as a unit quaternion.
     The four rotation flags share a light's one rotation, so two on one
     light error.
 
-29. `--light-euler <light-index> <x> <y> <z>`
+32. `--light-euler <light-index> <x> <y> <z>`
     - Repeatable: yes
 
     The indexed directional or spot light's rotation as Euler angles in
     degrees about the fixed x, y, then z axes.
 
-30. `--light-look-at <light-index> <x> <y> <z>`
+33. `--light-look-at <light-index> <x> <y> <z>`
     - Repeatable: yes
 
     Aims the indexed directional or spot light's -Z at a point in its frame,
     a directional light from the frame's origin. A target at the light
     errors.
 
-31. `--light-angles <light-index> <azimuth> <elevation>`
+34. `--light-angles <light-index> <azimuth> <elevation>`
     - Repeatable: yes
 
     The direction the indexed directional or spot light shines from, as an
     azimuth from +Z toward +X and an elevation toward +Y, in degrees.
 
-32. `--light-orbit <light-index> <azimuth> <elevation> <distance>`
+35. `--light-orbit <light-index> <azimuth> <elevation> <distance>`
     - Repeatable: yes
 
     Places the indexed point or spot light on a sphere about the subject's
@@ -282,33 +307,33 @@ mesh. A document with no objects errors. See
     a spot facing the center. It sets the whole transform, so it errors
     beside `--light-frame`, `--light-position`, or a rotation flag.
 
-33. `--light-shadow <light-index> <none | per-pixel | per-face | per-corner>`
+36. `--light-shadow <light-index> <none | per-pixel | per-face | per-corner>`
     - Default: `per-corner`
     - Repeatable: yes
 
     The indexed directional, point, or spot light's shadow granularity; see
     [Lights](contract.md#lights).
 
-34. `--light-color <light-index> <#RRGGBB>`
+37. `--light-color <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed directional, point, or spot light's color, an sRGB hex.
 
-35. `--light-strength <light-index> <strength>`
+38. `--light-strength <light-index> <strength>`
     - Default: `1`
     - Repeatable: yes
 
     The factor scaling the indexed light's color, zero or more. A headlight
     at pi renders a white base color as white.
 
-36. `--light-range <light-index> <meters>`
+39. `--light-range <light-index> <meters>`
     - Repeatable: yes
 
     The distance the indexed point or spot light reaches. Without it, the
     light has no cutoff.
 
-37. `--light-cone <light-index> <inner> <outer>`
+40. `--light-cone <light-index> <inner> <outer>`
     - Default: `0 45`
     - Repeatable: yes
 
@@ -318,19 +343,19 @@ mesh. A document with no objects errors. See
     outer, which is at most `90`. Any other pair errors, as does the flag
     on another kind.
 
-38. `--light-sky <light-index> <#RRGGBB>`
+41. `--light-sky <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed hemisphere light's color from above.
 
-39. `--light-ground <light-index> <#RRGGBB>`
+42. `--light-ground <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed hemisphere light's color from below.
 
-40. `--select <glob>`
+43. `--select <glob>`
     - Default: `*`, selecting every object
     - Repeatable: yes
 
@@ -339,13 +364,13 @@ mesh. A document with no objects errors. See
     default, so `--select-index` alone never unions with `*`. See
     [Object selectors](../../plan/open/vxl-commands/reference/conventions.md#object-selectors).
 
-41. `--select-index <index>`
+44. `--select-index <index>`
     - Repeatable: yes
 
     Chooses objects by position, an integer or an `a-b` range. Unions with
     `--select`.
 
-42. `--print-camera`
+45. `--print-camera`
     - Default: off
     - Repeatable: no
 

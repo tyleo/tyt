@@ -142,11 +142,39 @@ diagonal into the shorter image axis with a small margin. A sphere fits
 regardless of orientation, so every fitted view of one subject sits at one
 distance.
 
+## Bloom
+
+Bloom is a halo over the emissive term alone, added to the linear image
+before the tonemap, so a key light never makes a white face glow. A
+material's `emissiveStrength` says how hard it glows. Three scalars say how
+the lens responds:
+
+1. `bloomStrength` scales the halo. `0`, the default, skips the pass
+2. `bloomRadius` sets the halo's reach as a fraction of the shorter image
+   side, `0.03` by default. The fraction makes a small render glow like a
+   large one. The radius is the standard deviation of the widest blur
+3. `bloomThreshold` is the luminance in linear light an emission must
+   exceed, `1` by default. At `1` a material at glTF's default
+   `emissiveStrength` stays flat and one pushed above it glows
+
+The pass runs in four steps:
+
+1. Takes the part of each hit's emission over the threshold, hue preserved
+2. Blurs it by a Gaussian per octave from the radius halving to one pixel
+3. Averages the octaves and scales by the strength
+4. Adds the halo to every pixel
+
+A pixel no ray hit that the halo reaches takes the halo's peak channel,
+clamped to one, as its alpha and the halo over that alpha as its color.
+Compositing it over black gives the halo back.
+
 ## Output
 
 The image is linear light through the Khronos PBR Neutral tonemap, then the
 sRGB transfer to 8-bit RGBA with straight alpha. A pixel no ray hits is
-transparent, or the background color at full alpha. PBR Neutral keeps base
+transparent, or the background color at full alpha. A pixel only the bloom
+reached composites over the background color, or keeps its alpha under
+`transparent`. PBR Neutral keeps base
 colors true until highlights compress, and a voxel palette is what a reviewer
 most needs to see unchanged. The default image is 1024 by 1024: square suits a
 single asset, and a reviewer's model downsamples anyway.

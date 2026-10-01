@@ -22,8 +22,8 @@ use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::object::{
-        BRenderView, FitOrFixed, PoseTransform, RenderOcclusion, RenderRecord, RenderShadow,
-        RenderView, Rotation, ViewRecord, encode_render_png, render,
+        BRenderView, FitOrFixed, PoseTransform, RenderBloom, RenderOcclusion, RenderRecord,
+        RenderShadow, RenderView, Rotation, ViewRecord, encode_render_png, render,
     },
 };
 
@@ -73,6 +73,23 @@ pub struct ObjectRender {
     /// light's falloff runs in meters after it applies.
     #[arg(value_name = "voxel-size", long)]
     voxel_size: Option<PositiveF64>,
+
+    /// The factor scaling the bloom halo over the emissive term, zero or
+    /// more and defaulting to `0`, which skips the pass. The built-in
+    /// `glow` profile sets `1`.
+    #[arg(value_name = "strength", long)]
+    bloom_strength: Option<NonNegativeF64>,
+
+    /// The bloom halo's reach as a fraction of the shorter image side,
+    /// greater than zero and defaulting to `0.03`.
+    #[arg(value_name = "fraction", long)]
+    bloom_radius: Option<PositiveF64>,
+
+    /// The luminance in linear light an emission must exceed to bloom, zero
+    /// or more and defaulting to `1`, which a material at glTF's default
+    /// emissive strength never exceeds.
+    #[arg(value_name = "luminance", long)]
+    bloom_threshold: Option<NonNegativeF64>,
 
     /// Applies a profile whole, expanding it into its flags with its
     /// `viewsFrom` and `lightsFrom` imports first. An explicit flag replaces
@@ -516,6 +533,8 @@ impl ObjectRender {
 
         self.lower_lights(&mut lights)?;
 
+        let bloom = RenderBloom::default();
+
         Ok(RenderRecord {
             width: self.width.or(stack.width).map_or(1024, u32::from),
             height: self.height.or(stack.height).map_or(1024, u32::from),
@@ -531,6 +550,20 @@ impl ObjectRender {
                 .voxel_size
                 .or(stack.voxel_size)
                 .map_or(1.0, |size| size.0),
+            bloom: RenderBloom {
+                strength: self
+                    .bloom_strength
+                    .or(stack.bloom_strength)
+                    .map_or(bloom.strength, |strength| strength.0),
+                radius: self
+                    .bloom_radius
+                    .or(stack.bloom_radius)
+                    .map_or(bloom.radius, |radius| radius.0),
+                threshold: self
+                    .bloom_threshold
+                    .or(stack.bloom_threshold)
+                    .map_or(bloom.threshold, |threshold| threshold.0),
+            },
             views: views.finish(&stack.views)?,
             lights: lights.finish()?,
         })
@@ -929,7 +962,7 @@ mod tests {
     };
     use ty_math::{TyAngleUnit, TyLinSrgbF64, TyPoseF64, TyQuaternionF64, TySrgbU8, TyVector3F64};
     use voxsmith::operations::object::{
-        FitOrFixed, LightRecord, PoseTransform, PositionTransform, RenderOcclusion,
+        FitOrFixed, LightRecord, PoseTransform, PositionTransform, RenderBloom, RenderOcclusion,
         RenderProjection, RenderRecord, RenderShadow, RenderView, Rotation, RotationTransform,
         SpotTransform, ViewProjection, ViewRecord,
     };
@@ -1010,6 +1043,7 @@ mod tests {
         assert_eq!(record.background, None);
         assert_eq!(record.occlusion, RenderOcclusion::Corner);
         assert_eq!(record.voxel_size, 1.0);
+        assert_eq!(record.bloom, RenderBloom::default());
 
         let hero = view(&record);
         assert_eq!(hero.name, "hero");
@@ -1056,15 +1090,73 @@ mod tests {
             "none",
             "--voxel-size",
             "0.5",
+            "--bloom-strength",
+            "2",
+            "--bloom-radius",
+            "0.1",
+            "--bloom-threshold",
+            "0.5",
         ]);
 
         assert_eq!((record.width, record.height), (8, 4));
         assert_eq!(record.background, Some(TySrgbU8::new(1, 2, 3)));
         assert_eq!(record.occlusion, RenderOcclusion::None);
         assert_eq!(record.voxel_size, 0.5);
+        assert_eq!(
+            record.bloom,
+            RenderBloom {
+                strength: 2.0,
+                radius: 0.1,
+                threshold: 0.5,
+            }
+        );
 
         assert!(ObjectRender::try_parse_from(["render", "m.voxj", "--width", "0"]).is_err());
         assert!(ObjectRender::try_parse_from(["render", "m.voxj", "--background", "red"]).is_err());
+        assert!(
+            ObjectRender::try_parse_from(["render", "m.voxj", "--bloom-strength", "-1"]).is_err()
+        );
+        assert!(ObjectRender::try_parse_from(["render", "m.voxj", "--bloom-radius", "0"]).is_err());
+        assert!(
+            ObjectRender::try_parse_from(["render", "m.voxj", "--bloom-threshold", "nan"]).is_err()
+        );
+    }
+
+    #[test]
+    fn glow_stacks_over_any_rig_and_a_flag_stands_over_its_elements() {
+        let glow = record(&["--profile", "glow"]);
+        assert_eq!(view(&glow).name, "hero");
+        assert_eq!(glow.lights.len(), 2);
+        assert_eq!(
+            glow.bloom,
+            RenderBloom {
+                strength: 1.0,
+                ..RenderBloom::default()
+            }
+        );
+
+        let stacked = record(&[
+            "--profile",
+            "flat",
+            "--profile",
+            "glow",
+            "--bloom-radius",
+            "0.05",
+        ]);
+        assert!(matches!(light(&stacked), LightRecord::Directional { .. }));
+        assert_eq!(stacked.bloom.strength, 1.0);
+        assert_eq!(stacked.bloom.radius, 0.05);
+
+        let profiles = built_ins_under(&[("brighter", r#"{ "bloomStrength": 2 }"#)]);
+        let error = try_record_over(&profiles, &["--profile", "glow", "--profile", "brighter"])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(
+                "the profile `brighter` sets bloomStrength, which the profile `glow` sets already"
+            ),
+            "{error}"
+        );
     }
 
     #[test]

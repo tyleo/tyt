@@ -22,12 +22,12 @@ pub fn built_in_render_profiles() -> BTreeMap<String, RenderProfile> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Profile,
-        commands::{LightEntry, PoseTransformEntry, built_in_render_profiles},
+        PositiveF64, Profile,
+        commands::{LightEntry, NonNegativeF64, PoseTransformEntry, built_in_render_profiles},
     };
 
     #[test]
-    fn the_ten_built_ins_load_as_view_sets_and_light_rigs() {
+    fn the_eleven_built_ins_load_as_view_sets_light_rigs_and_a_bloom() {
         let profiles = built_in_render_profiles();
 
         assert_eq!(
@@ -37,6 +37,7 @@ mod tests {
                 "bottom",
                 "flat",
                 "front",
+                "glow",
                 "hero",
                 "left",
                 "right",
@@ -77,6 +78,12 @@ mod tests {
                 ..
             }
         ));
+
+        let glow = &profiles["glow"];
+        assert!(glow.views.is_empty() && glow.lights.is_empty());
+        assert_eq!(glow.bloom_strength, Some(NonNegativeF64(1.0)));
+        assert_eq!(glow.bloom_radius, Some(PositiveF64(0.03)));
+        assert_eq!(glow.bloom_threshold, Some(NonNegativeF64(1.0)));
     }
 
     #[test]

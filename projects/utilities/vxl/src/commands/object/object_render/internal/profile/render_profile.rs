@@ -1,6 +1,6 @@
 use crate::{
     NamedCliValue, PositiveF64, Profile, ProfileDescription,
-    commands::{Background, LightEntry, ViewEntry},
+    commands::{Background, LightEntry, NonNegativeF64, ViewEntry},
 };
 use serde::Deserialize;
 use std::{collections::BTreeMap, num::NonZeroU32};
@@ -28,6 +28,15 @@ pub struct RenderProfile {
 
     /// Mirrors `--voxel-size`.
     pub(crate) voxel_size: Option<PositiveF64>,
+
+    /// Mirrors `--bloom-strength`.
+    pub(crate) bloom_strength: Option<NonNegativeF64>,
+
+    /// Mirrors `--bloom-radius`.
+    pub(crate) bloom_radius: Option<PositiveF64>,
+
+    /// Mirrors `--bloom-threshold`.
+    pub(crate) bloom_threshold: Option<NonNegativeF64>,
 
     /// Mirrors `--views-from` per entry. Only the views travel.
     pub(crate) views_from: Vec<String>,
@@ -71,6 +80,9 @@ mod tests {
                 "background": "#202020",
                 "occlusion": "none",
                 "voxelSize": 0.1,
+                "bloomStrength": 1.5,
+                "bloomRadius": 0.05,
+                "bloomThreshold": 0.8,
                 "viewsFrom": ["front", "top"],
                 "lightsFrom": ["studio"],
                 "views": {
@@ -133,6 +145,9 @@ mod tests {
             Some(NamedCliValue(RenderOcclusion::None))
         );
         assert_eq!(profile.voxel_size, Some(PositiveF64(0.1)));
+        assert_eq!(profile.bloom_strength, Some(NonNegativeF64(1.5)));
+        assert_eq!(profile.bloom_radius, Some(PositiveF64(0.05)));
+        assert_eq!(profile.bloom_threshold, Some(NonNegativeF64(0.8)));
         assert_eq!(profile.views_from, ["front", "top"]);
         assert_eq!(profile.lights_from, ["studio"]);
 
@@ -367,6 +382,8 @@ mod tests {
     fn an_unknown_key_errors_at_every_depth() {
         assert!(serde_json::from_str::<RenderProfile>(r#"{ "size": 1 }"#).is_err());
         assert!(serde_json::from_str::<RenderProfile>(r#"{ "width": 0 }"#).is_err());
+        assert!(serde_json::from_str::<RenderProfile>(r#"{ "bloomRadius": 0 }"#).is_err());
+        assert!(serde_json::from_str::<RenderProfile>(r#"{ "bloomStrength": -1 }"#).is_err());
         assert!(
             serde_json::from_str::<RenderProfile>(r#"{ "views": { "a": { "fovy": 1 } } }"#)
                 .is_err()

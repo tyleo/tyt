@@ -31,7 +31,8 @@ size in the scene. `mesh` writes the selected objects as a glTF mesh. The
 `render` draws the selected objects into one image per view, placed as `mesh`
 places them. The views and lights come from profiles in `.vxlconfig` and the
 flags that mirror them. With neither, the `hero` view renders under the
-`studio` lights. The image shows inline in the terminal, or `--to png` writes
+`studio` lights. `--profile glow` adds a bloom over the emissive
+materials. The image shows inline in the terminal, or `--to png` writes
 one PNG per view beside the input. The
 [render reference](../../../doc/ref/render/render.md) covers the flags and the
 profiles.

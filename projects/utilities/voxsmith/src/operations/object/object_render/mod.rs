@@ -24,8 +24,8 @@ pub use rotation_transform::*;
 pub use spot_transform::*;
 pub use view_projection::*;
 pub use voxrender::{
-    BRenderLight, BRenderView, RenderOcclusion, RenderOutput, RenderProjection, RenderShadow,
-    RenderView,
+    BRenderLight, BRenderView, RenderBloom, RenderOcclusion, RenderOutput, RenderProjection,
+    RenderShadow, RenderView,
 };
 
 // Internal API

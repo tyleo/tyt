@@ -87,4 +87,12 @@
       },
     ],
   },
+
+  // The bloom reads the emissive term alone. The rig stays free.
+  "glow": {
+    "description": "A bloom over the emissive materials, over any rig",
+    "bloomStrength": 1,
+    "bloomRadius": 0.03,
+    "bloomThreshold": 1,
+  },
 }

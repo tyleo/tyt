@@ -6,6 +6,9 @@ use voxrender::BRenderLight;
 /// an error rose from.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum RenderElement {
+    /// The bloom values.
+    Bloom,
+
     /// The image size.
     Image,
 
@@ -43,6 +46,8 @@ pub enum RenderElement {
 impl Display for RenderElement {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            RenderElement::Bloom => f.write_str("the bloom"),
+
             RenderElement::Image => f.write_str("the image"),
 
             RenderElement::LightTransform { light_id } => {

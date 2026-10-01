@@ -19,6 +19,7 @@ mod error;
 mod fit_distance;
 mod fit_margin;
 mod fit_scale;
+mod render_bloom;
 mod render_image;
 mod render_light;
 mod render_material;
@@ -41,6 +42,7 @@ pub use error::*;
 pub use fit_distance::*;
 pub use fit_margin::*;
 pub use fit_scale::*;
+pub use render_bloom::*;
 pub use render_image::*;
 pub use render_light::*;
 pub use render_material::*;
@@ -92,6 +94,12 @@ pub use render_view_rays::*;
 mod fit_radius;
 
 pub(crate) use fit_radius::*;
+
+#[cfg(feature = "cpu")]
+mod bloom;
+
+#[cfg(feature = "cpu")]
+pub(crate) use bloom::*;
 
 #[cfg(feature = "cpu")]
 mod shadow_target;

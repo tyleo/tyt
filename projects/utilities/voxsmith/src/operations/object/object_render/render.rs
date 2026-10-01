@@ -11,8 +11,8 @@ use std::collections::HashSet;
 use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64};
 use voxcore::{BVoxObject, Error as VoxError, VoxExt, VoxMain};
 use voxrender::{
-    BRenderLight, BRenderPlacement, BRenderView, RenderLight, RenderOutput, RenderScene,
-    render as render_image,
+    BRenderLight, BRenderPlacement, BRenderView, RenderBloom, RenderLight, RenderOutput,
+    RenderScene, render as render_image,
 };
 
 /// Renders the objects `object_ids` of `main` under `record`, one image per
@@ -22,7 +22,8 @@ use voxrender::{
 ///
 /// 1. `object_ids` is empty, lists an object twice, or lists one that is
 ///    not one of `main`'s
-/// 2. an image side is zero, or the voxel size is not finite and positive
+/// 2. an image side is zero, the voxel size is not finite and positive, or
+///    a bloom value is out of range
 /// 3. the record holds no view
 /// 4. a view's `select` matches none of the rendered objects
 /// 5. a transform cannot resolve
@@ -83,6 +84,7 @@ pub fn render<T: VoxExt>(
             &scene,
             view_id,
             record.occlusion,
+            record.bloom,
             record.width,
             record.height,
         )?;
@@ -132,7 +134,7 @@ fn check_objects<T: VoxExt>(main: &VoxMain<T>, object_ids: &[U32Id<BVoxObject>])
 }
 
 /// Errors unless `record` has an image with two positive sides, a finite
-/// positive voxel size, and at least one view.
+/// positive voxel size, a bloom in range, and at least one view.
 fn check_record(record: &RenderRecord) -> Result<()> {
     if record.width == 0 || record.height == 0 {
         return Err(Error::render_record(
@@ -151,10 +153,50 @@ fn check_record(record: &RenderRecord) -> Result<()> {
         ));
     }
 
+    check_bloom(&record.bloom)?;
+
     if record.views.is_empty() {
         return Err(Error::render_record(
             RenderElement::Views,
             "holds no view, and a run needs at least one",
+        ));
+    }
+
+    Ok(())
+}
+
+/// Errors unless `bloom` has a finite strength and threshold of zero or
+/// more and a finite positive radius.
+fn check_bloom(bloom: &RenderBloom) -> Result<()> {
+    let non_negative = |value: f64| value.is_finite() && value >= 0.0;
+
+    if !non_negative(bloom.strength) {
+        return Err(Error::render_record(
+            RenderElement::Bloom,
+            format!(
+                "has a strength of {}, and it must be finite and 0 or more",
+                bloom.strength
+            ),
+        ));
+    }
+
+    if !(bloom.radius.is_finite() && bloom.radius > 0.0) {
+        return Err(Error::render_record(
+            RenderElement::Bloom,
+            format!(
+                "has a radius of {}, and it must be finite and greater than 0",
+                bloom.radius
+            ),
+        ));
+    }
+
+    if !non_negative(bloom.threshold) {
+        return Err(Error::render_record(
+            RenderElement::Bloom,
+            format!(
+                "has a threshold of {}, and it must be finite and 0 or more",
+                bloom.threshold
+            ),
         ));
     }
 
@@ -293,7 +335,7 @@ mod tests {
         TyVector3I32, TyVector3U32,
     };
     use voxcore::{BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
-    use voxrender::{BRenderView, RenderOcclusion, RenderOutput, RenderShadow};
+    use voxrender::{BRenderView, RenderBloom, RenderOcclusion, RenderOutput, RenderShadow};
 
     /// A red voxel at `x = 0` beside a blue one at `x = 1`.
     fn bar() -> VoxMain<HookRecorder> {
@@ -342,6 +384,7 @@ mod tests {
             background: None,
             occlusion: RenderOcclusion::Corner,
             voxel_size: 1.0,
+            bloom: RenderBloom::default(),
             views: IdVec::from(views),
             lights: IdVec::from(vec![headlight()]),
         }
@@ -576,6 +619,29 @@ mod tests {
             element(render(&main, &object_ids, &sized)),
             RenderElement::VoxelSize
         );
+
+        for bloom in [
+            RenderBloom {
+                strength: -1.0,
+                ..RenderBloom::default()
+            },
+            RenderBloom {
+                radius: 0.0,
+                ..RenderBloom::default()
+            },
+            RenderBloom {
+                threshold: f64::NAN,
+                ..RenderBloom::default()
+            },
+        ] {
+            let mut glowing = record(vec![orbit("front", 0.0)]);
+            glowing.bloom = bloom;
+            assert_eq!(
+                element(render(&main, &object_ids, &glowing)),
+                RenderElement::Bloom,
+                "{bloom:?}"
+            );
+        }
 
         assert_eq!(
             element(render(&main, &object_ids, &record(Vec::new()))),

@@ -215,7 +215,7 @@ resample plan has one.
       6. Tests: a spot over a floor lights a disc that fades between the
          cones and nothing past the outer, the shadow stops at the light,
          and the point-lit room fixture gets a spot golden
-- [ ] **S16. Bloom.** A post pass over the linear image before the tonemap,
+- [x] **S16. Bloom.** A post pass over the linear image before the tonemap,
       fed by the emissive term alone, so a key light never makes a white
       face glow. A material's `emissiveStrength` says how hard the material
       glows. The profile says how the lens responds, through three scalars.

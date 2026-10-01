@@ -51,6 +51,17 @@ interface Profile {
   /** Mirrors `--voxel-size`, meters per voxel; omitted, `1`. */
   voxelSize?: number;
 
+  /** Mirrors `--bloom-strength`; omitted, `0`, which skips the pass. */
+  bloomStrength?: number;
+
+  /** Mirrors `--bloom-radius`, a fraction of the shorter image side;
+   *  omitted, `0.03`. */
+  bloomRadius?: number;
+
+  /** Mirrors `--bloom-threshold`, a luminance in linear light; omitted,
+   *  `1`. */
+  bloomThreshold?: number;
+
   /** Mirrors `--views-from` per entry; only the views travel. */
   viewsFrom?: string[];
 
@@ -209,6 +220,9 @@ a profile writes its names and values.
           "background": "<transparent | #RRGGBB>",
           "occlusion": "<none | corner>",
           "voxelSize": 1.0,
+          "bloomStrength": 1,
+          "bloomRadius": 0.03,
+          "bloomThreshold": 1,
 
           "viewsFrom": ["<profile>"],
           "views": {
@@ -340,8 +354,9 @@ The checks split by when they run:
    1. each `.vxlconfig` parsing
    2. the schema's shape, an unknown key erroring rather than skipping
    3. each value's range: a positive `width`, `height`, `voxelSize`, `fov`,
-      `scale`, `range`, and orbit distance, a `strength` and a cone angle of
-      zero or more, and a `#RRGGBB` color
+      `scale`, `range`, `bloomRadius`, and orbit distance, a `strength`, a
+      cone angle, `bloomStrength`, and `bloomThreshold` of zero or more, and
+      a `#RRGGBB` color
 2. the profile stack applied whole
    1. every `--profile`, `--views-from`, and `--lights-from` name resolving,
       listed once per flag
@@ -460,6 +475,14 @@ when a profile loads, so the built-ins take the same schema by construction:
       },
     ],
   },
+
+  // The bloom reads the emissive term alone. The rig stays free.
+  "glow": {
+    "description": "A bloom over the emissive materials, over any rig",
+    "bloomStrength": 1,
+    "bloomRadius": 0.03,
+    "bloomThreshold": 1,
+  },
 }
 ```
 
@@ -474,6 +497,11 @@ whoever is looking, over a hemisphere light. A light in the `camera` frame
 follows every view, so each view of a turnaround lights the same way. The key
 light sets no shadow granularity and takes `per-corner`. `flat` is a headlight
 with no shadow, for judging color alone.
+
+`glow` turns the [bloom](contract.md#bloom) on over the emissive materials.
+With no view and no rig, it stacks over any of them:
+`--profile turnaround --profile glow` renders the turnaround under `studio`
+with the emissive materials glowing.
 
 ## User-defined profiles
 

@@ -2,6 +2,7 @@
 
 mod check_goldens;
 mod cube_scene;
+mod glow_scene;
 mod l_shape_scene;
 mod lit_room;
 mod orbit_view;
@@ -12,6 +13,7 @@ mod two_placements_scene;
 
 pub(crate) use check_goldens::*;
 pub(crate) use cube_scene::*;
+pub(crate) use glow_scene::*;
 pub(crate) use l_shape_scene::*;
 pub(crate) use lit_room::*;
 pub(crate) use orbit_view::*;

@@ -1,4 +1,4 @@
-use crate::{RenderOcclusion, RenderOutput, RenderScene, RenderShadow, render};
+use crate::{RenderBloom, RenderOcclusion, RenderOutput, RenderScene, RenderShadow, render};
 use png::{BitDepth, ColorType, Decoder, Encoder};
 use std::{env, fs, io::Cursor, path::Path};
 
@@ -12,13 +12,19 @@ const SIZE: u32 = 64;
 /// How far a channel may stray from the golden's.
 const TOLERANCE: u8 = 2;
 
-/// Checks `fixture`'s render under each variant against its golden.
+/// Checks `fixture`'s render under `bloom` and each variant against its
+/// golden.
 ///
 /// # Arguments
 /// * `name` - prefixes the golden file names.
 /// * `goldens` - one per variant, in the order `per-pixel`, `per-face`,
 ///   `per-corner`, and `unoccluded`.
-pub fn check_goldens(name: &str, fixture: fn(RenderShadow) -> RenderScene, goldens: [&[u8]; 4]) {
+pub fn check_goldens(
+    name: &str,
+    fixture: fn(RenderShadow) -> RenderScene,
+    bloom: RenderBloom,
+    goldens: [&[u8]; 4],
+) {
     let variants = [
         ("per-pixel", RenderShadow::PerPixel, RenderOcclusion::Corner),
         ("per-face", RenderShadow::PerFace, RenderOcclusion::Corner),
@@ -35,7 +41,7 @@ pub fn check_goldens(name: &str, fixture: fn(RenderShadow) -> RenderScene, golde
 
         let (view_id, _) = scene.iter_views().next().expect("a fixture holds one view");
 
-        let image = render(&scene, view_id, occlusion, SIZE, SIZE).unwrap();
+        let image = render(&scene, view_id, occlusion, bloom, SIZE, SIZE).unwrap();
 
         let output = RenderOutput::from_image(&image, None);
 

@@ -380,3 +380,39 @@ they land.
   fill light, and the view. The spot golden aims the light at the pillar
   from the point light's position at three times its strength, because the
   cone lights the far floor alone and the walls beside the light go dark.
+
+## S16. Bloom
+
+- `RenderBloom` is a contract type outside the `cpu` feature, as
+  `RenderOcclusion` is, because every renderer reads the three scalars.
+  `render` takes it by value beside the occlusion. The default strength of
+  `0` skips the pass, so the phase 1 goldens stay byte-identical.
+- The shader returns a `HitShade`, the color beside the emissive term
+  within it. `render` keeps the emission in a second buffer the pass
+  reads. The pass never sees the lit color. A key light cannot bloom.
+- The threshold cuts by Rec. 709 luminance and keeps the hue: the part over
+  it is the emission scaled by the excess over the luminance. When nothing
+  exceeds the threshold, the pass returns before any blur. The image stays
+  untouched at any strength.
+- The radius is the standard deviation of the widest Gaussian, as a
+  fraction of the shorter side. The octaves halve it while it stays at or
+  above one pixel: a 1024 render under `0.03` blurs at five octaves and a
+  64 pixel golden at one. Each octave is a separable blur whose taps reach
+  three deviations and read black past the edges. Light leaving the frame
+  is lost, where a clamped edge would pile it onto the border.
+- A miss the halo reaches carries the halo as straight alpha. The peak
+  channel clamped to one is the alpha, and the halo over that alpha is the
+  color, which turns the premultiplied halo straight. Compositing it over
+  black gives the halo back. `RenderOutput::from_image` composites it over
+  a background after the tonemap or keeps the alpha under `transparent`.
+  A hit adds the halo and stays opaque.
+- voxrender checks the three values with its own errors and voxsmith
+  checks them again on the record's `Bloom` element, as the voxel size is
+  checked at both layers.
+- The three vxl flags and profile keys are image elements: the stack
+  claims each on its own, and a flag stands over the stack's. Because
+  `glow` sets the three and nothing else, it stacks over any view set and
+  rig.
+- The glow fixture is a dark plate whose top row emits at four times
+  glTF's strength. The halo spills above the silhouette into transparent
+  pixels, which the goldens and the alpha test pin.

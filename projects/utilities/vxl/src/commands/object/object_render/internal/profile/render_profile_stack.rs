@@ -65,6 +65,21 @@ impl<'a> RenderProfileStack<'a> {
                 self.profile.voxel_size = Some(voxel_size);
             }
 
+            if let Some(strength) = member.bloom_strength {
+                self.claim(name, "bloomStrength".to_owned())?;
+                self.profile.bloom_strength = Some(strength);
+            }
+
+            if let Some(radius) = member.bloom_radius {
+                self.claim(name, "bloomRadius".to_owned())?;
+                self.profile.bloom_radius = Some(radius);
+            }
+
+            if let Some(threshold) = member.bloom_threshold {
+                self.claim(name, "bloomThreshold".to_owned())?;
+                self.profile.bloom_threshold = Some(threshold);
+            }
+
             self.land_views(origin, name, &mut Vec::new())?;
             self.land_lights(origin, name, &mut Vec::new())?;
         }

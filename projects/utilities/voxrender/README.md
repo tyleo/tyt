@@ -130,10 +130,20 @@ emissive term. The light kinds reach a hit differently:
 Under `RenderOcclusion::Corner`, the corner occlusion darkens the
 hemisphere light. A shadow is one grid ray toward the light. `RenderShadow`
 casts it per pixel, per face, or per corner, and blends the corner results
-across the face.
+across the face. A `RenderBloom` adds a halo over the emissive term before
+the tonemap: the part of each hit's emission over its threshold, blurred
+out to its radius and scaled by its strength, lands on every pixel. The
+default strength of `0` skips the pass.
 
 ```rust
-let image = render(&scene, view_id, RenderOcclusion::Corner, 1024, 1024)?;
+let image = render(
+    &scene,
+    view_id,
+    RenderOcclusion::Corner,
+    RenderBloom::default(),
+    1024,
+    1024,
+)?;
 ```
 
 ## Images
@@ -145,7 +155,8 @@ A `RenderImage` is a linear-light RGBA `f32` buffer, rows top to bottom.
 `RenderOutput` holds the 8-bit sRGB image a PNG stores.
 `RenderOutput::from_image` runs each hit through the Khronos PBR Neutral
 curve in `tonemap` and then the sRGB transfer. Each miss becomes
-transparent or the background color.
+transparent or the background color. A miss only the bloom reached
+composites over the background or keeps its alpha.
 
 ```rust
 let output = RenderOutput::from_image(&image, None);

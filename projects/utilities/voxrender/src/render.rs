@@ -1,10 +1,11 @@
 use crate::{
-    BRenderView, Error, RenderHit, RenderImage, RenderLight, RenderMaterial, RenderOcclusion,
-    RenderRay, RenderScene, RenderShadow, RenderViewRays, Result, ShadowTarget, cast_ray,
+    BRenderView, Error, RenderBloom, RenderHit, RenderImage, RenderLight, RenderMaterial,
+    RenderOcclusion, RenderRay, RenderScene, RenderShadow, RenderViewRays, Result, ShadowTarget,
+    apply_bloom, cast_ray,
 };
 use branded_id::U32Id;
 use std::f64::consts::PI;
-use ty_math::{TyLinSrgbF64, TyLinSrgbaF32, TyVector3F64};
+use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyLinSrgbaF32, TyVector3F64};
 use voxsurface::{SurfaceSpan, corner_occlusion};
 
 /// The GGX alpha floor that keeps a mirror's lobe finite.
@@ -27,12 +28,14 @@ const INSET: f64 = 1e-3;
 /// Renders the view `view_id` of `scene` into a `width` by `height` image
 /// under every light of the scene. `occlusion` decides whether the corner
 /// occlusion darkens the hemisphere light. A pixel a ray hits is opaque. A
-/// pixel no ray hits stays transparent black. Errors if the view is not one
-/// of the scene's or a side is zero.
+/// pixel no ray hits stays transparent black until `bloom`'s halo reaches
+/// it. Errors if the view is not one of the scene's, a side is zero, or a
+/// bloom value is out of range.
 pub fn render(
     scene: &RenderScene,
     view_id: U32Id<BRenderView>,
     occlusion: RenderOcclusion,
+    bloom: RenderBloom,
     width: u32,
     height: u32,
 ) -> Result<RenderImage> {
@@ -40,44 +43,90 @@ pub fn render(
         return Err(Error::ImageSide { width, height });
     }
 
+    check_bloom(bloom)?;
+
     let view = scene.view(view_id).ok_or(Error::UnknownView { view_id })?;
 
     let rays = RenderViewRays::new(view, width, height);
     let mut image = RenderImage::new(width, height);
+    let mut emission = vec![TyLinSrgbF32::new(0.0, 0.0, 0.0); width as usize * height as usize];
 
     for y in 0..height {
         for x in 0..width {
             let ray = rays.ray(x, y);
 
             if let Some(hit) = cast_ray(scene, &ray, f64::INFINITY) {
-                let color = shade_hit(scene, occlusion, &ray, &hit);
+                let shade = shade_hit(scene, occlusion, &ray, &hit);
 
                 image.set_pixel(
                     x,
                     y,
                     TyLinSrgbaF32::new(
-                        color.red as f32,
-                        color.green as f32,
-                        color.blue as f32,
+                        shade.color.red as f32,
+                        shade.color.green as f32,
+                        shade.color.blue as f32,
                         1.0,
                     ),
+                );
+
+                emission[y as usize * width as usize + x as usize] = TyLinSrgbF32::new(
+                    shade.emission.red as f32,
+                    shade.emission.green as f32,
+                    shade.emission.blue as f32,
                 );
             }
         }
     }
 
+    if bloom.strength > 0.0 {
+        apply_bloom(&mut image, &emission, bloom);
+    }
+
     Ok(image)
 }
 
-/// The linear color of `hit` seen along `ray`, lit by every light of
-/// `scene` plus the hit material's emission. `occlusion` decides whether the
-/// corner occlusion darkens the hemisphere term.
+/// Errors unless `bloom` has a finite strength and threshold of zero or
+/// more and a finite positive radius.
+fn check_bloom(bloom: RenderBloom) -> Result<()> {
+    if !(bloom.strength.is_finite() && bloom.strength >= 0.0) {
+        return Err(Error::BloomStrength {
+            strength: bloom.strength,
+        });
+    }
+
+    if !(bloom.radius.is_finite() && bloom.radius > 0.0) {
+        return Err(Error::BloomRadius {
+            radius: bloom.radius,
+        });
+    }
+
+    if !(bloom.threshold.is_finite() && bloom.threshold >= 0.0) {
+        return Err(Error::BloomThreshold {
+            threshold: bloom.threshold,
+        });
+    }
+
+    Ok(())
+}
+
+/// What a hit shades to.
+struct HitShade {
+    /// The linear color, lit by every light plus the emission.
+    color: TyLinSrgbF64,
+
+    /// The emissive term within `color`, which the bloom reads.
+    emission: TyLinSrgbF64,
+}
+
+/// The shade of `hit` seen along `ray` under every light of `scene`.
+/// `occlusion` decides whether the corner occlusion darkens the hemisphere
+/// term.
 fn shade_hit(
     scene: &RenderScene,
     occlusion: RenderOcclusion,
     ray: &RenderRay,
     hit: &RenderHit,
-) -> TyLinSrgbF64 {
+) -> HitShade {
     let placement = scene
         .placement(hit.placement_id)
         .expect("a hit lands on one of the scene's placements");
@@ -109,7 +158,8 @@ fn shade_hit(
         }
     };
 
-    let mut color = material.emissive_color * material.emissive_strength;
+    let emission = material.emissive_color * material.emissive_strength;
+    let mut color = emission;
 
     for (_, light) in scene.iter_lights() {
         match *light {
@@ -204,7 +254,7 @@ fn shade_hit(
         }
     }
 
-    color
+    HitShade { color, emission }
 }
 
 /// The light `material` reflects toward `view` from a unit radiance
@@ -416,16 +466,16 @@ fn bilinear(face: &SurfaceSpan, values: [f64; 4], along: [f64; 2]) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Error, RenderLight, RenderMaterial, RenderObject, RenderOcclusion, RenderPlacement,
-        RenderProjection, RenderRay, RenderScene, RenderShadow, RenderView, ShadowTarget, cast_ray,
-        fit_distance, render,
+        Error, RenderBloom, RenderLight, RenderMaterial, RenderObject, RenderOcclusion,
+        RenderPlacement, RenderProjection, RenderRay, RenderScene, RenderShadow, RenderView,
+        ShadowTarget, cast_ray, fit_distance, render,
         render::{
-            bilinear, cone_attenuation, direct_radiance, hemisphere_radiance, point_attenuation,
-            shade_hit, shadow_factor,
+            bilinear, check_bloom, cone_attenuation, direct_radiance, hemisphere_radiance,
+            point_attenuation, shade_hit, shadow_factor,
         },
         test_utilities::{
-            check_goldens, cube_scene, l_shape_scene, room_scene, solid_object, spot_room_scene,
-            two_placements_scene,
+            check_goldens, cube_scene, glow_scene, l_shape_scene, room_scene, solid_object,
+            spot_room_scene, two_placements_scene,
         },
     };
     use branded_id::U32Id;
@@ -476,7 +526,15 @@ mod tests {
             })
             .unwrap();
 
-        let image = render(&scene, view_id, RenderOcclusion::Corner, 8, 8).unwrap();
+        let image = render(
+            &scene,
+            view_id,
+            RenderOcclusion::Corner,
+            RenderBloom::default(),
+            8,
+            8,
+        )
+        .unwrap();
 
         let center = image.pixel(4, 4).unwrap();
         assert_eq!(center.alpha, 1.0);
@@ -485,17 +543,68 @@ mod tests {
         assert_eq!(image.pixel(7, 7).unwrap().alpha, 0.0);
 
         assert_eq!(
-            render(&scene, U32Id::from_u32(9), RenderOcclusion::Corner, 8, 8).err(),
+            render(
+                &scene,
+                U32Id::from_u32(9),
+                RenderOcclusion::Corner,
+                RenderBloom::default(),
+                8,
+                8
+            )
+            .err(),
             Some(Error::UnknownView {
                 view_id: U32Id::from_u32(9)
             })
         );
         assert_eq!(
-            render(&scene, view_id, RenderOcclusion::Corner, 0, 8).err(),
+            render(
+                &scene,
+                view_id,
+                RenderOcclusion::Corner,
+                RenderBloom::default(),
+                0,
+                8
+            )
+            .err(),
             Some(Error::ImageSide {
                 width: 0,
                 height: 8
             })
+        );
+    }
+
+    #[test]
+    fn a_bloom_value_out_of_range_errors() {
+        let bloom = RenderBloom::default();
+
+        assert_eq!(check_bloom(bloom), Ok(()));
+        assert_eq!(
+            check_bloom(RenderBloom {
+                strength: -1.0,
+                ..bloom
+            }),
+            Err(Error::BloomStrength { strength: -1.0 })
+        );
+        assert_eq!(
+            check_bloom(RenderBloom {
+                radius: 0.0,
+                ..bloom
+            }),
+            Err(Error::BloomRadius { radius: 0.0 })
+        );
+        assert!(
+            check_bloom(RenderBloom {
+                radius: f64::INFINITY,
+                ..bloom
+            })
+            .is_err()
+        );
+        assert!(
+            check_bloom(RenderBloom {
+                threshold: f64::NAN,
+                ..bloom
+            })
+            .is_err()
         );
     }
 
@@ -565,7 +674,7 @@ mod tests {
             direction: TyVector3F64::from_array(direction),
         };
         let hit = cast_ray(scene, &ray, f64::INFINITY).unwrap();
-        let color = shade_hit(scene, RenderOcclusion::Corner, &ray, &hit);
+        let color = shade_hit(scene, RenderOcclusion::Corner, &ray, &hit).color;
         color.red + color.green + color.blue
     }
 
@@ -630,10 +739,9 @@ mod tests {
         };
         let hit = cast_ray(&scene, &ray, f64::INFINITY).unwrap();
 
-        assert_eq!(
-            shade_hit(&scene, RenderOcclusion::None, &ray, &hit),
-            TyLinSrgbF64::new(2.0, 1.0, 0.0)
-        );
+        let shade = shade_hit(&scene, RenderOcclusion::None, &ray, &hit);
+        assert_eq!(shade.color, TyLinSrgbF64::new(2.0, 1.0, 0.0));
+        assert_eq!(shade.emission, shade.color);
     }
 
     #[test]
@@ -794,7 +902,9 @@ mod tests {
             };
             let hit = cast_ray(scene, &ray, f64::INFINITY).unwrap();
             assert_eq!(hit.distance, 2.5);
-            shade_hit(scene, RenderOcclusion::None, &ray, &hit).red
+            shade_hit(scene, RenderOcclusion::None, &ray, &hit)
+                .color
+                .red
         };
 
         // The light sits two units up, so the inner cone reaches 0.73 out
@@ -942,6 +1052,7 @@ mod tests {
         check_goldens(
             "cube",
             cube_scene,
+            RenderBloom::default(),
             [
                 include_bytes!("goldens/cube-per-pixel.png"),
                 include_bytes!("goldens/cube-per-face.png"),
@@ -956,6 +1067,7 @@ mod tests {
         check_goldens(
             "l-shape",
             l_shape_scene,
+            RenderBloom::default(),
             [
                 include_bytes!("goldens/l-shape-per-pixel.png"),
                 include_bytes!("goldens/l-shape-per-face.png"),
@@ -970,6 +1082,7 @@ mod tests {
         check_goldens(
             "two-placements",
             two_placements_scene,
+            RenderBloom::default(),
             [
                 include_bytes!("goldens/two-placements-per-pixel.png"),
                 include_bytes!("goldens/two-placements-per-face.png"),
@@ -984,6 +1097,7 @@ mod tests {
         check_goldens(
             "room",
             room_scene,
+            RenderBloom::default(),
             [
                 include_bytes!("goldens/room-per-pixel.png"),
                 include_bytes!("goldens/room-per-face.png"),
@@ -994,10 +1108,73 @@ mod tests {
     }
 
     #[test]
+    fn bloom_off_or_under_the_threshold_leaves_the_image_and_the_halo_spills_past_the_silhouette() {
+        let scene = glow_scene(RenderShadow::None);
+        let (view_id, _) = scene.iter_views().next().unwrap();
+        let draw = |bloom| render(&scene, view_id, RenderOcclusion::Corner, bloom, 64, 64).unwrap();
+
+        // The strip's emission has a luminance of 2.48.
+        let off = draw(RenderBloom::default());
+        let under = draw(RenderBloom {
+            strength: 1.0,
+            threshold: 3.0,
+            ..RenderBloom::default()
+        });
+        assert_eq!(off, under);
+
+        let glow = draw(RenderBloom {
+            strength: 1.0,
+            ..RenderBloom::default()
+        });
+        assert_ne!(off, glow);
+
+        // Down the middle column, the first hit is the strip's top edge.
+        let top = (0..64)
+            .find(|y| off.pixel(32, *y).unwrap().alpha == 1.0)
+            .unwrap();
+        assert!(top > 4, "{top}");
+
+        // The miss above it takes the halo, orange, as a translucent pixel.
+        let above = glow.pixel(32, top - 1).unwrap();
+        assert_eq!(off.pixel(32, top - 1).unwrap().alpha, 0.0);
+        assert!(above.alpha > 0.0 && above.alpha < 1.0, "{above:?}");
+        assert!(
+            above.red > above.green && above.green > above.blue,
+            "{above:?}"
+        );
+
+        assert!(glow.pixel(32, top - 2).unwrap().alpha < above.alpha);
+        assert_eq!(glow.pixel(0, 0).unwrap().alpha, 0.0);
+
+        let strip = glow.pixel(32, top).unwrap();
+        assert_eq!(strip.alpha, 1.0);
+        assert!(strip.red > off.pixel(32, top).unwrap().red);
+    }
+
+    #[test]
+    fn the_glow_matches_its_goldens() {
+        check_goldens(
+            "glow",
+            glow_scene,
+            RenderBloom {
+                strength: 1.0,
+                ..RenderBloom::default()
+            },
+            [
+                include_bytes!("goldens/glow-per-pixel.png"),
+                include_bytes!("goldens/glow-per-face.png"),
+                include_bytes!("goldens/glow-per-corner.png"),
+                include_bytes!("goldens/glow-unoccluded.png"),
+            ],
+        );
+    }
+
+    #[test]
     fn the_spot_room_matches_its_goldens() {
         check_goldens(
             "spot-room",
             spot_room_scene,
+            RenderBloom::default(),
             [
                 include_bytes!("goldens/spot-room-per-pixel.png"),
                 include_bytes!("goldens/spot-room-per-face.png"),

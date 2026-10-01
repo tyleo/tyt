@@ -116,6 +116,15 @@ pub enum Error {
 
     /// An orthographic view's scale is not finite and positive.
     ViewScale { scale: f64 },
+
+    /// A bloom's strength is not finite and zero or more.
+    BloomStrength { strength: f64 },
+
+    /// A bloom's radius is not finite and positive.
+    BloomRadius { radius: f64 },
+
+    /// A bloom's threshold is not finite and zero or more.
+    BloomThreshold { threshold: f64 },
 }
 
 impl Display for Error {
@@ -255,6 +264,24 @@ impl Display for Error {
 
             Error::ViewScale { scale } => {
                 write!(f, "view scale {scale} is not finite and positive")
+            }
+
+            Error::BloomStrength { strength } => {
+                write!(
+                    f,
+                    "bloom strength {strength} is not finite and zero or more"
+                )
+            }
+
+            Error::BloomRadius { radius } => {
+                write!(f, "bloom radius {radius} is not finite and positive")
+            }
+
+            Error::BloomThreshold { threshold } => {
+                write!(
+                    f,
+                    "bloom threshold {threshold} is not finite and zero or more"
+                )
             }
         }
     }

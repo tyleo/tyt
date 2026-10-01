@@ -36,7 +36,7 @@ mod tests {
     use png::{ColorType, Decoder, Info, SrgbRenderingIntent};
     use std::{env, fs, io::Cursor, path::Path, result::Result as StdResult};
     use ty_math::{TyLinSrgbF64, TySrgbU8, TyVector3I32, TyVector3U32};
-    use voxrender::{RenderImage, RenderOcclusion, RenderOutput, RenderShadow};
+    use voxrender::{RenderBloom, RenderImage, RenderOcclusion, RenderOutput, RenderShadow};
 
     /// Refuses every image.
     struct Refuse;
@@ -123,6 +123,7 @@ mod tests {
             background: None,
             occlusion: RenderOcclusion::Corner,
             voxel_size: 1.0,
+            bloom: RenderBloom::default(),
             views: IdVec::from(vec![ViewRecord {
                 name: "hero".to_owned(),
                 transform: PoseTransform::Orbit {

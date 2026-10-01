@@ -1,7 +1,7 @@
 # Voxel rendering plan
 
-Status: **open**. The shape below was agreed on 2026-09-28. Phase 1 is built
-and phase 2 is open. The [checklist](checklist.md) tracks both, and the
+Status: **open**. The shape below was agreed on 2026-09-28. Phase 1 and
+phase 2 are built. The [checklist](checklist.md) tracks both, and the
 [reference pages](../../../ref/render/README.md) hold the contract and the
 profile language.
 
@@ -240,7 +240,13 @@ grid cap of `2^27` cells bounds an object, never a scene.
     never makes a white face glow. A material's `emissiveStrength` says how
     hard the material glows. Bloom is off by default, which keeps the phase 1
     goldens and `flat` unchanged. The `glow` built-in turns it on. Proposed
-    on 2026-09-30.
+    on 2026-09-30. Tuned on 2026-10-01 over `emissive`, whose eight voxels
+    step from `0` to `20` in emissive strength: `glow` keeps the proposed
+    strength of `1`, radius of `0.03`, and threshold of `1`. The radius is
+    the standard deviation of the widest blur. `0.06` reads as haze.
+    `energy-reactor` stays flat under `glow`: its lines emit at `0.6`,
+    under glTF's default, and a line that thin and dim blurs to nothing
+    even at a threshold of `0.3`.
 
 ## Deferred
 
