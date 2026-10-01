@@ -1,9 +1,9 @@
 # Voxel rendering plan
 
-Status: **open**. The shape below was agreed on 2026-09-28. Phase 1 is built;
-the [checklist](checklist.md) tracks it, and the
+Status: **open**. The shape below was agreed on 2026-09-28. Phase 1 is built
+and phase 2 is open. The [checklist](checklist.md) tracks both, and the
 [reference pages](../../../ref/render/README.md) hold the contract and the
-profile language. Phase 2 is the `node` frame and spot lights.
+profile language.
 
 ## Goal
 
@@ -236,16 +236,25 @@ grid cap of `2^27` cells bounds an object, never a scene.
     are one vocabulary shared by views and lights.
 20. Point lights are in the first cut. They are a position. The shadow ray
     only changes from infinite to finite.
+21. Bloom reads the emissive term alone, before the tonemap. A key light
+    never makes a white face glow. A material's `emissiveStrength` says how
+    hard the material glows. Bloom is off by default, which keeps the phase 1
+    goldens and `flat` unchanged. The `glow` built-in turns it on. Proposed
+    on 2026-09-30.
 
 ## Deferred
 
-1. Alpha, `transmission`, and `ior`.
-2. Traced occlusion as a third `occlusion` value.
-3. Spot and area lights. A spot light takes the pose shape a view takes.
-4. The `node` frame: a transform read in a hierarchy node's world transform,
-   so a camera can ride a player.
-5. Tiling several views into one sheet.
-6. The desktop tier and `voxrender-wgpu`, each its own plan.
+Transparency and the GPU come after phase 2, each its own plan:
+
+1. Alpha, `transmission`, and `ior`. The contract settles what a transparent
+   voxel is before any tier follows it.
+2. `voxrender-wgpu`, the standalone tier, and later the desktop tier.
+
+The rest wait for a reason to pull them in:
+
+1. Traced occlusion as a third `occlusion` value.
+2. Area lights.
+3. Tiling several views into one sheet.
 
 `tyt fbx render`'s remaining surface does not carry over: its render engine
 and sample count belong to Blender, its near and far planes to a depth
@@ -273,4 +282,10 @@ The checklist covers phase 1:
 10. Golden-image tests over a fixture set
 11. The three-shadow renders over real assets
 
-Phase 2 is the `node` frame and spot lights.
+Phase 2 adds:
+
+1. The `node` frame, so a camera or a light can ride a hierarchy node
+2. Spot lights, over the pose shape a view takes
+3. Bloom over the emissive term, off by default, with the `glow` built-in
+
+Transparency and `voxrender-wgpu` come after, as [Deferred](#deferred) says.
