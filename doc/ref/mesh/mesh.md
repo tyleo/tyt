@@ -209,10 +209,11 @@ object and errors in a mesh holding several. See
     - Repeatable: yes
 
     Defines values the writers and slots can name. The argument holds one or
-    more statements of the value language. Every property of the effective
-    palette enters the program as a name. The run joins every `--value` and
-    profile values entry into one program, bindings evaluating in order with
-    let-style redefinition; see [Programs](value-language.md#programs).
+    more statements of the value language. Each property of the effective
+    palette that the program, a writer, or a slot reads enters the program as
+    a name. The run joins every `--value` and profile values entry into one
+    program, bindings evaluating in order with let-style redefinition; see
+    [Programs](value-language.md#programs).
 
 17. `--values-from <profile>`
     - Repeatable: yes

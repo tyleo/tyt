@@ -21,3 +21,23 @@ they land.
 - voxsurface's `corner_occlusion` and `mesh_occlusion` return `f64`, so the
   occlusion thirds reach the language and voxrender exact. Vertex positions
   stay `f32`.
+
+## S2. Swatch count and mentioned names
+
+- `Program::free_names` scans for the names the environment supplies, not
+  every name the program mentions. It counts a name a binding reads before the
+  program binds it, and a name an end-scope expression reads that the program
+  never binds. A property the program rebinds before reading it stays unbound.
+  Its value never blocks the run.
+- `Destination::of_record` parses each expression and keeps it on the
+  `Destination`. The run collects the free names from those expressions before
+  it binds. A destination parse error now rises before the environment binds.
+  `Destination` drops `Eq` because `Expression` does not implement it.
+- Computed bindings bind even when nothing reads them because each comes from
+  an explicit flag.
+- `CheckedRecord` parses and checks a record once per object. A greedy mesh
+  evaluates it twice, over the culled pre-pass and over the merged geometry.
+  The property values bind once. The computed values and the groupings rebind
+  for each geometry. `computed_type` gives a computed binding its type before
+  any geometry exists. `Streams` now derives once per object.
+- A destination check error now rises before an evaluation error.

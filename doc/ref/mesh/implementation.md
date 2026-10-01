@@ -569,7 +569,8 @@ here on, and the later phases fill in the rest of the document.
 
 ### 2. The environment
 
-The effective palette binds its properties in atlas-texel order, and the
+In atlas-texel order, voxsmith binds each property of the effective palette
+that the program or an expression reads. The
 [computed values](value-language.md#computed-values) bind on request.
 
 ### 3. The evaluation

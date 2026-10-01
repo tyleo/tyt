@@ -392,7 +392,7 @@ mod tests {
     fn the_groupings_fix_the_lengths_and_must_hold_together() {
         let environment = ValueEnvironment {
             values: HashMap::new(),
-            groupings: groupings(&[0, 1], &[&[0], &[]]),
+            groupings: groupings(2, &[0, 1], &[&[0], &[]]),
         };
 
         assert_eq!(
@@ -402,12 +402,26 @@ mod tests {
 
         let environment = ValueEnvironment {
             values: HashMap::new(),
-            groupings: groupings(&[0, 1], &[&[0], &[2]]),
+            groupings: groupings(2, &[0, 1], &[&[0], &[2]]),
         };
 
         assert_eq!(
             eval(&checked_lamp(&types_of(&environment)), &environment),
             Err(Error::PieceVoxel { face: 1, voxel: 2 })
+        );
+
+        let environment = ValueEnvironment {
+            values: HashMap::new(),
+            groupings: groupings(1, &[0, 1], &[]),
+        };
+
+        assert_eq!(
+            eval(&checked_lamp(&types_of(&environment)), &environment),
+            Err(Error::VoxelSwatch {
+                voxel: 1,
+                swatch: 1,
+                swatches: 1
+            })
         );
 
         let environment = ValueEnvironment {
@@ -422,6 +436,7 @@ mod tests {
             .into_iter()
             .collect(),
             groupings: Groupings {
+                swatch_count: 6,
                 voxel_swatches: IdVec::<BVoxel, U32Id<BSwatch>>::from(vec![U32Id::from_u32(5)]),
                 face_voxels: IdVec::<BFace, Vec<U32Id<BVoxel>>>::default(),
             },

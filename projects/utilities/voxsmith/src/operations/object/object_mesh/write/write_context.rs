@@ -13,7 +13,7 @@ pub struct WriteContext<'a, D: EncodePng> {
 
     pub record: &'a MeshRecord,
 
-    pub run: &'a ProgramRun,
+    pub run: &'a ProgramRun<'a>,
 
     pub streams: &'a Streams,
 

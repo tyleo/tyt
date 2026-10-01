@@ -13,16 +13,25 @@ pub struct Lengths {
 }
 
 impl Lengths {
-    /// Derives the lengths, erroring on a face with no pieces or a piece
-    /// outside the voxel table.
+    /// Derives the lengths. Errors on a voxel's swatch at or past the swatch
+    /// count, a face with no pieces, or a piece outside the voxel table.
     pub(crate) fn from_groupings(groupings: &Groupings) -> Result<Lengths> {
-        let voxels = groupings.voxel_swatches.len();
-        let swatches = groupings
+        let swatches = groupings.swatch_count;
+
+        if let Some((voxel, swatch_id)) = groupings
             .voxel_swatches
             .iter()
-            .map(|swatch_id| swatch_id.to_usize_id().to_usize() + 1)
-            .max()
-            .unwrap_or(0);
+            .enumerate()
+            .find(|(_, swatch_id)| swatch_id.to_usize_id().to_usize() >= swatches)
+        {
+            return Err(Error::VoxelSwatch {
+                voxel,
+                swatch: swatch_id.to_u32(),
+                swatches,
+            });
+        }
+
+        let voxels = groupings.voxel_swatches.len();
 
         for (face, pieces) in groupings.face_voxels.iter().enumerate() {
             if pieces.is_empty() {
@@ -64,30 +73,39 @@ impl Lengths {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Domain, Groupings, Lengths, groupings};
+    use crate::{Domain, Error, Groupings, Lengths, groupings};
 
     #[test]
-    fn the_swatch_count_is_one_past_the_largest_swatch_a_voxel_names() {
-        let lengths = Lengths::from_groupings(&groupings(&[0, 3, 1], &[&[0, 1], &[2]])).unwrap();
+    fn the_groupings_fix_every_length() {
+        let lengths = Lengths::from_groupings(&groupings(5, &[0, 3, 1], &[&[0, 1], &[2]])).unwrap();
 
         assert_eq!(
             lengths,
             Lengths {
-                swatches: 4,
+                swatches: 5,
                 voxels: 3,
                 faces: 2,
                 corners: 8
             }
         );
         assert_eq!(lengths.of(Domain::Plain), 1);
-        assert_eq!(lengths.of(Domain::Swatch), 4);
+        assert_eq!(lengths.of(Domain::Swatch), 5);
         assert_eq!(lengths.of(Domain::Voxel), 3);
         assert_eq!(lengths.of(Domain::Face), 2);
         assert_eq!(lengths.of(Domain::Corner), 8);
     }
 
     #[test]
-    fn no_voxels_means_no_swatches() {
+    fn swatches_stand_without_voxels() {
+        assert_eq!(
+            Lengths::from_groupings(&groupings(4, &[], &[])).unwrap(),
+            Lengths {
+                swatches: 4,
+                voxels: 0,
+                faces: 0,
+                corners: 0
+            }
+        );
         assert_eq!(
             Lengths::from_groupings(&Groupings::default()).unwrap(),
             Lengths {
@@ -96,6 +114,18 @@ mod tests {
                 faces: 0,
                 corners: 0
             }
+        );
+    }
+
+    #[test]
+    fn a_voxel_swatch_at_the_count_errors() {
+        assert_eq!(
+            Lengths::from_groupings(&groupings(2, &[0, 1, 2], &[])),
+            Err(Error::VoxelSwatch {
+                voxel: 2,
+                swatch: 2,
+                swatches: 2
+            })
         );
     }
 }

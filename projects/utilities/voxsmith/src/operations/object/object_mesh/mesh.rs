@@ -2,9 +2,9 @@ use crate::{
     Error, Result,
     dependencies::object::EncodePng,
     operations::object::{
-        Atlases, FacePartition, Images, MergeRules, MeshElement, MeshRecord, MeshTarget, Method,
-        ProgramRun, Streams, Swatches, WriteContext, table_index, write_attributes, write_extras,
-        write_files, write_hierarchy, write_materials, write_primitive,
+        Atlases, CheckedRecord, FacePartition, Images, MergeRules, MeshElement, MeshRecord,
+        MeshTarget, Method, Streams, Swatches, WriteContext, table_index, write_attributes,
+        write_extras, write_files, write_hierarchy, write_materials, write_primitive,
     },
 };
 use branded_id::U32Id;
@@ -100,12 +100,14 @@ fn mesh_object<D: EncodePng, T: VoxExt>(
         ));
     }
 
+    let checked_record = CheckedRecord::check(&swatches, record)?;
+
+    let streams = Streams::derive(record, &checked_record.destinations)?;
+
     let geometry = if record.method == Method::Greedy {
         let culled = mesh_grid(object, Method::Culled);
 
-        let run = ProgramRun::over(object, &swatches, record, &culled)?;
-
-        let streams = Streams::derive(record, &run.destinations)?;
+        let run = checked_record.run(object, &swatches, &culled)?;
 
         let rules = MergeRules::derive(object, record, &swatches, &culled, &run, &streams)?;
 
@@ -119,9 +121,7 @@ fn mesh_object<D: EncodePng, T: VoxExt>(
         mesh_grid(object, record.method)
     };
 
-    let run = ProgramRun::over(object, &swatches, record, &geometry)?;
-
-    let streams = Streams::derive(record, &run.destinations)?;
+    let run = checked_record.run(object, &swatches, &geometry)?;
 
     let atlases = Atlases::new(record.texture_shape, &swatches, &geometry);
 
@@ -1162,6 +1162,30 @@ mod tests {
             .unwrap()
             .validate()
             .unwrap();
+    }
+
+    #[test]
+    fn a_run_binds_only_the_properties_it_reads() {
+        let mut main: VoxMain = VoxMain::default();
+        let palette_id = paint(&mut main);
+        let object_id = main.retain_object(painted_bar(palette_id)).unwrap();
+        let tags = main.retain_value_pool(VoxValuePool::int(vec![-1]).unwrap());
+        main.retain_property(palette_id, "tag".to_owned(), tags, U32Id::from_u32(0))
+            .unwrap();
+
+        let mut unread = record(Method::Greedy);
+        unread.program = "tint = baseColor.rgb * metallic; tag = 1u32;".to_owned();
+        mesh_one(&main, object_id, &unread).unwrap();
+
+        let mut program = record(Method::Greedy);
+        program.program = "x = tag;".to_owned();
+        let error = mesh_one(&main, object_id, &program).unwrap_err();
+        assert!(error.to_string().contains("`tag` holds -1"), "{error}");
+
+        let mut select = record(Method::Greedy);
+        select.primitives[U32Id::from_u32(0).to_usize_id()].select = "max(tag) == 0u32".to_owned();
+        let error = mesh_one(&main, object_id, &select).unwrap_err();
+        assert!(error.to_string().contains("`tag` holds -1"), "{error}");
     }
 
     #[test]

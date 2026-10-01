@@ -76,6 +76,15 @@ pub enum Error {
 
         found: Type,
     },
+
+    /// A voxel's swatch lies at or past the swatch count.
+    VoxelSwatch {
+        voxel: usize,
+
+        swatch: u32,
+
+        swatches: usize,
+    },
 }
 
 impl Display for Error {
@@ -159,6 +168,15 @@ impl Display for Error {
             } => write!(
                 formatter,
                 "`{name}` was checked as {expected} and holds {found}"
+            ),
+
+            Error::VoxelSwatch {
+                voxel,
+                swatch,
+                swatches,
+            } => write!(
+                formatter,
+                "voxel {voxel} samples swatch {swatch}, past the {swatches} swatches"
             ),
         }
     }

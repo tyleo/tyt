@@ -24,7 +24,7 @@ The design is in the [README](README.md). Check steps off as they land.
       the README's rule. `write/write_files.rs` and `write/write_extras.rs`
       write `f64`. Update the crate README, `doc/ref/mesh/value-language.md`,
       and `doc/ref/mesh/mesh.md`.
-- [ ] **S2. Swatch count and mentioned names.** Add the swatch count to
+- [x] **S2. Swatch count and mentioned names.** Add the swatch count to
       `Groupings` (`environment/groupings.rs`). `Lengths::from_groupings`
       (`evaluator/lengths.rs`) checks voxel swatch ids against it.
       `groupings_of` (`mesh_environment.rs:299`) passes `swatches.count()`.

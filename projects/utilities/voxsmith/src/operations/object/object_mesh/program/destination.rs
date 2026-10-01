@@ -6,41 +6,47 @@ use crate::{
     },
 };
 use branded_id::U32Id;
-use vox_value_language::{CheckedProgram, check_expression, parse_expression};
+use vox_value_language::{CheckedProgram, Expression, check_expression, parse_expression};
 
 /// A record element holding an expression the run writes somewhere.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Destination {
     pub element: MeshElement,
 
     pub landing: Landing,
 
     pub text: String,
+
+    pub expression: Expression,
 }
 
 impl Destination {
-    /// Every destination `record` holds, in table order. Errors if a slot
-    /// names a property the material model does not hold.
+    /// Every destination `record` holds, in table order, with each expression
+    /// parsed. Errors if a slot names a property the material model does not
+    /// hold, or on an expression that fails to parse.
     pub(crate) fn of_record(record: &MeshRecord) -> Result<Vec<Self>> {
         let mut destinations = Vec::new();
 
         let extras = |destinations: &mut Vec<Self>,
                       extras: &[ExtraWrite],
-                      element: &dyn Fn(&str) -> MeshElement| {
+                      element: &dyn Fn(&str) -> MeshElement|
+         -> Result<()> {
             for extra in extras {
                 let ExtraSource::Value(value) = &extra.source else {
                     continue;
                 };
 
-                destinations.push(Destination {
-                    element: element(&extra.name),
-                    landing: match extra.form {
+                destinations.push(parsed(
+                    element(&extra.name),
+                    match extra.form {
                         ExtraForm::Image => Landing::Texture,
                         ExtraForm::Json => Landing::Json,
                     },
-                    text: value.expression.clone(),
-                });
+                    &value.expression,
+                )?);
             }
+
+            Ok(())
         };
 
         for (index, material) in record.materials.iter().enumerate() {
@@ -63,15 +69,13 @@ impl Destination {
                     continue;
                 };
 
-                destinations.push(Destination {
-                    element,
-                    landing: if property.is_texture() {
-                        Landing::Texture
-                    } else {
-                        Landing::Factor
-                    },
-                    text: text.clone(),
-                });
+                let landing = if property.is_texture() {
+                    Landing::Texture
+                } else {
+                    Landing::Factor
+                };
+
+                destinations.push(parsed(element, landing, text)?);
             }
 
             extras(&mut destinations, &material.extras, &|name| {
@@ -79,17 +83,17 @@ impl Destination {
                     material_id,
                     name: name.to_owned(),
                 }
-            });
+            })?;
         }
 
         for (index, primitive) in record.primitives.iter().enumerate() {
             let primitive_id = U32Id::from_u32(table_index(index));
 
-            destinations.push(Destination {
-                element: MeshElement::PrimitiveSelect { primitive_id },
-                landing: Landing::Select,
-                text: primitive.select.clone(),
-            });
+            destinations.push(parsed(
+                MeshElement::PrimitiveSelect { primitive_id },
+                Landing::Select,
+                &primitive.select,
+            )?);
 
             for attribute in &primitive.attributes {
                 let text = match attribute {
@@ -97,46 +101,43 @@ impl Destination {
                     AttributeWrite::Custom { value, .. } => &value.expression,
                 };
 
-                destinations.push(Destination {
-                    element: MeshElement::PrimitiveAttribute {
+                destinations.push(parsed(
+                    MeshElement::PrimitiveAttribute {
                         primitive_id,
                         name: attribute.name().to_owned(),
                     },
-                    landing: Landing::Attribute,
-                    text: text.clone(),
-                });
+                    Landing::Attribute,
+                    text,
+                )?);
             }
         }
 
         for file in &record.files {
-            destinations.push(Destination {
-                element: MeshElement::File {
+            destinations.push(parsed(
+                MeshElement::File {
                     file: file.file.clone(),
                 },
-                landing: match file.form {
+                match file.form {
                     FileForm::Json { .. } => Landing::Json,
                     FileForm::Png => Landing::Texture,
                 },
-                text: file.value.expression.clone(),
-            });
+                &file.value.expression,
+            )?);
         }
 
         extras(&mut destinations, &record.mesh_extras, &|name| {
             MeshElement::MeshExtra {
                 name: name.to_owned(),
             }
-        });
+        })?;
 
         Ok(destinations)
     }
 
-    /// Parses and checks the expression in the scope at `checked`'s end.
-    /// Every error rises from the element.
+    /// Checks the expression in the scope at `checked`'s end. Every error
+    /// rises from the element.
     pub(crate) fn check(self, checked: &CheckedProgram) -> Result<CheckedDestination> {
-        let parsed = parse_expression(&self.text)
-            .map_err(|error| Error::mesh_record(self.element.clone(), error))?;
-
-        let expression = check_expression(&parsed, checked)
+        let expression = check_expression(&self.expression, checked)
             .map_err(|error| Error::mesh_record(self.element.clone(), error))?;
 
         Ok(CheckedDestination {
@@ -144,6 +145,20 @@ impl Destination {
             expression,
         })
     }
+}
+
+/// Parses `text` into the destination at `element`. A parse error rises from
+/// the element.
+fn parsed(element: MeshElement, landing: Landing, text: &str) -> Result<Destination> {
+    let expression =
+        parse_expression(text).map_err(|error| Error::mesh_record(element.clone(), error))?;
+
+    Ok(Destination {
+        element,
+        landing,
+        text: text.to_owned(),
+        expression,
+    })
 }
 
 #[cfg(test)]
@@ -206,6 +221,27 @@ mod tests {
                     element: MeshElement::Slot { property, .. },
                     ..
                 } if property == "subsurface"
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn an_expression_that_fails_to_parse_errors_from_its_element() {
+        let record = with_slots(vec![SlotWrite {
+            property: "emissiveStrength".to_owned(),
+            source: SlotSource::Value("0.5 +".to_owned()),
+        }]);
+
+        let error = Destination::of_record(&record).unwrap_err();
+
+        assert!(
+            matches!(
+                &error,
+                Error::MeshRecord {
+                    element: MeshElement::Slot { property, .. },
+                    ..
+                } if property == "emissiveStrength"
             ),
             "{error}"
         );

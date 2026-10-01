@@ -1480,7 +1480,7 @@ mod tests {
     fn buried() -> ValueEnvironment {
         let mut environment = ValueEnvironment {
             values: HashMap::new(),
-            groupings: groupings(&[0, 1], &[&[0], &[0], &[0]]),
+            groupings: groupings(2, &[0, 1], &[&[0], &[0], &[0]]),
         };
 
         environment.values = [(

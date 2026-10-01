@@ -17,7 +17,7 @@ pub fn write_attributes(
     primitive_id: U32Id<BMeshPrimitive>,
     attributes: &[AttributeWrite],
     faces: &[usize],
-    run: &ProgramRun,
+    run: &ProgramRun<'_>,
     atlases: &Atlases<'_>,
 ) -> Result<()> {
     for attribute in attributes {

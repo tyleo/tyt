@@ -22,7 +22,7 @@ enum PendingFile {
 pub fn write_files<D: EncodePng>(
     dependencies: &D,
     record: &MeshRecord,
-    run: &ProgramRun,
+    run: &ProgramRun<'_>,
     streams: &Streams,
     atlases: &Atlases<'_>,
 ) -> Result<Vec<MeshFile>> {

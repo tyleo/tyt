@@ -7,6 +7,7 @@ pub fn lamp() -> ValueEnvironment {
     let mut environment = ValueEnvironment {
         values: HashMap::new(),
         groupings: groupings(
+            2,
             &[0, 1],
             &[&[0], &[0], &[0], &[0], &[0], &[1], &[1], &[1], &[1], &[1]],
         ),

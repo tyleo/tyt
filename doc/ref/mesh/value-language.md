@@ -6,8 +6,9 @@ The expression language behind `vxl object mesh`'s material values. A binding,
 `name = expr`, defines a named value, and a run gathers every binding it is
 given into one [program](#programs). The writer and slot flags listed in
 [`vxl object mesh`](mesh.md#options) take expressions too, landing the results
-in images, JSON files, and the mesh's material. Every property of the
-[effective palette](mesh.md#the-palette-atlas) enters the program as a name.
+in images, JSON files, and the mesh's material. Each property of the
+[effective palette](mesh.md#the-palette-atlas) that the program or an
+expression reads enters the program as a name.
 
 A value sits on three axes, each with a section below:
 
@@ -165,7 +166,9 @@ every operator, comparison, and function takes one numeric type across its
 numeric operands, so `voxelPosition.y * 0.5` errors and
 `f64(voxelPosition.y) * 0.5` converts. Unsigned values come from an `int`-kind
 palette property, read as `u32`, and from the computed [index](#computed-index)
-and [voxel position](#computed-voxel-position), both `u32`.
+and [voxel position](#computed-voxel-position), both `u32`. An `int` property
+holding a value outside the `u32` range errors only when the program or an
+expression reads it.
 
 A literal names its type or takes it from context. A decimal point makes an
 `f64`, a suffix pins any type, `2f64`, `2u8`, `2u16`, `2u32`, and a bare whole

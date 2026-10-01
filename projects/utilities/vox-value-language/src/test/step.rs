@@ -8,6 +8,7 @@ pub fn step() -> ValueEnvironment {
     let mut environment = ValueEnvironment {
         values: HashMap::new(),
         groupings: groupings(
+            1,
             &[0, 0, 0],
             &[
                 &[0, 1],

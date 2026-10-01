@@ -45,10 +45,10 @@ impl<'a> MergeRules<'a> {
         record: &MeshRecord,
         swatches: &'a Swatches<'a>,
         culled: &'a MeshGeometry,
-        run: &ProgramRun,
+        run: &ProgramRun<'_>,
         streams: &Streams,
     ) -> Result<Self> {
-        let provenance = Provenance::of(&record.computed_bindings, &run.checked);
+        let provenance = Provenance::of(&record.computed_bindings, run.checked);
 
         let mut gathered = Gathered::default();
 
@@ -58,7 +58,7 @@ impl<'a> MergeRules<'a> {
             }
         }
 
-        for checked in &run.destinations {
+        for checked in run.destinations {
             let destination = &checked.destination;
             let domain = checked.expression.to_type().domain;
 
@@ -299,7 +299,7 @@ impl Gathered {
         &mut self,
         expression: &CheckedExpression,
         provenance: &Provenance,
-        run: &ProgramRun,
+        run: &ProgramRun<'_>,
         element: &MeshElement,
     ) -> Result<()> {
         let domain = expression.to_type().domain;
@@ -399,9 +399,9 @@ fn lerp(from: f64, to: f64, along: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::operations::object::{
-        ArrayDomain, AttributeWrite, Computation, ComputedBinding, ExtraForm, ExtraSource,
-        ExtraWrite, FileForm, FileWrite, MaterialRecord, MergeRules, MeshGeometry, MeshRecord,
-        Method, PrimitiveRecord, ProgramRun, SlotSource, SlotWrite, Streams, Swatches,
+        ArrayDomain, AttributeWrite, CheckedRecord, Computation, ComputedBinding, ExtraForm,
+        ExtraSource, ExtraWrite, FileForm, FileWrite, MaterialRecord, MergeRules, MeshGeometry,
+        MeshRecord, Method, PrimitiveRecord, SlotSource, SlotWrite, Streams, Swatches,
         TextureShape, Transfer, WrittenValue,
     };
     use branded_id::{IdVec, U32Id};
@@ -501,9 +501,10 @@ mod tests {
         let (main, object) = painted();
         let swatches = Swatches::resolve(&main, &object).unwrap();
         let culled = mesh_grid(&object, Method::Culled);
-        let run = ProgramRun::over(&object, &swatches, record, &culled).unwrap();
+        let checked_record = CheckedRecord::check(&swatches, record).unwrap();
+        let run = checked_record.run(&object, &swatches, &culled).unwrap();
 
-        let streams = Streams::derive(record, &run.destinations).unwrap();
+        let streams = Streams::derive(record, run.destinations).unwrap();
         let rules =
             MergeRules::derive(&object, record, &swatches, &culled, &run, &streams).unwrap();
 
@@ -622,8 +623,9 @@ mod tests {
         let swatches = Swatches::resolve(&main, &object).unwrap();
 
         let culled = mesh_grid(&object, Method::Culled);
-        let run = ProgramRun::over(&object, &swatches, record, &culled).unwrap();
-        let streams = Streams::derive(record, &run.destinations).unwrap();
+        let checked_record = CheckedRecord::check(&swatches, record).unwrap();
+        let run = checked_record.run(&object, &swatches, &culled).unwrap();
+        let streams = Streams::derive(record, run.destinations).unwrap();
         let rules =
             MergeRules::derive(&object, record, &swatches, &culled, &run, &streams).unwrap();
 

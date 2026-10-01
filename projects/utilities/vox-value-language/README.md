@@ -48,21 +48,32 @@ The names a program reads but never defines come in through the environments.
 A `TypeEnvironment` maps each name to its `Type`: a `Domain`, a `Dimension`,
 and a `Scalar`. A `ValueEnvironment` maps each name to its `Value`, the entries
 flattened component by component in `Components`, and carries the `Groupings`
-the reductions and climbs walk: each voxel's swatch and each face's voxel
-pieces. The corners need no table because every face owns four, in face order.
+the reductions and climbs walk: the swatch count, each voxel's swatch, and each
+face's voxel pieces. The corners need no table because every face owns four, in
+face order.
 
-To the crate an array is a length, and the groupings fix the lengths: the voxel
-count is the voxel table's length, the face count the face table's, the corner
-count four times that, and the swatch count one past the largest swatch id a
-voxel names, zero with no voxels. `eval` checks the value environment before
-computing anything:
+To the crate an array is a length, and the groupings fix the lengths. The
+groupings carry the swatch count because a palette with no voxels still has
+swatches. The voxel and face counts match the lengths of their tables. The
+corner count is four times the face count. `eval` checks the value environment
+before computing anything:
 
 1. Every name the type environment holds has a value of that type, and no
    other name has one
 2. Every array holds its domain's length
 3. Every `f64` input is finite
-4. Every face lists at least one voxel piece
-5. Every piece points into the voxel table
+4. Every voxel's swatch lies below the swatch count
+5. Every face lists at least one voxel piece
+6. Every piece points into the voxel table
+
+A caller can call `Program::free_names` before `check` to learn which names the
+environment has to supply:
+
+1. Each name a binding reads before the program binds it
+2. Each name the given end-scope expressions read that the program never binds
+
+A caller that binds only those names never has to fit an unread value into the
+language.
 
 ## Programs
 

@@ -1,9 +1,10 @@
 use crate::{BFace, BSwatch, BVoxel, Groupings};
 use branded_id::{IdVec, U32Id};
 
-/// The groupings from each voxel's swatch and each face's voxel pieces.
-pub fn groupings(voxel_swatches: &[u32], face_voxels: &[&[u32]]) -> Groupings {
+/// Builds `Groupings` from plain ids.
+pub fn groupings(swatch_count: usize, voxel_swatches: &[u32], face_voxels: &[&[u32]]) -> Groupings {
     Groupings {
+        swatch_count,
         voxel_swatches: IdVec::<BVoxel, U32Id<BSwatch>>::from(
             voxel_swatches
                 .iter()

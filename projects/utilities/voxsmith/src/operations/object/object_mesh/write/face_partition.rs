@@ -17,7 +17,7 @@ impl FacePartition {
     /// the faces with lower domains climbing in.
     pub(crate) fn derive(
         record: &MeshRecord,
-        run: &ProgramRun,
+        run: &ProgramRun<'_>,
         atlases: &Atlases<'_>,
     ) -> Result<Self> {
         let mut faces: IdVec<BMeshPrimitive, Vec<usize>> =
@@ -26,7 +26,7 @@ impl FacePartition {
         let mut takers: Vec<Option<U32Id<BMeshPrimitive>>> =
             vec![None; atlases.cell_count(ArrayDomain::Face)];
 
-        for checked in &run.destinations {
+        for checked in run.destinations {
             let destination = &checked.destination;
 
             if destination.landing != Landing::Select {
@@ -124,8 +124,8 @@ mod tests {
     use crate::{
         Error,
         operations::object::{
-            ArrayDomain, Atlases, Computation, ComputedBinding, FacePartition, MeshElement,
-            MeshRecord, Method, PrimitiveRecord, ProgramRun, Swatches, TextureShape,
+            ArrayDomain, Atlases, CheckedRecord, Computation, ComputedBinding, FacePartition,
+            MeshElement, MeshRecord, Method, PrimitiveRecord, Swatches, TextureShape,
         },
     };
     use branded_id::{IdVec, U32Id};
@@ -196,7 +196,8 @@ mod tests {
             files: Vec::new(),
             mesh_extras: Vec::new(),
         };
-        let run = ProgramRun::over(&object, &swatches, &record, &culled).unwrap();
+        let checked_record = CheckedRecord::check(&swatches, &record).unwrap();
+        let run = checked_record.run(&object, &swatches, &culled).unwrap();
         let atlases = Atlases::new(TextureShape::Pot, &swatches, &culled);
 
         match FacePartition::derive(&record, &run, &atlases) {

@@ -3,33 +3,41 @@ use crate::{
     operations::object::{Computation, ComputedBinding, MeshElement, MeshGeometry, Swatches},
 };
 use branded_id::{U32Id, UsizeId};
-use std::{collections::HashMap, slice};
+use std::{
+    collections::{BTreeSet, HashMap},
+    slice,
+};
 use vox_value_language::{
-    Components, Dimension, Domain, Groupings, TypeEnvironment, Value, ValueEnvironment,
+    Components, Dimension, Domain, Groupings, Scalar, Type, TypeEnvironment, Value,
+    ValueEnvironment,
 };
 use voxcore::{VoxObject, VoxValuePoolKind, VoxValuePoolValueRef};
 use voxsurface::mesh_occlusion;
 
 /// The names a run's program reads but never defines: the effective palette's
-/// properties, one swatch array each, and the computed bindings.
+/// properties it reads, one swatch array each, and the computed bindings. The
+/// types and the property values hold for every geometry. The computed values
+/// and the groupings follow each geometry.
 pub struct MeshEnvironment {
     pub types: TypeEnvironment,
 
-    pub values: ValueEnvironment,
+    properties: HashMap<String, Value>,
+
+    computed_bindings: Vec<ComputedBinding>,
 }
 
 impl MeshEnvironment {
-    /// Binds the properties `swatches` read through and `computed_bindings`
-    /// over `object` and `geometry`. Errors on a computed binding shadowing
-    /// a property or bound twice.
+    /// Binds each property `swatches` read through that `free_names` holds. A
+    /// computed binding gets only its type here because its value waits for a
+    /// geometry. Errors on a computed binding shadowing a property or bound
+    /// twice.
     pub(crate) fn bind(
-        object: &VoxObject,
         swatches: &Swatches<'_>,
-        geometry: &MeshGeometry,
         computed_bindings: &[ComputedBinding],
+        free_names: &BTreeSet<String>,
     ) -> Result<Self> {
         let mut types = HashMap::new();
-        let mut values = HashMap::new();
+        let mut properties = HashMap::new();
 
         let effective = swatches.effective();
 
@@ -39,6 +47,10 @@ impl MeshEnvironment {
             let property = effective
                 .property(property_id)
                 .expect("property ids below the count resolve");
+
+            if !free_names.contains(property.name()) {
+                continue;
+            }
 
             let swatch_values: Vec<_> = (0..swatches.count())
                 .map(|swatch| swatches.value(U32Id::from_u32(swatch as u32), property_id))
@@ -50,17 +62,9 @@ impl MeshEnvironment {
                 &swatch_values,
             )? {
                 types.insert(property.name().to_owned(), value.to_type());
-                values.insert(property.name().to_owned(), value);
+                properties.insert(property.name().to_owned(), value);
             }
         }
-
-        let entries = |domain: Domain| match domain {
-            Domain::Corner => geometry.quad_count() * 4,
-            Domain::Face => geometry.quad_count(),
-            Domain::Plain => unreachable!("a computed index runs over an array domain"),
-            Domain::Swatch => swatches.count(),
-            Domain::Voxel => swatches.voxel_swatch_ids().len(),
-        };
 
         for binding in computed_bindings {
             let element = MeshElement::ComputedBinding {
@@ -74,10 +78,38 @@ impl MeshEnvironment {
                 ));
             }
 
-            if values.contains_key(&binding.name) {
+            if types.contains_key(&binding.name) {
                 return Err(Error::mesh_record(element, "is bound twice"));
             }
 
+            types.insert(binding.name.clone(), computed_type(binding.computation));
+        }
+
+        Ok(MeshEnvironment {
+            types: TypeEnvironment { types },
+            properties,
+            computed_bindings: computed_bindings.to_vec(),
+        })
+    }
+
+    /// The value environment over `geometry`.
+    pub(crate) fn values(
+        &self,
+        object: &VoxObject,
+        swatches: &Swatches<'_>,
+        geometry: &MeshGeometry,
+    ) -> ValueEnvironment {
+        let entries = |domain: Domain| match domain {
+            Domain::Corner => geometry.quad_count() * 4,
+            Domain::Face => geometry.quad_count(),
+            Domain::Plain => unreachable!("a computed index runs over an array domain"),
+            Domain::Swatch => swatches.count(),
+            Domain::Voxel => swatches.voxel_swatch_ids().len(),
+        };
+
+        let mut values = self.properties.clone();
+
+        for binding in &self.computed_bindings {
             let value = match binding.computation {
                 Computation::Index(domain) => {
                     let domain = Domain::from(domain);
@@ -89,17 +121,28 @@ impl MeshEnvironment {
                 Computation::VoxelPosition => compute_voxel_position(object),
             };
 
-            types.insert(binding.name.clone(), value.to_type());
             values.insert(binding.name.clone(), value);
         }
 
-        Ok(MeshEnvironment {
-            types: TypeEnvironment { types },
-            values: ValueEnvironment {
-                values,
-                groupings: groupings_of(swatches, geometry),
-            },
-        })
+        ValueEnvironment {
+            values,
+            groupings: groupings_of(swatches, geometry),
+        }
+    }
+}
+
+/// The type `computation` binds over any geometry.
+fn computed_type(computation: Computation) -> Type {
+    let (domain, dimension, scalar) = match computation {
+        Computation::Index(domain) => (Domain::from(domain), Dimension::Vec1, Scalar::U32),
+        Computation::Occlusion => (Domain::Corner, Dimension::Vec1, Scalar::F64),
+        Computation::VoxelPosition => (Domain::Voxel, Dimension::Vec3, Scalar::U32),
+    };
+
+    Type {
+        domain,
+        dimension,
+        scalar,
     }
 }
 
@@ -294,10 +337,10 @@ fn compute_occlusion(object: &VoxObject, geometry: &MeshGeometry) -> Value {
     .expect("one component per corner fills a vec1 array")
 }
 
-/// The tables the reductions and climbs walk: each voxel entry's swatch and
-/// each face's voxel pieces.
+/// The groupings over `geometry`. Each face piece maps to its voxel's entry.
 fn groupings_of(swatches: &Swatches<'_>, geometry: &MeshGeometry) -> Groupings {
     Groupings {
+        swatch_count: swatches.count(),
         voxel_swatches: swatches.voxel_swatch_ids().clone(),
         face_voxels: geometry
             .face_cells
@@ -316,10 +359,10 @@ fn groupings_of(swatches: &Swatches<'_>, geometry: &MeshGeometry) -> Groupings {
 mod tests {
     use crate::{
         operations::object::{
-            Method, Swatches,
+            ArrayDomain, Computation, Method, Swatches,
             object_mesh::program::mesh_environment::{
-                compute_index, compute_occlusion, compute_voxel_position, groupings_of,
-                property_value,
+                compute_index, compute_occlusion, compute_voxel_position, computed_type,
+                groupings_of, property_value,
             },
         },
         test_utilities::live_object,
@@ -359,6 +402,32 @@ mod tests {
         assert_eq!(value.domain(), Domain::Corner);
         assert_eq!(value.entries(), 24);
         assert_eq!(value.components(), &Components::F64(vec![1.0; 24]));
+    }
+
+    #[test]
+    fn each_computation_binds_its_computed_type() {
+        let object = live_object([3, 3, 3], &[[1, 1, 1]]);
+        let geometry = mesh_grid(&object, Method::Culled);
+
+        let cases = [
+            (
+                Computation::Index(ArrayDomain::Face),
+                compute_index(Domain::Face, 6),
+            ),
+            (
+                Computation::Occlusion,
+                compute_occlusion(&object, &geometry),
+            ),
+            (Computation::VoxelPosition, compute_voxel_position(&object)),
+        ];
+
+        for (computation, value) in cases {
+            assert_eq!(
+                computed_type(computation),
+                value.to_type(),
+                "{computation:?}"
+            );
+        }
     }
 
     #[test]

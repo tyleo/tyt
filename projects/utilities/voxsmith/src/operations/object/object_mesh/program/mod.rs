@@ -1,6 +1,7 @@
 // Internal API
 
 mod checked_destination;
+mod checked_record;
 mod destination;
 mod landing;
 mod mesh_environment;
@@ -10,6 +11,7 @@ mod swatches;
 mod table_index;
 
 pub(crate) use checked_destination::*;
+pub(crate) use checked_record::*;
 pub(crate) use destination::*;
 pub(crate) use landing::*;
 pub(crate) use mesh_environment::*;
