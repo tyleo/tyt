@@ -1,6 +1,6 @@
 use crate::{
-    BMeshMaterial, BMeshObject, MeshHierarchyNode, MeshMain, MeshMaterial, MeshObject, MeshTexture,
-    MeshTextureRef, png_image, unit_triangle,
+    MeshHierarchyNode, MeshMain, MeshMaterial, MeshObject, MeshTexture, MeshTextureRef,
+    TestMainIds, png_image, unit_triangle,
 };
 use branded_id::U32Id;
 use ty_math::TyVector2F64;
@@ -8,8 +8,8 @@ use ty_math::TyVector2F64;
 /// A main carrying `ext`: one image, one texture over it, one material
 /// sampling the texture as its base color through UV stream `0`, and one
 /// object of one triangle with that stream drawing the material, placed by
-/// one root node. Returns the main with its object and material ids.
-pub fn test_main<T>(ext: T) -> (MeshMain<T>, U32Id<BMeshObject>, U32Id<BMeshMaterial>) {
+/// one root node.
+pub fn test_main<T>(ext: T) -> (MeshMain<T>, TestMainIds) {
     let mut main = MeshMain::default();
 
     let image_id = main.retain_image(png_image()).unwrap();
@@ -40,7 +40,7 @@ pub fn test_main<T>(ext: T) -> (MeshMain<T>, U32Id<BMeshObject>, U32Id<BMeshMate
 
     let object_id = main.retain_object(object).unwrap();
 
-    let node_id = main
+    let root_id = main
         .retain_hierarchy_node(MeshHierarchyNode {
             name: "root".to_owned(),
             child_object_ids: vec![object_id],
@@ -48,7 +48,15 @@ pub fn test_main<T>(ext: T) -> (MeshMain<T>, U32Id<BMeshObject>, U32Id<BMeshMate
         })
         .unwrap();
 
-    main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+    main.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
-    (main.put_ext(ext), object_id, material_id)
+    let ids = TestMainIds {
+        image_id,
+        texture_id,
+        material_id,
+        object_id,
+        root_id,
+    };
+
+    (main.put_ext(ext), ids)
 }

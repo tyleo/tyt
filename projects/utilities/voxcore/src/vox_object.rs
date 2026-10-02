@@ -678,7 +678,7 @@ impl Drop for VoxObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxMaterial, BVoxPalette, Error, VoxObject};
+    use crate::{BVoxLayer, BVoxMaterial, BVoxPalette, Error, VoxObject};
     use branded_id::U32Id;
     use std::collections::HashMap;
     use ty_math::{TyVector3I32, TyVector3U32};
@@ -690,11 +690,12 @@ mod tests {
     /// A `1 x 2 x 3` grid seated at `(5, 6, 7)` with two layers, live at
     /// `(0, 1, 0)` sampling materials 3 and 4 and at `(0, 0, 2)` sampling 5
     /// and 6.
-    fn seated_object() -> VoxObject {
+    fn seated_object() -> (VoxObject, [U32Id<BVoxLayer>; 2]) {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 2, 3)).unwrap();
         object.set_origin(TyVector3I32::new(5, 6, 7));
-        object.retain_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
-        object.retain_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(1));
+        let first_layer_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
+        let second_layer_id =
+            object.retain_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(1));
         let first_id = object.voxel_id(TyVector3U32::new(0, 1, 0)).unwrap();
         object
             .retain_voxel(first_id, &[material_id(3), material_id(4)])
@@ -703,7 +704,8 @@ mod tests {
         object
             .retain_voxel(second_id, &[material_id(5), material_id(6)])
             .unwrap();
-        object
+
+        (object, [first_layer_id, second_layer_id])
     }
 
     /// The `(position, samples)` of every live voxel, in raster order.
@@ -723,7 +725,7 @@ mod tests {
 
     #[test]
     fn zup_to_yup_turns_the_grid_about_x() {
-        let object = seated_object();
+        let (object, _) = seated_object();
         let turned = object.zup_to_yup();
 
         assert_eq!(turned.name(), "o");
@@ -749,7 +751,7 @@ mod tests {
 
     #[test]
     fn remap_voxels_moves_live_voxels_and_their_samples() {
-        let mut object = seated_object();
+        let (mut object, _) = seated_object();
 
         // Swap y and z onto a `1 x 3 x 2` grid.
         let voxel_ids = object
@@ -784,7 +786,7 @@ mod tests {
 
     #[test]
     fn remap_voxels_rejects_a_bad_move_without_changing_state() {
-        let mut object = seated_object();
+        let (mut object, _) = seated_object();
         let before = live_cells(&object);
 
         assert_eq!(
@@ -814,7 +816,7 @@ mod tests {
 
     #[test]
     fn resample_voxels_draws_each_cell_from_its_source() {
-        let mut object = seated_object();
+        let (mut object, _) = seated_object();
 
         // Double the grid along y, each old cell filling two new ones.
         let old_ids = object
@@ -858,7 +860,7 @@ mod tests {
 
     #[test]
     fn resample_voxels_rejects_a_bad_source_without_changing_state() {
-        let mut object = seated_object();
+        let (mut object, _) = seated_object();
         let before = live_cells(&object);
 
         assert_eq!(
@@ -879,7 +881,7 @@ mod tests {
 
     #[test]
     fn the_axis_turns_are_inverses() {
-        let object = seated_object();
+        let (object, _) = seated_object();
         for restored in [
             object.zup_to_yup().yup_to_zup(),
             object.yup_to_zup().zup_to_yup(),
@@ -1152,9 +1154,8 @@ mod tests {
 
     #[test]
     fn a_clone_copies_every_layer_and_voxel() {
-        let mut object = seated_object();
+        let (mut object, [first_layer_id, _]) = seated_object();
 
-        let (first_layer_id, _) = object.iter_layers().next().unwrap();
         object.release_layer(first_layer_id).unwrap();
 
         let mut copy = object.clone();
@@ -1176,7 +1177,7 @@ mod tests {
 
     #[test]
     fn relabel_layer_palettes_keeps_the_samples() {
-        let mut object = seated_object();
+        let (mut object, _) = seated_object();
 
         let before = live_cells(&object);
 

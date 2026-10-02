@@ -1638,14 +1638,18 @@ mod tests {
 
     /// A palette with one property "v" on `value_pool_id` and one material
     /// drawing value id `index`.
-    fn one_material_palette(value_pool_id: U32Id<BVoxValuePool>, index: u32) -> VoxPalette {
+    fn one_material_palette(
+        value_pool_id: U32Id<BVoxValuePool>,
+        index: u32,
+    ) -> (VoxPalette, U32Id<BVoxMaterial>) {
         let mut palette = VoxPalette::default();
         palette
             .retain_property("v".to_owned(), value_pool_id, value_id(0))
             .unwrap();
 
-        palette.retain_material(vec![value_id(index)]).unwrap();
-        palette
+        let material_id = palette.retain_material(vec![value_id(index)]).unwrap();
+
+        (palette, material_id)
     }
 
     #[test]
@@ -2003,9 +2007,9 @@ mod tests {
     fn retain_object_rejects_a_bad_sample_material() {
         let mut main = VoxMain::default();
         let ints_id = int_value_pool_id(&mut main, vec![7]);
-        let live_palette_id = main
-            .retain_palette(one_material_palette(ints_id, 0))
-            .unwrap();
+        let (palette, _) = one_material_palette(ints_id, 0);
+
+        let live_palette_id = main.retain_palette(palette).unwrap();
 
         // The layer back-fills the live voxel with material 9, beyond the
         // palette's one material.
@@ -2325,22 +2329,22 @@ mod tests {
         let mut main = VoxMain::default();
         let value_pool_a_id = int_value_pool_id(&mut main, vec![10]);
         let value_pool_b_id = int_value_pool_id(&mut main, vec![20]);
-        let palette_a_id = main
-            .retain_palette(one_material_palette(value_pool_a_id, 0))
-            .unwrap();
+        let (palette, material_a_id) = one_material_palette(value_pool_a_id, 0);
 
-        let palette_b_id = main
-            .retain_palette(one_material_palette(value_pool_b_id, 0))
-            .unwrap();
+        let palette_a_id = main.retain_palette(palette).unwrap();
+
+        let (palette, material_b_id) = one_material_palette(value_pool_b_id, 0);
+
+        let palette_b_id = main.retain_palette(palette).unwrap();
 
         let mut a = unit_object("a");
-        a.retain_layer(palette_a_id, material_id(0));
+        a.retain_layer(palette_a_id, material_a_id);
         let object_a_id = main.retain_object(a).unwrap();
 
         let mut b = unit_object("b");
-        b.retain_layer(palette_b_id, material_id(0));
+        b.retain_layer(palette_b_id, material_b_id);
         let live_voxel_id = b.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        b.retain_voxel(live_voxel_id, &[material_id(0)]).unwrap();
+        b.retain_voxel(live_voxel_id, &[material_b_id]).unwrap();
         let object_b_id = main.retain_object(b).unwrap();
 
         let inner_id = main
@@ -3180,7 +3184,7 @@ mod tests {
         let ints_id = int_value_pool_id(&mut main, vec![10, 20, 30]);
 
         // Two palettes draw the doomed value, so both must be repointed.
-        let a = one_material_palette(ints_id, 0);
+        let (a, _) = one_material_palette(ints_id, 0);
         let a_id = main.retain_palette(a).unwrap();
 
         let mut b = VoxPalette::default();
@@ -3699,20 +3703,13 @@ mod tests {
     fn palette_methods_edit_an_inserted_palette() {
         let mut main = VoxMain::default();
         let ints_id = int_value_pool_id(&mut main, vec![10, 20]);
-        let palette_id = main
-            .retain_palette(one_material_palette(ints_id, 0))
-            .unwrap();
+        let (palette, first_id) = one_material_palette(ints_id, 0);
+
+        let palette_id = main.retain_palette(palette).unwrap();
 
         // retain_property back-fills the existing material with the default.
         let tag_id = main
             .retain_property(palette_id, "tag".to_owned(), ints_id, value_id(1))
-            .unwrap();
-
-        let first_id = main
-            .palette(palette_id)
-            .unwrap()
-            .iter_materials()
-            .next()
             .unwrap();
 
         assert_eq!(
@@ -3742,9 +3739,9 @@ mod tests {
     fn palette_methods_reject_bad_ids() {
         let mut main = VoxMain::default();
         let ints_id = int_value_pool_id(&mut main, vec![10, 20]);
-        let palette_id = main
-            .retain_palette(one_material_palette(ints_id, 0))
-            .unwrap();
+        let (palette, _) = one_material_palette(ints_id, 0);
+
+        let palette_id = main.retain_palette(palette).unwrap();
 
         let ghost_id = U32Id::<BVoxPalette>::from_u32(9);
         assert_eq!(
@@ -3820,16 +3817,9 @@ mod tests {
     fn release_material_can_empty_a_palette() {
         let mut main = VoxMain::default();
         let ints_id = int_value_pool_id(&mut main, vec![10]);
-        let palette_id = main
-            .retain_palette(one_material_palette(ints_id, 0))
-            .unwrap();
+        let (palette, only_id) = one_material_palette(ints_id, 0);
 
-        let only_id = main
-            .palette(palette_id)
-            .unwrap()
-            .iter_materials()
-            .next()
-            .unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
         // No live voxel samples the material, so even the last one releases and
         // the palette empties.
@@ -3938,7 +3928,9 @@ mod tests {
 
         // Insertions.
         assert_rejects_unchanged(&mut main, |s| {
-            s.retain_palette(one_material_palette(value_pool_id(9), 0))
+            let (palette, _) = one_material_palette(value_pool_id(9), 0);
+
+            s.retain_palette(palette)
         });
 
         assert_rejects_unchanged(&mut main, |s| {

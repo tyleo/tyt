@@ -1183,7 +1183,7 @@ mod tests {
         BMeshFile, BMeshHierarchyNode, BMeshMaterial, BMeshObject, BMeshTexture, Error, MeshExt,
         MeshFile, MeshHierarchyNode, MeshImage, MeshImageMediaType, MeshImageSource, MeshMain,
         MeshMaterial, MeshObject, MeshProperty, MeshPropertyValue, MeshTexture, MeshTextureRef,
-        PNG_SIGNATURE, png_image, test_main, unit_triangle,
+        PNG_SIGNATURE, TestMainIds, png_image, test_main, unit_triangle,
     };
     use branded_id::U32Id;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector2F64, TyVector3F64};
@@ -1231,7 +1231,14 @@ mod tests {
 
     #[test]
     fn the_test_main_validates_and_reads_back() {
-        let (main, object_id, material_id) = test_main(());
+        let (
+            main,
+            TestMainIds {
+                object_id,
+                material_id,
+                ..
+            },
+        ) = test_main(());
         main.validate().unwrap();
 
         assert_eq!(main.image_count(), 1);
@@ -1387,9 +1394,14 @@ mod tests {
 
     #[test]
     fn set_material_checks_the_primitives_drawing_it() {
-        let (mut main, _, material_id) = test_main(());
-
-        let texture_id = main.iter_textures().next().unwrap().0;
+        let (
+            mut main,
+            TestMainIds {
+                texture_id,
+                material_id,
+                ..
+            },
+        ) = test_main(());
 
         // A second stream the one-stream primitive does not carry.
         let material = MeshMaterial {
@@ -1413,7 +1425,14 @@ mod tests {
 
     #[test]
     fn set_primitive_material_id_checks_and_repoints() {
-        let (mut main, object_id, material_id) = test_main(());
+        let (
+            mut main,
+            TestMainIds {
+                object_id,
+                material_id,
+                ..
+            },
+        ) = test_main(());
         let primitive_id = U32Id::from_u32(0);
 
         assert_eq!(
@@ -1441,10 +1460,16 @@ mod tests {
 
     #[test]
     fn releases_refuse_while_referenced_and_go_through_once_detached() {
-        let (mut main, object_id, material_id) = test_main(());
-        let image_id = main.iter_images().next().unwrap().0;
-        let texture_id = main.iter_textures().next().unwrap().0;
-        let root_id = main.root_hierarchy_node_ids()[0];
+        let (
+            mut main,
+            TestMainIds {
+                image_id,
+                texture_id,
+                material_id,
+                object_id,
+                root_id,
+            },
+        ) = test_main(());
 
         assert_eq!(
             main.release_image(image_id),
@@ -1881,7 +1906,16 @@ mod tests {
 
     #[test]
     fn object_properties_hold_textures_and_gc_relabels_them() {
-        let (mut main, object_id, _) = test_main(());
+        let (
+            mut main,
+            TestMainIds {
+                image_id,
+                texture_id,
+                material_id,
+                object_id,
+                ..
+            },
+        ) = test_main(());
         let spare_image_id = main.retain_image(png_image()).unwrap();
         let spare_texture_id = main
             .retain_texture(MeshTexture::new(spare_image_id))
@@ -1926,16 +1960,13 @@ mod tests {
             })
         );
 
-        // Release the unreferenced file and the first image and texture, so
-        // the referenced ones renumber.
+        // Release the unreferenced file and the test main's image and texture,
+        // so the referenced ones renumber.
         main.release_file(file_id).unwrap();
-        let (first_texture_id, _) = main.iter_textures().next().unwrap();
-        let first_image_id = main.texture(first_texture_id).unwrap().image_id;
-        let (material_id, _) = main.iter_materials().next().unwrap();
         main.set_material(material_id, MeshMaterial::default())
             .unwrap();
-        main.release_texture(first_texture_id).unwrap();
-        main.release_image(first_image_id).unwrap();
+        main.release_texture(texture_id).unwrap();
+        main.release_image(image_id).unwrap();
 
         let remap = main.gc().unwrap();
         let object = main.object(object_id).unwrap();
@@ -1957,7 +1988,7 @@ mod tests {
 
     #[test]
     fn take_and_put_ext_move_the_document_over() {
-        let (main, object_id, _) = test_main(Tag(3));
+        let (main, TestMainIds { object_id, .. }) = test_main(Tag(3));
         let taken = main.take_ext();
         assert_eq!(taken.ext, Tag(3));
         assert!(taken.main.object(object_id).is_some());

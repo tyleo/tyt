@@ -1047,8 +1047,8 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain,
+        VoxObject, VoxPalette, VoxValuePool,
     };
 
     /// Renders `main` with the given pattern and collapse flags, unwrapping.
@@ -1292,9 +1292,12 @@ mod tests {
         main
     }
 
-    /// Adds a palette with `count` `baseColor` materials to `main`; only
-    /// the material count matters to the tree, so every color is the same.
-    fn retain_palette_with_materials(main: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
+    /// Adds a palette with `count` `baseColor` materials to `main`. Only the
+    /// material count matters to the tree, so every color is the same.
+    fn retain_palette_with_materials(
+        main: &mut VoxMain,
+        count: usize,
+    ) -> (U32Id<BVoxPalette>, Vec<U32Id<BVoxMaterial>>) {
         let colors_value_pool_id =
             main.retain_value_pool(VoxValuePool::vec_4_float(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
@@ -1305,10 +1308,13 @@ mod tests {
                 U32Id::from_u32(0),
             )
             .unwrap();
+        let mut material_ids = Vec::new();
+
         for _ in 0..count {
-            palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+            material_ids.push(palette.retain_material(vec![U32Id::from_u32(0)]).unwrap());
         }
-        main.retain_palette(palette).unwrap()
+
+        (main.retain_palette(palette).unwrap(), material_ids)
     }
 
     /// A root placing one object `body` that carries a layer on palette 0 (two
@@ -1316,24 +1322,13 @@ mod tests {
     fn palette_ref_main() -> VoxMain {
         let mut main = VoxMain::default();
 
-        let first_palette_id = retain_palette_with_materials(&mut main, 2);
-        let first_material_id = main
-            .palette(first_palette_id)
-            .unwrap()
-            .iter_materials()
-            .next()
-            .unwrap();
-        let second_palette_id = retain_palette_with_materials(&mut main, 3);
-        let second_material_id = main
-            .palette(second_palette_id)
-            .unwrap()
-            .iter_materials()
-            .next()
-            .unwrap();
+        let (first_palette_id, first_material_ids) = retain_palette_with_materials(&mut main, 2);
+
+        let (second_palette_id, second_material_ids) = retain_palette_with_materials(&mut main, 3);
 
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        body.retain_layer(first_palette_id, first_material_id);
-        body.retain_layer(second_palette_id, second_material_id);
+        body.retain_layer(first_palette_id, first_material_ids[0]);
+        body.retain_layer(second_palette_id, second_material_ids[0]);
         let body_id = main.retain_object(body).unwrap();
 
         let root_id = main

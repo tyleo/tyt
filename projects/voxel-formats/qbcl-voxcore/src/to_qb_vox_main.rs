@@ -204,8 +204,9 @@ mod tests {
     use std::collections::BTreeSet;
     use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain,
+        VoxObject, VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8,
+        material::BASE_COLOR,
     };
 
     /// The linear-light components of a `#RRGGBB` hex string.
@@ -439,9 +440,7 @@ mod tests {
         assert_eq!(file.matrices.len(), 3);
     }
 
-    fn empty_object(main: &VoxMain<()>) -> VoxObject {
-        let palette_id = main.iter_palettes().next().unwrap().0;
-
+    fn empty_object(palette_id: U32Id<BVoxPalette>) -> VoxObject {
         let mut object = VoxObject::new("empty".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
         object.retain_layer(palette_id, U32Id::from_u32(0));
@@ -463,9 +462,9 @@ mod tests {
 
         palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
 
-        main.retain_palette(palette).unwrap();
+        let palette_id = main.retain_palette(palette).unwrap();
 
-        let copy = duplicate_object(&main, &empty_object(&main)).unwrap();
+        let copy = duplicate_object(&main, &empty_object(palette_id)).unwrap();
 
         assert_eq!(copy.layer_count(), 1);
 
@@ -478,9 +477,9 @@ mod tests {
     fn an_empty_layer_over_an_empty_palette_errors() {
         let mut main: VoxMain = VoxMain::default();
 
-        main.retain_palette(VoxPalette::default()).unwrap();
+        let palette_id = main.retain_palette(VoxPalette::default()).unwrap();
 
-        let actual = duplicate_object(&main, &empty_object(&main));
+        let actual = duplicate_object(&main, &empty_object(palette_id));
 
         assert!(matches!(actual, Err(Error::Invalid(_))));
     }
