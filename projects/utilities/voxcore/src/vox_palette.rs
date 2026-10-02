@@ -279,6 +279,31 @@ impl VoxPalette {
         Some(*unsafe { row.get(property_id) })
     }
 
+    /// Points `material_id`'s cell for `property_id` at `value_id`. Errors,
+    /// changing nothing, if either id is not this palette's. `value_id` must be
+    /// one of the property's value pool's values, which
+    /// [`VoxMain::set_material_value`](crate::VoxMain::set_material_value)
+    /// checks.
+    pub fn set_value_id(
+        &mut self,
+        material_id: U32Id<BVoxMaterial>,
+        property_id: U32Id<BVoxProperty>,
+        value_id: U32Id<BVoxValuePoolValue>,
+    ) -> Result<()> {
+        if !self.material_ids.is_retained(material_id) {
+            return Err(Error::UnknownMaterial { material_id });
+        }
+
+        if !self.property_ids.is_retained(property_id) {
+            return Err(Error::UnknownProperty { property_id });
+        }
+
+        // Safety: a retained material has a value id for every property.
+        let row = unsafe { self.materials.get_mut(material_id) };
+        *unsafe { row.get_mut(property_id) } = value_id;
+        Ok(())
+    }
+
     /// Translates each material's cells through the value relabeling of the
     /// value pool its property draws from, matching value pools a
     /// [`VoxMain`](crate::VoxMain) is compacting. `remaps` is indexed by the
@@ -470,6 +495,51 @@ mod tests {
             })
         );
         assert_eq!(palette.material_count(), 0);
+    }
+
+    #[test]
+    fn set_value_id_points_one_cell() {
+        let mut palette = VoxPalette::default();
+        let color_id = palette
+            .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
+            .unwrap();
+
+        let roughness_id = palette
+            .retain_property("roughness".to_owned(), value_pool_id(1), value_id(0))
+            .unwrap();
+
+        let a_id = palette
+            .retain_material(vec![value_id(0), value_id(0)])
+            .unwrap();
+
+        let b_id = palette
+            .retain_material(vec![value_id(0), value_id(0)])
+            .unwrap();
+
+        assert_eq!(
+            palette.set_value_id(b_id, roughness_id, value_id(2)),
+            Ok(())
+        );
+
+        assert_eq!(palette.value_id(b_id, roughness_id), Some(value_id(2)));
+        assert_eq!(palette.value_id(b_id, color_id), Some(value_id(0)));
+        assert_eq!(palette.value_id(a_id, roughness_id), Some(value_id(0)));
+
+        let unknown_material_id = U32Id::<BVoxMaterial>::from_u32(9);
+        assert_eq!(
+            palette.set_value_id(unknown_material_id, roughness_id, value_id(1)),
+            Err(Error::UnknownMaterial {
+                material_id: unknown_material_id
+            })
+        );
+
+        let unknown_property_id = U32Id::<BVoxProperty>::from_u32(9);
+        assert_eq!(
+            palette.set_value_id(a_id, unknown_property_id, value_id(1)),
+            Err(Error::UnknownProperty {
+                property_id: unknown_property_id
+            })
+        );
     }
 
     #[test]

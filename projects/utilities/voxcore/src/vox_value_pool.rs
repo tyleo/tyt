@@ -35,23 +35,23 @@ impl VoxValuePool {
     /// Creates a `float` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if a value is NaN.
     pub fn float(values: Vec<f64>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, float_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Float(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates an `int` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if a value's magnitude exceeds `2^53 - 1`.
     pub fn int(values: Vec<i64>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, int_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Int(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates a `json` value pool holding `values`, retaining ids in order.
@@ -75,84 +75,230 @@ impl VoxValuePool {
     /// Creates a `vec-2-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_2_float(values: Vec<[f64; 2]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, floats_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Vec2Float(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates a `vec-2-int` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component's magnitude exceeds
     /// `2^53 - 1`.
     pub fn vec_2_int(values: Vec<[i64; 2]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, ints_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Vec2Int(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates a `vec-3-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_3_float(values: Vec<[f64; 3]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, floats_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Vec3Float(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates a `vec-3-int` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component's magnitude exceeds
     /// `2^53 - 1`.
     pub fn vec_3_int(values: Vec<[i64; 3]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, ints_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Vec3Int(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates a `vec-4-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_4_float(values: Vec<[f64; 4]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, floats_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Vec4Float(values),
-        }
-        .checked()
+        })
     }
 
     /// Creates a `vec-4-int` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component's magnitude exceeds
     /// `2^53 - 1`.
     pub fn vec_4_int(values: Vec<[i64; 4]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
+        let (value_ids, values) = checked_columns(values, ints_in_domain)?;
+
+        Ok(Self {
             value_ids,
             kind: VoxValuePoolKind::Vec4Int(values),
-        }
-        .checked()
-    }
-
-    /// Maps a freshly built value pool's first out-of-domain value onto the
-    /// creation error.
-    fn checked(self) -> Result<Self> {
-        match self.first_out_of_domain_value() {
-            None => Ok(self),
-            Some(value_id) => Err(Error::MalformedValuePoolValue { value_id }),
-        }
+        })
     }
 
     /// The kind, for matching.
     pub fn kind(&self) -> &VoxValuePoolKind {
         &self.kind
+    }
+
+    /// Appends a `bool` value and returns its id. Errors, changing nothing, if
+    /// the value pool holds another kind.
+    pub fn retain_boolean_value(&mut self, value: bool) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Bool(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `float` value and returns its id. Errors, changing nothing, if
+    /// the value pool holds another kind or `value` is NaN.
+    pub fn retain_float_value(&mut self, value: f64) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !float_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends an `int` value and returns its id. Errors, changing nothing, if
+    /// the value pool holds another kind or `value`'s magnitude exceeds
+    /// `2^53 - 1`.
+    pub fn retain_int_value(&mut self, value: i64) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !int_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `json` value and returns its id. Errors, changing nothing, if
+    /// the value pool holds another kind.
+    pub fn retain_json_value(&mut self, value: VoxValue) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Json(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `string` value and returns its id. Errors, changing nothing,
+    /// if the value pool holds another kind.
+    pub fn retain_string_value(&mut self, value: String) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::String(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `vec-2-float` value and returns its id. Errors, changing
+    /// nothing, if the value pool holds another kind or a component is NaN.
+    pub fn retain_vec_2_float_value(
+        &mut self,
+        value: [f64; 2],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Vec2Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !floats_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `vec-2-int` value and returns its id. Errors, changing
+    /// nothing, if the value pool holds another kind or a component's magnitude
+    /// exceeds `2^53 - 1`.
+    pub fn retain_vec_2_int_value(&mut self, value: [i64; 2]) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Vec2Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !ints_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `vec-3-float` value and returns its id. Errors, changing
+    /// nothing, if the value pool holds another kind or a component is NaN.
+    pub fn retain_vec_3_float_value(
+        &mut self,
+        value: [f64; 3],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Vec3Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !floats_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `vec-3-int` value and returns its id. Errors, changing
+    /// nothing, if the value pool holds another kind or a component's magnitude
+    /// exceeds `2^53 - 1`.
+    pub fn retain_vec_3_int_value(&mut self, value: [i64; 3]) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Vec3Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !ints_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `vec-4-float` value and returns its id. Errors, changing
+    /// nothing, if the value pool holds another kind or a component is NaN.
+    pub fn retain_vec_4_float_value(
+        &mut self,
+        value: [f64; 4],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Vec4Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !floats_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
+    }
+
+    /// Appends a `vec-4-int` value and returns its id. Errors, changing
+    /// nothing, if the value pool holds another kind or a component's magnitude
+    /// exceeds `2^53 - 1`.
+    pub fn retain_vec_4_int_value(&mut self, value: [i64; 4]) -> Result<U32Id<BVoxValuePoolValue>> {
+        let VoxValuePoolKind::Vec4Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        if !ints_in_domain(&value) {
+            return Err(Error::MalformedRetainedValue);
+        }
+
+        Ok(retain_into(&mut self.value_ids, values, value))
     }
 
     /// Releases value `id`, keeping the surviving values' listing order. The id
@@ -185,39 +331,40 @@ impl VoxValuePool {
     }
 
     /// The id of the first value outside its kind's value domain, or `None` if
-    /// every value is within it. The checked constructors gate on this, so a
-    /// flaw found later is a voxcore bug.
-    /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
+    /// every value is within it. The checked constructors and the
+    /// `retain_*_value` methods gate on the domain, so a flaw found later is a
+    /// voxcore bug. [`VoxMain::validate`](crate::VoxMain::validate) audits for
+    /// one anyway.
     pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
-        for (value_id, value) in self.iter_values() {
-            let in_domain = match value {
-                VoxValuePoolValueRef::Float(value) => float_in_domain(value),
+        let ids = &self.value_ids;
 
-                VoxValuePoolValueRef::Int(value) => int_in_domain(value),
+        match &self.kind {
+            VoxValuePoolKind::Float(values) => first_out_of_domain(ids, values, float_in_domain),
 
-                VoxValuePoolValueRef::Vec2Float(components) => floats_in_domain(components),
+            VoxValuePoolKind::Int(values) => first_out_of_domain(ids, values, int_in_domain),
 
-                VoxValuePoolValueRef::Vec2Int(components) => ints_in_domain(components),
+            VoxValuePoolKind::Vec2Float(values) => {
+                first_out_of_domain(ids, values, floats_in_domain)
+            }
 
-                VoxValuePoolValueRef::Vec3Float(components) => floats_in_domain(components),
+            VoxValuePoolKind::Vec2Int(values) => first_out_of_domain(ids, values, ints_in_domain),
 
-                VoxValuePoolValueRef::Vec3Int(components) => ints_in_domain(components),
+            VoxValuePoolKind::Vec3Float(values) => {
+                first_out_of_domain(ids, values, floats_in_domain)
+            }
 
-                VoxValuePoolValueRef::Vec4Float(components) => floats_in_domain(components),
+            VoxValuePoolKind::Vec3Int(values) => first_out_of_domain(ids, values, ints_in_domain),
 
-                VoxValuePoolValueRef::Vec4Int(components) => ints_in_domain(components),
+            VoxValuePoolKind::Vec4Float(values) => {
+                first_out_of_domain(ids, values, floats_in_domain)
+            }
 
-                VoxValuePoolValueRef::Bool(_)
-                | VoxValuePoolValueRef::Json(_)
-                | VoxValuePoolValueRef::String(_) => true,
-            };
+            VoxValuePoolKind::Vec4Int(values) => first_out_of_domain(ids, values, ints_in_domain),
 
-            if !in_domain {
-                return Some(value_id);
+            VoxValuePoolKind::Bool(_) | VoxValuePoolKind::Json(_) | VoxValuePoolKind::String(_) => {
+                None
             }
         }
-
-        None
     }
 
     /// Compacts the value id pool back to a contiguous `0..len` in listing
@@ -431,25 +578,23 @@ impl PartialEq for VoxValuePool {
 const MAX_INT_MAGNITUDE: i64 = (1 << 53) - 1;
 
 /// Whether `value` is within the float value domain.
-fn float_in_domain(value: f64) -> bool {
+fn float_in_domain(value: &f64) -> bool {
     !value.is_nan()
 }
 
 /// Whether every component of a float vector is within the float value domain.
-fn floats_in_domain(components: &[f64]) -> bool {
-    components
-        .iter()
-        .all(|&component| float_in_domain(component))
+fn floats_in_domain<const N: usize>(components: &[f64; N]) -> bool {
+    components.iter().all(float_in_domain)
 }
 
 /// Whether `value` is within the int value domain.
-fn int_in_domain(value: i64) -> bool {
-    (-MAX_INT_MAGNITUDE..=MAX_INT_MAGNITUDE).contains(&value)
+fn int_in_domain(value: &i64) -> bool {
+    (-MAX_INT_MAGNITUDE..=MAX_INT_MAGNITUDE).contains(value)
 }
 
 /// Whether every component of an int vector is within the int value domain.
-fn ints_in_domain(components: &[i64]) -> bool {
-    components.iter().all(|&component| int_in_domain(component))
+fn ints_in_domain<const N: usize>(components: &[i64; N]) -> bool {
+    components.iter().all(int_in_domain)
 }
 
 /// Builds the paired id pool and value column for `values`, retaining ids in
@@ -465,9 +610,59 @@ fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxValuePoolValue>, IdField<BVoxValu
     (ids, column)
 }
 
+/// Builds the columns for `values` as [`columns`] does. Errors, building
+/// nothing, on the first value outside the domain. Ids retain in order, so a
+/// value's index is the id it would take.
+fn checked_columns<T>(
+    values: Vec<T>,
+    in_domain: fn(&T) -> bool,
+) -> Result<(IdStruct<BVoxValuePoolValue>, IdField<BVoxValuePoolValue, T>)> {
+    for (index, value) in (0..).zip(&values) {
+        if !in_domain(value) {
+            return Err(Error::MalformedValuePoolValue {
+                value_id: U32Id::from_u32(index),
+            });
+        }
+    }
+
+    Ok(columns(values))
+}
+
+/// The id of the first value in `column` outside the domain.
+fn first_out_of_domain<T>(
+    ids: &IdStruct<BVoxValuePoolValue>,
+    column: &IdField<BVoxValuePoolValue, T>,
+    in_domain: fn(&T) -> bool,
+) -> Option<U32Id<BVoxValuePoolValue>> {
+    // Safety: the column holds a value for every id in its id pool.
+    let values = unsafe { column.iter(ids) };
+
+    for (value_id, value) in ids.iter().zip(values) {
+        if !in_domain(value) {
+            return Some(value_id);
+        }
+    }
+
+    None
+}
+
+/// Retains an id in `ids` and writes `value` to it in `column`.
+fn retain_into<T>(
+    ids: &mut IdStruct<BVoxValuePoolValue>,
+    column: &mut IdField<BVoxValuePoolValue, T>,
+    value: T,
+) -> U32Id<BVoxValuePoolValue> {
+    let value_id = ids.retain();
+    column.retain(value_id, value);
+    value_id
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxValuePoolValue, Error, VoxValuePool, VoxValuePoolValueRef};
+    use crate::{
+        BVoxValuePoolValue, Error, VoxValue, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
+        vox_value_pool::columns,
+    };
     use branded_id::U32Id;
 
     fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
@@ -616,6 +811,163 @@ mod tests {
                 value_id: value_id(0)
             }
         );
+    }
+
+    #[test]
+    fn retain_int_value_appends_to_the_listing() {
+        let mut value_pool = VoxValuePool::int(vec![10, 20, 30]).unwrap();
+        value_pool.release_value_stable(value_id(0));
+
+        // The released id comes back, listed last.
+        assert_eq!(value_pool.retain_int_value(40), Ok(value_id(0)));
+        assert_eq!(value_pool.retain_int_value(50), Ok(value_id(3)));
+        assert_eq!(value_pool, VoxValuePool::int(vec![20, 30, 40, 50]).unwrap());
+    }
+
+    #[test]
+    fn each_retain_appends_its_kind() {
+        let mut booleans = VoxValuePool::boolean(vec![]);
+        booleans.retain_boolean_value(true).unwrap();
+        assert_eq!(booleans, VoxValuePool::boolean(vec![true]));
+
+        let mut floats = VoxValuePool::float(vec![]).unwrap();
+        floats.retain_float_value(f64::INFINITY).unwrap();
+        assert_eq!(floats, VoxValuePool::float(vec![f64::INFINITY]).unwrap());
+
+        let mut ints = VoxValuePool::int(vec![]).unwrap();
+        ints.retain_int_value(-1).unwrap();
+        assert_eq!(ints, VoxValuePool::int(vec![-1]).unwrap());
+
+        let mut jsons = VoxValuePool::json(vec![]);
+        jsons.retain_json_value(VoxValue::Null).unwrap();
+        assert_eq!(jsons, VoxValuePool::json(vec![VoxValue::Null]));
+
+        let mut strings = VoxValuePool::string(vec![]);
+        strings.retain_string_value("rust".to_owned()).unwrap();
+        assert_eq!(strings, VoxValuePool::string(vec!["rust".to_owned()]));
+
+        let mut vec_2_floats = VoxValuePool::vec_2_float(vec![]).unwrap();
+        vec_2_floats.retain_vec_2_float_value([0.0, 1.0]).unwrap();
+        assert_eq!(
+            vec_2_floats,
+            VoxValuePool::vec_2_float(vec![[0.0, 1.0]]).unwrap()
+        );
+
+        let mut vec_2_ints = VoxValuePool::vec_2_int(vec![]).unwrap();
+        vec_2_ints.retain_vec_2_int_value([0, 1]).unwrap();
+        assert_eq!(vec_2_ints, VoxValuePool::vec_2_int(vec![[0, 1]]).unwrap());
+
+        let mut vec_3_floats = VoxValuePool::vec_3_float(vec![]).unwrap();
+        vec_3_floats
+            .retain_vec_3_float_value([0.0, 1.0, 2.0])
+            .unwrap();
+        assert_eq!(
+            vec_3_floats,
+            VoxValuePool::vec_3_float(vec![[0.0, 1.0, 2.0]]).unwrap()
+        );
+
+        let mut vec_3_ints = VoxValuePool::vec_3_int(vec![]).unwrap();
+        vec_3_ints.retain_vec_3_int_value([0, 1, 2]).unwrap();
+        assert_eq!(
+            vec_3_ints,
+            VoxValuePool::vec_3_int(vec![[0, 1, 2]]).unwrap()
+        );
+
+        let mut vec_4_floats = VoxValuePool::vec_4_float(vec![]).unwrap();
+        vec_4_floats
+            .retain_vec_4_float_value([0.0, 1.0, 2.0, 3.0])
+            .unwrap();
+        assert_eq!(
+            vec_4_floats,
+            VoxValuePool::vec_4_float(vec![[0.0, 1.0, 2.0, 3.0]]).unwrap()
+        );
+
+        let mut vec_4_ints = VoxValuePool::vec_4_int(vec![]).unwrap();
+        vec_4_ints.retain_vec_4_int_value([0, 1, 2, 3]).unwrap();
+        assert_eq!(
+            vec_4_ints,
+            VoxValuePool::vec_4_int(vec![[0, 1, 2, 3]]).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_retain_rejects_another_kind_without_spending_an_id() {
+        let mut value_pool = VoxValuePool::float(vec![0.5]).unwrap();
+
+        assert_eq!(
+            value_pool.retain_int_value(1),
+            Err(Error::RetainedValueKind)
+        );
+        assert_eq!(
+            value_pool.retain_float_value(f64::NAN),
+            Err(Error::MalformedRetainedValue)
+        );
+        assert_eq!(value_pool, VoxValuePool::float(vec![0.5]).unwrap());
+        assert_eq!(value_pool.retain_float_value(1.0), Ok(value_id(1)));
+    }
+
+    #[test]
+    fn each_numeric_retain_rejects_an_out_of_domain_value() {
+        const PAST_CAP: i64 = 1 << 53;
+        let malformed = Err(Error::MalformedRetainedValue);
+
+        let mut floats = VoxValuePool::float(vec![]).unwrap();
+        assert_eq!(floats.retain_float_value(f64::NAN), malformed);
+
+        let mut ints = VoxValuePool::int(vec![]).unwrap();
+        assert_eq!(ints.retain_int_value(-PAST_CAP), malformed);
+
+        let mut vec_2_floats = VoxValuePool::vec_2_float(vec![]).unwrap();
+        assert_eq!(
+            vec_2_floats.retain_vec_2_float_value([0.0, f64::NAN]),
+            malformed
+        );
+
+        let mut vec_2_ints = VoxValuePool::vec_2_int(vec![]).unwrap();
+        assert_eq!(vec_2_ints.retain_vec_2_int_value([0, PAST_CAP]), malformed);
+
+        let mut vec_3_floats = VoxValuePool::vec_3_float(vec![]).unwrap();
+        assert_eq!(
+            vec_3_floats.retain_vec_3_float_value([0.0, 0.0, f64::NAN]),
+            malformed
+        );
+
+        let mut vec_3_ints = VoxValuePool::vec_3_int(vec![]).unwrap();
+        assert_eq!(
+            vec_3_ints.retain_vec_3_int_value([0, 0, PAST_CAP]),
+            malformed
+        );
+
+        let mut vec_4_floats = VoxValuePool::vec_4_float(vec![]).unwrap();
+        assert_eq!(
+            vec_4_floats.retain_vec_4_float_value([0.0, 0.0, 0.0, f64::NAN]),
+            malformed
+        );
+
+        let mut vec_4_ints = VoxValuePool::vec_4_int(vec![]).unwrap();
+        assert_eq!(
+            vec_4_ints.retain_vec_4_int_value([0, 0, 0, PAST_CAP]),
+            malformed
+        );
+    }
+
+    #[test]
+    fn the_audit_finds_a_value_past_the_gates() {
+        // A struct literal skips the constructor's gate, as a voxcore bug would.
+        let (value_ids, values) = columns(vec![[0.0, 0.0], [0.0, 1.0], [f64::NAN, 0.0]]);
+        let mut value_pool = VoxValuePool {
+            value_ids,
+            kind: VoxValuePoolKind::Vec2Float(values),
+        };
+
+        assert_eq!(value_pool.first_out_of_domain_value(), Some(value_id(2)));
+
+        // Listed first, the bad value still reports its own id.
+        value_pool.move_value(value_id(2), 0).unwrap();
+        assert_eq!(value_pool.first_out_of_domain_value(), Some(value_id(2)));
+
+        value_pool.release_value_stable(value_id(2));
+        assert_eq!(value_pool.first_out_of_domain_value(), None);
     }
 
     #[test]

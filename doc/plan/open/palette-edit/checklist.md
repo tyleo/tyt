@@ -33,7 +33,7 @@ The design is in the [README](README.md). Check steps off as they land.
       `parser/syntax_node.rs`). `MeshEnvironment::bind` binds only the
       properties the scan finds, so `program/program_run.rs` parses before
       binding.
-- [ ] **S3. voxcore setters.** Add `VoxValuePoolValue` and an append on
+- [x] **S3. voxcore setters.** Add `VoxValuePoolValue` and an append on
       `VoxValuePool` beside `release_value_stable` (`vox_value_pool.rs`). The
       append domain-checks like `checked`. Add a cell setter on `VoxPalette`
       beside `value_id` (`vox_palette.rs`). `VoxMain` wraps them as

@@ -41,3 +41,21 @@ they land.
   for each geometry. `computed_type` gives a computed binding its type before
   any geometry exists. `Streams` now derives once per object.
 - A destination check error now rises before an evaluation error.
+
+## S3. voxcore setters
+
+- `VoxValuePool` gains one `retain_<kind>_value` per kind, matching its
+  constructors. `VoxMain` wraps each one under the same name. These replace
+  the README's `retain_value_pool_value` and `VoxValuePoolValue`, so the
+  caller picks the method for its value's kind. S5 compares a written value
+  against a pool's values through `VoxValuePoolValueRef`.
+- Each append checks the pool's kind first, then the value's domain.
+- The checked constructors scan their own values before building and drop
+  `checked`. `first_out_of_domain_value`, now only the audit `validate` runs,
+  matches the kind once and walks the typed column. The domain checks take
+  refs, so one function serves a constructor, an append, and the audit.
+- The appends and `VoxPalette::set_value_id` are public, like `move_value` and
+  `retain_property`. `VoxMain` adds the cross-reference checks.
+- A rejected value has no id yet, so the two new errors carry none:
+  `RetainedValueKind` and `MalformedRetainedValue`.
+- An appended value can reuse a released id. It still lists last.

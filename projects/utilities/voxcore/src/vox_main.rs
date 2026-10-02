@@ -1,7 +1,7 @@
 use crate::{
     BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
     BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, TakenExt, VoxEffectivePalette,
-    VoxExt, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValuePool,
+    VoxExt, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue, VoxValuePool,
     check_node_transform, first_cycle_node_index,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
@@ -726,6 +726,49 @@ impl<T: VoxExt> VoxMain<T> {
         Ok(())
     }
 
+    /// Points palette `palette_id`'s material `material_id` at `value_id` for
+    /// property `property_id`. Errors, changing nothing, if:
+    ///
+    /// 1. `palette_id` is not one of this state's
+    /// 2. `material_id` or `property_id` is not one of the palette's
+    /// 3. `value_id` is not one of the property's value pool's values
+    pub fn set_material_value(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        material_id: U32Id<BVoxMaterial>,
+        property_id: U32Id<BVoxProperty>,
+        value_id: U32Id<BVoxValuePoolValue>,
+    ) -> Result<()> {
+        if !self.state.palette_ids.is_retained(palette_id) {
+            return Err(Error::UnknownPalette { palette_id });
+        }
+
+        // Safety: the palette id is retained.
+        let palette_ref = unsafe { self.state.palettes.get(palette_id) };
+        if !palette_ref.contains_material(material_id) {
+            return Err(Error::UnknownMaterial { material_id });
+        }
+
+        let Some(property) = palette_ref.property(property_id) else {
+            return Err(Error::UnknownProperty { property_id });
+        };
+
+        let value_pool = self
+            .value_pool(property.value_pool_id)
+            .expect("a property names a live value pool");
+
+        if !value_pool.contains_value(value_id) {
+            return Err(Error::UnknownValuePoolValue { value_id });
+        }
+
+        // Safety: the palette id is retained.
+        unsafe { self.state.palettes.get_mut(palette_id) }.set_value_id(
+            material_id,
+            property_id,
+            value_id,
+        )
+    }
+
     /// Retains an object at the end of the listing, returning its id. Errors,
     /// changing nothing, if a layer references a palette that is not one of
     /// this state's or a live voxel samples a material that is not one of its
@@ -1109,6 +1152,155 @@ impl<T: VoxExt> VoxMain<T> {
         unsafe { self.state.value_pools.release(id) };
         self.state.value_pool_ids.release_stable(id);
         Ok(())
+    }
+
+    /// Appends a `bool` value to value pool `value_pool_id` and returns its id.
+    /// Errors, changing nothing, if `value_pool_id` is not one of this state's
+    /// value pools or under the [`VoxValuePool::retain_boolean_value`] rules.
+    pub fn retain_boolean_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: bool,
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_boolean_value(value)
+    }
+
+    /// Appends a `float` value to value pool `value_pool_id` and returns its
+    /// id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the [`VoxValuePool::retain_float_value`]
+    /// rules.
+    pub fn retain_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: f64,
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_float_value(value)
+    }
+
+    /// Appends an `int` value to value pool `value_pool_id` and returns its id.
+    /// Errors, changing nothing, if `value_pool_id` is not one of this state's
+    /// value pools or under the [`VoxValuePool::retain_int_value`] rules.
+    pub fn retain_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: i64,
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?.retain_int_value(value)
+    }
+
+    /// Appends a `json` value to value pool `value_pool_id` and returns its id.
+    /// Errors, changing nothing, if `value_pool_id` is not one of this state's
+    /// value pools or under the [`VoxValuePool::retain_json_value`] rules.
+    pub fn retain_json_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: VoxValue,
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?.retain_json_value(value)
+    }
+
+    /// Appends a `string` value to value pool `value_pool_id` and returns its
+    /// id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the [`VoxValuePool::retain_string_value`]
+    /// rules.
+    pub fn retain_string_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: String,
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_string_value(value)
+    }
+
+    /// Appends a `vec-2-float` value to value pool `value_pool_id` and returns
+    /// its id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the
+    /// [`VoxValuePool::retain_vec_2_float_value`] rules.
+    pub fn retain_vec_2_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: [f64; 2],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_vec_2_float_value(value)
+    }
+
+    /// Appends a `vec-2-int` value to value pool `value_pool_id` and returns
+    /// its id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the
+    /// [`VoxValuePool::retain_vec_2_int_value`] rules.
+    pub fn retain_vec_2_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: [i64; 2],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_vec_2_int_value(value)
+    }
+
+    /// Appends a `vec-3-float` value to value pool `value_pool_id` and returns
+    /// its id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the
+    /// [`VoxValuePool::retain_vec_3_float_value`] rules.
+    pub fn retain_vec_3_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: [f64; 3],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_vec_3_float_value(value)
+    }
+
+    /// Appends a `vec-3-int` value to value pool `value_pool_id` and returns
+    /// its id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the
+    /// [`VoxValuePool::retain_vec_3_int_value`] rules.
+    pub fn retain_vec_3_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: [i64; 3],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_vec_3_int_value(value)
+    }
+
+    /// Appends a `vec-4-float` value to value pool `value_pool_id` and returns
+    /// its id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the
+    /// [`VoxValuePool::retain_vec_4_float_value`] rules.
+    pub fn retain_vec_4_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: [f64; 4],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_vec_4_float_value(value)
+    }
+
+    /// Appends a `vec-4-int` value to value pool `value_pool_id` and returns
+    /// its id. Errors, changing nothing, if `value_pool_id` is not one of this
+    /// state's value pools or under the
+    /// [`VoxValuePool::retain_vec_4_int_value`] rules.
+    pub fn retain_vec_4_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value: [i64; 4],
+    ) -> Result<U32Id<BVoxValuePoolValue>> {
+        self.value_pool_mut(value_pool_id)?
+            .retain_vec_4_int_value(value)
+    }
+
+    /// Value pool `id`, for an append. Errors if `id` is not one of this state's
+    /// value pools.
+    fn value_pool_mut(&mut self, id: U32Id<BVoxValuePool>) -> Result<&mut VoxValuePool> {
+        if !self.state.value_pool_ids.is_retained(id) {
+            return Err(Error::UnknownValuePool { value_pool_id: id });
+        }
+
+        // Safety: the value pool id is retained.
+        Ok(unsafe { self.state.value_pools.get_mut(id) })
     }
 
     /// Releases `value_id` from `value_pool_id`. Leaves a hole until
@@ -3107,6 +3299,110 @@ mod tests {
     }
 
     #[test]
+    fn a_retained_value_lands_in_one_cell() {
+        let mut main = VoxMain::default();
+        let ints_id = int_value_pool_id(&mut main, vec![10, 20]);
+        let a_id = main.retain_palette(two_material_palette(ints_id)).unwrap();
+        let b_id = main.retain_palette(two_material_palette(ints_id)).unwrap();
+
+        let thirty_id = main.retain_int_value(ints_id, 30).unwrap();
+
+        assert_eq!(
+            main.value_pool(ints_id),
+            Some(&VoxValuePool::int(vec![10, 20, 30]).unwrap())
+        );
+
+        let property_id = U32Id::<BVoxProperty>::from_u32(0);
+        assert_eq!(
+            main.set_material_value(a_id, material_id(1), property_id, thirty_id),
+            Ok(())
+        );
+
+        // Palette b shares the value pool and keeps its cells.
+        let a = main.palette(a_id).unwrap();
+        assert_eq!(a.value_id(material_id(0), property_id), Some(value_id(0)));
+        assert_eq!(a.value_id(material_id(1), property_id), Some(thirty_id));
+
+        let b = main.palette(b_id).unwrap();
+        assert_eq!(b.value_id(material_id(1), property_id), Some(value_id(1)));
+
+        main.validate().unwrap();
+    }
+
+    #[test]
+    fn value_setters_reject_without_changing_state() {
+        let mut main = VoxMain::default();
+        let ints_id = int_value_pool_id(&mut main, vec![10, 20]);
+
+        // Another value pool holds a value 2, which the ints lack.
+        int_value_pool_id(&mut main, vec![1, 2, 3]);
+
+        let a_id = main.retain_palette(two_material_palette(ints_id)).unwrap();
+        let property_id = U32Id::<BVoxProperty>::from_u32(0);
+
+        assert_eq!(
+            main.retain_int_value(value_pool_id(9), 30),
+            Err(Error::UnknownValuePool {
+                value_pool_id: value_pool_id(9)
+            })
+        );
+
+        assert_eq!(
+            main.retain_float_value(ints_id, 0.5),
+            Err(Error::RetainedValueKind)
+        );
+
+        assert_eq!(
+            main.retain_int_value(ints_id, 1 << 53),
+            Err(Error::MalformedRetainedValue)
+        );
+
+        assert_eq!(
+            main.set_material_value(palette_id(9), material_id(0), property_id, value_id(1)),
+            Err(Error::UnknownPalette {
+                palette_id: palette_id(9)
+            })
+        );
+
+        assert_eq!(
+            main.set_material_value(a_id, material_id(9), property_id, value_id(1)),
+            Err(Error::UnknownMaterial {
+                material_id: material_id(9)
+            })
+        );
+
+        let unknown_property_id = U32Id::<BVoxProperty>::from_u32(9);
+        assert_eq!(
+            main.set_material_value(a_id, material_id(0), unknown_property_id, value_id(1)),
+            Err(Error::UnknownProperty {
+                property_id: unknown_property_id
+            })
+        );
+
+        // Value 2 lies in the other value pool, not the property's.
+        assert_eq!(
+            main.set_material_value(a_id, material_id(0), property_id, value_id(2)),
+            Err(Error::UnknownValuePoolValue {
+                value_id: value_id(2)
+            })
+        );
+
+        assert_eq!(
+            main.value_pool(ints_id),
+            Some(&VoxValuePool::int(vec![10, 20]).unwrap())
+        );
+
+        assert_eq!(
+            main.palette(a_id)
+                .unwrap()
+                .value_id(material_id(0), property_id),
+            Some(value_id(0))
+        );
+
+        main.validate().unwrap();
+    }
+
+    #[test]
     fn gc_after_moves_renumbers_to_listing_order() {
         let mut main = VoxMain::default();
         let ints_id = int_value_pool_id(&mut main, vec![1, 2]);
@@ -3676,6 +3972,8 @@ mod tests {
             ])
         });
 
+        assert_rejects_unchanged(&mut main, |s| s.retain_float_value(ints_id, 0.5));
+
         // Root setters.
         assert_rejects_unchanged(&mut main, |s| s.push_root_hierarchy_node_id(node_id(9)));
         assert_rejects_unchanged(&mut main, |s| s.push_root_hierarchy_node_id(live_node_id));
@@ -3740,6 +4038,15 @@ mod tests {
 
         assert_rejects_unchanged(&mut main, |s| {
             s.release_property(live_palette_id, U32Id::from_u32(9))
+        });
+
+        assert_rejects_unchanged(&mut main, |s| {
+            s.set_material_value(
+                live_palette_id,
+                material_id(0),
+                U32Id::from_u32(0),
+                value_id(9),
+            )
         });
 
         // Releases of unknown ids.
@@ -3815,7 +4122,7 @@ mod tests {
         let wild_node_id = node_id(rng.below(8) as u32);
         let wild_material_id = material_id(rng.below(4) as u32);
         let wild_value_id = value_id(rng.below(4) as u32);
-        match rng.below(24) {
+        match rng.below(26) {
             0 => {
                 let values = (0..1 + rng.below(3)).map(|v| v as i64).collect();
                 main.retain_value_pool(VoxValuePool::int(values).unwrap());
@@ -3985,6 +4292,19 @@ mod tests {
                     wild_value_pool_id,
                     wild_value_id,
                     value_id(rng.below(4) as u32),
+                );
+            }
+
+            23 => {
+                let _ = main.retain_int_value(wild_value_pool_id, rng.below(4) as i64);
+            }
+
+            24 => {
+                let _ = main.set_material_value(
+                    wild_palette_id,
+                    wild_material_id,
+                    U32Id::from_u32(rng.below(3) as u32),
+                    wild_value_id,
                 );
             }
 

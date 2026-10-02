@@ -19,6 +19,12 @@ pub enum Error {
     /// A value pool was given a value outside its kind's value domain.
     MalformedValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
+    /// A value added to a value pool lies outside its kind's value domain.
+    MalformedRetainedValue,
+
+    /// A value added to a value pool differs from the value pool's kind.
+    RetainedValueKind,
+
     /// An object grid of this many cells would exceed
     /// [`MAX_GRID_CELLS`](crate::VoxObject::MAX_GRID_CELLS).
     GridCellCap { cells: u64 },
@@ -316,6 +322,14 @@ impl Display for Error {
                 "value {} is outside its kind's value domain",
                 value_id.to_u32()
             ),
+
+            Error::MalformedRetainedValue => {
+                write!(f, "the added value is outside its kind's value domain")
+            }
+
+            Error::RetainedValueKind => {
+                write!(f, "the added value's kind differs from the value pool's")
+            }
 
             Error::GridCellCap { cells } => write!(
                 f,
