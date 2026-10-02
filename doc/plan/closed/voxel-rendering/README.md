@@ -1,9 +1,13 @@
 # Voxel rendering plan
 
-Status: **open**. The shape below was agreed on 2026-09-28. Phase 1 and
-phase 2 are built. The [checklist](checklist.md) tracks both, and the
+Status: **closed.** The shape below was agreed on 2026-09-28. Phase 1 landed
+on main by 2026-09-30, ending with the docs in `c27d5834`, and phase 2 on
+2026-10-01, ending with bloom in `b201758e`. The steps lived in
+[checklist.md](checklist.md). Code-level choices are logged in
+[implementation-decisions.md](implementation-decisions.md). The
 [reference pages](../../../ref/render/README.md) hold the contract and the
-profile language.
+profile language. The parts it left open live in the
+[follow-ups plan](../../open/voxel-rendering-followups/README.md).
 
 ## Goal
 

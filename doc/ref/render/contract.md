@@ -1,13 +1,13 @@
 # The contract
 
-_Part of the [voxel rendering plan](../../plan/open/voxel-rendering/README.md)._
+_Part of the
+[voxel rendering plan](../../plan/closed/voxel-rendering/README.md)._
 
 The contract says what the image of a scene is. Every renderer implements it.
 The CPU reference in `voxrender` follows it literally and makes the review
-images and the golden images. A realtime tier turns off the features it cannot
-afford, and the reference renders that tier's golden images with the same
-features off. [`vxl object render`](render.md) runs the reference, and its
-[profiles](profile-language.md) and flags mirror the views and lights below.
+images and the golden images. [`vxl object render`](render.md) runs the
+reference, and its [profiles](profile-language.md) and flags mirror the views
+and lights below.
 
 ## Frame
 
@@ -27,7 +27,7 @@ normals. There is no smoothing, no bevel, and no sub-voxel detail.
 A voxel carries its effective palette material, in voxj's glTF vocabulary with
 glTF's defaults. The render shades `baseColor`, `metallic`, `roughness`,
 `emissiveColor`, `emissiveStrength`, and `occlusionStrength`. Every live voxel
-is opaque. Alpha, `transmission`, and `ior` are deferred.
+is opaque. Alpha, `transmission`, and `ior` have no effect.
 
 ## Shading
 
@@ -61,8 +61,7 @@ one occlusion switch. There are four kinds:
 The occlusion switch is `none` or `corner`. `corner` is the
 neighbor-occupancy rule voxel art uses, one value per face corner from the
 three adjacent cells. It has one implementation, in `voxsurface`: the
-reference shades with it, `object mesh` bakes it, and a standalone tier stores
-it with its faces. Traced occlusion is a later value.
+reference shades with it and `object mesh` bakes it.
 
 A shadow is one grid ray toward the light. The ray runs to infinity for a
 directional light and ends at a point or spot light. A light samples it at
@@ -78,8 +77,7 @@ one of three granularities:
    look with a sun
 
 `none` turns a light's shadow off. `per-corner` is the default look. It reads
-as one look with the corner occlusion, and a standalone tier computes it
-exactly where `per-pixel` needs a shadow map.
+as one look with the corner occlusion.
 
 ## Transforms
 

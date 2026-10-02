@@ -1,6 +1,7 @@
 # `vxl object render`
 
-_Part of the [voxel rendering plan](../../plan/open/voxel-rendering/README.md)._
+_Part of the
+[voxel rendering plan](../../plan/closed/voxel-rendering/README.md)._
 
 ```sh
 vxl object render <input> [options]

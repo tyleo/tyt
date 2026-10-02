@@ -1,6 +1,7 @@
 # Profile Language
 
-_Part of the [voxel rendering plan](../../plan/open/voxel-rendering/README.md)._
+_Part of the
+[voxel rendering plan](../../plan/closed/voxel-rendering/README.md)._
 
 A profile is a named piece of configuration whose elements stand for
 [`vxl object render`](render.md) flags. `--profile` applies a profile whole,

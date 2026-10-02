@@ -346,6 +346,32 @@ they land.
 - The vxl-commands README's intro gained rendering, and `vxl object render`
   and `vxl profile object render list` joined its command list.
 
+## S14. The `node` frame
+
+- `node_paths` yields a `NodePath` carrying the node id, the path, and the
+  world transform the chain composes, in voxel units. The selectors read the
+  path alone. The render reads the transform too. The match rule moved
+  out of `select_nodes` into `is_node_path_match`, its own crate-internal
+  file, because `NodeFrames` matches the same way.
+- `NodeFrames` builds once per render from that walk. It scales each path's
+  position by the voxel size and leaves the rotation and scale alone, as the
+  flatten does for the path's placements. A view riding a node then sits
+  where the node's voxels sit. A lookup errors through the element that reads
+  it, listing the matched paths when the glob matches several.
+- A `node` pose resolves on the node's axes before it turns. The position
+  goes through the frame's `transform_point`, which scales it. The look-at
+  resolves against the local position, and then the frame's rotation
+  composes on the left. A directional light's rotation composes the same
+  way. A point light's position goes through `transform_point`.
+- `PoseTransform` lost `Copy` because the `node` variant carries the path as
+  a `String`. The profile entries' `to_transform` became `into_transform`.
+- vxl keeps the node path as one more posing element beside the frame, the
+  position, and the rotation, so `--view-node` alone makes a view posed and
+  clashes with `--view-orbit`. The record builder reads the path only once
+  the frame is known: a path under another frame errors, and the `node`
+  frame with no path errors. The lights share the rule through one
+  `node_path` helper over the light's index.
+
 ## S15. Spot lights
 
 - `RenderLight::Spot` carries a position and a rotation beside the point
