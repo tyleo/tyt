@@ -12,7 +12,7 @@ categories = ["encoding", "game-development", "graphics"]
 independent = true
 
 [dependencies]
-branded-id = { version = "0.1.7", optional = true }
+branded-id = { version = "0.2.0", optional = true }
 goxl-voxcore = { version = "0.1.0", default-features = false, optional = true }
 mvox-voxcore = { version = "0.1.0", default-features = false, optional = true }
 qbcl-voxcore = { version = "0.1.0", default-features = false, optional = true }
@@ -26,7 +26,7 @@ voxj = { version = "0.1.3", default-features = false, optional = true }
 voxj-voxcore = { version = "0.2.0", default-features = false, optional = true }
 
 [dev-dependencies]
-branded-id = "0.1.7"
+branded-id = "0.2.0"
 serde = { version = "1", features = ["derive"] }
 ty-math = { version = "0.2.0", default-features = false }
 

@@ -1,10 +1,10 @@
 use crate::{
-    BMeshFile, BMeshPrimitive, BMeshTexture, Error, MeshPrimitive, MeshProperty, MeshPropertyValue,
-    MeshTextureRef, Result,
+    BMeshFile, BMeshMaterial, BMeshPrimitive, BMeshTexture, Error, MeshPrimitive, MeshProperty,
+    MeshPropertyValue, MeshTextureRef, Result,
 };
 use branded_id::{
     U32Id,
-    soa::{IdField, IdRemap, IdStruct},
+    soa::{IdList, IdRemap},
 };
 
 /// An object, the ordered primitives that make up one piece of geometry. A
@@ -17,11 +17,8 @@ pub struct MeshObject {
     /// Named properties outside the modeled set, names unique.
     properties: Vec<MeshProperty>,
 
-    /// Primitive id pool.
-    primitive_ids: IdStruct<BMeshPrimitive>,
-
     /// The primitives.
-    primitives: IdField<BMeshPrimitive, MeshPrimitive>,
+    primitives: IdList<BMeshPrimitive, MeshPrimitive>,
 }
 
 impl MeshObject {
@@ -31,26 +28,19 @@ impl MeshObject {
         Self {
             name,
             properties: Vec::new(),
-            primitive_ids: IdStruct::new(),
-            primitives: IdField::new(),
+            primitives: IdList::new(),
         }
     }
 
     /// Compacts the primitive id pool, returning its relabeling. The
     /// primitives' material ids were already rewritten by the caller.
     pub(crate) fn gc(&mut self) -> IdRemap<BMeshPrimitive, u32> {
-        let remap = self.primitive_ids.gc();
-
-        // Safety: the primitive column was in sync with the pre-gc id pool,
-        // and nothing has retained or released since.
-        unsafe { self.primitives.gc(&remap) };
-
-        remap
+        self.primitives.gc()
     }
 
     /// The id the next retained primitive takes.
     pub(crate) fn peek_next_primitive_id(&self) -> U32Id<BMeshPrimitive> {
-        self.primitive_ids.peek_next()
+        self.primitives.ids().peek_next()
     }
 
     /// Display name.
@@ -123,28 +113,38 @@ impl MeshObject {
         }
     }
 
+    /// Rewrites every primitive's material through `remap`, the material id
+    /// pool's relabeling from a [`MeshMain::gc`](crate::MeshMain::gc).
+    /// Requires a referentially valid object, so every translation resolves.
+    pub(crate) fn relabel_materials(&mut self, remap: &IdRemap<BMeshMaterial, u32>) {
+        for (_, primitive) in self.primitives.iter_mut() {
+            let Some(material_id) = primitive.material_id() else {
+                continue;
+            };
+
+            let new_material_id = remap
+                .new_id(material_id)
+                .expect("a primitive draws a live material in a valid state");
+
+            primitive.set_material_id(Some(new_material_id));
+        }
+    }
+
     /// Retains a primitive after any existing ones and returns its id. The
     /// material id is checked against the state's materials by
     /// [`MeshMain::retain_object`](crate::MeshMain::retain_object) on insert.
     pub fn retain_primitive(&mut self, primitive: MeshPrimitive) -> U32Id<BMeshPrimitive> {
-        let primitive_id = self.primitive_ids.retain();
-
-        self.primitives.retain(primitive_id, primitive);
-
-        primitive_id
+        self.primitives.retain(primitive)
     }
 
     /// Releases primitive `id`. The remaining primitives keep their order.
     /// Errors, changing nothing, if `id` is not one of this object's. Leaves
     /// a hole until [`MeshMain::gc`](crate::MeshMain::gc) renumbers.
     pub fn release_primitive(&mut self, id: U32Id<BMeshPrimitive>) -> Result<()> {
-        if !self.primitive_ids.is_retained(id) {
+        let Some(_primitive) = self.primitives.release_stable(id) else {
             return Err(Error::UnknownPrimitive { primitive_id: id });
-        }
+        };
 
-        // Safety: a retained primitive id has a value.
-        unsafe { self.primitives.release(id) };
-        self.primitive_ids.release_stable(id);
         Ok(())
     }
 
@@ -153,25 +153,24 @@ impl MeshObject {
     /// changing nothing, if `id` is not one of this object's or `index` is
     /// at or past [`primitive_count`](Self::primitive_count).
     pub fn move_primitive(&mut self, id: U32Id<BMeshPrimitive>, index: usize) -> Result<()> {
-        if !self.primitive_ids.is_retained(id) {
+        if !self.primitives.ids().is_retained(id) {
             return Err(Error::UnknownPrimitive { primitive_id: id });
         }
 
         let count = self.primitive_count();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.primitive_ids.move_to(id, index);
+        self.primitives.move_to(id, index);
+
         Ok(())
     }
 
     /// The primitive `id`, or `None` if not one of this object's.
     pub fn primitive(&self, id: U32Id<BMeshPrimitive>) -> Option<&MeshPrimitive> {
-        // Safety: retained ids have a value.
-        self.primitive_ids
-            .is_retained(id)
-            .then(|| unsafe { self.primitives.get(id) })
+        self.primitives.get(id)
     }
 
     /// The primitive `id`, mutably, or `None` if not one of this object's.
@@ -182,32 +181,19 @@ impl MeshObject {
         &mut self,
         id: U32Id<BMeshPrimitive>,
     ) -> Option<&mut MeshPrimitive> {
-        // Safety: retained ids have a value.
-        self.primitive_ids
-            .is_retained(id)
-            .then(|| unsafe { self.primitives.get_mut(id) })
+        self.primitives.get_mut(id)
     }
 
     /// Number of primitives.
     pub fn primitive_count(&self) -> usize {
-        self.primitive_ids.len()
+        self.primitives.len()
     }
 
     /// Primitives in listing order, as `(id, primitive)`.
     pub fn iter_primitives(
         &self,
     ) -> impl Iterator<Item = (U32Id<BMeshPrimitive>, &MeshPrimitive)> + '_ {
-        // Safety: retained ids have a value.
-        self.primitive_ids
-            .iter()
-            .map(move |primitive_id| (primitive_id, unsafe { self.primitives.get(primitive_id) }))
-    }
-}
-
-impl Drop for MeshObject {
-    fn drop(&mut self) {
-        // Safety: the column holds a value for every retained id.
-        unsafe { self.primitives.release_all(&self.primitive_ids) };
+        self.primitives.iter()
     }
 }
 
@@ -242,5 +228,28 @@ mod tests {
                 primitive_id: U32Id::from_u32(9)
             })
         );
+    }
+
+    #[test]
+    fn release_primitive_errors_on_a_released_id_and_changes_nothing() {
+        let mut object = MeshObject::new("o".to_owned());
+
+        let a_id = object.retain_primitive(unit_triangle());
+
+        let b_id = object.retain_primitive(unit_triangle());
+
+        object.release_primitive(a_id).unwrap();
+
+        assert_eq!(
+            object.release_primitive(a_id),
+            Err(Error::UnknownPrimitive { primitive_id: a_id })
+        );
+
+        let order: Vec<_> = object
+            .iter_primitives()
+            .map(|(primitive_id, _)| primitive_id)
+            .collect();
+
+        assert_eq!(order, [b_id]);
     }
 }

@@ -12,7 +12,7 @@ categories = ["encoding", "game-development", "graphics"]
 independent = true
 
 [dependencies]
-branded-id = "0.1.10"
+branded-id = "0.2.0"
 mvox = "0.1.1"
 mvox-codec = { version = "0.1.2", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }

@@ -12,12 +12,12 @@ categories = ["encoding", "game-development", "graphics"]
 independent = true
 
 [dependencies]
-branded-id = { version = "0.1.10", optional = true }
+branded-id = { version = "0.2.0", optional = true }
 gltf-meshdoc = { version = "0.1.0", default-features = false, optional = true }
 meshdoc = "0.1.0"
 
 [dev-dependencies]
-branded-id = "0.1.10"
+branded-id = "0.2.0"
 ty-math = { version = "0.2.0", default-features = false }
 
 [features]

@@ -10,4 +10,4 @@ description = "A typed expression language over per-swatch, per-voxel, per-face,
 independent = true
 
 [dependencies]
-branded-id = "0.1.10"
+branded-id = "0.2.0"

@@ -1,10 +1,16 @@
 use crate::{BVoxLayer, BVoxMaterial, BVoxPalette, BVoxVoxel, Error, Result, VoxLiveness};
 use branded_id::{
     IdVec, U32Id,
-    soa::{IdField, IdRemap, IdStruct},
+    soa::{IdField, IdRemap, IdStruct, IdStructView, IdStructViewMut},
 };
 use std::collections::HashMap;
 use ty_math::{TyVector3I32, TyVector3U32};
+
+/// The layer column of palette ids.
+type LayerPaletteIdColumn = IdField<BVoxLayer, U32Id<BVoxPalette>>;
+
+/// The layer column of samples.
+type LayerSampleColumn = IdField<BVoxLayer, IdVec<BVoxVoxel, U32Id<BVoxMaterial>>>;
 
 /// One object's voxel volume: a dense grid, the ordered layers it references,
 /// and the material each voxel samples in each layer.
@@ -43,11 +49,11 @@ pub struct VoxObject {
     layer_ids: IdStruct<BVoxLayer>,
 
     /// The palette each layer references, in layer order.
-    layer_palette_ids: IdField<BVoxLayer, U32Id<BVoxPalette>>,
+    layer_palette_ids: LayerPaletteIdColumn,
 
     /// Per layer, the material each voxel samples, one slot per grid cell.
     /// Cells of non-live voxels are ignored filler.
-    samples: IdField<BVoxLayer, IdVec<BVoxVoxel, U32Id<BVoxMaterial>>>,
+    samples: LayerSampleColumn,
 }
 
 impl VoxObject {
@@ -96,21 +102,19 @@ impl VoxObject {
         palette_remap: &IdRemap<BVoxPalette, u32>,
         material_remaps: &IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>>,
     ) {
-        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
         let live_ids: Vec<_> = self.liveness.iter_live().collect();
-        for layer_id in layer_ids {
-            // Samples translate while the layer still holds the palette's
-            // pre-gc id. The filler cells of non-live voxels are exempt.
-            // Safety: retained layer ids have a `layer_palette_ids` value.
-            let palette_id = *unsafe { self.layer_palette_ids.get(layer_id) };
+
+        // Samples translate while the layer still holds the palette's pre-gc
+        // id. The filler cells of non-live voxels are exempt.
+        for (_, (palette_id, samples)) in self.layers_mut() {
             let material_remap = &material_remaps[palette_id.to_usize_id()];
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get_mut(layer_id) };
+
             for &voxel_id in &live_ids {
-                let new_material_id = material_remap
-                    .new_id(column[voxel_id.to_usize_id()])
+                let sample = &mut samples[voxel_id.to_usize_id()];
+
+                *sample = material_remap
+                    .new_id(*sample)
                     .expect("a live voxel samples a live material in a valid state");
-                column[voxel_id.to_usize_id()] = new_material_id;
             }
         }
 
@@ -122,12 +126,7 @@ impl VoxObject {
 
         // Compact the layer id pool; the values above were already translated,
         // so this only relabels layer keys.
-        let layer_remap = self.layer_ids.gc();
-
-        // Safety: both columns were in sync with the pre-gc layer id pool, and
-        // nothing has retained or released since.
-        unsafe { self.samples.gc(&layer_remap) };
-        unsafe { self.layer_palette_ids.gc(&layer_remap) };
+        self.layers_mut().gc();
     }
 
     /// Translates every layer's palette id through `palette_id`, for an object
@@ -139,11 +138,8 @@ impl VoxObject {
         &mut self,
         mut palette_id: impl FnMut(U32Id<BVoxPalette>) -> U32Id<BVoxPalette>,
     ) {
-        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        for layer_id in layer_ids {
-            // Safety: retained layer ids have a `layer_palette_ids` value.
-            let slot = unsafe { self.layer_palette_ids.get_mut(layer_id) };
-            *slot = palette_id(*slot);
+        for (_, (layer_palette_id, _)) in self.layers_mut() {
+            *layer_palette_id = palette_id(*layer_palette_id);
         }
     }
 
@@ -165,15 +161,9 @@ impl VoxObject {
         palette_id: U32Id<BVoxPalette>,
         default_material_id: U32Id<BVoxMaterial>,
     ) -> U32Id<BVoxLayer> {
-        let layer_id = self.layer_ids.retain();
-        self.layer_palette_ids.retain(layer_id, palette_id);
+        let samples = IdVec::from_vec(vec![default_material_id; self.liveness.len()]);
 
-        self.samples.retain(
-            layer_id,
-            IdVec::from_vec(vec![default_material_id; self.liveness.len()]),
-        );
-
-        layer_id
+        self.layers_mut().retain((palette_id, samples))
     }
 
     /// Releases layer `id`, dropping its per-voxel sample column so every voxel
@@ -181,24 +171,19 @@ impl VoxObject {
     /// changing nothing, if `id` is not one of this object's layers. Leaves a
     /// hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn release_layer(&mut self, id: U32Id<BVoxLayer>) -> Result<()> {
-        if !self.layer_ids.is_retained(id) {
+        let Some(_) = self.layers_mut().release_stable(id) else {
             return Err(Error::UnknownLayer { layer_id: id });
-        }
+        };
 
-        // Safety: a retained layer id has a value in both columns.
-        unsafe { self.layer_palette_ids.release(id) };
-        unsafe { self.samples.release(id) };
-        self.layer_ids.release_stable(id);
         Ok(())
     }
 
     /// Layers in layer order, as `(layer id, palette id)`. Pair a layer id with
     /// [`voxel_material`](Self::voxel_material) to read its samples.
     pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
-        // Safety: retained layer ids have a `layer_palette_ids` value.
-        self.layer_ids
-            .iter()
-            .map(move |layer_id| (layer_id, *unsafe { self.layer_palette_ids.get(layer_id) }))
+        self.layers()
+            .into_iter()
+            .map(|(layer_id, (palette_id, _))| (layer_id, *palette_id))
     }
 
     /// Number of layers.
@@ -209,10 +194,9 @@ impl VoxObject {
     /// The palette id layer `id` references, or `None` if `id` is not one of
     /// this object's layers.
     pub fn layer_palette_id(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
-        // Safety: retained layer ids have a `layer_palette_ids` value.
-        self.layer_ids
-            .is_retained(id)
-            .then(|| *unsafe { self.layer_palette_ids.get(id) })
+        let (palette_id, _) = self.layers().get(id)?;
+
+        Some(*palette_id)
     }
 
     /// Moves layer `id` to position `index` in the layer order, shifting the
@@ -242,17 +226,16 @@ impl VoxObject {
         palette_id: U32Id<BVoxPalette>,
         replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
     ) {
-        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        for layer_id in layer_ids {
-            // Safety: retained layer ids have a `layer_palette_ids` value.
-            if *unsafe { self.layer_palette_ids.get(layer_id) } != palette_id {
+        let live_ids: Vec<_> = self.liveness.iter_live().collect();
+
+        for (_, (&mut layer_palette_id, samples)) in self.layers_mut() {
+            if layer_palette_id != palette_id {
                 continue;
             }
 
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get_mut(layer_id) };
-            for voxel_id in self.liveness.iter_live() {
-                let sample = &mut column[voxel_id.to_usize_id()];
+            for &voxel_id in &live_ids {
+                let sample = &mut samples[voxel_id.to_usize_id()];
+
                 if let Some(&replacement_id) = replacement_ids.get(sample) {
                     *sample = replacement_id;
                 }
@@ -302,10 +285,8 @@ impl VoxObject {
 
         self.liveness.set_live(id, true);
 
-        for (layer_id, &material_id) in self.layer_ids.iter().zip(sample_ids) {
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get_mut(layer_id) };
-            column[id.to_usize_id()] = material_id;
+        for ((_, (_, samples)), &material_id) in self.layers_mut().into_iter().zip(sample_ids) {
+            samples[id.to_usize_id()] = material_id;
         }
 
         Ok(())
@@ -342,16 +323,12 @@ impl VoxObject {
         &self,
         layer_id: U32Id<BVoxLayer>,
     ) -> Option<impl Iterator<Item = (U32Id<BVoxVoxel>, U32Id<BVoxMaterial>)> + '_> {
-        if !self.layer_ids.is_retained(layer_id) {
-            return None;
-        }
+        let (_, samples) = self.layers().get(layer_id)?;
 
-        // Safety: retained layer ids have a sample column.
-        let column = unsafe { self.samples.get(layer_id) };
         Some(
             self.liveness
                 .iter_live()
-                .map(move |voxel_id| (voxel_id, column[voxel_id.to_usize_id()])),
+                .map(move |voxel_id| (voxel_id, samples[voxel_id.to_usize_id()])),
         )
     }
 
@@ -414,13 +391,13 @@ impl VoxObject {
         id: U32Id<BVoxVoxel>,
         layer_id: U32Id<BVoxLayer>,
     ) -> Option<U32Id<BVoxMaterial>> {
-        if !self.is_live(id) || !self.layer_ids.is_retained(layer_id) {
+        if !self.is_live(id) {
             return None;
         }
 
-        // Safety: retained layer ids have a sample column.
-        let column = unsafe { self.samples.get(layer_id) };
-        Some(column[id.to_usize_id()])
+        let (_, samples) = self.layers().get(layer_id)?;
+
+        Some(samples[id.to_usize_id()])
     }
 
     /// Grid position of `id`, or `None` if outside the grid. Inverse of
@@ -501,15 +478,14 @@ impl VoxObject {
         }
 
         // Non-live cells are ignored filler, so material 0 stands in.
-        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        for layer_id in layer_ids {
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get_mut(layer_id) };
+        for (_, (_, samples)) in self.layers_mut() {
             let mut moved = IdVec::from_vec(vec![U32Id::from_u32(0); volume as usize]);
+
             for (&old_id, &new_id) in &new_ids {
-                moved[new_id.to_usize_id()] = column[old_id.to_usize_id()];
+                moved[new_id.to_usize_id()] = samples[old_id.to_usize_id()];
             }
-            *column = moved;
+
+            *samples = moved;
         }
 
         self.bounds = bounds;
@@ -558,15 +534,14 @@ impl VoxObject {
         }
 
         // Non-live cells are ignored filler, so material 0 stands in.
-        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        for layer_id in layer_ids {
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get_mut(layer_id) };
+        for (_, (_, samples)) in self.layers_mut() {
             let mut drawn = IdVec::from_vec(vec![U32Id::from_u32(0); volume as usize]);
+
             for &(new_id, old_id) in &sources {
-                drawn[new_id.to_usize_id()] = column[old_id.to_usize_id()];
+                drawn[new_id.to_usize_id()] = samples[old_id.to_usize_id()];
             }
-            *column = drawn;
+
+            *samples = drawn;
         }
 
         let old_ids = self.liveness.iter_live().collect();
@@ -607,9 +582,8 @@ impl VoxObject {
         cell: impl Fn(TyVector3U32) -> TyVector3U32,
     ) -> Self {
         let mut copy = Self::new(self.name.clone(), bounds).expect("the grid keeps its cell count");
+
         copy.origin = origin;
-        copy.layer_ids = self.layer_ids.clone();
-        copy.layer_palette_ids = self.layer_palette_ids.clone();
 
         // Per cell of the new grid, the cell of this grid that moves there.
         let volume = self.liveness.len();
@@ -632,22 +606,58 @@ impl VoxObject {
             }
         }
 
-        for layer_id in self.layer_ids.iter() {
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get(layer_id) };
+        let mut samples = IdField::new();
+
+        for (layer_id, (_, layer_samples)) in self.layers() {
             let moved: Vec<_> = voxel_ids
                 .clone()
-                .map(|moved_id| column[source[moved_id.to_usize_id()].to_usize_id()])
+                .map(|moved_id| layer_samples[source[moved_id.to_usize_id()].to_usize_id()])
                 .collect();
-            copy.samples.retain(layer_id, IdVec::from_vec(moved));
+
+            samples.retain(layer_id, IdVec::from_vec(moved));
         }
 
+        // The layers keep their ids, so the copy takes the whole layer id pool.
+        copy.layer_ids = self.layer_ids.clone();
+
+        copy.layer_palette_ids = self.layer_palette_ids.clone();
+
+        copy.samples = samples;
+
         copy
+    }
+
+    /// The layers, as `(palette id, samples)` rows.
+    fn layers(&self) -> IdStructView<'_, BVoxLayer, (&LayerPaletteIdColumn, &LayerSampleColumn)> {
+        // Safety: both layer columns hold a value for every layer id.
+        unsafe {
+            self.layer_ids
+                .view((&self.layer_palette_ids, &self.samples))
+        }
+    }
+
+    /// The layers, as writable `(palette id, samples)` rows. Rows can also be
+    /// added and removed.
+    fn layers_mut(
+        &mut self,
+    ) -> IdStructViewMut<'_, BVoxLayer, (&mut LayerPaletteIdColumn, &mut LayerSampleColumn)> {
+        // Safety: both layer columns hold a value for every layer id, and they
+        // are the layer id pool's only columns.
+        unsafe {
+            self.layer_ids
+                .view_mut((&mut self.layer_palette_ids, &mut self.samples))
+        }
     }
 }
 
 impl Clone for VoxObject {
     fn clone(&self) -> Self {
+        let mut samples = IdField::new();
+
+        for (layer_id, (_, layer_samples)) in self.layers() {
+            samples.retain(layer_id, layer_samples.clone());
+        }
+
         Self {
             name: self.name.clone(),
             bounds: self.bounds,
@@ -655,19 +665,14 @@ impl Clone for VoxObject {
             liveness: self.liveness.clone(),
             layer_ids: self.layer_ids.clone(),
             layer_palette_ids: self.layer_palette_ids.clone(),
-            // Safety: retained layer ids have a sample column.
-            samples: unsafe { self.samples.clone_retained(&self.layer_ids) },
+            samples,
         }
     }
 }
 
 impl Drop for VoxObject {
     fn drop(&mut self) {
-        // Safety: every `layer_ids` id has a value in both columns.
-        unsafe {
-            self.layer_palette_ids.release_all(&self.layer_ids);
-            self.samples.release_all(&self.layer_ids);
-        }
+        self.layers_mut().clear();
     }
 }
 

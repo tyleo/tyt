@@ -13,7 +13,7 @@ independent = true
 all-features = true
 
 [dependencies]
-branded-id = "0.1.7"
+branded-id = "0.2.0"
 meshdoc = "0.1.0"
 pathspec = "0.2.0"
 png = { version = "0.18.1", optional = true }

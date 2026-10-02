@@ -12,7 +12,7 @@ categories = ["encoding", "game-development", "graphics"]
 independent = true
 
 [dependencies]
-branded-id = "0.1.10"
+branded-id = "0.2.0"
 serde = { version = "1", features = ["derive"], optional = true }
 ty-math = "0.2.0"
 vmax = { version = "0.1.9", default-features = false }

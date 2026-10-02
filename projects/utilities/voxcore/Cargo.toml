@@ -10,7 +10,7 @@ description = "Core types for working with voxels."
 independent = true
 
 [dependencies]
-branded-id = "0.1.11"
+branded-id = "0.2.0"
 ty-math = { version = "0.2.0", default-features = false }
 
 [features]

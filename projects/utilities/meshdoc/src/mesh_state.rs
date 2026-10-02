@@ -3,75 +3,38 @@ use crate::{
     BMeshTexture, Error, MeshFile, MeshHierarchyNode, MeshImage, MeshImageSource, MeshMaterial,
     MeshObject, MeshPrimitive, MeshProperty, MeshTexture, Result, first_cycle_node_index,
 };
-use branded_id::{
-    U32Id,
-    soa::{IdField, IdStruct},
-};
+use branded_id::{U32Id, soa::IdList};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionExt, UNIT_ROTATION_TOLERANCE};
 
 /// The document of a mesh model: the read side of
 /// [`MeshMain`](crate::MeshMain), which forwards to it.
 ///
-/// This is the struct-of-arrays backing store. [`MeshMain`](crate::MeshMain)
-/// owns mutation logic over these fields. The fields are crate-private so the
-/// id pools and columns stay in sync. An ext hook reads the document through
-/// this type.
+/// This is the backing store. [`MeshMain`](crate::MeshMain) owns mutation logic
+/// over these fields. The fields are crate-private so every edit goes through
+/// the referential checks. An ext hook reads the document through this type.
 #[derive(Debug, Default)]
 pub struct MeshState {
-    /// File id pool.
-    pub(crate) file_ids: IdStruct<BMeshFile>,
-
     /// The files.
-    pub(crate) files: IdField<BMeshFile, MeshFile>,
-
-    /// Image id pool.
-    pub(crate) image_ids: IdStruct<BMeshImage>,
+    pub(crate) files: IdList<BMeshFile, MeshFile>,
 
     /// The images.
-    pub(crate) images: IdField<BMeshImage, MeshImage>,
-
-    /// Texture id pool.
-    pub(crate) texture_ids: IdStruct<BMeshTexture>,
+    pub(crate) images: IdList<BMeshImage, MeshImage>,
 
     /// The textures.
-    pub(crate) textures: IdField<BMeshTexture, MeshTexture>,
-
-    /// Material id pool.
-    pub(crate) material_ids: IdStruct<BMeshMaterial>,
+    pub(crate) textures: IdList<BMeshTexture, MeshTexture>,
 
     /// The materials.
-    pub(crate) materials: IdField<BMeshMaterial, MeshMaterial>,
-
-    /// Object id pool.
-    pub(crate) object_ids: IdStruct<BMeshObject>,
+    pub(crate) materials: IdList<BMeshMaterial, MeshMaterial>,
 
     /// The objects.
-    pub(crate) objects: IdField<BMeshObject, MeshObject>,
-
-    /// Hierarchy node id pool.
-    pub(crate) hierarchy_node_ids: IdStruct<BMeshHierarchyNode>,
+    pub(crate) objects: IdList<BMeshObject, MeshObject>,
 
     /// The hierarchy nodes.
-    pub(crate) hierarchy_nodes: IdField<BMeshHierarchyNode, MeshHierarchyNode>,
+    pub(crate) hierarchy_nodes: IdList<BMeshHierarchyNode, MeshHierarchyNode>,
 
     /// The document's roots: hierarchy node ids.
     pub(crate) root_hierarchy_node_ids: Vec<U32Id<BMeshHierarchyNode>>,
-}
-
-impl Drop for MeshState {
-    fn drop(&mut self) {
-        // Safety: each column holds a value for every id in its id pool; the
-        // fields free their own storage on drop.
-        unsafe {
-            self.files.release_all(&self.file_ids);
-            self.images.release_all(&self.image_ids);
-            self.textures.release_all(&self.texture_ids);
-            self.materials.release_all(&self.material_ids);
-            self.objects.release_all(&self.object_ids);
-            self.hierarchy_nodes.release_all(&self.hierarchy_node_ids);
-        }
-    }
 }
 
 impl MeshState {
@@ -253,21 +216,17 @@ impl MeshState {
         // Acyclicity; every child is now known live. Works over the retained
         // node ids by position, so it holds whether or not the node id pool
         // has holes.
-        let node_ids: Vec<_> = self.hierarchy_node_ids.iter().collect();
+        let node_ids: Vec<_> = self.hierarchy_nodes.ids().iter().collect();
+
         let index_of: HashMap<U32Id<BMeshHierarchyNode>, usize> = node_ids
             .iter()
             .enumerate()
             .map(|(node_index, &node_id)| (node_id, node_index))
             .collect();
 
-        let children: Vec<&[U32Id<BMeshHierarchyNode>]> = node_ids
-            .iter()
-            .map(|&node_id| {
-                // Safety: `node_id` is a retained node id.
-                unsafe { self.hierarchy_nodes.get(node_id) }
-                    .child_node_ids
-                    .as_slice()
-            })
+        let children: Vec<&[U32Id<BMeshHierarchyNode>]> = self
+            .iter_hierarchy_nodes()
+            .map(|(_, node)| node.child_node_ids.as_slice())
             .collect();
 
         if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
@@ -495,25 +454,19 @@ impl MeshState {
 
     /// The hierarchy node `id`, or `None` if not one of this state's.
     pub fn hierarchy_node(&self, id: U32Id<BMeshHierarchyNode>) -> Option<&MeshHierarchyNode> {
-        // Safety: retained ids have a value.
-        self.hierarchy_node_ids
-            .is_retained(id)
-            .then(|| unsafe { self.hierarchy_nodes.get(id) })
+        self.hierarchy_nodes.get(id)
     }
 
     /// Number of hierarchy nodes.
     pub fn hierarchy_node_count(&self) -> usize {
-        self.hierarchy_node_ids.len()
+        self.hierarchy_nodes.len()
     }
 
     /// Hierarchy nodes in listing order, as `(id, node)`.
     pub fn iter_hierarchy_nodes(
         &self,
     ) -> impl Iterator<Item = (U32Id<BMeshHierarchyNode>, &MeshHierarchyNode)> + '_ {
-        // Safety: retained ids have a value.
-        self.hierarchy_node_ids
-            .iter()
-            .map(move |node_id| (node_id, unsafe { self.hierarchy_nodes.get(node_id) }))
+        self.hierarchy_nodes.iter()
     }
 
     /// Whether `target` is one of `from` or reachable from any of them through
@@ -546,10 +499,7 @@ impl MeshState {
 
     /// The file `id`, or `None` if not one of this state's.
     pub fn file(&self, id: U32Id<BMeshFile>) -> Option<&MeshFile> {
-        // Safety: retained ids have a value.
-        self.file_ids
-            .is_retained(id)
-            .then(|| unsafe { self.files.get(id) })
+        self.files.get(id)
     }
 
     /// The file named `name`, as `(id, file)`, or `None` if no file has the
@@ -560,23 +510,17 @@ impl MeshState {
 
     /// Number of files.
     pub fn file_count(&self) -> usize {
-        self.file_ids.len()
+        self.files.len()
     }
 
     /// Files in listing order, as `(id, file)`.
     pub fn iter_files(&self) -> impl Iterator<Item = (U32Id<BMeshFile>, &MeshFile)> + '_ {
-        // Safety: retained ids have a value.
-        self.file_ids
-            .iter()
-            .map(move |file_id| (file_id, unsafe { self.files.get(file_id) }))
+        self.files.iter()
     }
 
     /// The image `id`, or `None` if not one of this state's.
     pub fn image(&self, id: U32Id<BMeshImage>) -> Option<&MeshImage> {
-        // Safety: retained ids have a value.
-        self.image_ids
-            .is_retained(id)
-            .then(|| unsafe { self.images.get(id) })
+        self.images.get(id)
     }
 
     /// The encoded bytes of image `id`, its own or its file's, or `None` if
@@ -592,80 +536,59 @@ impl MeshState {
 
     /// Number of images.
     pub fn image_count(&self) -> usize {
-        self.image_ids.len()
+        self.images.len()
     }
 
     /// Images in listing order, as `(id, image)`.
     pub fn iter_images(&self) -> impl Iterator<Item = (U32Id<BMeshImage>, &MeshImage)> + '_ {
-        // Safety: retained ids have a value.
-        self.image_ids
-            .iter()
-            .map(move |image_id| (image_id, unsafe { self.images.get(image_id) }))
+        self.images.iter()
     }
 
     /// The texture `id`, or `None` if not one of this state's.
     pub fn texture(&self, id: U32Id<BMeshTexture>) -> Option<&MeshTexture> {
-        // Safety: retained ids have a value.
-        self.texture_ids
-            .is_retained(id)
-            .then(|| unsafe { self.textures.get(id) })
+        self.textures.get(id)
     }
 
     /// Number of textures.
     pub fn texture_count(&self) -> usize {
-        self.texture_ids.len()
+        self.textures.len()
     }
 
     /// Textures in listing order, as `(id, texture)`.
     pub fn iter_textures(&self) -> impl Iterator<Item = (U32Id<BMeshTexture>, &MeshTexture)> + '_ {
-        // Safety: retained ids have a value.
-        self.texture_ids
-            .iter()
-            .map(move |texture_id| (texture_id, unsafe { self.textures.get(texture_id) }))
+        self.textures.iter()
     }
 
     /// The material `id`, or `None` if not one of this state's.
     pub fn material(&self, id: U32Id<BMeshMaterial>) -> Option<&MeshMaterial> {
-        // Safety: retained ids have a value.
-        self.material_ids
-            .is_retained(id)
-            .then(|| unsafe { self.materials.get(id) })
+        self.materials.get(id)
     }
 
     /// Number of materials.
     pub fn material_count(&self) -> usize {
-        self.material_ids.len()
+        self.materials.len()
     }
 
     /// Materials in listing order, as `(id, material)`.
     pub fn iter_materials(
         &self,
     ) -> impl Iterator<Item = (U32Id<BMeshMaterial>, &MeshMaterial)> + '_ {
-        // Safety: retained ids have a value.
-        self.material_ids
-            .iter()
-            .map(move |material_id| (material_id, unsafe { self.materials.get(material_id) }))
+        self.materials.iter()
     }
 
     /// Objects in listing order, as `(id, object)`.
     pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BMeshObject>, &MeshObject)> + '_ {
-        // Safety: retained ids have a value.
-        self.object_ids
-            .iter()
-            .map(move |object_id| (object_id, unsafe { self.objects.get(object_id) }))
+        self.objects.iter()
     }
 
     /// The object `id`, or `None` if not one of this state's.
     pub fn object(&self, id: U32Id<BMeshObject>) -> Option<&MeshObject> {
-        // Safety: retained ids have a value.
-        self.object_ids
-            .is_retained(id)
-            .then(|| unsafe { self.objects.get(id) })
+        self.objects.get(id)
     }
 
     /// Number of objects.
     pub fn object_count(&self) -> usize {
-        self.object_ids.len()
+        self.objects.len()
     }
 
     /// The document's roots: hierarchy node ids.

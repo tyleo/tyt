@@ -13,7 +13,7 @@ independent = true
 
 [dependencies]
 base64 = { version = "0.22", optional = true }
-branded-id = "0.1.10"
+branded-id = "0.2.0"
 gltf = { version = "1.4.1", default-features = false, features = [
     "extensions",
     "extras",

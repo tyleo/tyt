@@ -4,42 +4,37 @@ use crate::{
 };
 use branded_id::{
     U32Id,
-    soa::{IdField, IdRemap, IdStruct},
+    soa::{IdList, IdRemap, IdStruct},
 };
 
-/// A shared value pool: one typed column keyed by an id pool of value ids.
+/// A shared value pool: one typed list of values keyed by value id.
 ///
 /// Build a value pool with the constructor for its kind (for example
 /// [`float`](Self::float) or [`vec_4_float`](Self::vec_4_float)). Read values
 /// back through the accessor for the kind the caller wants, such as
 /// [`float_values`](Self::float_values). A caller that takes any kind matches
 /// [`values`](Self::values) once.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VoxValuePool {
-    /// Value id pool. Its listing order is the value pool's value order.
-    value_ids: IdStruct<BVoxValuePoolValue>,
-
-    /// The kind and its typed value column, keyed by `value_ids`.
+    /// The kind and its typed values. Their listing order is the value pool's
+    /// value order.
     kind: VoxValuePoolKind,
 }
 
 impl VoxValuePool {
     /// Creates a `bool` value pool holding `values`, retaining ids in order.
     pub fn boolean(values: Vec<bool>) -> Self {
-        let (value_ids, values) = columns(values);
         Self {
-            value_ids,
-            kind: VoxValuePoolKind::Bool(values),
+            kind: VoxValuePoolKind::Bool(values.into_iter().collect()),
         }
     }
 
     /// Creates a `float` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if a value is NaN.
     pub fn float(values: Vec<f64>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, float_in_domain)?;
+        let values = checked_values(values, float_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Float(values),
         })
     }
@@ -47,39 +42,33 @@ impl VoxValuePool {
     /// Creates an `int` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if a value's magnitude exceeds `2^53 - 1`.
     pub fn int(values: Vec<i64>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, int_in_domain)?;
+        let values = checked_values(values, int_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Int(values),
         })
     }
 
     /// Creates a `json` value pool holding `values`, retaining ids in order.
     pub fn json(values: Vec<VoxValue>) -> Self {
-        let (value_ids, values) = columns(values);
         Self {
-            value_ids,
-            kind: VoxValuePoolKind::Json(values),
+            kind: VoxValuePoolKind::Json(values.into_iter().collect()),
         }
     }
 
     /// Creates a `string` value pool holding `values`, retaining ids in order.
     pub fn string(values: Vec<String>) -> Self {
-        let (value_ids, values) = columns(values);
         Self {
-            value_ids,
-            kind: VoxValuePoolKind::String(values),
+            kind: VoxValuePoolKind::String(values.into_iter().collect()),
         }
     }
 
     /// Creates a `vec-2-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_2_float(values: Vec<[f64; 2]>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, floats_in_domain)?;
+        let values = checked_values(values, floats_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Vec2Float(values),
         })
     }
@@ -88,10 +77,9 @@ impl VoxValuePool {
     /// order. Errors, building nothing, if a component's magnitude exceeds
     /// `2^53 - 1`.
     pub fn vec_2_int(values: Vec<[i64; 2]>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, ints_in_domain)?;
+        let values = checked_values(values, ints_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Vec2Int(values),
         })
     }
@@ -99,10 +87,9 @@ impl VoxValuePool {
     /// Creates a `vec-3-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_3_float(values: Vec<[f64; 3]>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, floats_in_domain)?;
+        let values = checked_values(values, floats_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Vec3Float(values),
         })
     }
@@ -111,10 +98,9 @@ impl VoxValuePool {
     /// order. Errors, building nothing, if a component's magnitude exceeds
     /// `2^53 - 1`.
     pub fn vec_3_int(values: Vec<[i64; 3]>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, ints_in_domain)?;
+        let values = checked_values(values, ints_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Vec3Int(values),
         })
     }
@@ -122,10 +108,9 @@ impl VoxValuePool {
     /// Creates a `vec-4-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_4_float(values: Vec<[f64; 4]>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, floats_in_domain)?;
+        let values = checked_values(values, floats_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Vec4Float(values),
         })
     }
@@ -134,10 +119,9 @@ impl VoxValuePool {
     /// order. Errors, building nothing, if a component's magnitude exceeds
     /// `2^53 - 1`.
     pub fn vec_4_int(values: Vec<[i64; 4]>) -> Result<Self> {
-        let (value_ids, values) = checked_columns(values, ints_in_domain)?;
+        let values = checked_values(values, ints_in_domain)?;
 
         Ok(Self {
-            value_ids,
             kind: VoxValuePoolKind::Vec4Int(values),
         })
     }
@@ -149,7 +133,7 @@ impl VoxValuePool {
             return Err(Error::RetainedValueKind);
         };
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `float` value and returns its id. Errors, changing nothing, if
@@ -163,7 +147,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends an `int` value and returns its id. Errors, changing nothing, if
@@ -178,7 +162,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `json` value and returns its id. Errors, changing nothing, if
@@ -188,7 +172,7 @@ impl VoxValuePool {
             return Err(Error::RetainedValueKind);
         };
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `string` value and returns its id. Errors, changing nothing,
@@ -198,7 +182,7 @@ impl VoxValuePool {
             return Err(Error::RetainedValueKind);
         };
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `vec-2-float` value and returns its id. Errors, changing
@@ -215,7 +199,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `vec-2-int` value and returns its id. Errors, changing
@@ -230,7 +214,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `vec-3-float` value and returns its id. Errors, changing
@@ -247,7 +231,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `vec-3-int` value and returns its id. Errors, changing
@@ -262,7 +246,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `vec-4-float` value and returns its id. Errors, changing
@@ -279,7 +263,7 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
     /// Appends a `vec-4-int` value and returns its id. Errors, changing
@@ -294,36 +278,33 @@ impl VoxValuePool {
             return Err(Error::MalformedRetainedValue);
         }
 
-        Ok(retain_into(&mut self.value_ids, values, value))
+        Ok(values.retain(value))
     }
 
-    /// Releases value `id`, keeping the surviving values' listing order. The id
-    /// must be one of this value pool's values. The caller repoints any palette
-    /// cell drawing it first.
-    pub(crate) fn release_value_stable(&mut self, id: U32Id<BVoxValuePoolValue>) {
-        // Safety: the id is retained, so it has a value in the column.
-        unsafe {
-            match &mut self.kind {
-                VoxValuePoolKind::Bool(values) => values.release(id),
-                VoxValuePoolKind::Float(values) => values.release(id),
-                VoxValuePoolKind::Int(values) => values.release(id),
-                VoxValuePoolKind::Json(values) => values.release(id),
-                VoxValuePoolKind::String(values) => values.release(id),
-                VoxValuePoolKind::Vec2Float(values) => values.release(id),
-                VoxValuePoolKind::Vec2Int(values) => values.release(id),
-                VoxValuePoolKind::Vec3Float(values) => values.release(id),
-                VoxValuePoolKind::Vec3Int(values) => values.release(id),
-                VoxValuePoolKind::Vec4Float(values) => values.release(id),
-                VoxValuePoolKind::Vec4Int(values) => values.release(id),
-            }
-        }
+    /// Releases value `id`, keeping the surviving values' listing order.
+    /// Returns `None`, changing nothing, if `id` is not one of this value
+    /// pool's values. The caller repoints any palette cell drawing it first.
+    pub(crate) fn release_value_stable(&mut self, id: U32Id<BVoxValuePoolValue>) -> Option<()> {
+        let released = match &mut self.kind {
+            VoxValuePoolKind::Bool(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Float(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Int(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Json(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::String(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Vec2Float(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Vec2Int(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Vec3Float(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Vec3Int(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Vec4Float(values) => values.release_stable(id).is_some(),
+            VoxValuePoolKind::Vec4Int(values) => values.release_stable(id).is_some(),
+        };
 
-        self.value_ids.release_stable(id);
+        released.then_some(())
     }
 
     /// Whether `id` is one of this value pool's values.
     pub fn contains_value(&self, id: U32Id<BVoxValuePoolValue>) -> bool {
-        self.value_ids.is_retained(id)
+        self.value_ids().is_retained(id)
     }
 
     /// The id of the first value outside its kind's value domain, or `None` if
@@ -359,41 +340,34 @@ impl VoxValuePool {
     /// order and returns the relabeling, so the caller can translate the
     /// palette cells that point at these values.
     pub(crate) fn gc_values(&mut self) -> IdRemap<BVoxValuePoolValue, u32> {
-        let remap = self.value_ids.gc();
-        // Safety: the column was in sync with the pre-gc id pool, and nothing
-        // has retained or released since.
-        unsafe {
-            match &mut self.kind {
-                VoxValuePoolKind::Bool(values) => values.gc(&remap),
-                VoxValuePoolKind::Float(values) => values.gc(&remap),
-                VoxValuePoolKind::Int(values) => values.gc(&remap),
-                VoxValuePoolKind::Json(values) => values.gc(&remap),
-                VoxValuePoolKind::String(values) => values.gc(&remap),
-                VoxValuePoolKind::Vec2Float(values) => values.gc(&remap),
-                VoxValuePoolKind::Vec2Int(values) => values.gc(&remap),
-                VoxValuePoolKind::Vec3Float(values) => values.gc(&remap),
-                VoxValuePoolKind::Vec3Int(values) => values.gc(&remap),
-                VoxValuePoolKind::Vec4Float(values) => values.gc(&remap),
-                VoxValuePoolKind::Vec4Int(values) => values.gc(&remap),
-            }
+        match &mut self.kind {
+            VoxValuePoolKind::Bool(values) => values.gc(),
+            VoxValuePoolKind::Float(values) => values.gc(),
+            VoxValuePoolKind::Int(values) => values.gc(),
+            VoxValuePoolKind::Json(values) => values.gc(),
+            VoxValuePoolKind::String(values) => values.gc(),
+            VoxValuePoolKind::Vec2Float(values) => values.gc(),
+            VoxValuePoolKind::Vec2Int(values) => values.gc(),
+            VoxValuePoolKind::Vec3Float(values) => values.gc(),
+            VoxValuePoolKind::Vec3Int(values) => values.gc(),
+            VoxValuePoolKind::Vec4Float(values) => values.gc(),
+            VoxValuePoolKind::Vec4Int(values) => values.gc(),
         }
-
-        remap
     }
 
     /// Whether the value pool holds no values.
     pub fn is_empty(&self) -> bool {
-        self.value_ids.is_empty()
+        self.value_ids().is_empty()
     }
 
     /// Value ids in listing order.
     pub fn iter_value_ids(&self) -> impl Iterator<Item = U32Id<BVoxValuePoolValue>> + '_ {
-        self.value_ids.iter()
+        self.value_ids().iter()
     }
 
     /// Number of values.
     pub fn len(&self) -> usize {
-        self.value_ids.len()
+        self.value_ids().len()
     }
 
     /// Moves value `id` to listing position `index`, shifting the values
@@ -401,16 +375,30 @@ impl VoxValuePool {
     /// `id` is not one of this value pool's values or `index` is at or past
     /// [`len`](Self::len).
     pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
-        if !self.value_ids.is_retained(id) {
+        if !self.contains_value(id) {
             return Err(Error::UnknownValuePoolValue { value_id: id });
         }
 
-        let count = self.value_ids.len();
+        let count = self.len();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.value_ids.move_to(id, index);
+        match &mut self.kind {
+            VoxValuePoolKind::Bool(values) => values.move_to(id, index),
+            VoxValuePoolKind::Float(values) => values.move_to(id, index),
+            VoxValuePoolKind::Int(values) => values.move_to(id, index),
+            VoxValuePoolKind::Json(values) => values.move_to(id, index),
+            VoxValuePoolKind::String(values) => values.move_to(id, index),
+            VoxValuePoolKind::Vec2Float(values) => values.move_to(id, index),
+            VoxValuePoolKind::Vec2Int(values) => values.move_to(id, index),
+            VoxValuePoolKind::Vec3Float(values) => values.move_to(id, index),
+            VoxValuePoolKind::Vec3Int(values) => values.move_to(id, index),
+            VoxValuePoolKind::Vec4Float(values) => values.move_to(id, index),
+            VoxValuePoolKind::Vec4Int(values) => values.move_to(id, index),
+        }
+
         Ok(())
     }
 
@@ -420,39 +408,61 @@ impl VoxValuePool {
         &mut self,
         new_order_ids: &[U32Id<BVoxValuePoolValue>],
     ) -> Option<()> {
-        self.value_ids.try_set_order(new_order_ids)
+        match &mut self.kind {
+            VoxValuePoolKind::Bool(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Float(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Int(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Json(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::String(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Vec2Float(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Vec2Int(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Vec3Float(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Vec3Int(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Vec4Float(values) => values.try_set_order(new_order_ids),
+            VoxValuePoolKind::Vec4Int(values) => values.try_set_order(new_order_ids),
+        }
     }
 
     /// The values, typed by the kind, for a caller that handles any kind.
     pub fn values(&self) -> VoxValuePoolValues<'_> {
         match &self.kind {
-            VoxValuePoolKind::Bool(values) => VoxValuePoolValues::Bool(self.column(values)),
+            VoxValuePoolKind::Bool(values) => VoxValuePoolValues::Bool(VoxValueColumn::new(values)),
 
-            VoxValuePoolKind::Float(values) => VoxValuePoolValues::Float(self.column(values)),
+            VoxValuePoolKind::Float(values) => {
+                VoxValuePoolValues::Float(VoxValueColumn::new(values))
+            }
 
-            VoxValuePoolKind::Int(values) => VoxValuePoolValues::Int(self.column(values)),
+            VoxValuePoolKind::Int(values) => VoxValuePoolValues::Int(VoxValueColumn::new(values)),
 
-            VoxValuePoolKind::Json(values) => VoxValuePoolValues::Json(self.column(values)),
+            VoxValuePoolKind::Json(values) => VoxValuePoolValues::Json(VoxValueColumn::new(values)),
 
-            VoxValuePoolKind::String(values) => VoxValuePoolValues::String(self.column(values)),
+            VoxValuePoolKind::String(values) => {
+                VoxValuePoolValues::String(VoxValueColumn::new(values))
+            }
 
             VoxValuePoolKind::Vec2Float(values) => {
-                VoxValuePoolValues::Vec2Float(self.column(values))
+                VoxValuePoolValues::Vec2Float(VoxValueColumn::new(values))
             }
 
-            VoxValuePoolKind::Vec2Int(values) => VoxValuePoolValues::Vec2Int(self.column(values)),
+            VoxValuePoolKind::Vec2Int(values) => {
+                VoxValuePoolValues::Vec2Int(VoxValueColumn::new(values))
+            }
 
             VoxValuePoolKind::Vec3Float(values) => {
-                VoxValuePoolValues::Vec3Float(self.column(values))
+                VoxValuePoolValues::Vec3Float(VoxValueColumn::new(values))
             }
 
-            VoxValuePoolKind::Vec3Int(values) => VoxValuePoolValues::Vec3Int(self.column(values)),
+            VoxValuePoolKind::Vec3Int(values) => {
+                VoxValuePoolValues::Vec3Int(VoxValueColumn::new(values))
+            }
 
             VoxValuePoolKind::Vec4Float(values) => {
-                VoxValuePoolValues::Vec4Float(self.column(values))
+                VoxValuePoolValues::Vec4Float(VoxValueColumn::new(values))
             }
 
-            VoxValuePoolKind::Vec4Int(values) => VoxValuePoolValues::Vec4Int(self.column(values)),
+            VoxValuePoolKind::Vec4Int(values) => {
+                VoxValuePoolValues::Vec4Int(VoxValueColumn::new(values))
+            }
         }
     }
 
@@ -462,7 +472,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `float` value pool, or `None` if it holds another kind.
@@ -471,7 +481,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of an `int` value pool, or `None` if it holds another kind.
@@ -480,7 +490,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `json` value pool, or `None` if it holds another kind.
@@ -489,7 +499,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `string` value pool, or `None` if it holds another kind.
@@ -498,7 +508,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `vec-2-float` value pool, or `None` if it holds another
@@ -508,7 +518,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `vec-2-int` value pool, or `None` if it holds another
@@ -518,7 +528,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `vec-3-float` value pool, or `None` if it holds another
@@ -528,7 +538,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `vec-3-int` value pool, or `None` if it holds another
@@ -538,7 +548,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `vec-4-float` value pool, or `None` if it holds another
@@ -548,7 +558,7 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
     /// The values of a `vec-4-int` value pool, or `None` if it holds another
@@ -558,94 +568,23 @@ impl VoxValuePool {
             return None;
         };
 
-        Some(self.column(values))
+        Some(VoxValueColumn::new(values))
     }
 
-    fn column<'a, T>(
-        &'a self,
-        values: &'a IdField<BVoxValuePoolValue, T>,
-    ) -> VoxValueColumn<'a, T> {
-        // Safety: `values` is this value pool's column, which holds a value for
-        // every id it retains.
-        unsafe { VoxValueColumn::new(&self.value_ids, values) }
-    }
-}
-
-impl Clone for VoxValuePool {
-    fn clone(&self) -> Self {
-        let ids = &self.value_ids;
-
-        // Safety: the column holds a value for every id in the id pool.
-        let kind = unsafe {
-            match &self.kind {
-                VoxValuePoolKind::Bool(values) => {
-                    VoxValuePoolKind::Bool(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Float(values) => {
-                    VoxValuePoolKind::Float(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Int(values) => VoxValuePoolKind::Int(values.clone_retained(ids)),
-
-                VoxValuePoolKind::Json(values) => {
-                    VoxValuePoolKind::Json(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::String(values) => {
-                    VoxValuePoolKind::String(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Vec2Float(values) => {
-                    VoxValuePoolKind::Vec2Float(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Vec2Int(values) => {
-                    VoxValuePoolKind::Vec2Int(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Vec3Float(values) => {
-                    VoxValuePoolKind::Vec3Float(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Vec3Int(values) => {
-                    VoxValuePoolKind::Vec3Int(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Vec4Float(values) => {
-                    VoxValuePoolKind::Vec4Float(values.clone_retained(ids))
-                }
-
-                VoxValuePoolKind::Vec4Int(values) => {
-                    VoxValuePoolKind::Vec4Int(values.clone_retained(ids))
-                }
-            }
-        };
-
-        Self {
-            value_ids: ids.clone(),
-            kind,
-        }
-    }
-}
-
-impl Drop for VoxValuePool {
-    fn drop(&mut self) {
-        // Safety: the column holds a value for every id in the id pool.
-        unsafe {
-            match &mut self.kind {
-                VoxValuePoolKind::Bool(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Float(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Int(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Json(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::String(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec2Float(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec2Int(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec3Float(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec3Int(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec4Float(values) => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec4Int(values) => values.release_all(&self.value_ids),
-            }
+    /// The value ids, whatever the kind.
+    fn value_ids(&self) -> &IdStruct<BVoxValuePoolValue> {
+        match &self.kind {
+            VoxValuePoolKind::Bool(values) => values.ids(),
+            VoxValuePoolKind::Float(values) => values.ids(),
+            VoxValuePoolKind::Int(values) => values.ids(),
+            VoxValuePoolKind::Json(values) => values.ids(),
+            VoxValuePoolKind::String(values) => values.ids(),
+            VoxValuePoolKind::Vec2Float(values) => values.ids(),
+            VoxValuePoolKind::Vec2Int(values) => values.ids(),
+            VoxValuePoolKind::Vec3Float(values) => values.ids(),
+            VoxValuePoolKind::Vec3Int(values) => values.ids(),
+            VoxValuePoolKind::Vec4Float(values) => values.ids(),
+            VoxValuePoolKind::Vec4Int(values) => values.ids(),
         }
     }
 }
@@ -682,26 +621,12 @@ fn ints_in_domain<const N: usize>(components: &[i64; N]) -> bool {
     components.iter().all(int_in_domain)
 }
 
-/// Builds the paired id pool and value column for `values`, retaining ids in
-/// order.
-fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxValuePoolValue>, IdField<BVoxValuePoolValue, T>) {
-    let mut ids = IdStruct::new();
-    let mut column = IdField::with_capacity(values.len());
-    for value in values {
-        let value_id = ids.retain();
-        column.retain(value_id, value);
-    }
-
-    (ids, column)
-}
-
-/// Builds the columns for `values` as [`columns`] does. Errors, building
-/// nothing, on the first value outside the domain. Ids retain in order, so a
-/// value's index is the id it would take.
-fn checked_columns<T>(
+/// Lists `values`, retaining ids in order, so a value's index is the id it
+/// takes. Errors, building nothing, on the first value outside the domain.
+fn checked_values<T>(
     values: Vec<T>,
     in_domain: fn(&T) -> bool,
-) -> Result<(IdStruct<BVoxValuePoolValue>, IdField<BVoxValuePoolValue, T>)> {
+) -> Result<IdList<BVoxValuePoolValue, T>> {
     for (index, value) in (0..).zip(&values) {
         if !in_domain(value) {
             return Err(Error::MalformedValuePoolValue {
@@ -710,7 +635,7 @@ fn checked_columns<T>(
         }
     }
 
-    Ok(columns(values))
+    Ok(values.into_iter().collect())
 }
 
 /// The id of the first of `values` outside the domain.
@@ -727,24 +652,12 @@ fn first_out_of_domain<T>(
     None
 }
 
-/// Retains an id in `ids` and writes `value` to it in `column`.
-fn retain_into<T>(
-    ids: &mut IdStruct<BVoxValuePoolValue>,
-    column: &mut IdField<BVoxValuePoolValue, T>,
-    value: T,
-) -> U32Id<BVoxValuePoolValue> {
-    let value_id = ids.retain();
-    column.retain(value_id, value);
-    value_id
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
         BVoxValuePoolValue, Error, VoxValue, VoxValuePool, VoxValuePoolKind, VoxValuePoolValues,
-        vox_value_pool::columns,
     };
-    use branded_id::U32Id;
+    use branded_id::{U32Id, soa::IdList};
 
     fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
@@ -896,7 +809,7 @@ mod tests {
     #[test]
     fn retain_int_value_appends_to_the_listing() {
         let mut value_pool = VoxValuePool::int(vec![10, 20, 30]).unwrap();
-        value_pool.release_value_stable(value_id(0));
+        value_pool.release_value_stable(value_id(0)).unwrap();
 
         // The released id comes back, listed last.
         assert_eq!(value_pool.retain_int_value(40), Ok(value_id(0)));
@@ -1034,9 +947,9 @@ mod tests {
     #[test]
     fn the_audit_finds_a_value_past_the_gates() {
         // A struct literal skips the constructor's gate, as a voxcore bug would.
-        let (value_ids, values) = columns(vec![[0.0, 0.0], [0.0, 1.0], [f64::NAN, 0.0]]);
+        let values = IdList::from_iter([[0.0, 0.0], [0.0, 1.0], [f64::NAN, 0.0]]);
+
         let mut value_pool = VoxValuePool {
-            value_ids,
             kind: VoxValuePoolKind::Vec2Float(values),
         };
 
@@ -1046,7 +959,7 @@ mod tests {
         value_pool.move_value(value_id(2), 0).unwrap();
         assert_eq!(value_pool.first_out_of_domain_value(), Some(value_id(2)));
 
-        value_pool.release_value_stable(value_id(2));
+        value_pool.release_value_stable(value_id(2)).unwrap();
         assert_eq!(value_pool.first_out_of_domain_value(), None);
     }
 
@@ -1055,9 +968,9 @@ mod tests {
         let mut value_pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
 
-        value_pool.release_value_stable(value_id(1));
+        value_pool.release_value_stable(value_id(1)).unwrap();
 
-        let copy = value_pool.clone();
+        let mut copy = value_pool.clone();
 
         assert_eq!(copy, value_pool);
         assert_eq!(
@@ -1066,6 +979,25 @@ mod tests {
                 (value_id(0), &"a".to_owned()),
                 (value_id(2), &"c".to_owned())
             ]
+        );
+
+        // The copy queues the released id for reuse, as the original does.
+        assert_eq!(copy.retain_string_value("d".to_owned()), Ok(value_id(1)));
+    }
+
+    #[test]
+    fn release_value_stable_rejects_an_unknown_id_without_changing_state() {
+        let mut value_pool =
+            VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
+
+        value_pool.release_value_stable(value_id(1)).unwrap();
+
+        assert_eq!(value_pool.release_value_stable(value_id(1)), None);
+        assert_eq!(value_pool.release_value_stable(value_id(9)), None);
+
+        assert_eq!(
+            value_pool,
+            VoxValuePool::string(vec!["a".to_owned(), "c".to_owned()])
         );
     }
 }

@@ -182,14 +182,9 @@ impl<T: MeshExt> MeshMain<T> {
     pub fn gc(&mut self) -> Result<MeshGcRemap> {
         // Compact the files, then relabel every image source and property
         // pointing at one.
-        let file_remap = self.state.file_ids.gc();
-        // Safety: the file column was in sync with the pre-gc id pool, and
-        // nothing has retained or released since.
-        unsafe { self.state.files.gc(&file_remap) };
+        let file_remap = self.state.files.gc();
 
-        for image_id in self.state.image_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained image ids have a value.
-            let image = unsafe { self.state.images.get_mut(image_id) };
+        for (_, image) in self.state.images.iter_mut() {
             if let MeshImageSource::File(file_id) = &mut image.source {
                 *file_id = file_remap
                     .new_id(*file_id)
@@ -197,26 +192,19 @@ impl<T: MeshExt> MeshMain<T> {
             }
         }
 
-        for material_id in self.state.material_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained material ids have a value.
-            unsafe { self.state.materials.get_mut(material_id) }.relabel_files(&file_remap);
+        for (_, material) in self.state.materials.iter_mut() {
+            material.relabel_files(&file_remap);
         }
 
-        for object_id in self.state.object_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained object ids have a value.
-            unsafe { self.state.objects.get_mut(object_id) }.relabel_files(&file_remap);
+        for (_, object) in self.state.objects.iter_mut() {
+            object.relabel_files(&file_remap);
         }
 
         // Compact the images, then relabel every texture's image before the
         // textures move.
-        let image_remap = self.state.image_ids.gc();
-        // Safety: the image column was in sync with the pre-gc id pool, and
-        // nothing has retained or released since.
-        unsafe { self.state.images.gc(&image_remap) };
+        let image_remap = self.state.images.gc();
 
-        for texture_id in self.state.texture_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained texture ids have a value.
-            let texture = unsafe { self.state.textures.get_mut(texture_id) };
+        for (_, texture) in self.state.textures.iter_mut() {
             texture.image_id = image_remap
                 .new_id(texture.image_id)
                 .expect("a texture samples a live image in a valid state");
@@ -224,69 +212,47 @@ impl<T: MeshExt> MeshMain<T> {
 
         // Compact the textures, then relabel every material's and object's
         // textures.
-        let texture_remap = self.state.texture_ids.gc();
-        // Safety: as above, for the texture column.
-        unsafe { self.state.textures.gc(&texture_remap) };
+        let texture_remap = self.state.textures.gc();
 
-        for material_id in self.state.material_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained material ids have a value.
-            let material = unsafe { self.state.materials.get_mut(material_id) };
+        for (_, material) in self.state.materials.iter_mut() {
             material.relabel_textures(&texture_remap);
         }
 
-        for object_id in self.state.object_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained object ids have a value.
-            unsafe { self.state.objects.get_mut(object_id) }.relabel_textures(&texture_remap);
+        for (_, object) in self.state.objects.iter_mut() {
+            object.relabel_textures(&texture_remap);
         }
 
         // Compact the materials, then relabel every primitive's material and
         // compact each object's primitive pool. Because the primitive
         // relabelings are indexed by old object id, the column covers the
         // object id pool's whole id space.
-        let material_remap = self.state.material_ids.gc();
-        // Safety: as above, for the material column.
-        unsafe { self.state.materials.gc(&material_remap) };
+        let material_remap = self.state.materials.gc();
 
-        let object_id_space = self.state.object_ids.peek_next_fresh().to_u32() as usize;
+        let object_id_space = self
+            .state
+            .objects
+            .ids()
+            .peek_next_fresh()
+            .to_usize_id()
+            .to_usize();
+
         let mut primitive_remaps =
             IdVec::from_vec((0..object_id_space).map(|_| IdRemap::default()).collect());
 
-        for object_id in self.state.object_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained object ids have a value.
-            let object = unsafe { self.state.objects.get_mut(object_id) };
-            let primitive_ids: Vec<_> = object.iter_primitives().map(|(id, _)| id).collect();
-
-            for primitive_id in primitive_ids {
-                let primitive = object
-                    .primitive_mut(primitive_id)
-                    .expect("an iterated primitive is one of the object's");
-
-                if let Some(material_id) = primitive.material_id() {
-                    let new_material_id = material_remap
-                        .new_id(material_id)
-                        .expect("a primitive draws a live material in a valid state");
-                    primitive.set_material_id(Some(new_material_id));
-                }
-            }
+        for (object_id, object) in self.state.objects.iter_mut() {
+            object.relabel_materials(&material_remap);
 
             primitive_remaps[object_id.to_usize_id()] = object.gc();
         }
 
         // Compact the object id pool.
-        let object_remap = self.state.object_ids.gc();
-        // Safety: as above, for the object column.
-        unsafe { self.state.objects.gc(&object_remap) };
+        let object_remap = self.state.objects.gc();
 
         // Compact the node id pool, then translate child links and roots,
         // which point at the relabeled nodes and objects.
-        let node_remap = self.state.hierarchy_node_ids.gc();
-        // Safety: as above, for the node column.
-        unsafe { self.state.hierarchy_nodes.gc(&node_remap) };
+        let node_remap = self.state.hierarchy_nodes.gc();
 
-        let node_ids: Vec<_> = self.state.hierarchy_node_ids.iter().collect();
-        for node_id in node_ids {
-            // Safety: retained node ids have a value.
-            let node = unsafe { self.state.hierarchy_nodes.get_mut(node_id) };
+        for (_, node) in self.state.hierarchy_nodes.iter_mut() {
             for child_id in &mut node.child_node_ids {
                 *child_id = node_remap
                     .new_id(*child_id)
@@ -315,7 +281,9 @@ impl<T: MeshExt> MeshMain<T> {
             primitives: primitive_remaps,
             hierarchy_nodes: node_remap,
         };
+
         self.ext.did_gc(&self.state, &remap)?;
+
         Ok(remap)
     }
 
@@ -335,9 +303,10 @@ impl<T: MeshExt> MeshMain<T> {
     ) -> Result<U32Id<BMeshHierarchyNode>> {
         self.state.check_inserted_node(&node, 0, &HashSet::new())?;
 
-        let node_id = self.state.hierarchy_node_ids.retain();
-        self.state.hierarchy_nodes.retain(node_id, node);
+        let node_id = self.state.hierarchy_nodes.retain(node);
+
         self.ext.hierarchy_node_did_retain(&self.state, node_id)?;
+
         Ok(node_id)
     }
 
@@ -358,7 +327,7 @@ impl<T: MeshExt> MeshMain<T> {
         // The ids the batch will take, computed before any of it is inserted
         // so every check runs before any mutation.
         let prospective_ids: Vec<U32Id<BMeshHierarchyNode>> = (0..nodes.len())
-            .map(|index| self.state.hierarchy_node_ids.peek_nth(index))
+            .map(|index| self.state.hierarchy_nodes.ids().peek_nth(index))
             .collect();
 
         let batch_ids: HashSet<U32Id<BMeshHierarchyNode>> =
@@ -389,11 +358,7 @@ impl<T: MeshExt> MeshMain<T> {
 
         let ids: Vec<U32Id<BMeshHierarchyNode>> = nodes
             .into_iter()
-            .map(|node| {
-                let node_id = self.state.hierarchy_node_ids.retain();
-                self.state.hierarchy_nodes.retain(node_id, node);
-                node_id
-            })
+            .map(|node| self.state.hierarchy_nodes.retain(node))
             .collect();
 
         debug_assert_eq!(
@@ -416,7 +381,7 @@ impl<T: MeshExt> MeshMain<T> {
     ///    the parents first and drop it from the roots with
     ///    [`set_root_hierarchy_node_ids`](Self::set_root_hierarchy_node_ids)
     pub fn release_hierarchy_node(&mut self, id: U32Id<BMeshHierarchyNode>) -> Result<()> {
-        if !self.state.hierarchy_node_ids.is_retained(id) {
+        if !self.state.hierarchy_nodes.ids().is_retained(id) {
             return Err(Error::UnknownHierarchyNode { node_id: id });
         }
 
@@ -427,6 +392,7 @@ impl<T: MeshExt> MeshMain<T> {
             .collect();
 
         let root = self.state.root_hierarchy_node_ids.contains(&id);
+
         if !parent_ids.is_empty() || root {
             return Err(Error::HierarchyNodeInUse {
                 node_id: id,
@@ -437,9 +403,11 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext.hierarchy_node_will_release(&self.state, id)?;
 
-        // Safety: a retained node id has a value.
-        unsafe { self.state.hierarchy_nodes.release(id) };
-        self.state.hierarchy_node_ids.release_stable(id);
+        self.state
+            .hierarchy_nodes
+            .release_stable(id)
+            .expect("the node id was checked retained");
+
         Ok(())
     }
 
@@ -459,7 +427,7 @@ impl<T: MeshExt> MeshMain<T> {
         id: U32Id<BMeshHierarchyNode>,
         node: MeshHierarchyNode,
     ) -> Result<()> {
-        if !self.state.hierarchy_node_ids.is_retained(id) {
+        if !self.state.hierarchy_nodes.ids().is_retained(id) {
             return Err(Error::UnknownHierarchyNode { node_id: id });
         }
 
@@ -469,27 +437,33 @@ impl<T: MeshExt> MeshMain<T> {
             return Err(Error::InsertedCycle { index: 0 });
         }
 
-        // Safety: a retained node id has a value.
-        *unsafe { self.state.hierarchy_nodes.get_mut(id) } = node;
+        let slot = self
+            .state
+            .hierarchy_nodes
+            .get_mut(id)
+            .expect("the node id was checked retained");
+
+        *slot = node;
+
         Ok(())
     }
 
     /// Retains a file at the end of the listing, returning its id. Errors,
     /// changing nothing, if its name is empty or another file has it.
     pub fn retain_file(&mut self, file: MeshFile) -> Result<U32Id<BMeshFile>> {
-        let file_id = self.state.file_ids.peek_next();
+        let file_id = self.state.files.ids().peek_next();
 
         self.state.check_inserted_file(file_id, &file)?;
 
-        let retained_id = self.state.file_ids.retain();
+        let retained_id = self.state.files.retain(file);
 
         debug_assert_eq!(
             retained_id, file_id,
             "the id pool assigned the predicted id"
         );
 
-        self.state.files.retain(file_id, file);
         self.ext.file_did_retain(&self.state, file_id)?;
+
         Ok(file_id)
     }
 
@@ -500,7 +474,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// 2. an image still reads it, or a material or object property still
     ///    points at it; release or repoint those first
     pub fn release_file(&mut self, id: U32Id<BMeshFile>) -> Result<()> {
-        if !self.state.file_ids.is_retained(id) {
+        if !self.state.files.ids().is_retained(id) {
             return Err(Error::UnknownFile { file_id: id });
         }
 
@@ -533,9 +507,11 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext.file_will_release(&self.state, id)?;
 
-        // Safety: a retained file id has a value.
-        unsafe { self.state.files.release(id) };
-        self.state.file_ids.release_stable(id);
+        self.state
+            .files
+            .release_stable(id)
+            .expect("the file id was checked retained");
+
         Ok(())
     }
 
@@ -544,16 +520,18 @@ impl<T: MeshExt> MeshMain<T> {
     /// nothing, if `id` is not one of this state's files or `index` is at or
     /// past [`file_count`](Self::file_count).
     pub fn move_file(&mut self, id: U32Id<BMeshFile>, index: usize) -> Result<()> {
-        if !self.state.file_ids.is_retained(id) {
+        if !self.state.files.ids().is_retained(id) {
             return Err(Error::UnknownFile { file_id: id });
         }
 
         let count = self.state.file_count();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.state.file_ids.move_to(id, index);
+        self.state.files.move_to(id, index);
+
         Ok(())
     }
 
@@ -565,14 +543,20 @@ impl<T: MeshExt> MeshMain<T> {
     /// 3. an image reading it would no longer start with its media type's
     ///    signature
     pub fn set_file(&mut self, id: U32Id<BMeshFile>, file: MeshFile) -> Result<()> {
-        if !self.state.file_ids.is_retained(id) {
+        if !self.state.files.ids().is_retained(id) {
             return Err(Error::UnknownFile { file_id: id });
         }
 
         self.state.check_inserted_file(id, &file)?;
 
-        // Safety: a retained file id has a value.
-        *unsafe { self.state.files.get_mut(id) } = file;
+        let slot = self
+            .state
+            .files
+            .get_mut(id)
+            .expect("the file id was checked retained");
+
+        *slot = file;
+
         Ok(())
     }
 
@@ -582,9 +566,10 @@ impl<T: MeshExt> MeshMain<T> {
     pub fn retain_image(&mut self, image: MeshImage) -> Result<U32Id<BMeshImage>> {
         self.state.check_inserted_image(&image)?;
 
-        let image_id = self.state.image_ids.retain();
-        self.state.images.retain(image_id, image);
+        let image_id = self.state.images.retain(image);
+
         self.ext.image_did_retain(&self.state, image_id)?;
+
         Ok(image_id)
     }
 
@@ -594,7 +579,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// 1. `id` is not one of this state's images
     /// 2. a texture still samples it; release those textures first
     pub fn release_image(&mut self, id: U32Id<BMeshImage>) -> Result<()> {
-        if !self.state.image_ids.is_retained(id) {
+        if !self.state.images.ids().is_retained(id) {
             return Err(Error::UnknownImage { image_id: id });
         }
 
@@ -613,9 +598,11 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext.image_will_release(&self.state, id)?;
 
-        // Safety: a retained image id has a value.
-        unsafe { self.state.images.release(id) };
-        self.state.image_ids.release_stable(id);
+        self.state
+            .images
+            .release_stable(id)
+            .expect("the image id was checked retained");
+
         Ok(())
     }
 
@@ -624,16 +611,18 @@ impl<T: MeshExt> MeshMain<T> {
     /// nothing, if `id` is not one of this state's images or `index` is at
     /// or past [`image_count`](Self::image_count).
     pub fn move_image(&mut self, id: U32Id<BMeshImage>, index: usize) -> Result<()> {
-        if !self.state.image_ids.is_retained(id) {
+        if !self.state.images.ids().is_retained(id) {
             return Err(Error::UnknownImage { image_id: id });
         }
 
         let count = self.state.image_count();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.state.image_ids.move_to(id, index);
+        self.state.images.move_to(id, index);
+
         Ok(())
     }
 
@@ -642,14 +631,20 @@ impl<T: MeshExt> MeshMain<T> {
     /// state's images or `image` fails a [`retain_image`](Self::retain_image)
     /// check.
     pub fn set_image(&mut self, id: U32Id<BMeshImage>, image: MeshImage) -> Result<()> {
-        if !self.state.image_ids.is_retained(id) {
+        if !self.state.images.ids().is_retained(id) {
             return Err(Error::UnknownImage { image_id: id });
         }
 
         self.state.check_inserted_image(&image)?;
 
-        // Safety: a retained image id has a value.
-        *unsafe { self.state.images.get_mut(id) } = image;
+        let slot = self
+            .state
+            .images
+            .get_mut(id)
+            .expect("the image id was checked retained");
+
+        *slot = image;
+
         Ok(())
     }
 
@@ -663,9 +658,10 @@ impl<T: MeshExt> MeshMain<T> {
             });
         }
 
-        let texture_id = self.state.texture_ids.retain();
-        self.state.textures.retain(texture_id, texture);
+        let texture_id = self.state.textures.retain(texture);
+
         self.ext.texture_did_retain(&self.state, texture_id)?;
+
         Ok(texture_id)
     }
 
@@ -676,7 +672,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// 2. a material still draws it, or an object property still references
     ///    it; release or replace those first
     pub fn release_texture(&mut self, id: U32Id<BMeshTexture>) -> Result<()> {
-        if !self.state.texture_ids.is_retained(id) {
+        if !self.state.textures.ids().is_retained(id) {
             return Err(Error::UnknownTexture { texture_id: id });
         }
 
@@ -710,9 +706,11 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext.texture_will_release(&self.state, id)?;
 
-        // Safety: a retained texture id has a value.
-        unsafe { self.state.textures.release(id) };
-        self.state.texture_ids.release_stable(id);
+        self.state
+            .textures
+            .release_stable(id)
+            .expect("the texture id was checked retained");
+
         Ok(())
     }
 
@@ -721,16 +719,18 @@ impl<T: MeshExt> MeshMain<T> {
     /// nothing, if `id` is not one of this state's textures or `index` is at
     /// or past [`texture_count`](Self::texture_count).
     pub fn move_texture(&mut self, id: U32Id<BMeshTexture>, index: usize) -> Result<()> {
-        if !self.state.texture_ids.is_retained(id) {
+        if !self.state.textures.ids().is_retained(id) {
             return Err(Error::UnknownTexture { texture_id: id });
         }
 
         let count = self.state.texture_count();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.state.texture_ids.move_to(id, index);
+        self.state.textures.move_to(id, index);
+
         Ok(())
     }
 
@@ -739,7 +739,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// this state's textures or `texture` samples an image that is not one
     /// of this state's.
     pub fn set_texture(&mut self, id: U32Id<BMeshTexture>, texture: MeshTexture) -> Result<()> {
-        if !self.state.texture_ids.is_retained(id) {
+        if !self.state.textures.ids().is_retained(id) {
             return Err(Error::UnknownTexture { texture_id: id });
         }
 
@@ -749,8 +749,14 @@ impl<T: MeshExt> MeshMain<T> {
             });
         }
 
-        // Safety: a retained texture id has a value.
-        *unsafe { self.state.textures.get_mut(id) } = texture;
+        let slot = self
+            .state
+            .textures
+            .get_mut(id)
+            .expect("the texture id was checked retained");
+
+        *slot = texture;
+
         Ok(())
     }
 
@@ -763,9 +769,10 @@ impl<T: MeshExt> MeshMain<T> {
     pub fn retain_material(&mut self, material: MeshMaterial) -> Result<U32Id<BMeshMaterial>> {
         self.state.check_inserted_material(&material)?;
 
-        let material_id = self.state.material_ids.retain();
-        self.state.materials.retain(material_id, material);
+        let material_id = self.state.materials.retain(material);
+
         self.ext.material_did_retain(&self.state, material_id)?;
+
         Ok(material_id)
     }
 
@@ -776,7 +783,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// 2. a primitive still draws with it; repoint those primitives first
     ///    with [`set_primitive_material_id`](Self::set_primitive_material_id)
     pub fn release_material(&mut self, id: U32Id<BMeshMaterial>) -> Result<()> {
-        if !self.state.material_ids.is_retained(id) {
+        if !self.state.materials.ids().is_retained(id) {
             return Err(Error::UnknownMaterial { material_id: id });
         }
 
@@ -799,9 +806,11 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext.material_will_release(&self.state, id)?;
 
-        // Safety: a retained material id has a value.
-        unsafe { self.state.materials.release(id) };
-        self.state.material_ids.release_stable(id);
+        self.state
+            .materials
+            .release_stable(id)
+            .expect("the material id was checked retained");
+
         Ok(())
     }
 
@@ -810,16 +819,18 @@ impl<T: MeshExt> MeshMain<T> {
     /// changing nothing, if `id` is not one of this state's materials or
     /// `index` is at or past [`material_count`](Self::material_count).
     pub fn move_material(&mut self, id: U32Id<BMeshMaterial>, index: usize) -> Result<()> {
-        if !self.state.material_ids.is_retained(id) {
+        if !self.state.materials.ids().is_retained(id) {
             return Err(Error::UnknownMaterial { material_id: id });
         }
 
         let count = self.state.material_count();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.state.material_ids.move_to(id, index);
+        self.state.materials.move_to(id, index);
+
         Ok(())
     }
 
@@ -831,7 +842,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// 3. a primitive drawing with it does not carry a UV stream one of
     ///    `material`'s textures samples
     pub fn set_material(&mut self, id: U32Id<BMeshMaterial>, material: MeshMaterial) -> Result<()> {
-        if !self.state.material_ids.is_retained(id) {
+        if !self.state.materials.ids().is_retained(id) {
             return Err(Error::UnknownMaterial { material_id: id });
         }
 
@@ -855,8 +866,14 @@ impl<T: MeshExt> MeshMain<T> {
             }
         }
 
-        // Safety: a retained material id has a value.
-        *unsafe { self.state.materials.get_mut(id) } = material;
+        let slot = self
+            .state
+            .materials
+            .get_mut(id)
+            .expect("the material id was checked retained");
+
+        *slot = material;
+
         Ok(())
     }
 
@@ -879,9 +896,10 @@ impl<T: MeshExt> MeshMain<T> {
             )?;
         }
 
-        let object_id = self.state.object_ids.retain();
-        self.state.objects.retain(object_id, object);
+        let object_id = self.state.objects.retain(object);
+
         self.ext.object_did_retain(&self.state, object_id)?;
+
         Ok(object_id)
     }
 
@@ -891,7 +909,7 @@ impl<T: MeshExt> MeshMain<T> {
     /// 1. `id` is not one of this state's objects
     /// 2. a hierarchy node still places it; release those nodes first
     pub fn release_object(&mut self, id: U32Id<BMeshObject>) -> Result<()> {
-        if !self.state.object_ids.is_retained(id) {
+        if !self.state.objects.ids().is_retained(id) {
             return Err(Error::UnknownObject { object_id: id });
         }
 
@@ -910,9 +928,11 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext.object_will_release(&self.state, id)?;
 
-        // Safety: a retained object id has a value.
-        unsafe { self.state.objects.release(id) };
-        self.state.object_ids.release_stable(id);
+        self.state
+            .objects
+            .release_stable(id)
+            .expect("the object id was checked retained");
+
         Ok(())
     }
 
@@ -921,28 +941,30 @@ impl<T: MeshExt> MeshMain<T> {
     /// nothing, if `id` is not one of this state's objects or `index` is at
     /// or past [`object_count`](Self::object_count).
     pub fn move_object(&mut self, id: U32Id<BMeshObject>, index: usize) -> Result<()> {
-        if !self.state.object_ids.is_retained(id) {
+        if !self.state.objects.ids().is_retained(id) {
             return Err(Error::UnknownObject { object_id: id });
         }
 
         let count = self.state.object_count();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.state.object_ids.move_to(id, index);
+        self.state.objects.move_to(id, index);
+
         Ok(())
     }
 
     /// Sets the name of object `object_id`. Errors, changing nothing, if
     /// `object_id` is not one of this state's.
     pub fn set_object_name(&mut self, object_id: U32Id<BMeshObject>, name: String) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        unsafe { self.state.objects.get_mut(object_id) }.set_name(name);
+        object.set_name(name);
+
         Ok(())
     }
 
@@ -958,14 +980,18 @@ impl<T: MeshExt> MeshMain<T> {
         object_id: U32Id<BMeshObject>,
         properties: Vec<MeshProperty>,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        if !self.state.objects.ids().is_retained(object_id) {
             return Err(Error::UnknownObject { object_id });
         }
 
         self.state.check_properties(&properties)?;
 
-        // Safety: the object id is retained.
-        unsafe { self.state.objects.get_mut(object_id) }.set_properties(properties);
+        self.state
+            .objects
+            .get_mut(object_id)
+            .expect("the object id was checked retained")
+            .set_properties(properties);
+
         Ok(())
     }
 
@@ -982,20 +1008,21 @@ impl<T: MeshExt> MeshMain<T> {
         object_id: U32Id<BMeshObject>,
         primitive: MeshPrimitive,
     ) -> Result<U32Id<BMeshPrimitive>> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.object(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let object = unsafe { self.state.objects.get(object_id) };
         let primitive_id = object.peek_next_primitive_id();
 
         self.state
             .check_primitive_material(primitive_id, &primitive, primitive.material_id())?;
 
-        // Safety: the object id is retained.
-        let retained_id =
-            unsafe { self.state.objects.get_mut(object_id) }.retain_primitive(primitive);
+        let retained_id = self
+            .state
+            .objects
+            .get_mut(object_id)
+            .expect("the object id was checked retained")
+            .retain_primitive(primitive);
 
         debug_assert_eq!(
             retained_id, primitive_id,
@@ -1004,6 +1031,7 @@ impl<T: MeshExt> MeshMain<T> {
 
         self.ext
             .primitive_did_retain(&self.state, object_id, primitive_id)?;
+
         Ok(primitive_id)
     }
 
@@ -1016,23 +1044,22 @@ impl<T: MeshExt> MeshMain<T> {
         object_id: U32Id<BMeshObject>,
         primitive_id: U32Id<BMeshPrimitive>,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.object(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        if unsafe { self.state.objects.get(object_id) }
-            .primitive(primitive_id)
-            .is_none()
-        {
+        if object.primitive(primitive_id).is_none() {
             return Err(Error::UnknownPrimitive { primitive_id });
         }
 
         self.ext
             .primitive_will_release(&self.state, object_id, primitive_id)?;
 
-        // Safety: the object id is retained; the primitive was checked.
-        unsafe { self.state.objects.get_mut(object_id) }.release_primitive(primitive_id)
+        self.state
+            .objects
+            .get_mut(object_id)
+            .expect("the object id was checked retained")
+            .release_primitive(primitive_id)
     }
 
     /// Moves primitive `primitive_id` of object `object_id` to position
@@ -1047,12 +1074,11 @@ impl<T: MeshExt> MeshMain<T> {
         primitive_id: U32Id<BMeshPrimitive>,
         index: usize,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        unsafe { self.state.objects.get_mut(object_id) }.move_primitive(primitive_id, index)
+        object.move_primitive(primitive_id, index)
     }
 
     /// Sets the material primitive `primitive_id` of object `object_id` draws
@@ -1069,13 +1095,11 @@ impl<T: MeshExt> MeshMain<T> {
         primitive_id: U32Id<BMeshPrimitive>,
         material_id: Option<U32Id<BMeshMaterial>>,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.object(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let Some(primitive) = unsafe { self.state.objects.get(object_id) }.primitive(primitive_id)
-        else {
+        let Some(primitive) = object.primitive(primitive_id) else {
             return Err(Error::UnknownPrimitive { primitive_id });
         };
 
@@ -1088,11 +1112,14 @@ impl<T: MeshExt> MeshMain<T> {
         self.state
             .check_primitive_material(primitive_id, primitive, material_id)?;
 
-        // Safety: the object id is retained; the primitive was checked.
-        unsafe { self.state.objects.get_mut(object_id) }
+        self.state
+            .objects
+            .get_mut(object_id)
+            .expect("the object id was checked retained")
             .primitive_mut(primitive_id)
             .expect("the primitive was checked")
             .set_material_id(material_id);
+
         Ok(())
     }
 

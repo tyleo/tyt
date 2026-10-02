@@ -16,7 +16,7 @@ path = "src/main.rs"
 required-features = ["bin"]
 
 [dependencies]
-branded-id = "0.1.7"
+branded-id = "0.2.0"
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 treegrid = { version = "0.2.0", default-features = false, features = [

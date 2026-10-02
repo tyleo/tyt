@@ -4,60 +4,33 @@ use crate::{
     VoxHierarchyNode, VoxObject, VoxPalette, VoxValuePool, check_node_transform,
     first_cycle_node_index,
 };
-use branded_id::{
-    IdVec, U32Id, UsizeId,
-    soa::{IdField, IdStruct},
-};
+use branded_id::{IdVec, U32Id, UsizeId, soa::IdList};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionExt, UNIT_ROTATION_TOLERANCE};
 
 /// The scene of a voxel model: the read side of [`VoxMain`](crate::VoxMain),
 /// which forwards to it.
 ///
-/// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain) owns
-/// mutation logic over these fields; they are crate-private so the id pools and
-/// columns stay in sync. An ext hook reads the scene through this type.
+/// This is the backing store. [`VoxMain`](crate::VoxMain) owns mutation logic
+/// over these fields. The fields are crate-private so every mutation goes
+/// through its cross-reference checks. An ext hook reads the scene through this
+/// type.
 #[derive(Debug, Default)]
 pub struct VoxState {
-    /// Value-pool id pool.
-    pub(crate) value_pool_ids: IdStruct<BVoxValuePool>,
-
     /// The shared value pools.
-    pub(crate) value_pools: IdField<BVoxValuePool, VoxValuePool>,
-
-    /// Palette id pool.
-    pub(crate) palette_ids: IdStruct<BVoxPalette>,
+    pub(crate) value_pools: IdList<BVoxValuePool, VoxValuePool>,
 
     /// The shared palettes.
-    pub(crate) palettes: IdField<BVoxPalette, VoxPalette>,
-
-    /// Object id pool.
-    pub(crate) object_ids: IdStruct<BVoxObject>,
+    pub(crate) palettes: IdList<BVoxPalette, VoxPalette>,
 
     /// The objects.
-    pub(crate) objects: IdField<BVoxObject, VoxObject>,
-
-    /// Hierarchy node id pool.
-    pub(crate) hierarchy_node_ids: IdStruct<BVoxHierarchyNode>,
+    pub(crate) objects: IdList<BVoxObject, VoxObject>,
 
     /// The hierarchy nodes.
-    pub(crate) hierarchy_nodes: IdField<BVoxHierarchyNode, VoxHierarchyNode>,
+    pub(crate) hierarchy_nodes: IdList<BVoxHierarchyNode, VoxHierarchyNode>,
 
     /// The scene's roots: hierarchy node ids.
     pub(crate) root_hierarchy_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
-}
-
-impl Drop for VoxState {
-    fn drop(&mut self) {
-        // Safety: each column holds a value for every id in its id pool; the
-        // fields free their own storage on drop.
-        unsafe {
-            self.value_pools.release_all(&self.value_pool_ids);
-            self.palettes.release_all(&self.palette_ids);
-            self.objects.release_all(&self.object_ids);
-            self.hierarchy_nodes.release_all(&self.hierarchy_node_ids);
-        }
-    }
 }
 
 impl VoxState {
@@ -186,21 +159,18 @@ impl VoxState {
         // Acyclicity; every child is now known live. Works over the retained
         // node ids by position, so it holds whether or not the node id pool has
         // holes.
-        let node_ids: Vec<_> = self.hierarchy_node_ids.iter().collect();
+        let node_ids: Vec<_> = self.hierarchy_nodes.ids().iter().collect();
+
         let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = node_ids
             .iter()
             .enumerate()
             .map(|(node_index, &node_id)| (node_id, node_index))
             .collect();
 
-        let children: Vec<&[U32Id<BVoxHierarchyNode>]> = node_ids
+        let children: Vec<&[U32Id<BVoxHierarchyNode>]> = self
+            .hierarchy_nodes
             .iter()
-            .map(|&node_id| {
-                // Safety: `node_id` is a retained node id.
-                unsafe { self.hierarchy_nodes.get(node_id) }
-                    .child_node_ids
-                    .as_slice()
-            })
+            .map(|(_, node)| node.child_node_ids.as_slice())
             .collect();
 
         if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
@@ -307,25 +277,19 @@ impl VoxState {
 
     /// The hierarchy node `id`, or `None` if not one of this state's.
     pub fn hierarchy_node(&self, id: U32Id<BVoxHierarchyNode>) -> Option<&VoxHierarchyNode> {
-        // Safety: retained ids have a value.
-        self.hierarchy_node_ids
-            .is_retained(id)
-            .then(|| unsafe { self.hierarchy_nodes.get(id) })
+        self.hierarchy_nodes.get(id)
     }
 
     /// Number of hierarchy nodes.
     pub fn hierarchy_node_count(&self) -> usize {
-        self.hierarchy_node_ids.len()
+        self.hierarchy_nodes.len()
     }
 
     /// Hierarchy nodes in listing order, as `(id, node)`.
     pub fn iter_hierarchy_nodes(
         &self,
     ) -> impl Iterator<Item = (U32Id<BVoxHierarchyNode>, &VoxHierarchyNode)> + '_ {
-        // Safety: retained ids have a value.
-        self.hierarchy_node_ids
-            .iter()
-            .map(move |node_id| (node_id, unsafe { self.hierarchy_nodes.get(node_id) }))
+        self.hierarchy_nodes.iter()
     }
 
     /// Whether `target` is one of `from` or reachable from any of them through
@@ -376,23 +340,17 @@ impl VoxState {
 
     /// Objects in listing order, as `(id, object)`.
     pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BVoxObject>, &VoxObject)> + '_ {
-        // Safety: retained ids have a value.
-        self.object_ids
-            .iter()
-            .map(move |object_id| (object_id, unsafe { self.objects.get(object_id) }))
+        self.objects.iter()
     }
 
     /// The object `id`, or `None` if not one of this state's.
     pub fn object(&self, id: U32Id<BVoxObject>) -> Option<&VoxObject> {
-        // Safety: retained ids have a value.
-        self.object_ids
-            .is_retained(id)
-            .then(|| unsafe { self.objects.get(id) })
+        self.objects.get(id)
     }
 
     /// Number of objects.
     pub fn object_count(&self) -> usize {
-        self.object_ids.len()
+        self.objects.len()
     }
 
     /// The effective palette of `object`, resolving its layer override rule
@@ -452,23 +410,17 @@ impl VoxState {
 
     /// Palettes in listing order, as `(id, palette)`.
     pub fn iter_palettes(&self) -> impl Iterator<Item = (U32Id<BVoxPalette>, &VoxPalette)> + '_ {
-        // Safety: retained ids have a value.
-        self.palette_ids
-            .iter()
-            .map(move |palette_id| (palette_id, unsafe { self.palettes.get(palette_id) }))
+        self.palettes.iter()
     }
 
     /// The palette `id`, or `None` if not one of this state's.
     pub fn palette(&self, id: U32Id<BVoxPalette>) -> Option<&VoxPalette> {
-        // Safety: retained ids have a value.
-        self.palette_ids
-            .is_retained(id)
-            .then(|| unsafe { self.palettes.get(id) })
+        self.palettes.get(id)
     }
 
     /// Number of shared palettes.
     pub fn palette_count(&self) -> usize {
-        self.palette_ids.len()
+        self.palettes.len()
     }
 
     /// The scene's roots: hierarchy node ids.
@@ -480,24 +432,16 @@ impl VoxState {
     pub fn iter_value_pools(
         &self,
     ) -> impl Iterator<Item = (U32Id<BVoxValuePool>, &VoxValuePool)> + '_ {
-        // Safety: retained ids have a value.
-        self.value_pool_ids.iter().map(move |value_pool_id| {
-            (value_pool_id, unsafe {
-                self.value_pools.get(value_pool_id)
-            })
-        })
+        self.value_pools.iter()
     }
 
     /// The value pool `id`, or `None` if not one of this state's.
     pub fn value_pool(&self, id: U32Id<BVoxValuePool>) -> Option<&VoxValuePool> {
-        // Safety: retained ids have a value.
-        self.value_pool_ids
-            .is_retained(id)
-            .then(|| unsafe { self.value_pools.get(id) })
+        self.value_pools.get(id)
     }
 
     /// Number of shared value pools.
     pub fn value_pool_count(&self) -> usize {
-        self.value_pool_ids.len()
+        self.value_pools.len()
     }
 }

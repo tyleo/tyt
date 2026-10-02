@@ -167,7 +167,13 @@ impl<T: VoxExt> VoxMain<T> {
         // Compact each value pool's values first, recording the value
         // relabelings by the value pool's pre-gc id so the palette pass below
         // can translate its cells before value-pool ids move.
-        let value_pool_id_space = self.state.value_pool_ids.peek_next_fresh().to_u32() as usize;
+        let value_pool_id_space = self
+            .state
+            .value_pools
+            .ids()
+            .peek_next_fresh()
+            .to_usize_id()
+            .to_usize();
 
         let mut value_pool_value_remaps = IdVec::from_vec(
             (0..value_pool_id_space)
@@ -175,9 +181,7 @@ impl<T: VoxExt> VoxMain<T> {
                 .collect(),
         );
 
-        for value_pool_id in self.state.value_pool_ids.iter() {
-            // Safety: retained value-pool ids have a value.
-            let value_pool = unsafe { self.state.value_pools.get_mut(value_pool_id) };
+        for (value_pool_id, value_pool) in self.state.value_pools.iter_mut() {
             value_pool_value_remaps[value_pool_id.to_usize_id()] = value_pool.gc_values();
         }
 
@@ -186,63 +190,53 @@ impl<T: VoxExt> VoxMain<T> {
         // palettes are compacted. Value-pool ids follow the listing: a value
         // pool moved before gc is renumbered here, and every property's
         // value-pool id is rewritten to match.
-        let value_pool_remap = self.state.value_pool_ids.gc();
-        // Safety: the value-pool column was in sync with the pre-gc id pool,
-        // and nothing has retained or released since.
-        unsafe { self.state.value_pools.gc(&value_pool_remap) };
+        let value_pool_remap = self.state.value_pools.gc();
 
         // Compact each palette's own id pools, so the material relabelings are
         // ready when object samples are translated below. Because they are
         // indexed by old palette id, the column covers the palette id pool's
         // whole id space. Cells translate through the value relabelings first,
         // while each property still names its value pool's pre-gc id.
-        let palette_id_space = self.state.palette_ids.peek_next_fresh().to_u32() as usize;
+        let palette_id_space = self
+            .state
+            .palettes
+            .ids()
+            .peek_next_fresh()
+            .to_usize_id()
+            .to_usize();
+
         let mut material_remaps =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
 
-        for palette_id in self.state.palette_ids.iter().collect::<Vec<_>>() {
-            // Safety: retained palette ids have a value.
-            let palette = unsafe { self.state.palettes.get_mut(palette_id) };
+        for (palette_id, palette) in self.state.palettes.iter_mut() {
             palette.relabel_value_pool_values(&value_pool_value_remaps);
+
             palette.relabel_value_pools(|value_pool_id| {
                 value_pool_remap
                     .new_id(value_pool_id)
                     .expect("a property names a live value pool in a valid state")
             });
+
             material_remaps[palette_id.to_usize_id()] = palette.gc();
         }
 
         // Compact the palette id pool.
-        let palette_remap = self.state.palette_ids.gc();
-        // Safety: the palette column was in sync with the pre-gc palette id
-        // pool, and nothing has retained or released since.
-        unsafe { self.state.palettes.gc(&palette_remap) };
+        let palette_remap = self.state.palettes.gc();
 
         // Rewrite each object's palette references and sample cells, then
         // compact its own layer id pool.
-        let object_ids: Vec<_> = self.state.object_ids.iter().collect();
-        for object_id in object_ids {
-            // Safety: retained object ids have a value.
-            unsafe { self.state.objects.get_mut(object_id) }.gc(&palette_remap, &material_remaps);
+        for (_, object) in self.state.objects.iter_mut() {
+            object.gc(&palette_remap, &material_remaps);
         }
 
         // Compact the object id pool.
-        let object_remap = self.state.object_ids.gc();
-        // Safety: the object column was in sync with the pre-gc object id pool,
-        // and nothing has retained or released since.
-        unsafe { self.state.objects.gc(&object_remap) };
+        let object_remap = self.state.objects.gc();
 
         // Compact the node id pool, then translate child links and roots, which
         // point at the relabeled nodes and objects.
-        let node_remap = self.state.hierarchy_node_ids.gc();
-        // Safety: the node column was in sync with the pre-gc node id pool, and
-        // nothing has retained or released since.
-        unsafe { self.state.hierarchy_nodes.gc(&node_remap) };
+        let node_remap = self.state.hierarchy_nodes.gc();
 
-        let node_ids: Vec<_> = self.state.hierarchy_node_ids.iter().collect();
-        for node_id in node_ids {
-            // Safety: retained node ids have a value.
-            let node = unsafe { self.state.hierarchy_nodes.get_mut(node_id) };
+        for (_, node) in self.state.hierarchy_nodes.iter_mut() {
             for child_id in &mut node.child_node_ids {
                 *child_id = node_remap
                     .new_id(*child_id)
@@ -290,9 +284,10 @@ impl<T: VoxExt> VoxMain<T> {
     ) -> Result<U32Id<BVoxHierarchyNode>> {
         self.state.check_inserted_node(&node, 0, &HashSet::new())?;
 
-        let node_id = self.state.hierarchy_node_ids.retain();
-        self.state.hierarchy_nodes.retain(node_id, node);
+        let node_id = self.state.hierarchy_nodes.retain(node);
+
         self.ext.hierarchy_node_did_retain(&self.state, node_id)?;
+
         Ok(node_id)
     }
 
@@ -313,7 +308,7 @@ impl<T: VoxExt> VoxMain<T> {
         // The ids the batch will take, named before any of it is inserted so
         // every check runs before any mutation.
         let prospective_ids: Vec<U32Id<BVoxHierarchyNode>> = (0..nodes.len())
-            .map(|index| self.state.hierarchy_node_ids.peek_nth(index))
+            .map(|index| self.state.hierarchy_nodes.ids().peek_nth(index))
             .collect();
 
         let batch_ids: HashSet<U32Id<BVoxHierarchyNode>> =
@@ -344,11 +339,7 @@ impl<T: VoxExt> VoxMain<T> {
 
         let ids: Vec<U32Id<BVoxHierarchyNode>> = nodes
             .into_iter()
-            .map(|node| {
-                let node_id = self.state.hierarchy_node_ids.retain();
-                self.state.hierarchy_nodes.retain(node_id, node);
-                node_id
-            })
+            .map(|node| self.state.hierarchy_nodes.retain(node))
             .collect();
 
         debug_assert_eq!(
@@ -371,7 +362,7 @@ impl<T: VoxExt> VoxMain<T> {
     ///    the parents first and drop it from the roots with
     ///    [`set_root_hierarchy_node_ids`](Self::set_root_hierarchy_node_ids)
     pub fn release_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Result<()> {
-        if !self.state.hierarchy_node_ids.is_retained(id) {
+        if self.hierarchy_node(id).is_none() {
             return Err(Error::UnknownHierarchyNode { node_id: id });
         }
 
@@ -392,9 +383,11 @@ impl<T: VoxExt> VoxMain<T> {
 
         self.ext.hierarchy_node_will_release(&self.state, id)?;
 
-        // Safety: a retained node id has a value.
-        unsafe { self.state.hierarchy_nodes.release(id) };
-        self.state.hierarchy_node_ids.release_stable(id);
+        self.state
+            .hierarchy_nodes
+            .release_stable(id)
+            .expect("a checked node id is retained");
+
         Ok(())
     }
 
@@ -405,13 +398,12 @@ impl<T: VoxExt> VoxMain<T> {
         id: U32Id<BVoxHierarchyNode>,
         name: String,
     ) -> Result<()> {
-        if !self.state.hierarchy_node_ids.is_retained(id) {
+        let Some(node) = self.state.hierarchy_nodes.get_mut(id) else {
             return Err(Error::UnknownHierarchyNode { node_id: id });
-        }
+        };
 
-        // Safety: a retained node id has a value.
-        let node = unsafe { self.state.hierarchy_nodes.get_mut(id) };
         let old_name = mem::replace(&mut node.name, name);
+
         self.ext
             .hierarchy_node_name_did_set(&self.state, id, &old_name)
     }
@@ -423,15 +415,14 @@ impl<T: VoxExt> VoxMain<T> {
         id: U32Id<BVoxHierarchyNode>,
         transform: TyTransformF64,
     ) -> Result<()> {
-        if !self.state.hierarchy_node_ids.is_retained(id) {
+        let Some(node) = self.state.hierarchy_nodes.get_mut(id) else {
             return Err(Error::UnknownHierarchyNode { node_id: id });
-        }
+        };
 
         check_node_transform(id, &transform)?;
 
-        // Safety: a retained node id has a value.
-        let node = unsafe { self.state.hierarchy_nodes.get_mut(id) };
         let old_transform = mem::replace(&mut node.transform, transform);
+
         self.ext
             .hierarchy_node_transform_did_set(&self.state, id, old_transform)
     }
@@ -450,7 +441,7 @@ impl<T: VoxExt> VoxMain<T> {
         child_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
         child_object_ids: Vec<U32Id<BVoxObject>>,
     ) -> Result<()> {
-        if !self.state.hierarchy_node_ids.is_retained(id) {
+        if self.hierarchy_node(id).is_none() {
             return Err(Error::UnknownHierarchyNode { node_id: id });
         }
 
@@ -461,10 +452,16 @@ impl<T: VoxExt> VoxMain<T> {
             return Err(Error::Cycle { node_id: id });
         }
 
-        // Safety: a retained node id has a value.
-        let node = unsafe { self.state.hierarchy_nodes.get_mut(id) };
+        let node = self
+            .state
+            .hierarchy_nodes
+            .get_mut(id)
+            .expect("a checked node id is retained");
+
         let old_child_node_ids = mem::replace(&mut node.child_node_ids, child_node_ids);
+
         let old_child_object_ids = mem::replace(&mut node.child_object_ids, child_object_ids);
+
         self.ext.hierarchy_node_children_did_set(
             &self.state,
             id,
@@ -486,23 +483,21 @@ impl<T: VoxExt> VoxMain<T> {
         palette_id: U32Id<BVoxPalette>,
         default_material_id: U32Id<BVoxMaterial>,
     ) -> Result<U32Id<BVoxLayer>> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        let Some(palette_ref) = self.palette(palette_id) else {
+        let Some(palette) = self.state.palettes.get(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
         };
 
-        if !palette_ref.contains_material(default_material_id) {
+        if !palette.contains_material(default_material_id) {
             return Err(Error::UnknownMaterial {
                 material_id: default_material_id,
             });
         }
 
-        // Safety: the object id is retained.
-        Ok(unsafe { self.state.objects.get_mut(object_id) }
-            .retain_layer(palette_id, default_material_id))
+        Ok(object.retain_layer(palette_id, default_material_id))
     }
 
     /// Releases layer `layer_id` from object `object_id`, dropping its
@@ -513,12 +508,11 @@ impl<T: VoxExt> VoxMain<T> {
         object_id: U32Id<BVoxObject>,
         layer_id: U32Id<BVoxLayer>,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        unsafe { self.state.objects.get_mut(object_id) }.release_layer(layer_id)
+        object.release_layer(layer_id)
     }
 
     /// Moves layer `layer_id` of object `object_id` to position `index` in its
@@ -533,12 +527,11 @@ impl<T: VoxExt> VoxMain<T> {
         layer_id: U32Id<BVoxLayer>,
         index: usize,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        unsafe { self.state.objects.get_mut(object_id) }.move_layer(layer_id, index)
+        object.move_layer(layer_id, index)
     }
 
     /// Retains a material with one value id per property, in property order, to
@@ -552,22 +545,22 @@ impl<T: VoxExt> VoxMain<T> {
         palette_id: U32Id<BVoxPalette>,
         value_ids: Vec<U32Id<BVoxValuePoolValue>>,
     ) -> Result<U32Id<BVoxMaterial>> {
-        if !self.state.palette_ids.is_retained(palette_id) {
+        let Some(palette) = self.state.palettes.get_mut(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
-        }
+        };
 
-        // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.state.palettes.get(palette_id) };
-        if value_ids.len() != palette_ref.property_count() {
+        if value_ids.len() != palette.property_count() {
             return Err(Error::MaterialValueArity {
                 values: value_ids.len(),
-                properties: palette_ref.property_count(),
+                properties: palette.property_count(),
             });
         }
 
-        for ((_, property), &value_id) in palette_ref.iter_properties().zip(&value_ids) {
+        for ((_, property), &value_id) in palette.iter_properties().zip(&value_ids) {
             let value_pool = self
-                .value_pool(property.value_pool_id)
+                .state
+                .value_pools
+                .get(property.value_pool_id)
                 .expect("a property names a live value pool");
 
             if !value_pool.contains_value(value_id) {
@@ -575,11 +568,11 @@ impl<T: VoxExt> VoxMain<T> {
             }
         }
 
-        // Safety: the palette id is retained; the arity was checked.
-        let material_id =
-            unsafe { self.state.palettes.get_mut(palette_id) }.retain_material(value_ids)?;
+        let material_id = palette.retain_material(value_ids)?;
+
         self.ext
             .material_did_retain(&self.state, palette_id, material_id)?;
+
         Ok(material_id)
     }
 
@@ -607,12 +600,9 @@ impl<T: VoxExt> VoxMain<T> {
         palette_id: U32Id<BVoxPalette>,
         material_ids: &HashSet<U32Id<BVoxMaterial>>,
     ) -> Result<()> {
-        if !self.state.palette_ids.is_retained(palette_id) {
+        let Some(palette_ref) = self.state.palettes.get(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
-        }
-
-        // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.state.palettes.get(palette_id) };
+        };
 
         for &material_id in material_ids {
             if !palette_ref.contains_material(material_id) {
@@ -669,15 +659,19 @@ impl<T: VoxExt> VoxMain<T> {
         self.ext
             .materials_will_release(&self.state, palette_id, &doomed_ids)?;
 
-        // Safety: the palette id is retained; each material is one of its
-        // materials.
-        let palette_ref = unsafe { self.state.palettes.get_mut(palette_id) };
+        let palette = self
+            .state
+            .palettes
+            .get_mut(palette_id)
+            .expect("a checked palette id is retained");
 
         // Back to front: a release shifts the materials listed after it, so
         // dropping the last one first leaves nothing to shift and keeps the
         // batch linear where front-to-back release is quadratic.
         for material_id in doomed_ids.into_iter().rev() {
-            palette_ref.release_material(material_id);
+            palette
+                .release_material(material_id)
+                .expect("a doomed material is one of the palette's materials");
         }
 
         Ok(())
@@ -697,12 +691,9 @@ impl<T: VoxExt> VoxMain<T> {
         palette_id: U32Id<BVoxPalette>,
         replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
     ) -> Result<()> {
-        if !self.state.palette_ids.is_retained(palette_id) {
+        let Some(palette_ref) = self.state.palettes.get(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
-        }
-
-        // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.state.palettes.get(palette_id) };
+        };
 
         for (&material_id, &replacement_id) in replacement_ids {
             for checked_material_id in [material_id, replacement_id] {
@@ -714,15 +705,13 @@ impl<T: VoxExt> VoxMain<T> {
             }
         }
 
-        let object_ids: Vec<_> = self.state.object_ids.iter().collect();
-        for object_id in object_ids {
-            // Safety: retained object ids have a value.
-            let object = unsafe { self.state.objects.get_mut(object_id) };
+        for (_, object) in self.state.objects.iter_mut() {
             object.repaint_materials(palette_id, replacement_ids);
         }
 
         self.ext
             .materials_did_repaint(&self.state, palette_id, replacement_ids)?;
+
         Ok(())
     }
 
@@ -739,34 +728,29 @@ impl<T: VoxExt> VoxMain<T> {
         property_id: U32Id<BVoxProperty>,
         value_id: U32Id<BVoxValuePoolValue>,
     ) -> Result<()> {
-        if !self.state.palette_ids.is_retained(palette_id) {
+        let Some(palette) = self.state.palettes.get_mut(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
-        }
+        };
 
-        // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.state.palettes.get(palette_id) };
-        if !palette_ref.contains_material(material_id) {
+        if !palette.contains_material(material_id) {
             return Err(Error::UnknownMaterial { material_id });
         }
 
-        let Some(property) = palette_ref.property(property_id) else {
+        let Some(property) = palette.property(property_id) else {
             return Err(Error::UnknownProperty { property_id });
         };
 
         let value_pool = self
-            .value_pool(property.value_pool_id)
+            .state
+            .value_pools
+            .get(property.value_pool_id)
             .expect("a property names a live value pool");
 
         if !value_pool.contains_value(value_id) {
             return Err(Error::UnknownValuePoolValue { value_id });
         }
 
-        // Safety: the palette id is retained.
-        unsafe { self.state.palettes.get_mut(palette_id) }.set_value_id(
-            material_id,
-            property_id,
-            value_id,
-        )
+        palette.set_value_id(material_id, property_id, value_id)
     }
 
     /// Retains an object at the end of the listing, returning its id. Errors,
@@ -797,9 +781,10 @@ impl<T: VoxExt> VoxMain<T> {
             }
         }
 
-        let object_id = self.state.object_ids.retain();
-        self.state.objects.retain(object_id, object);
+        let object_id = self.state.objects.retain(object);
+
         self.ext.object_did_retain(&self.state, object_id)?;
+
         Ok(object_id)
     }
 
@@ -809,7 +794,7 @@ impl<T: VoxExt> VoxMain<T> {
     /// 1. `id` is not one of this state's objects
     /// 2. a hierarchy node still places it; release those nodes first
     pub fn release_object(&mut self, id: U32Id<BVoxObject>) -> Result<()> {
-        if !self.state.object_ids.is_retained(id) {
+        if self.object(id).is_none() {
             return Err(Error::UnknownObject { object_id: id });
         }
 
@@ -828,9 +813,11 @@ impl<T: VoxExt> VoxMain<T> {
 
         self.ext.object_will_release(&self.state, id)?;
 
-        // Safety: a retained object id has a value.
-        unsafe { self.state.objects.release(id) };
-        self.state.object_ids.release_stable(id);
+        self.state
+            .objects
+            .release_stable(id)
+            .expect("a checked object id is retained");
+
         Ok(())
     }
 
@@ -839,36 +826,32 @@ impl<T: VoxExt> VoxMain<T> {
     /// nothing, if `id` is not one of this state's objects or `index` is at or
     /// past [`object_count`](Self::object_count).
     pub fn move_object(&mut self, id: U32Id<BVoxObject>, index: usize) -> Result<()> {
-        if !self.state.object_ids.is_retained(id) {
+        let Some(old_index) = self.state.objects.ids().index_of(id) else {
             return Err(Error::UnknownObject { object_id: id });
-        }
+        };
 
-        let count = self.state.object_ids.len();
+        let count = self.state.objects.len();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        let old_index = self
-            .state
-            .object_ids
-            .iter()
-            .position(|object_id| object_id == id)
-            .expect("a retained object is listed");
-        self.state.object_ids.move_to(id, index);
+        self.state.objects.move_to(id, index);
+
         self.ext.object_did_move(&self.state, id, old_index)
     }
 
     /// Sets the name of object `object_id`. Errors, changing nothing, if
     /// `object_id` is not one of this state's.
     pub fn set_object_name(&mut self, object_id: U32Id<BVoxObject>, name: String) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let object = unsafe { self.state.objects.get_mut(object_id) };
         let old_name = object.name().to_owned();
+
         object.set_name(name);
+
         self.ext
             .object_name_did_set(&self.state, object_id, &old_name)
     }
@@ -880,14 +863,14 @@ impl<T: VoxExt> VoxMain<T> {
         object_id: U32Id<BVoxObject>,
         origin: TyVector3I32,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let object = unsafe { self.state.objects.get_mut(object_id) };
         let old_origin = object.origin();
+
         object.set_origin(origin);
+
         self.ext
             .object_origin_did_set(&self.state, object_id, old_origin)
     }
@@ -902,14 +885,14 @@ impl<T: VoxExt> VoxMain<T> {
         bounds: TyVector3U32,
         position: impl Fn(TyVector3U32) -> TyVector3I32,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let object = unsafe { self.state.objects.get_mut(object_id) };
         let old_bounds = object.bounds();
+
         let voxel_ids = object.remap_voxels(bounds, position)?;
+
         self.ext
             .object_voxels_did_remap(&self.state, object_id, old_bounds, &voxel_ids)
     }
@@ -924,14 +907,14 @@ impl<T: VoxExt> VoxMain<T> {
         bounds: TyVector3U32,
         source: impl Fn(TyVector3U32) -> Option<TyVector3U32>,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let object = unsafe { self.state.objects.get_mut(object_id) };
         let old_bounds = object.bounds();
+
         let old_voxel_ids = object.resample_voxels(bounds, source)?;
+
         self.ext
             .object_voxels_did_resample(&self.state, object_id, old_bounds, &old_voxel_ids)
     }
@@ -964,9 +947,10 @@ impl<T: VoxExt> VoxMain<T> {
             }
         }
 
-        let palette_id = self.state.palette_ids.retain();
-        self.state.palettes.retain(palette_id, palette);
+        let palette_id = self.state.palettes.retain(palette);
+
         self.ext.palette_did_retain(&self.state, palette_id)?;
+
         Ok(palette_id)
     }
 
@@ -977,7 +961,7 @@ impl<T: VoxExt> VoxMain<T> {
     /// 2. an object layer still references it; release those layers first with
     ///    [`release_layer`](Self::release_layer)
     pub fn release_palette(&mut self, id: U32Id<BVoxPalette>) -> Result<()> {
-        if !self.state.palette_ids.is_retained(id) {
+        if self.palette(id).is_none() {
             return Err(Error::UnknownPalette { palette_id: id });
         }
 
@@ -996,9 +980,11 @@ impl<T: VoxExt> VoxMain<T> {
 
         self.ext.palette_will_release(&self.state, id)?;
 
-        // Safety: a retained palette id has a value; its Drop frees its cells.
-        unsafe { self.state.palettes.release(id) };
-        self.state.palette_ids.release_stable(id);
+        self.state
+            .palettes
+            .release_stable(id)
+            .expect("a checked palette id is retained");
+
         Ok(())
     }
 
@@ -1007,16 +993,18 @@ impl<T: VoxExt> VoxMain<T> {
     /// nothing, if `id` is not one of this state's palettes or `index` is at or
     /// past [`palette_count`](Self::palette_count).
     pub fn move_palette(&mut self, id: U32Id<BVoxPalette>, index: usize) -> Result<()> {
-        if !self.state.palette_ids.is_retained(id) {
+        if self.palette(id).is_none() {
             return Err(Error::UnknownPalette { palette_id: id });
         }
 
-        let count = self.state.palette_ids.len();
+        let count = self.state.palettes.len();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
 
-        self.state.palette_ids.move_to(id, index);
+        self.state.palettes.move_to(id, index);
+
         Ok(())
     }
 
@@ -1036,11 +1024,11 @@ impl<T: VoxExt> VoxMain<T> {
         value_pool_id: U32Id<BVoxValuePool>,
         default_value_id: U32Id<BVoxValuePoolValue>,
     ) -> Result<U32Id<BVoxProperty>> {
-        if !self.state.palette_ids.is_retained(palette_id) {
+        let Some(palette) = self.state.palettes.get_mut(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
-        }
+        };
 
-        let Some(value_pool) = self.value_pool(value_pool_id) else {
+        let Some(value_pool) = self.state.value_pools.get(value_pool_id) else {
             return Err(Error::UnknownValuePool { value_pool_id });
         };
 
@@ -1050,12 +1038,7 @@ impl<T: VoxExt> VoxMain<T> {
             });
         }
 
-        // Safety: the palette id is retained.
-        unsafe { self.state.palettes.get_mut(palette_id) }.retain_property(
-            name,
-            value_pool_id,
-            default_value_id,
-        )
+        palette.retain_property(name, value_pool_id, default_value_id)
     }
 
     /// Releases property `property_id` from palette `palette_id`. Errors,
@@ -1066,12 +1049,11 @@ impl<T: VoxExt> VoxMain<T> {
         palette_id: U32Id<BVoxPalette>,
         property_id: U32Id<BVoxProperty>,
     ) -> Result<()> {
-        if !self.state.palette_ids.is_retained(palette_id) {
+        let Some(palette) = self.state.palettes.get_mut(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
-        }
+        };
 
-        // Safety: the palette id is retained.
-        unsafe { self.state.palettes.get_mut(palette_id) }.release_property(property_id)
+        palette.release_property(property_id)
     }
 
     /// Appends a root. Errors, changing nothing, if `root_id` is not one of
@@ -1115,9 +1097,7 @@ impl<T: VoxExt> VoxMain<T> {
 
     /// Retains a shared value pool at the end of the listing, returning its id.
     pub fn retain_value_pool(&mut self, value_pool: VoxValuePool) -> U32Id<BVoxValuePool> {
-        let value_pool_id = self.state.value_pool_ids.retain();
-        self.state.value_pools.retain(value_pool_id, value_pool);
-        value_pool_id
+        self.state.value_pools.retain(value_pool)
     }
 
     /// Releases value pool `id`. Leaves a hole until [`gc`](Self::gc)
@@ -1127,7 +1107,7 @@ impl<T: VoxExt> VoxMain<T> {
     /// 2. a palette property still references it; release those properties
     ///    first with [`release_property`](Self::release_property)
     pub fn release_value_pool(&mut self, id: U32Id<BVoxValuePool>) -> Result<()> {
-        if !self.state.value_pool_ids.is_retained(id) {
+        if self.value_pool(id).is_none() {
             return Err(Error::UnknownValuePool { value_pool_id: id });
         }
 
@@ -1148,9 +1128,11 @@ impl<T: VoxExt> VoxMain<T> {
             });
         }
 
-        // Safety: a retained value pool id has a value.
-        unsafe { self.state.value_pools.release(id) };
-        self.state.value_pool_ids.release_stable(id);
+        self.state
+            .value_pools
+            .release_stable(id)
+            .expect("a checked value pool id is retained");
+
         Ok(())
     }
 
@@ -1295,12 +1277,11 @@ impl<T: VoxExt> VoxMain<T> {
     /// Value pool `id`, for an append. Errors if `id` is not one of this state's
     /// value pools.
     fn value_pool_mut(&mut self, id: U32Id<BVoxValuePool>) -> Result<&mut VoxValuePool> {
-        if !self.state.value_pool_ids.is_retained(id) {
+        let Some(value_pool) = self.state.value_pools.get_mut(id) else {
             return Err(Error::UnknownValuePool { value_pool_id: id });
-        }
+        };
 
-        // Safety: the value pool id is retained.
-        Ok(unsafe { self.state.value_pools.get_mut(id) })
+        Ok(value_pool)
     }
 
     /// Releases `value_id` from `value_pool_id`. Leaves a hole until
@@ -1315,12 +1296,10 @@ impl<T: VoxExt> VoxMain<T> {
         value_pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
     ) -> Result<()> {
-        if !self.state.value_pool_ids.is_retained(value_pool_id) {
+        let Some(value_pool) = self.value_pool(value_pool_id) else {
             return Err(Error::UnknownValuePool { value_pool_id });
-        }
+        };
 
-        // Safety: the value pool id is retained.
-        let value_pool = unsafe { self.state.value_pools.get(value_pool_id) };
         if !value_pool.contains_value(value_id) {
             return Err(Error::UnknownValuePoolValue { value_id });
         }
@@ -1345,9 +1324,15 @@ impl<T: VoxExt> VoxMain<T> {
             });
         }
 
-        // Safety: the value pool id is retained and the value is one of its
-        // values.
-        unsafe { self.state.value_pools.get_mut(value_pool_id) }.release_value_stable(value_id);
+        let value_pool = self
+            .state
+            .value_pools
+            .get_mut(value_pool_id)
+            .expect("a checked value pool id is retained");
+
+        value_pool
+            .release_value_stable(value_id)
+            .expect("a checked value id is one of the value pool's values");
 
         Ok(())
     }
@@ -1363,12 +1348,9 @@ impl<T: VoxExt> VoxMain<T> {
         value_id: U32Id<BVoxValuePoolValue>,
         replacement_id: U32Id<BVoxValuePoolValue>,
     ) -> Result<()> {
-        if !self.state.value_pool_ids.is_retained(value_pool_id) {
+        let Some(value_pool) = self.value_pool(value_pool_id) else {
             return Err(Error::UnknownValuePool { value_pool_id });
-        }
-
-        // Safety: the value pool id is retained.
-        let value_pool = unsafe { self.state.value_pools.get(value_pool_id) };
+        };
 
         for checked_value_id in [value_id, replacement_id] {
             if !value_pool.contains_value(checked_value_id) {
@@ -1378,9 +1360,7 @@ impl<T: VoxExt> VoxMain<T> {
             }
         }
 
-        for palette_id in self.state.palette_ids.iter() {
-            // Safety: retained palette ids have a value.
-            let palette = unsafe { self.state.palettes.get_mut(palette_id) };
+        for (_, palette) in self.state.palettes.iter_mut() {
             palette.repoint_value_pool_value(value_pool_id, value_id, replacement_id);
         }
 
@@ -1392,14 +1372,18 @@ impl<T: VoxExt> VoxMain<T> {
     /// nothing, if `id` is not one of this state's value pools or `index` is at
     /// or past [`value_pool_count`](Self::value_pool_count).
     pub fn move_value_pool(&mut self, id: U32Id<BVoxValuePool>, index: usize) -> Result<()> {
-        if !self.state.value_pool_ids.is_retained(id) {
+        if self.value_pool(id).is_none() {
             return Err(Error::UnknownValuePool { value_pool_id: id });
         }
-        let count = self.state.value_pool_ids.len();
+
+        let count = self.state.value_pools.len();
+
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
-        self.state.value_pool_ids.move_to(id, index);
+
+        self.state.value_pools.move_to(id, index);
+
         Ok(())
     }
 
@@ -1412,16 +1396,15 @@ impl<T: VoxExt> VoxMain<T> {
     /// 2. a value pool nothing references is emptied
     pub fn prune_value_pools(&mut self) {
         // The value ids each value pool still has a material referencing.
-        let value_pool_ids: Vec<_> = self.state.value_pool_ids.iter().collect();
         let mut referenced_ids: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxValuePoolValue>>> =
-            value_pool_ids
+            self.state
+                .value_pools
+                .ids()
                 .iter()
-                .map(|&value_pool_id| (value_pool_id, HashSet::new()))
+                .map(|value_pool_id| (value_pool_id, HashSet::new()))
                 .collect();
 
-        for palette_id in self.state.palette_ids.iter() {
-            // Safety: retained palette ids have a value.
-            let palette = unsafe { self.state.palettes.get(palette_id) };
+        for (_, palette) in self.state.palettes.iter() {
             for (property_id, property) in palette.iter_properties() {
                 let used_ids = referenced_ids
                     .get_mut(&property.value_pool_id)
@@ -1437,10 +1420,9 @@ impl<T: VoxExt> VoxMain<T> {
         }
 
         // Release each value pool's unreferenced entries.
-        for &value_pool_id in &value_pool_ids {
+        for (value_pool_id, value_pool) in self.state.value_pools.iter_mut() {
             let keep_ids = &referenced_ids[&value_pool_id];
-            // Safety: retained value-pool ids have a value.
-            let value_pool = unsafe { self.state.value_pools.get_mut(value_pool_id) };
+
             let doomed_ids: Vec<_> = value_pool
                 .iter_value_ids()
                 .filter(|value_id| !keep_ids.contains(value_id))
@@ -1450,7 +1432,9 @@ impl<T: VoxExt> VoxMain<T> {
             // dropping the last one first leaves nothing to shift and keeps the
             // prune linear where front-to-back release is quadratic.
             for value_id in doomed_ids.into_iter().rev() {
-                value_pool.release_value_stable(value_id);
+                value_pool
+                    .release_value_stable(value_id)
+                    .expect("a listed value id is one of the value pool's values");
             }
         }
     }
@@ -1466,12 +1450,7 @@ impl<T: VoxExt> VoxMain<T> {
         value_pool_id: U32Id<BVoxValuePool>,
         new_order_ids: &[U32Id<BVoxValuePoolValue>],
     ) -> Result<()> {
-        if !self.state.value_pool_ids.is_retained(value_pool_id) {
-            return Err(Error::UnknownValuePool { value_pool_id });
-        }
-
-        // Safety: the id is retained, so it has a value.
-        unsafe { self.state.value_pools.get_mut(value_pool_id) }
+        self.value_pool_mut(value_pool_id)?
             .set_value_order(new_order_ids)
             .ok_or(Error::ValuePoolValueOrder)
     }
@@ -1490,26 +1469,26 @@ impl<T: VoxExt> VoxMain<T> {
         voxel_id: U32Id<BVoxVoxel>,
         sample_ids: &[U32Id<BVoxMaterial>],
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.state.objects.get_mut(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        let object_ref = unsafe { self.state.objects.get(object_id) };
-        if object_ref.voxel_position(voxel_id).is_none() {
+        if object.voxel_position(voxel_id).is_none() {
             return Err(Error::UnknownVoxel { voxel_id });
         }
 
-        if sample_ids.len() != object_ref.layer_count() {
+        if sample_ids.len() != object.layer_count() {
             return Err(Error::SampleArity {
                 samples: sample_ids.len(),
-                layers: object_ref.layer_count(),
+                layers: object.layer_count(),
             });
         }
 
-        for ((layer_id, palette_id), &material_id) in object_ref.iter_layers().zip(sample_ids) {
+        for ((layer_id, palette_id), &material_id) in object.iter_layers().zip(sample_ids) {
             let palette = self
-                .palette(palette_id)
+                .state
+                .palettes
+                .get(palette_id)
                 .expect("a layer references a live palette");
 
             if !palette.contains_material(material_id) {
@@ -1521,10 +1500,11 @@ impl<T: VoxExt> VoxMain<T> {
             }
         }
 
-        // Safety: the object id is retained; the grid and arity were checked.
-        unsafe { self.state.objects.get_mut(object_id) }.retain_voxel(voxel_id, sample_ids)?;
+        object.retain_voxel(voxel_id, sample_ids)?;
+
         self.ext
             .voxel_did_retain(&self.state, object_id, voxel_id)?;
+
         Ok(())
     }
 
@@ -1536,23 +1516,24 @@ impl<T: VoxExt> VoxMain<T> {
         object_id: U32Id<BVoxObject>,
         voxel_id: U32Id<BVoxVoxel>,
     ) -> Result<()> {
-        if !self.state.object_ids.is_retained(object_id) {
+        let Some(object) = self.object(object_id) else {
             return Err(Error::UnknownObject { object_id });
-        }
+        };
 
-        // Safety: the object id is retained.
-        if unsafe { self.state.objects.get(object_id) }
-            .voxel_position(voxel_id)
-            .is_none()
-        {
+        if object.voxel_position(voxel_id).is_none() {
             return Err(Error::UnknownVoxel { voxel_id });
         }
 
         self.ext
             .voxel_will_release(&self.state, object_id, voxel_id)?;
 
-        // Safety: the object id is retained; the grid was checked.
-        unsafe { self.state.objects.get_mut(object_id) }.release_voxel(voxel_id)
+        let object = self
+            .state
+            .objects
+            .get_mut(object_id)
+            .expect("a checked object id is retained");
+
+        object.release_voxel(voxel_id)
     }
 }
 
@@ -2924,9 +2905,10 @@ mod tests {
 
         // Release the drawn value directly, bypassing the in-use check
         // release_value_pool_value performs, so the material's cell holds a
-        // stale id. Safety: the value pool id is retained.
-        let value_pool_ref = unsafe { main.state.value_pools.get_mut(ints_id) };
-        value_pool_ref.release_value_stable(value_id(1));
+        // stale id.
+        let value_pool = main.state.value_pools.get_mut(ints_id).unwrap();
+
+        value_pool.release_value_stable(value_id(1)).unwrap();
 
         assert_eq!(
             main.validate(),
@@ -3865,10 +3847,20 @@ mod tests {
     }
 
     /// Everything the readers expose, rendered so a half-applied mutation
-    /// inside an entity shows up. The main's debug rendering carries the
-    /// id pools, the roots, and the ext, and stops at each entity's edge.
+    /// inside an entity shows up. The main's debug rendering shows every entity
+    /// by id, the roots, and the ext. Each top-level id pool's rendering adds
+    /// the released ids it queues for reuse.
     fn snapshot(main: &VoxMain) -> String {
         let mut out = format!("{main:?}");
+
+        out += &format!(
+            "|ids {:?} {:?} {:?} {:?}",
+            main.state.value_pools.ids(),
+            main.state.palettes.ids(),
+            main.state.objects.ids(),
+            main.state.hierarchy_nodes.ids()
+        );
+
         for (value_pool_id, value_pool) in main.iter_value_pools() {
             out += &format!("|value pool {value_pool_id:?} {:?}", value_pool.values());
         }

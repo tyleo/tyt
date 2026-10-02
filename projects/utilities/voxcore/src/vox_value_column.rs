@@ -1,8 +1,5 @@
 use crate::BVoxValuePoolValue;
-use branded_id::{
-    U32Id,
-    soa::{IdField, IdStruct},
-};
+use branded_id::{U32Id, soa::IdList};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// One kind's values in a [`VoxValuePool`](crate::VoxValuePool), read by
@@ -12,36 +9,25 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 /// per-kind accessor such as
 /// [`VoxValuePool::float_values`](crate::VoxValuePool::float_values).
 pub struct VoxValueColumn<'a, T> {
-    value_ids: &'a IdStruct<BVoxValuePoolValue>,
-
-    /// The value pool's column, keyed by `value_ids`.
-    values: &'a IdField<BVoxValuePoolValue, T>,
+    /// The value pool's values, keyed by value id.
+    values: &'a IdList<BVoxValuePoolValue, T>,
 }
 
 impl<'a, T> VoxValueColumn<'a, T> {
-    /// # Safety
-    /// `values` holds a value for every id `value_ids` retains.
-    pub(crate) unsafe fn new(
-        value_ids: &'a IdStruct<BVoxValuePoolValue>,
-        values: &'a IdField<BVoxValuePoolValue, T>,
-    ) -> Self {
-        Self { value_ids, values }
+    /// Reads `values`, a value pool's list.
+    pub(crate) fn new(values: &'a IdList<BVoxValuePoolValue, T>) -> Self {
+        Self { values }
     }
 
     /// The value at `id`, or `None` if `id` is not one of the value pool's
     /// values.
     pub fn get(&self, id: U32Id<BVoxValuePoolValue>) -> Option<&'a T> {
-        // Safety: a retained id has a value in the column.
-        self.value_ids
-            .is_retained(id)
-            .then(|| unsafe { self.values.get(id) })
+        self.values.get(id)
     }
 
     /// Values in listing order, as `(id, value)`.
     pub fn iter(&self) -> impl Iterator<Item = (U32Id<BVoxValuePoolValue>, &'a T)> + use<'a, T> {
-        // Safety: the column holds a value for every id in its id pool.
-        let values = unsafe { self.values.iter(self.value_ids) };
-        self.value_ids.iter().zip(values)
+        self.values.iter()
     }
 }
 
@@ -62,9 +48,7 @@ impl<T: Debug> Debug for VoxValueColumn<'_, T> {
 impl<T: PartialEq> PartialEq for VoxValueColumn<'_, T> {
     /// Compares values in listing order. Ids do not take part.
     fn eq(&self, other: &Self) -> bool {
-        self.iter()
-            .map(|(_, value)| value)
-            .eq(other.iter().map(|(_, value)| value))
+        self.values.eq_values(other.values)
     }
 }
 

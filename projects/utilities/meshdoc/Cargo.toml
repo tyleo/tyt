@@ -10,5 +10,5 @@ description = "Core types for working with meshes."
 independent = true
 
 [dependencies]
-branded-id = "0.1.10"
+branded-id = "0.2.0"
 ty-math = { version = "0.2.0", default-features = false, features = ["color"] }

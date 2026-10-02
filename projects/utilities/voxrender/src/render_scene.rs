@@ -2,10 +2,7 @@ use crate::{
     BRenderLight, BRenderMaterial, BRenderPlacement, BRenderView, Error, RenderLight,
     RenderMaterial, RenderObject, RenderPlacement, RenderProjection, RenderView, Result,
 };
-use branded_id::{
-    IdVec, U32Id, UsizeId,
-    soa::{IdField, IdStruct},
-};
+use branded_id::{IdVec, U32Id, UsizeId, soa::IdList};
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     f64::consts::{FRAC_PI_2, PI},
@@ -37,23 +34,15 @@ use voxcore::{
 /// release leaves a hole, and the survivors keep their order.
 #[derive(Default)]
 pub struct RenderScene {
-    material_ids: IdStruct<BRenderMaterial>,
-
-    materials: IdField<BRenderMaterial, RenderMaterial>,
+    materials: IdList<BRenderMaterial, RenderMaterial>,
 
     objects: IdVec<BVoxObject, Option<RenderObject>>,
 
-    placement_ids: IdStruct<BRenderPlacement>,
+    placements: IdList<BRenderPlacement, RenderPlacement>,
 
-    placements: IdField<BRenderPlacement, RenderPlacement>,
+    lights: IdList<BRenderLight, RenderLight>,
 
-    light_ids: IdStruct<BRenderLight>,
-
-    lights: IdField<BRenderLight, RenderLight>,
-
-    view_ids: IdStruct<BRenderView>,
-
-    views: IdField<BRenderView, RenderView>,
+    views: IdList<BRenderView, RenderView>,
 }
 
 impl RenderScene {
@@ -174,16 +163,13 @@ impl RenderScene {
     pub fn retain_material(&mut self, material: RenderMaterial) -> Result<U32Id<BRenderMaterial>> {
         check_material(&material)?;
 
-        let id = self.material_ids.retain();
-        self.materials.retain(id, material);
-
-        Ok(id)
+        Ok(self.materials.retain(material))
     }
 
     /// Releases material `id`. Errors, changing nothing, if `id` is not one
     /// of the scene's or a voxel still samples it.
     pub fn release_material(&mut self, id: U32Id<BRenderMaterial>) -> Result<()> {
-        if !self.material_ids.is_retained(id) {
+        if !self.materials.ids().is_retained(id) {
             return Err(Error::UnknownMaterial { material_id: id });
         }
 
@@ -200,34 +186,28 @@ impl RenderScene {
             });
         }
 
-        // Safety: a retained id has a value.
-        unsafe { self.materials.release(id) };
-        self.material_ids.release_stable(id);
+        self.materials
+            .release_stable(id)
+            .expect("the material is one of the scene's");
 
         Ok(())
     }
 
     /// The material `id`, or `None` if not one of the scene's.
     pub fn material(&self, id: U32Id<BRenderMaterial>) -> Option<&RenderMaterial> {
-        // Safety: retained ids have a value.
-        self.material_ids
-            .is_retained(id)
-            .then(|| unsafe { self.materials.get(id) })
+        self.materials.get(id)
     }
 
     /// Materials in listing order, as `(id, material)`.
     pub fn iter_materials(
         &self,
     ) -> impl Iterator<Item = (U32Id<BRenderMaterial>, &RenderMaterial)> + '_ {
-        // Safety: retained ids have a value.
-        self.material_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.materials.get(id) }))
+        self.materials.iter()
     }
 
     /// Number of materials.
     pub fn material_count(&self) -> usize {
-        self.material_ids.len()
+        self.materials.len()
     }
 
     /// Retains `object` under `id`, the id of the voxcore object it mirrors.
@@ -239,7 +219,7 @@ impl RenderScene {
         }
 
         for (voxel_id, material_id) in object.iter_live() {
-            if !self.material_ids.is_retained(material_id) {
+            if !self.materials.ids().is_retained(material_id) {
                 return Err(Error::VoxelMaterialRef {
                     voxel_id,
                     material_id,
@@ -297,7 +277,7 @@ impl RenderScene {
         }
 
         if let Some(material_id) = material_id
-            && !self.material_ids.is_retained(material_id)
+            && !self.materials.ids().is_retained(material_id)
         {
             return Err(Error::UnknownMaterial { material_id });
         }
@@ -348,22 +328,15 @@ impl RenderScene {
 
         check_transform(&placement.transform)?;
 
-        let id = self.placement_ids.retain();
-        self.placements.retain(id, placement);
-
-        Ok(id)
+        Ok(self.placements.retain(placement))
     }
 
     /// Releases placement `id`. Errors, changing nothing, if `id` is not one
     /// of the scene's.
     pub fn release_placement(&mut self, id: U32Id<BRenderPlacement>) -> Result<()> {
-        if !self.placement_ids.is_retained(id) {
+        let Some(_) = self.placements.release_stable(id) else {
             return Err(Error::UnknownPlacement { placement_id: id });
-        }
-
-        // Safety: a retained id has a value.
-        unsafe { self.placements.release(id) };
-        self.placement_ids.release_stable(id);
+        };
 
         Ok(())
     }
@@ -376,39 +349,32 @@ impl RenderScene {
         id: U32Id<BRenderPlacement>,
         transform: TyTransformF64,
     ) -> Result<()> {
-        if !self.placement_ids.is_retained(id) {
+        let Some(placement) = self.placements.get_mut(id) else {
             return Err(Error::UnknownPlacement { placement_id: id });
-        }
+        };
 
         check_transform(&transform)?;
 
-        // Safety: a retained id has a value.
-        unsafe { self.placements.get_mut(id) }.transform = transform;
+        placement.transform = transform;
 
         Ok(())
     }
 
     /// The placement `id`, or `None` if not one of the scene's.
     pub fn placement(&self, id: U32Id<BRenderPlacement>) -> Option<&RenderPlacement> {
-        // Safety: retained ids have a value.
-        self.placement_ids
-            .is_retained(id)
-            .then(|| unsafe { self.placements.get(id) })
+        self.placements.get(id)
     }
 
     /// Placements in listing order, as `(id, placement)`.
     pub fn iter_placements(
         &self,
     ) -> impl Iterator<Item = (U32Id<BRenderPlacement>, &RenderPlacement)> + '_ {
-        // Safety: retained ids have a value.
-        self.placement_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.placements.get(id) }))
+        self.placements.iter()
     }
 
     /// Number of placements.
     pub fn placement_count(&self) -> usize {
-        self.placement_ids.len()
+        self.placements.len()
     }
 
     /// Retains `light` at the end of the listing, returning its id. Errors,
@@ -417,22 +383,15 @@ impl RenderScene {
     pub fn retain_light(&mut self, light: RenderLight) -> Result<U32Id<BRenderLight>> {
         check_light(&light)?;
 
-        let id = self.light_ids.retain();
-        self.lights.retain(id, light);
-
-        Ok(id)
+        Ok(self.lights.retain(light))
     }
 
     /// Releases light `id`. Errors, changing nothing, if `id` is not one of
     /// the scene's.
     pub fn release_light(&mut self, id: U32Id<BRenderLight>) -> Result<()> {
-        if !self.light_ids.is_retained(id) {
+        let Some(_) = self.lights.release_stable(id) else {
             return Err(Error::UnknownLight { light_id: id });
-        }
-
-        // Safety: a retained id has a value.
-        unsafe { self.lights.release(id) };
-        self.light_ids.release_stable(id);
+        };
 
         Ok(())
     }
@@ -441,37 +400,30 @@ impl RenderScene {
     /// not one of the scene's or `light` fails the checks
     /// [`retain_light`](Self::retain_light) makes.
     pub fn set_light(&mut self, id: U32Id<BRenderLight>, light: RenderLight) -> Result<()> {
-        if !self.light_ids.is_retained(id) {
+        let Some(current) = self.lights.get_mut(id) else {
             return Err(Error::UnknownLight { light_id: id });
-        }
+        };
 
         check_light(&light)?;
 
-        // Safety: a retained id has a value.
-        *unsafe { self.lights.get_mut(id) } = light;
+        *current = light;
 
         Ok(())
     }
 
     /// The light `id`, or `None` if not one of the scene's.
     pub fn light(&self, id: U32Id<BRenderLight>) -> Option<&RenderLight> {
-        // Safety: retained ids have a value.
-        self.light_ids
-            .is_retained(id)
-            .then(|| unsafe { self.lights.get(id) })
+        self.lights.get(id)
     }
 
     /// Lights in listing order, as `(id, light)`.
     pub fn iter_lights(&self) -> impl Iterator<Item = (U32Id<BRenderLight>, &RenderLight)> + '_ {
-        // Safety: retained ids have a value.
-        self.light_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.lights.get(id) }))
+        self.lights.iter()
     }
 
     /// Number of lights.
     pub fn light_count(&self) -> usize {
-        self.light_ids.len()
+        self.lights.len()
     }
 
     /// Retains `view` at the end of the listing, returning its id. Errors,
@@ -481,22 +433,15 @@ impl RenderScene {
     pub fn retain_view(&mut self, view: RenderView) -> Result<U32Id<BRenderView>> {
         check_view(&view)?;
 
-        let id = self.view_ids.retain();
-        self.views.retain(id, view);
-
-        Ok(id)
+        Ok(self.views.retain(view))
     }
 
     /// Releases view `id`. Errors, changing nothing, if `id` is not one of
     /// the scene's.
     pub fn release_view(&mut self, id: U32Id<BRenderView>) -> Result<()> {
-        if !self.view_ids.is_retained(id) {
+        let Some(_) = self.views.release_stable(id) else {
             return Err(Error::UnknownView { view_id: id });
-        }
-
-        // Safety: a retained id has a value.
-        unsafe { self.views.release(id) };
-        self.view_ids.release_stable(id);
+        };
 
         Ok(())
     }
@@ -505,37 +450,30 @@ impl RenderScene {
     /// not one of the scene's or `view` fails the checks
     /// [`retain_view`](Self::retain_view) makes.
     pub fn set_view(&mut self, id: U32Id<BRenderView>, view: RenderView) -> Result<()> {
-        if !self.view_ids.is_retained(id) {
+        let Some(current) = self.views.get_mut(id) else {
             return Err(Error::UnknownView { view_id: id });
-        }
+        };
 
         check_view(&view)?;
 
-        // Safety: a retained id has a value.
-        *unsafe { self.views.get_mut(id) } = view;
+        *current = view;
 
         Ok(())
     }
 
     /// The view `id`, or `None` if not one of the scene's.
     pub fn view(&self, id: U32Id<BRenderView>) -> Option<&RenderView> {
-        // Safety: retained ids have a value.
-        self.view_ids
-            .is_retained(id)
-            .then(|| unsafe { self.views.get(id) })
+        self.views.get(id)
     }
 
     /// Views in listing order, as `(id, view)`.
     pub fn iter_views(&self) -> impl Iterator<Item = (U32Id<BRenderView>, &RenderView)> + '_ {
-        // Safety: retained ids have a value.
-        self.view_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.views.get(id) }))
+        self.views.iter()
     }
 
     /// Number of views.
     pub fn view_count(&self) -> usize {
-        self.view_ids.len()
+        self.views.len()
     }
 
     /// The world bounds of the live voxels under `placement_ids`, or `None`
@@ -587,19 +525,6 @@ impl RenderScene {
         }
 
         Ok(bounds)
-    }
-}
-
-impl Drop for RenderScene {
-    fn drop(&mut self) {
-        // Safety: each column holds a value for every id in its id pool; the
-        // fields free their own storage on drop.
-        unsafe {
-            self.materials.release_all(&self.material_ids);
-            self.placements.release_all(&self.placement_ids);
-            self.lights.release_all(&self.light_ids);
-            self.views.release_all(&self.view_ids);
-        }
     }
 }
 
@@ -1298,6 +1223,100 @@ mod tests {
             [ids[0], ids[2]]
         );
         assert_eq!(scene.material(ids[1]), None);
+    }
+
+    #[test]
+    fn a_stale_id_errors_before_its_value_is_checked_and_changes_nothing() {
+        let (mut scene, material_id, object_id) = painted();
+
+        let placement_id = scene
+            .retain_placement(RenderPlacement {
+                object_id,
+                transform: TyTransformF64::IDENTITY,
+            })
+            .unwrap();
+
+        let light = RenderLight::Hemisphere {
+            sky: white(),
+            ground: white(),
+            strength: 1.0,
+        };
+
+        let light_id = scene.retain_light(light).unwrap();
+
+        let survivor_id = scene.retain_light(light).unwrap();
+
+        let view = RenderView {
+            pose: TyPoseF64::IDENTITY,
+            projection: RenderProjection::Perspective { fov: 1.0 },
+        };
+
+        let view_id = scene.retain_view(view).unwrap();
+
+        scene.release_placement(placement_id).unwrap();
+
+        scene.release_light(light_id).unwrap();
+
+        scene.release_view(view_id).unwrap();
+
+        let flattened = TyTransformF64 {
+            scale: TyVector3F64::ZERO,
+            ..TyTransformF64::IDENTITY
+        };
+
+        assert_eq!(
+            scene.set_placement_transform(placement_id, flattened),
+            Err(Error::UnknownPlacement { placement_id })
+        );
+
+        let negative = RenderLight::Hemisphere {
+            sky: white(),
+            ground: white(),
+            strength: -1.0,
+        };
+
+        assert_eq!(
+            scene.set_light(light_id, negative),
+            Err(Error::UnknownLight { light_id })
+        );
+
+        assert_eq!(
+            scene.release_light(light_id),
+            Err(Error::UnknownLight { light_id })
+        );
+
+        let too_wide = RenderView {
+            projection: RenderProjection::Perspective { fov: PI },
+            ..view
+        };
+
+        assert_eq!(
+            scene.set_view(view_id, too_wide),
+            Err(Error::UnknownView { view_id })
+        );
+
+        let unknown_material_id = U32Id::from_u32(9);
+
+        assert_eq!(
+            scene.release_material(unknown_material_id),
+            Err(Error::UnknownMaterial {
+                material_id: unknown_material_id
+            })
+        );
+
+        assert_eq!(
+            scene.iter_lights().collect::<Vec<_>>(),
+            [(survivor_id, &light)]
+        );
+
+        assert_eq!(scene.placement_count(), 0);
+
+        assert_eq!(scene.view_count(), 0);
+
+        assert_eq!(
+            scene.iter_materials().map(|(id, _)| id).collect::<Vec<_>>(),
+            [material_id]
+        );
     }
 
     /// A main whose palette carries a red and a blue `baseColor` over one

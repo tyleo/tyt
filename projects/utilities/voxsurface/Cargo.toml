@@ -10,6 +10,6 @@ description = "The boundary of a voxel grid: its faces meshed and the occlusion 
 independent = true
 
 [dependencies]
-branded-id = "0.1.11"
+branded-id = "0.2.0"
 ty-math = { version = "0.2.0", default-features = false }
 voxcore = { version = "0.2.2", default-features = false }
