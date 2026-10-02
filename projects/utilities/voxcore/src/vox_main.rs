@@ -167,19 +167,14 @@ impl<T: VoxExt> VoxMain<T> {
         // Compact each value pool's values first, recording the value
         // relabelings by the value pool's pre-gc id so the palette pass below
         // can translate its cells before value-pool ids move.
-        let value_pool_id_space = self
+        let mut value_pool_value_remaps: IdVec<_, _> = self
             .state
             .value_pools
             .ids()
             .peek_next_fresh()
-            .to_usize_id()
-            .to_usize();
-
-        let mut value_pool_value_remaps = IdVec::from_vec(
-            (0..value_pool_id_space)
-                .map(|_| IdRemap::default())
-                .collect(),
-        );
+            .range_from_zero()
+            .map(|_| IdRemap::default())
+            .collect();
 
         for (value_pool_id, value_pool) in self.state.value_pools.iter_mut() {
             value_pool_value_remaps[value_pool_id.to_usize_id()] = value_pool.gc_values();
@@ -197,16 +192,14 @@ impl<T: VoxExt> VoxMain<T> {
         // indexed by old palette id, the column covers the palette id pool's
         // whole id space. Cells translate through the value relabelings first,
         // while each property still names its value pool's pre-gc id.
-        let palette_id_space = self
+        let mut material_remaps: IdVec<_, _> = self
             .state
             .palettes
             .ids()
             .peek_next_fresh()
-            .to_usize_id()
-            .to_usize();
-
-        let mut material_remaps =
-            IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
+            .range_from_zero()
+            .map(|_| IdRemap::default())
+            .collect();
 
         for (palette_id, palette) in self.state.palettes.iter_mut() {
             palette.relabel_value_pool_values(&value_pool_value_remaps);

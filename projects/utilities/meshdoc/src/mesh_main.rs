@@ -228,16 +228,14 @@ impl<T: MeshExt> MeshMain<T> {
         // object id pool's whole id space.
         let material_remap = self.state.materials.gc();
 
-        let object_id_space = self
+        let mut primitive_remaps: IdVec<_, _> = self
             .state
             .objects
             .ids()
             .peek_next_fresh()
-            .to_usize_id()
-            .to_usize();
-
-        let mut primitive_remaps =
-            IdVec::from_vec((0..object_id_space).map(|_| IdRemap::default()).collect());
+            .range_from_zero()
+            .map(|_| IdRemap::default())
+            .collect();
 
         for (object_id, object) in self.state.objects.iter_mut() {
             object.relabel_materials(&material_remap);
