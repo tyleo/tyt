@@ -5,8 +5,8 @@ use crate::{
 use branded_id::U32Id;
 use ty_math::{TyTransformF64, TyVector3U32};
 use voxcore::{
-    BVoxObject, VoxExt, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
-    VoxValuePoolKind, VoxValuePoolValueRef,
+    BVoxObject, VoxExt, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValueColumn,
+    VoxValuePool, VoxValuePoolValues,
 };
 use voxj::{
     CostVoxjObject, EncodeBase64, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode,
@@ -138,138 +138,40 @@ fn is_tight(object: &VoxObject) -> bool {
 /// values in listing order. Every kind maps one to one. `json` values recurse
 /// through [`voxj_value_from_vox_value`].
 fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjValuePool {
-    match value_pool.kind() {
-        VoxValuePoolKind::Bool(..) => VoxjValuePool::Bool(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Bool(flag) => flag,
-                    other => unreachable!("a bool value pool yields bool values, not {other:?}"),
-                })
+    match value_pool.values() {
+        VoxValuePoolValues::Bool(flags) => VoxjValuePool::Bool(copied(flags)),
+
+        VoxValuePoolValues::Float(numbers) => VoxjValuePool::Float(copied(numbers)),
+
+        VoxValuePoolValues::Int(numbers) => VoxjValuePool::Int(copied(numbers)),
+
+        VoxValuePoolValues::Json(values) => VoxjValuePool::Json(
+            values
+                .iter()
+                .map(|(_, value)| voxj_value_from_vox_value(value))
                 .collect(),
         ),
 
-        VoxValuePoolKind::Float(..) => VoxjValuePool::Float(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Float(number) => number,
-                    other => unreachable!("a float value pool yields float values, not {other:?}"),
-                })
-                .collect(),
-        ),
+        VoxValuePoolValues::String(texts) => {
+            VoxjValuePool::String(texts.iter().map(|(_, text)| text.clone()).collect())
+        }
 
-        VoxValuePoolKind::Int(..) => VoxjValuePool::Int(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Int(number) => number,
-                    other => unreachable!("an int value pool yields int values, not {other:?}"),
-                })
-                .collect(),
-        ),
+        VoxValuePoolValues::Vec2Float(vectors) => VoxjValuePool::Vec2Float(copied(vectors)),
 
-        VoxValuePoolKind::Json(..) => VoxjValuePool::Json(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Json(value) => voxj_value_from_vox_value(value),
-                    other => unreachable!("a json value pool yields json values, not {other:?}"),
-                })
-                .collect(),
-        ),
+        VoxValuePoolValues::Vec2Int(vectors) => VoxjValuePool::Vec2Int(copied(vectors)),
 
-        VoxValuePoolKind::String(..) => VoxjValuePool::String(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::String(text) => text.to_owned(),
+        VoxValuePoolValues::Vec3Float(vectors) => VoxjValuePool::Vec3Float(copied(vectors)),
 
-                    other => {
-                        unreachable!("a string value pool yields string values, not {other:?}")
-                    }
-                })
-                .collect(),
-        ),
+        VoxValuePoolValues::Vec3Int(vectors) => VoxjValuePool::Vec3Int(copied(vectors)),
 
-        VoxValuePoolKind::Vec2Float(..) => VoxjValuePool::Vec2Float(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Vec2Float(components) => *components,
+        VoxValuePoolValues::Vec4Float(vectors) => VoxjValuePool::Vec4Float(copied(vectors)),
 
-                    other => unreachable!(
-                        "a vec-2-float value pool yields vec-2-float values, not {other:?}"
-                    ),
-                })
-                .collect(),
-        ),
-
-        VoxValuePoolKind::Vec2Int(..) => VoxjValuePool::Vec2Int(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Vec2Int(components) => *components,
-
-                    other => unreachable!(
-                        "a vec-2-int value pool yields vec-2-int values, not {other:?}"
-                    ),
-                })
-                .collect(),
-        ),
-
-        VoxValuePoolKind::Vec3Float(..) => VoxjValuePool::Vec3Float(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Vec3Float(components) => *components,
-
-                    other => unreachable!(
-                        "a vec-3-float value pool yields vec-3-float values, not {other:?}"
-                    ),
-                })
-                .collect(),
-        ),
-
-        VoxValuePoolKind::Vec3Int(..) => VoxjValuePool::Vec3Int(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Vec3Int(components) => *components,
-
-                    other => unreachable!(
-                        "a vec-3-int value pool yields vec-3-int values, not {other:?}"
-                    ),
-                })
-                .collect(),
-        ),
-
-        VoxValuePoolKind::Vec4Float(..) => VoxjValuePool::Vec4Float(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Vec4Float(components) => *components,
-
-                    other => unreachable!(
-                        "a vec-4-float value pool yields vec-4-float values, not {other:?}"
-                    ),
-                })
-                .collect(),
-        ),
-
-        VoxValuePoolKind::Vec4Int(..) => VoxjValuePool::Vec4Int(
-            value_pool
-                .iter_values()
-                .map(|(_, value)| match value {
-                    VoxValuePoolValueRef::Vec4Int(components) => *components,
-
-                    other => unreachable!(
-                        "a vec-4-int value pool yields vec-4-int values, not {other:?}"
-                    ),
-                })
-                .collect(),
-        ),
+        VoxValuePoolValues::Vec4Int(vectors) => VoxjValuePool::Vec4Int(copied(vectors)),
     }
+}
+
+fn copied<T: Copy>(values: VoxValueColumn<'_, T>) -> Vec<T> {
+    values.iter().map(|(_, &value)| value).collect()
 }
 
 /// Builds a [`VoxjPalette`] from a [`VoxPalette`], emitting properties and

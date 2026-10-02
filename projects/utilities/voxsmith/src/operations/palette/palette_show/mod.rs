@@ -22,3 +22,9 @@ pub use palette_show_reading::*;
 pub use palette_show_table_shape::*;
 pub use property_ref::*;
 pub use property_selector::*;
+
+// Internal API
+
+mod stored_color;
+
+pub(crate) use stored_color::*;

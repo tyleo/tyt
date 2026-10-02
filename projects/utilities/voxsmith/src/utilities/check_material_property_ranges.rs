@@ -1,6 +1,7 @@
 use crate::{Result, utilities::check_material_range};
-use meshdoc::material::{COLOR_RANGE, MaterialPropertyKind, MaterialRange, scalar_range};
-use voxcore::{VoxExt, VoxMain, VoxValuePoolValueRef};
+use branded_id::U32Id;
+use meshdoc::material::{COLOR_RANGE, MaterialPropertyKind, scalar_range};
+use voxcore::{BVoxValuePoolValue, VoxExt, VoxMain, VoxValueColumn, VoxValuePoolValues};
 
 /// Checks every palette property in the material vocabulary against its
 /// range, erroring on the first value a material draws outside it.
@@ -15,66 +16,80 @@ use voxcore::{VoxExt, VoxMain, VoxValuePoolValueRef};
 /// a shape the name does not read. The boundary that reads the value errors
 /// on its shape.
 pub fn check_material_property_ranges<T: VoxExt>(main: &VoxMain<T>) -> Result<()> {
-    for (palette_id, palette) in main.iter_palettes() {
+    for (_, palette) in main.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
             let name = &property.name;
             let Some(kind) = MaterialPropertyKind::of(name) else {
                 continue;
             };
-            let range = match kind {
-                MaterialPropertyKind::ColorRgb | MaterialPropertyKind::ColorRgba => COLOR_RANGE,
 
-                MaterialPropertyKind::Scalar => {
-                    scalar_range(name).expect("every scalar vocabulary property has a range")
+            let value_pool = main
+                .value_pool(property.value_pool_id)
+                .expect("a property names a live value pool");
+
+            let value_ids = palette.iter_materials().map(|material_id| {
+                palette
+                    .value_id(material_id, property_id)
+                    .expect("a material has a value id for every property")
+            });
+
+            match (kind, value_pool.values()) {
+                (
+                    MaterialPropertyKind::ColorRgb | MaterialPropertyKind::ColorRgba,
+                    VoxValuePoolValues::Vec3Float(colors),
+                ) => check_colors(name, colors, value_ids)?,
+
+                (
+                    MaterialPropertyKind::ColorRgb | MaterialPropertyKind::ColorRgba,
+                    VoxValuePoolValues::Vec4Float(colors),
+                ) => check_colors(name, colors, value_ids)?,
+
+                (MaterialPropertyKind::Scalar, VoxValuePoolValues::Float(numbers)) => {
+                    let range =
+                        scalar_range(name).expect("every scalar vocabulary property has a range");
+
+                    for value_id in value_ids {
+                        check_material_range(name, *drawn(numbers, value_id), range)?;
+                    }
                 }
-            };
 
-            for material_id in palette.iter_materials() {
-                let Some(value) = main
-                    .material_value(palette_id, material_id, property_id)
-                    .and_then(|(value_pool, value_id)| value_pool.value(value_id))
-                else {
-                    continue;
-                };
+                (MaterialPropertyKind::Scalar, VoxValuePoolValues::Int(numbers)) => {
+                    let range =
+                        scalar_range(name).expect("every scalar vocabulary property has a range");
 
-                match kind {
-                    MaterialPropertyKind::ColorRgb | MaterialPropertyKind::ColorRgba => match value
-                    {
-                        VoxValuePoolValueRef::Vec3Float(components) => {
-                            check_components(name, components, range)?
-                        }
-
-                        VoxValuePoolValueRef::Vec4Float(components) => {
-                            check_components(name, components, range)?
-                        }
-
-                        _ => {}
-                    },
-
-                    MaterialPropertyKind::Scalar => match value {
-                        VoxValuePoolValueRef::Float(number) => {
-                            check_material_range(name, number, range)?
-                        }
-
-                        VoxValuePoolValueRef::Int(number) => {
-                            check_material_range(name, number as f64, range)?
-                        }
-
-                        _ => {}
-                    },
+                    for value_id in value_ids {
+                        check_material_range(name, *drawn(numbers, value_id) as f64, range)?;
+                    }
                 }
+
+                _ => {}
             }
         }
     }
+
     Ok(())
 }
 
-/// Errors unless every component of a vocabulary color lies in `range`.
-fn check_components(name: &str, components: &[f64], range: MaterialRange) -> Result<()> {
-    for &component in components {
-        check_material_range(name, component, range)?;
+/// Errors unless every component of each color `value_ids` draws lies in the
+/// color range.
+fn check_colors<const N: usize>(
+    name: &str,
+    colors: VoxValueColumn<'_, [f64; N]>,
+    value_ids: impl Iterator<Item = U32Id<BVoxValuePoolValue>>,
+) -> Result<()> {
+    for value_id in value_ids {
+        for &component in drawn(colors, value_id) {
+            check_material_range(name, component, COLOR_RANGE)?;
+        }
     }
+
     Ok(())
+}
+
+fn drawn<'a, T>(values: VoxValueColumn<'a, T>, value_id: U32Id<BVoxValuePoolValue>) -> &'a T {
+    values
+        .get(value_id)
+        .expect("a material draws one of its property's values")
 }
 
 #[cfg(test)]

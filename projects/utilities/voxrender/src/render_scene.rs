@@ -3,7 +3,7 @@ use crate::{
     RenderMaterial, RenderObject, RenderPlacement, RenderProjection, RenderView, Result,
 };
 use branded_id::{
-    IdVec, U32Id,
+    IdVec, U32Id, UsizeId,
     soa::{IdField, IdStruct},
 };
 use std::{
@@ -15,8 +15,9 @@ use ty_math::{
     TyVector3I32, UNIT_ROTATION_TOLERANCE,
 };
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxVoxel, VoxEffectivePalette, VoxExt, VoxMain,
-    VoxValuePoolValueRef,
+    BVoxEffectiveProperty, BVoxHierarchyNode, BVoxObject, BVoxValuePoolValue, BVoxVoxel,
+    VoxEffectivePalette, VoxExt, VoxMain, VoxValuePool,
+    color::ColorValues,
     material::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS,
     },
@@ -91,11 +92,38 @@ impl RenderScene {
 
             let effective = main.effective_palette(object)?;
 
+            let mut voxels: Vec<(U32Id<BVoxVoxel>, RenderMaterial)> = object
+                .iter_live()
+                .map(|voxel_id| (voxel_id, RenderMaterial::default()))
+                .collect();
+
+            fill_color(&effective, BASE_COLOR, &mut voxels, |material| {
+                &mut material.base_color
+            })?;
+
+            fill_scalar(&effective, METALLIC, &mut voxels, |material| {
+                &mut material.metallic
+            })?;
+
+            fill_scalar(&effective, ROUGHNESS, &mut voxels, |material| {
+                &mut material.roughness
+            })?;
+
+            fill_color(&effective, EMISSIVE_COLOR, &mut voxels, |material| {
+                &mut material.emissive_color
+            })?;
+
+            fill_scalar(&effective, EMISSIVE_STRENGTH, &mut voxels, |material| {
+                &mut material.emissive_strength
+            })?;
+
+            fill_scalar(&effective, OCCLUSION_STRENGTH, &mut voxels, |material| {
+                &mut material.occlusion_strength
+            })?;
+
             let mut render_object = RenderObject::new(object.name().to_owned(), object.bounds())?;
 
-            for voxel_id in object.iter_live() {
-                let material = resolve_material(&effective, voxel_id)?;
-
+            for (voxel_id, material) in voxels {
                 let material_id = match material_ids.entry(material_key(&material)) {
                     Entry::Occupied(entry) => *entry.get(),
                     Entry::Vacant(entry) => *entry.insert(scene.retain_material(material)?),
@@ -836,78 +864,84 @@ fn placement_transform(
     ))
 }
 
-/// The material the live voxel `voxel_id` samples, each shaded property
-/// read through `effective` or left at its default.
-fn resolve_material(
+/// Fills color property `property` into each voxel's material through
+/// `field`. Drops the alpha. Leaves the default where `effective` does not
+/// supply it. Errors when its value pool holds no colors.
+fn fill_color(
+    effective: &VoxEffectivePalette<'_>,
+    property: &str,
+    voxels: &mut [(U32Id<BVoxVoxel>, RenderMaterial)],
+    field: fn(&mut RenderMaterial) -> &mut TyLinSrgbF64,
+) -> Result<()> {
+    let Some(property_id) = effective.property_id_by_name(property) else {
+        return Ok(());
+    };
+
+    let colors = ColorValues::of(property_value_pool(effective, property_id)).ok_or_else(|| {
+        Error::MaterialPropertyKind {
+            property: property.to_owned(),
+        }
+    })?;
+
+    for (voxel_id, material) in voxels {
+        let color = colors
+            .lin_srgba_f64(voxel_value_id(effective, *voxel_id, property_id))
+            .expect("a material draws one of its property's values");
+
+        *field(material) = TyLinSrgbF64::new(color.red, color.green, color.blue);
+    }
+
+    Ok(())
+}
+
+/// Fills scalar property `property` into each voxel's material through
+/// `field`. Leaves the default where `effective` does not supply it. Errors
+/// when its value pool holds no floats.
+fn fill_scalar(
+    effective: &VoxEffectivePalette<'_>,
+    property: &str,
+    voxels: &mut [(U32Id<BVoxVoxel>, RenderMaterial)],
+    field: fn(&mut RenderMaterial) -> &mut f64,
+) -> Result<()> {
+    let Some(property_id) = effective.property_id_by_name(property) else {
+        return Ok(());
+    };
+
+    let values = property_value_pool(effective, property_id)
+        .float_values()
+        .ok_or_else(|| Error::MaterialPropertyKind {
+            property: property.to_owned(),
+        })?;
+
+    for (voxel_id, material) in voxels {
+        *field(material) = *values
+            .get(voxel_value_id(effective, *voxel_id, property_id))
+            .expect("a material draws one of its property's values");
+    }
+
+    Ok(())
+}
+
+/// The value pool the resolved property `property_id` draws from.
+fn property_value_pool<'a>(
+    effective: &VoxEffectivePalette<'a>,
+    property_id: UsizeId<BVoxEffectiveProperty>,
+) -> &'a VoxValuePool {
+    effective
+        .property(property_id)
+        .expect("a resolved name identifies one of the effective palette's properties")
+        .value_pool()
+}
+
+/// The value id the live voxel `voxel_id` reads for `property_id`.
+fn voxel_value_id(
     effective: &VoxEffectivePalette<'_>,
     voxel_id: U32Id<BVoxVoxel>,
-) -> Result<RenderMaterial> {
-    let mut material = RenderMaterial::default();
-
-    if let Some(value) = read(effective, voxel_id, BASE_COLOR) {
-        material.base_color = color(BASE_COLOR, value)?;
-    }
-
-    if let Some(value) = read(effective, voxel_id, METALLIC) {
-        material.metallic = scalar(METALLIC, value)?;
-    }
-
-    if let Some(value) = read(effective, voxel_id, ROUGHNESS) {
-        material.roughness = scalar(ROUGHNESS, value)?;
-    }
-
-    if let Some(value) = read(effective, voxel_id, EMISSIVE_COLOR) {
-        material.emissive_color = color(EMISSIVE_COLOR, value)?;
-    }
-
-    if let Some(value) = read(effective, voxel_id, EMISSIVE_STRENGTH) {
-        material.emissive_strength = scalar(EMISSIVE_STRENGTH, value)?;
-    }
-
-    if let Some(value) = read(effective, voxel_id, OCCLUSION_STRENGTH) {
-        material.occlusion_strength = scalar(OCCLUSION_STRENGTH, value)?;
-    }
-
-    Ok(material)
-}
-
-/// The value `voxel_id` samples for `property`, or `None` where the
-/// effective palette does not supply it.
-fn read<'a>(
-    effective: &'a VoxEffectivePalette<'a>,
-    voxel_id: U32Id<BVoxVoxel>,
-    property: &str,
-) -> Option<VoxValuePoolValueRef<'a>> {
-    let property_id = effective.property_id_by_name(property)?;
-
-    Some(
-        effective
-            .voxel_value(voxel_id, property_id)
-            .expect("a live voxel samples a material holding every property of its palette"),
-    )
-}
-
-fn scalar(property: &str, value: VoxValuePoolValueRef<'_>) -> Result<f64> {
-    match value {
-        VoxValuePoolValueRef::Float(value) => Ok(value),
-
-        _ => Err(Error::MaterialPropertyKind {
-            property: property.to_owned(),
-        }),
-    }
-}
-
-fn color(property: &str, value: VoxValuePoolValueRef<'_>) -> Result<TyLinSrgbF64> {
-    match value {
-        VoxValuePoolValueRef::Vec3Float(&[red, green, blue])
-        | VoxValuePoolValueRef::Vec4Float(&[red, green, blue, _]) => {
-            Ok(TyLinSrgbF64::new(red, green, blue))
-        }
-
-        _ => Err(Error::MaterialPropertyKind {
-            property: property.to_owned(),
-        }),
-    }
+    property_id: UsizeId<BVoxEffectiveProperty>,
+) -> U32Id<BVoxValuePoolValue> {
+    effective
+        .voxel_value_id(voxel_id, property_id)
+        .expect("a live voxel samples a material holding every property of its palette")
 }
 
 fn material_key(material: &RenderMaterial) -> MaterialKey {

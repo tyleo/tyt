@@ -1442,8 +1442,7 @@ impl<T: VoxExt> VoxMain<T> {
             // Safety: retained value-pool ids have a value.
             let value_pool = unsafe { self.state.value_pools.get_mut(value_pool_id) };
             let doomed_ids: Vec<_> = value_pool
-                .iter_values()
-                .map(|(value_id, _)| value_id)
+                .iter_value_ids()
                 .filter(|value_id| !keep_ids.contains(value_id))
                 .collect();
 
@@ -1576,7 +1575,7 @@ mod tests {
     use crate::{
         BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
         BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxHierarchyNode, VoxMain,
-        VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+        VoxObject, VoxPalette, VoxValuePool,
     };
     use branded_id::U32Id;
     use std::collections::{HashMap, HashSet};
@@ -1825,8 +1824,8 @@ mod tests {
 
         let value_pool = main.value_pool(colors_id).unwrap();
         assert_eq!(
-            value_pool.value(value_id(2)),
-            Some(VoxValuePoolValueRef::Vec4Float(&[0.0, 0.0, 1.0, 1.0]))
+            value_pool.vec_4_float_values().unwrap().get(value_id(2)),
+            Some(&[0.0, 0.0, 1.0, 1.0])
         );
 
         assert_eq!(
@@ -2398,8 +2397,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Int(20))
+            value_pool.int_values().unwrap().get(resolved_value_id),
+            Some(&20)
         );
 
         assert_eq!(
@@ -2714,8 +2713,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Int(2))
+            value_pool.int_values().unwrap().get(resolved_value_id),
+            Some(&2)
         );
 
         assert_eq!(main.palette(live_palette_id).unwrap().material_count(), 2);
@@ -2833,8 +2832,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))
+            value_pool
+                .vec_4_float_values()
+                .unwrap()
+                .get(resolved_value_id),
+            Some(&[1.0, 0.0, 0.0, 1.0])
         );
 
         let (value_pool, resolved_value_id) = main
@@ -2842,8 +2844,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Float(0.0))
+            value_pool.float_values().unwrap().get(resolved_value_id),
+            Some(&0.0)
         );
 
         // The overlay layer at v0 samples shiny_green, drawing color id 1
@@ -2854,8 +2856,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Vec4Float(&[0.0, 1.0, 0.0, 1.0]))
+            value_pool
+                .vec_4_float_values()
+                .unwrap()
+                .get(resolved_value_id),
+            Some(&[0.0, 1.0, 0.0, 1.0])
         );
     }
 
@@ -3455,20 +3460,14 @@ mod tests {
         );
 
         let value_pool = main.value_pool(ints_id).unwrap();
-        assert_eq!(
-            value_pool.value(value_id(0)),
-            Some(VoxValuePoolValueRef::Int(2))
-        );
+        assert_eq!(value_pool.int_values().unwrap().get(value_id(0)), Some(&2));
 
-        assert_eq!(
-            value_pool.value(value_id(1)),
-            Some(VoxValuePoolValueRef::Int(1))
-        );
+        assert_eq!(value_pool.int_values().unwrap().get(value_id(1)), Some(&1));
 
         assert_eq!(
             value_pool
-                .iter_values()
-                .map(|(value_id, _)| value_id.to_u32())
+                .iter_value_ids()
+                .map(|value_id| value_id.to_u32())
                 .collect::<Vec<_>>(),
             [0, 1]
         );
@@ -3574,8 +3573,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool_ref.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Int(20))
+            value_pool_ref.int_values().unwrap().get(resolved_value_id),
+            Some(&20)
         );
 
         let (value_pool_ref, resolved_value_id) = main
@@ -3583,8 +3582,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            value_pool_ref.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Int(30))
+            value_pool_ref.int_values().unwrap().get(resolved_value_id),
+            Some(&30)
         );
     }
 
@@ -3871,11 +3870,7 @@ mod tests {
     fn snapshot(main: &VoxMain) -> String {
         let mut out = format!("{main:?}");
         for (value_pool_id, value_pool) in main.iter_value_pools() {
-            let values: Vec<_> = value_pool.iter_values().collect();
-            out += &format!(
-                "|value pool {value_pool_id:?} {:?} {values:?}",
-                value_pool.kind()
-            );
+            out += &format!("|value pool {value_pool_id:?} {:?}", value_pool.values());
         }
 
         for (palette_id, palette) in main.iter_palettes() {

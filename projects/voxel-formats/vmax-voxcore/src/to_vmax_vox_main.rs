@@ -120,8 +120,8 @@ fn visit(
 #[cfg(test)]
 mod tests {
     use crate::{
-        FALLBACK_CONTENT_VERSION, SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtPalette,
-        VMaxWriteOptions, from_vmax_file, to_vmax_file, to_vmax_vox_main,
+        FALLBACK_CONTENT_VERSION, SHADOWS, SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat,
+        VMaxExtPalette, VMaxWriteOptions, from_vmax_file, to_vmax_file, to_vmax_vox_main,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -135,8 +135,7 @@ mod tests {
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxVoxel, VoxEffectivePalette,
         VoxExt, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
-        VoxValuePoolValueRef,
-        color::{lin_srgba_f64_from_srgba_u8, value_pool_color},
+        color::{ColorValues, lin_srgba_f64_from_srgba_u8},
         material::BASE_COLOR,
     };
 
@@ -180,6 +179,53 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains(BASE_COLOR), "{error}");
+    }
+
+    /// A `shadows` over a pool of another kind errors rather than writing the
+    /// shadow-casting default.
+    #[test]
+    fn a_non_flag_shadows_errors_rather_than_writing_the_default() {
+        let mut main = VoxMain::default();
+        let colors_id = main
+            .retain_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap());
+
+        let floats_id = main.retain_value_pool(VoxValuePool::float(vec![0.0]).unwrap());
+
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), colors_id, U32Id::from_u32(0))
+            .unwrap();
+
+        palette
+            .retain_property(SHADOWS.to_owned(), floats_id, U32Id::from_u32(0))
+            .unwrap();
+
+        let material_id = palette
+            .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(0)])
+            .unwrap();
+
+        let palette_id = main.retain_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::splat(1)).unwrap();
+        object.retain_layer(palette_id, material_id);
+        object
+            .retain_voxel(U32Id::from_u32(0), &[material_id])
+            .unwrap();
+
+        main.retain_object(object).unwrap();
+        main.retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+
+        main.set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
+
+        let error = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("holding no flag"), "{error}");
     }
 
     /// A material pool holding a value past the eight slots is no Voxel Max
@@ -470,7 +516,9 @@ mod tests {
         let value_id = property
             .value_id(material_id)
             .expect("a material has a value id for every property");
-        value_pool_color(property.value_pool(), value_id).expect("the test colors resolve")
+        ColorValues::of(property.value_pool())
+            .and_then(|colors| colors.srgba_u8(value_id))
+            .expect("the test colors resolve")
     }
 
     /// A default state has no scene, so the writer synthesizes an empty
@@ -1315,20 +1363,22 @@ mod tests {
                 let (value_pool, value_id) = reloaded
                     .material_value(palette_id, material_id, property_id)
                     .unwrap();
-                match value_pool.value(value_id) {
-                    Some(VoxValuePoolValueRef::Float(number)) => number,
-                    _ => panic!("a scalar attribute is a float value pool"),
-                }
+                *value_pool
+                    .float_values()
+                    .expect("a scalar attribute is a float value pool")
+                    .get(value_id)
+                    .unwrap()
             };
             let flag = |attribute: &str| -> bool {
                 let property_id = material_palette.property_id_by_name(attribute).unwrap();
                 let (value_pool, value_id) = reloaded
                     .material_value(palette_id, material_id, property_id)
                     .unwrap();
-                match value_pool.value(value_id) {
-                    Some(VoxValuePoolValueRef::Bool(flag)) => flag,
-                    _ => panic!("shadows is a bool value pool"),
-                }
+                *value_pool
+                    .boolean_values()
+                    .expect("shadows is a bool value pool")
+                    .get(value_id)
+                    .unwrap()
             };
             // Metalness and roughness round-trip through Voxel Max's 0.1 to 0.9
             // coefficient range, so they return within f64 rounding of the
@@ -1402,10 +1452,11 @@ mod tests {
         let (value_pool, value_id) = reloaded
             .material_value(palette_id, material_id, property_id)
             .unwrap();
-        match value_pool.value(value_id) {
-            Some(VoxValuePoolValueRef::Float(number)) => number,
-            _ => panic!("emissiveStrength is a float value pool"),
-        }
+        *value_pool
+            .float_values()
+            .expect("emissiveStrength is a float value pool")
+            .get(value_id)
+            .unwrap()
     }
 
     /// Voxel Max glows in the voxel's base color at coefficient `sic`, so an

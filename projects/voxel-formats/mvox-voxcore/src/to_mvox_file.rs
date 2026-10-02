@@ -11,8 +11,8 @@ use mvox::{
 };
 use std::collections::{HashMap, HashSet};
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxObject,
-    VoxState, color::value_pool_color, material::BASE_COLOR,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, Error as VoxError, VoxHierarchyNode,
+    VoxObject, VoxState, color::ColorValues, material::BASE_COLOR,
 };
 
 /// How far a frame's projected rotation or scale may drift from the node's
@@ -40,14 +40,16 @@ const TRANSFORM_TOLERANCE: f64 = 1e-6;
 ///    objects its node places
 /// 4. a transform's first frame no longer projects to its node's transform
 /// 5. a model exceeds a MagicaVoxel limit such as the per-axis voxel cap
+/// 6. the palette's `baseColor` draws from a value pool that holds no colors
 pub fn to_mvox_file(main: &MVoxVoxMain) -> Result<MVoxFile> {
     let ext = main.ext();
     let state = main.state();
 
     let palette_id = check_palette(state)?;
-    let file_palette = ext.palette_present.then(|| MVoxPalette {
-        colors: colors_from_palette(state, palette_id),
-    });
+    let file_palette = ext
+        .palette_present
+        .then(|| colors_from_palette(state, palette_id).map(|colors| MVoxPalette { colors }))
+        .transpose()?;
 
     let materials = build_materials(state, palette_id, ext)?;
     // Each object is the author's build volume, so the written model keeps
@@ -154,29 +156,50 @@ fn check_palette(state: &VoxState) -> Result<Option<U32Id<BVoxPalette>>> {
 
 /// The 256 palette colors read back through `baseColor`: material `index`
 /// gives color index `index`. Transparent where the palette or its color
-/// property is absent.
+/// property is absent. Errors when the color property draws from a value pool
+/// that holds no colors.
 fn colors_from_palette(
     state: &VoxState,
     palette_id: Option<U32Id<BVoxPalette>>,
-) -> [MVoxColor; 256] {
+) -> Result<[MVoxColor; 256]> {
     let mut colors = [MVoxColor::default(); 256];
     let Some(palette_id) = palette_id else {
-        return colors;
+        return Ok(colors);
     };
+
     let palette = state.palette(palette_id).expect("the palette is listed");
     let Some(property_id) = palette.property_id_by_name(BASE_COLOR) else {
-        return colors;
+        return Ok(colors);
     };
-    for (index, color) in colors.iter_mut().enumerate() {
-        let material_id = U32Id::<BVoxMaterial>::from_u32(index as u32);
-        if let Some([r, g, b, a]) = state
-            .material_value(palette_id, material_id, property_id)
-            .and_then(|(value_pool, value_id)| value_pool_color(value_pool, value_id))
-        {
-            *color = MVoxColor::new(r, g, b, a);
-        }
+
+    let value_pool_id = palette
+        .property(property_id)
+        .expect("a named property is the palette's")
+        .value_pool_id;
+
+    let value_pool = state
+        .value_pool(value_pool_id)
+        .expect("a property names a live value pool");
+
+    let color_values = ColorValues::of(value_pool).ok_or(VoxError::NonColorProperty {
+        palette_id,
+        property_id,
+    })?;
+
+    for material_id in palette.iter_materials() {
+        let value_id = palette
+            .value_id(material_id, property_id)
+            .expect("a material has a value id for every property");
+
+        let [r, g, b, a] = color_values
+            .srgba_u8(value_id)
+            .expect("a material draws one of its property's values");
+
+        // `check_palette` keeps every material id below the color count.
+        colors[material_id.to_u32() as usize] = MVoxColor::new(r, g, b, a);
     }
-    colors
+
+    Ok(colors)
 }
 
 /// Rebuilds the `MATL` chunks in material order from the ext, which holds
@@ -475,8 +498,8 @@ fn frame_from_provenance(frame: &MVoxExtFrame) -> MVoxFrame {
 #[cfg(test)]
 mod tests {
     use crate::{
-        MVoxExtNode, MVoxExtNodeBody, MVoxExtShapeModel, MVoxVoxMain, from_mvox_file, material_id,
-        node_id, object_id, to_mvox_file,
+        Error, MVoxExtNode, MVoxExtNodeBody, MVoxExtShapeModel, MVoxVoxMain, from_mvox_file,
+        material_id, node_id, object_id, to_mvox_file,
     };
     use branded_id::U32Id;
     use mvox::{
@@ -492,8 +515,9 @@ mod tests {
     };
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxPalette,
-        VoxValuePoolValueRef, material::IOR,
+        BVoxHierarchyNode, BVoxObject, BVoxPalette, Error as VoxError, VoxHierarchyNode,
+        VoxPalette, VoxValuePool,
+        material::{BASE_COLOR, IOR},
     };
 
     fn pair(key: &str, value: &str) -> (String, String) {
@@ -726,9 +750,10 @@ mod tests {
 
         assert!(
             value_pool
-                .iter_values()
-                .filter_map(|(value_id, _)| value_pool.value(value_id))
-                .any(|value| value == VoxValuePoolValueRef::Float(f64::INFINITY)),
+                .float_values()
+                .unwrap()
+                .iter()
+                .any(|(_, &value)| value == f64::INFINITY),
             "the infinite ior defaulted away"
         );
     }
@@ -1238,6 +1263,47 @@ mod tests {
         main.retain_material(palette_id, vec![value_id]).unwrap();
 
         assert!(to_mvox_file(&main).is_err());
+    }
+
+    /// A `baseColor` over a value pool of another kind has no colors to write,
+    /// so it errors rather than writing a transparent palette.
+    #[test]
+    fn a_base_color_holding_no_colors_errors() {
+        let mut main = from_mvox_file(&sample_file()).unwrap();
+
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+
+        let color_id = main
+            .palette(palette_id)
+            .unwrap()
+            .property_id_by_name(BASE_COLOR)
+            .unwrap();
+
+        main.release_property(palette_id, color_id).unwrap();
+
+        let floats_id = main.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+
+        let property_id = main
+            .retain_property(
+                palette_id,
+                BASE_COLOR.to_owned(),
+                floats_id,
+                U32Id::from_u32(0),
+            )
+            .unwrap();
+
+        let error = to_mvox_file(&main).unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                Error::Vox(VoxError::NonColorProperty {
+                    palette_id: error_palette_id,
+                    property_id: error_property_id,
+                }) if error_palette_id == palette_id && error_property_id == property_id
+            ),
+            "{error}"
+        );
     }
 
     /// A model reads one layer, so an object given a second one errors rather

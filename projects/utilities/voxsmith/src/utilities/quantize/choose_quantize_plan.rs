@@ -6,14 +6,14 @@ use crate::{
     },
 };
 use branded_id::U32Id;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug, result::Result as StdResult};
 use ty_math::{
     FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbF64, TyOklabColorF64, TySrgbF64,
     TyVector3F64, TyVector4F64,
 };
 use voxcore::{
-    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxExt, VoxMain, VoxPalette,
-    VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
+    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, BVoxValuePoolValue, VoxExt,
+    VoxMain, VoxPalette, VoxValueColumn, VoxValuePool, VoxValuePoolValues,
     material::{BASE_COLOR, EMISSIVE_COLOR},
 };
 
@@ -40,7 +40,7 @@ pub fn choose_quantize_plan<T: VoxExt>(
     })?;
     let value_pool = property_value_pool(main, palette, property_id);
 
-    let (reading, dimensions) = Reading::resolve(options, value_pool.kind())?;
+    let (reading, dimensions) = Reading::resolve(options, value_pool)?;
     let partition_properties =
         partition_properties(main, palette, palette_index, property_id, options)?;
 
@@ -50,35 +50,44 @@ pub fn choose_quantize_plan<T: VoxExt>(
         return Ok(None);
     }
 
-    // Candidates in listing order, grouped into partitions in order of first
-    // appearance, so the clustering is deterministic.
-    let mut partitions: Vec<(PartitionKey<'_>, Vec<QuantizePoint>)> = Vec::new();
-    let mut partition_indices = HashMap::new();
+    // The sampled materials in listing order, so the clustering is
+    // deterministic.
+    let candidates: Vec<_> = palette
+        .iter_materials()
+        .enumerate()
+        .filter_map(|(material_index, material_id)| {
+            let &population = populations.get(&material_id)?;
+            Some((material_index, material_id, population))
+        })
+        .collect();
 
-    for (material_index, material_id) in palette.iter_materials().enumerate() {
-        let Some(&population) = populations.get(&material_id) else {
-            continue;
-        };
+    let value_ids: Vec<_> = candidates
+        .iter()
+        .map(|&(_, material_id, _)| material_value_id(palette, material_id, property_id))
+        .collect();
 
-        let value = material_value(palette, value_pool, material_id, property_id);
-        let (coords, alpha) = reading.point(value).ok_or_else(|| {
+    let points = reading
+        .points(value_pool, &value_ids)
+        .map_err(|(index, value)| {
+            let (material_index, _, _) = candidates[index];
             Error::invalid(format!(
-                "material {material_index} of palette {palette_index} holds {value:?} for \
+                "material {material_index} of palette {palette_index} holds {value} for \
                  `{name}`, which reads as no finite point"
             ))
         })?;
 
+    // Candidates grouped into partitions in order of first appearance.
+    let mut partitions: Vec<(PartitionKey, Vec<QuantizePoint>)> = Vec::new();
+    let mut partition_indices = HashMap::new();
+
+    for ((_, material_id, population), (coords, alpha)) in candidates.into_iter().zip(points) {
         let key = PartitionKey {
             alpha,
-            values: partition_properties
+            value_ids: partition_properties
                 .iter()
-                .map(|&(partition_property_id, partition_value_pool)| {
-                    material_value(
-                        palette,
-                        partition_value_pool,
-                        material_id,
-                        partition_property_id,
-                    )
+                .map(|(partition_property_id, first_equal_ids)| {
+                    first_equal_ids
+                        [&material_value_id(palette, material_id, *partition_property_id)]
                 })
                 .collect(),
         };
@@ -144,15 +153,23 @@ pub fn choose_quantize_plan<T: VoxExt>(
 
 /// How a property's values read as clustering points, resolved against its
 /// value pool's kind.
+#[derive(Clone, Copy)]
 enum Reading {
-    /// A color measured in `space`, alpha taking part per `alpha` when the
-    /// color has four components.
-    Color {
+    /// A three-component color stored in `encoding` and measured in `space`.
+    Rgb {
+        encoding: ColorEncoding,
+
+        space: ColorSpace,
+    },
+
+    /// A four-component color stored in `encoding` and measured in `space`.
+    /// `alpha` sets how its alpha takes part.
+    Rgba {
         encoding: ColorEncoding,
 
         space: ColorSpace,
 
-        alpha: Option<AlphaMode>,
+        alpha: AlphaMode,
     },
 
     /// Raw components.
@@ -167,12 +184,16 @@ enum ColorEncoding {
     Srgb,
 }
 
+/// A clustering point, plus the alpha when alpha partitions.
+type Point = (TyVector4F64, Option<f64>);
+
 impl Reading {
-    /// Resolves `options`'s reading of a property whose values are `kind`,
+    /// Resolves `options`'s reading of a property drawing from `value_pool`,
     /// with the number of axes its points use.
-    fn resolve(options: &QuantizeOptions, kind: &VoxValuePoolKind) -> Result<(Self, usize)> {
+    fn resolve(options: &QuantizeOptions, value_pool: &VoxValuePool) -> Result<(Self, usize)> {
         let name = &options.property;
-        let kind_name = kind_name(kind);
+        let values = value_pool.values();
+        let kind_name = kind_name(values);
 
         let interpretation = match options.interpret_property {
             PropertyInterpretation::Auto if name == BASE_COLOR || name == EMISSIVE_COLOR => {
@@ -186,10 +207,40 @@ impl Reading {
 
         let (reading, dimensions) = match interpretation {
             PropertyInterpretation::LinearColor | PropertyInterpretation::SrgbColor => {
-                let components = match kind {
-                    VoxValuePoolKind::Vec3Float(_) => 3,
+                let encoding = match interpretation {
+                    PropertyInterpretation::SrgbColor => ColorEncoding::Srgb,
+                    _ => ColorEncoding::Linear,
+                };
 
-                    VoxValuePoolKind::Vec4Float(_) => 4,
+                let space = options.space.unwrap_or(ColorSpace::Oklab);
+
+                match (values, options.alpha) {
+                    (VoxValuePoolValues::Vec3Float(_), None) => {
+                        (Reading::Rgb { encoding, space }, 3)
+                    }
+
+                    (VoxValuePoolValues::Vec3Float(_), Some(_)) => {
+                        return Err(Error::invalid(format!(
+                            "property `{name}` reads as a 3-component color, which has no alpha \
+                             to take part"
+                        )));
+                    }
+
+                    (VoxValuePoolValues::Vec4Float(_), alpha) => {
+                        let alpha = alpha.unwrap_or(AlphaMode::Partition);
+                        let dimensions = match alpha {
+                            AlphaMode::Distance => 4,
+                            AlphaMode::Ignore | AlphaMode::Partition => 3,
+                        };
+
+                        let reading = Reading::Rgba {
+                            encoding,
+                            space,
+                            alpha,
+                        };
+
+                        (reading, dimensions)
+                    }
 
                     _ => {
                         return Err(Error::invalid(format!(
@@ -197,53 +248,22 @@ impl Reading {
                              needs vec-3-float or vec-4-float"
                         )));
                     }
-                };
-
-                let alpha = match (components, options.alpha) {
-                    (4, alpha) => Some(alpha.unwrap_or(AlphaMode::Partition)),
-
-                    (_, None) => None,
-
-                    (_, Some(_)) => {
-                        return Err(Error::invalid(format!(
-                            "property `{name}` reads as a 3-component color, which has no alpha \
-                             to take part"
-                        )));
-                    }
-                };
-
-                let encoding = match interpretation {
-                    PropertyInterpretation::SrgbColor => ColorEncoding::Srgb,
-                    _ => ColorEncoding::Linear,
-                };
-
-                let dimensions = match alpha {
-                    Some(AlphaMode::Distance) => 4,
-                    _ => 3,
-                };
-
-                let reading = Reading::Color {
-                    encoding,
-                    space: options.space.unwrap_or(ColorSpace::Oklab),
-                    alpha,
-                };
-
-                (reading, dimensions)
+                }
             }
 
             PropertyInterpretation::Numeric => {
-                let dimensions = match kind {
-                    VoxValuePoolKind::Float(_) | VoxValuePoolKind::Int(_) => 1,
+                let dimensions = match values {
+                    VoxValuePoolValues::Float(_) | VoxValuePoolValues::Int(_) => 1,
 
-                    VoxValuePoolKind::Vec2Float(_) | VoxValuePoolKind::Vec2Int(_) => 2,
+                    VoxValuePoolValues::Vec2Float(_) | VoxValuePoolValues::Vec2Int(_) => 2,
 
-                    VoxValuePoolKind::Vec3Float(_) | VoxValuePoolKind::Vec3Int(_) => 3,
+                    VoxValuePoolValues::Vec3Float(_) | VoxValuePoolValues::Vec3Int(_) => 3,
 
-                    VoxValuePoolKind::Vec4Float(_) | VoxValuePoolKind::Vec4Int(_) => 4,
+                    VoxValuePoolValues::Vec4Float(_) | VoxValuePoolValues::Vec4Int(_) => 4,
 
-                    VoxValuePoolKind::Bool(_)
-                    | VoxValuePoolKind::Json(_)
-                    | VoxValuePoolKind::String(_) => {
+                    VoxValuePoolValues::Bool(_)
+                    | VoxValuePoolValues::Json(_)
+                    | VoxValuePoolValues::String(_) => {
                         return Err(Error::invalid(format!(
                             "property `{name}` holds {kind_name} values, which read as no points"
                         )));
@@ -277,97 +297,169 @@ impl Reading {
         Ok((reading, dimensions))
     }
 
-    /// `value` as a clustering point, with its alpha when alpha partitions, or
-    /// `None` when a coordinate is not finite. `value` has to be of the kind
-    /// the reading resolved against.
-    fn point(&self, value: VoxValuePoolValueRef<'_>) -> Option<(TyVector4F64, Option<f64>)> {
-        let (coords, partition_alpha) = match *self {
-            Reading::Color {
-                encoding,
-                space,
-                alpha,
-            } => {
-                let (rgb, alpha_value) = match value {
-                    VoxValuePoolValueRef::Vec3Float(&[red, green, blue]) => {
-                        ([red, green, blue], None)
-                    }
-
-                    VoxValuePoolValueRef::Vec4Float(&[red, green, blue, alpha]) => {
-                        ([red, green, blue], Some(alpha))
-                    }
-
-                    _ => unreachable!("a color reading resolved against a float vector"),
-                };
-
-                let xyz = color_coords(rgb, encoding, space);
-
-                let (w, partition_alpha) = match (alpha, alpha_value) {
-                    (Some(AlphaMode::Distance), Some(alpha)) => (alpha * alpha_scale(space), None),
-                    (Some(AlphaMode::Partition), Some(alpha)) => (0.0, Some(alpha)),
-                    _ => (0.0, None),
-                };
-
-                (xyz.extend(w), partition_alpha)
+    /// The point of each value `value_ids` draw from `value_pool`, which must be
+    /// the value pool the reading resolved against. Errors with the index into
+    /// `value_ids` and the value's spelling on the first point with a
+    /// coordinate that is not finite.
+    fn points(
+        self,
+        value_pool: &VoxValuePool,
+        value_ids: &[U32Id<BVoxValuePoolValue>],
+    ) -> StdResult<Vec<Point>, (usize, String)> {
+        match (self, value_pool.values()) {
+            (Reading::Rgb { encoding, space }, VoxValuePoolValues::Vec3Float(colors)) => {
+                let coords = color_coords(encoding, space);
+                finite_points(colors, value_ids, |&rgb| (coords(rgb).extend(0.0), None))
             }
 
-            Reading::Numeric => {
-                let mut components = [0.0; 4];
-                match value {
-                    VoxValuePoolValueRef::Float(number) => components[0] = number,
-
-                    VoxValuePoolValueRef::Int(number) => components[0] = number as f64,
-
-                    VoxValuePoolValueRef::Vec2Float(vector) => {
-                        components[..2].copy_from_slice(vector)
-                    }
-
-                    VoxValuePoolValueRef::Vec3Float(vector) => {
-                        components[..3].copy_from_slice(vector)
-                    }
-
-                    VoxValuePoolValueRef::Vec4Float(vector) => components.copy_from_slice(vector),
-
-                    VoxValuePoolValueRef::Vec2Int(vector) => {
-                        components[..2].copy_from_slice(&vector.map(|number| number as f64))
-                    }
-
-                    VoxValuePoolValueRef::Vec3Int(vector) => {
-                        components[..3].copy_from_slice(&vector.map(|number| number as f64))
-                    }
-
-                    VoxValuePoolValueRef::Vec4Int(vector) => {
-                        components.copy_from_slice(&vector.map(|number| number as f64))
-                    }
-
-                    _ => unreachable!("a numeric reading resolved against a number or vector"),
-                }
-
-                (TyVector4F64::from_array(components), None)
+            (
+                Reading::Rgba {
+                    encoding,
+                    space,
+                    alpha: AlphaMode::Distance,
+                },
+                VoxValuePoolValues::Vec4Float(colors),
+            ) => {
+                let coords = color_coords(encoding, space);
+                let scale = alpha_scale(space);
+                finite_points(colors, value_ids, |&[red, green, blue, alpha]| {
+                    (coords([red, green, blue]).extend(alpha * scale), None)
+                })
             }
-        };
 
-        coords.is_finite().then_some((coords, partition_alpha))
+            (
+                Reading::Rgba {
+                    encoding,
+                    space,
+                    alpha: AlphaMode::Partition,
+                },
+                VoxValuePoolValues::Vec4Float(colors),
+            ) => {
+                let coords = color_coords(encoding, space);
+                finite_points(colors, value_ids, |&[red, green, blue, alpha]| {
+                    (coords([red, green, blue]).extend(0.0), Some(alpha))
+                })
+            }
+
+            (
+                Reading::Rgba {
+                    encoding,
+                    space,
+                    alpha: AlphaMode::Ignore,
+                },
+                VoxValuePoolValues::Vec4Float(colors),
+            ) => {
+                let coords = color_coords(encoding, space);
+                finite_points(colors, value_ids, |&[red, green, blue, _]| {
+                    (coords([red, green, blue]).extend(0.0), None)
+                })
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Float(numbers)) => {
+                finite_points(numbers, value_ids, |&number| (padded([number]), None))
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Int(numbers)) => {
+                finite_points(numbers, value_ids, |&number| {
+                    (padded([number as f64]), None)
+                })
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Vec2Float(vectors)) => {
+                finite_points(vectors, value_ids, |&vector| (padded(vector), None))
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Vec3Float(vectors)) => {
+                finite_points(vectors, value_ids, |&vector| (padded(vector), None))
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Vec4Float(vectors)) => {
+                finite_points(vectors, value_ids, |&vector| (padded(vector), None))
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Vec2Int(vectors)) => {
+                finite_points(vectors, value_ids, |vector| {
+                    (padded(vector.map(|number| number as f64)), None)
+                })
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Vec3Int(vectors)) => {
+                finite_points(vectors, value_ids, |vector| {
+                    (padded(vector.map(|number| number as f64)), None)
+                })
+            }
+
+            (Reading::Numeric, VoxValuePoolValues::Vec4Int(vectors)) => {
+                finite_points(vectors, value_ids, |vector| {
+                    (padded(vector.map(|number| number as f64)), None)
+                })
+            }
+
+            _ => unreachable!("a reading resolves only against a kind it reads"),
+        }
     }
 }
 
-/// The color `rgb`, stored in `encoding`, as a point in `space`.
-fn color_coords(rgb: [f64; 3], encoding: ColorEncoding, space: ColorSpace) -> TyVector3F64 {
-    let [red, green, blue] = rgb;
+/// The point `point` makes of each value `value_ids` draw from `values`.
+/// Errors with the index into `value_ids` and the value's spelling on the
+/// first point with a coordinate that is not finite.
+fn finite_points<T: Debug>(
+    values: VoxValueColumn<'_, T>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+    point: impl Fn(&T) -> Point,
+) -> StdResult<Vec<Point>, (usize, String)> {
+    let mut points = Vec::with_capacity(value_ids.len());
 
-    let linear = match encoding {
-        ColorEncoding::Linear => TyLinSrgbF64::new(red, green, blue),
-        ColorEncoding::Srgb => TySrgbF64::new(red, green, blue).into_linear(),
-    };
+    for (index, &value_id) in value_ids.iter().enumerate() {
+        let value = values
+            .get(value_id)
+            .expect("a material's value is one of its value pool's");
 
-    match space {
-        ColorSpace::Lab => TyCielabColorF64::from_color(linear).to_vector3(),
+        let (coords, alpha) = point(value);
+        if !coords.is_finite() {
+            return Err((index, format!("{value:?}")));
+        }
 
-        ColorSpace::Oklab => TyOklabColorF64::from_color(linear).to_vector3(),
+        points.push((coords, alpha));
+    }
 
-        ColorSpace::Srgb => match encoding {
-            ColorEncoding::Linear => TySrgbF64::from_linear(linear).to_vector3(),
-            ColorEncoding::Srgb => TyVector3F64::new(red, green, blue),
+    Ok(points)
+}
+
+/// `components` as a point with every later axis zero.
+fn padded<const N: usize>(components: [f64; N]) -> TyVector4F64 {
+    let mut padded = [0.0; 4];
+    padded[..N].copy_from_slice(&components);
+    TyVector4F64::from_array(padded)
+}
+
+/// The map from a color stored in `encoding` to a point in `space`.
+fn color_coords(encoding: ColorEncoding, space: ColorSpace) -> fn([f64; 3]) -> TyVector3F64 {
+    match (encoding, space) {
+        (ColorEncoding::Linear, ColorSpace::Lab) => |[red, green, blue]| {
+            TyCielabColorF64::from_color(TyLinSrgbF64::new(red, green, blue)).to_vector3()
         },
+
+        (ColorEncoding::Srgb, ColorSpace::Lab) => |[red, green, blue]| {
+            TyCielabColorF64::from_color(TySrgbF64::new(red, green, blue).into_linear())
+                .to_vector3()
+        },
+
+        (ColorEncoding::Linear, ColorSpace::Oklab) => |[red, green, blue]| {
+            TyOklabColorF64::from_color(TyLinSrgbF64::new(red, green, blue)).to_vector3()
+        },
+
+        (ColorEncoding::Srgb, ColorSpace::Oklab) => |[red, green, blue]| {
+            TyOklabColorF64::from_color(TySrgbF64::new(red, green, blue).into_linear()).to_vector3()
+        },
+
+        (ColorEncoding::Linear, ColorSpace::Srgb) => |[red, green, blue]| {
+            TySrgbF64::from_linear(TyLinSrgbF64::new(red, green, blue)).to_vector3()
+        },
+
+        (ColorEncoding::Srgb, ColorSpace::Srgb) => {
+            |[red, green, blue]| TyVector3F64::new(red, green, blue)
+        }
     }
 }
 
@@ -381,23 +473,24 @@ fn alpha_scale(space: ColorSpace) -> f64 {
 }
 
 /// The partition key of one material: the values it has to share with another
-/// material to merge.
+/// material to merge. Each value is the first value id in its value pool
+/// holding an equal value.
 #[derive(PartialEq)]
-struct PartitionKey<'a> {
+struct PartitionKey {
     alpha: Option<f64>,
 
-    values: Vec<VoxValuePoolValueRef<'a>>,
+    value_ids: Vec<U32Id<BVoxValuePoolValue>>,
 }
 
-/// The partition properties `options` picks from `palette`, each with the value
-/// pool it draws from.
-fn partition_properties<'a, T: VoxExt>(
-    main: &'a VoxMain<T>,
-    palette: &'a VoxPalette,
+/// The partition properties `options` picks from `palette`, each with the
+/// [`FirstEqualIds`] of the value pool it draws from.
+fn partition_properties<T: VoxExt>(
+    main: &VoxMain<T>,
+    palette: &VoxPalette,
     palette_index: usize,
     property_id: U32Id<BVoxProperty>,
     options: &QuantizeOptions,
-) -> Result<Vec<(U32Id<BVoxProperty>, &'a VoxValuePool)>> {
+) -> Result<Vec<(U32Id<BVoxProperty>, FirstEqualIds)>> {
     let partition_property_ids: Vec<_> = match &options.partition {
         PartitionProperties::All => palette
             .iter_properties()
@@ -430,7 +523,7 @@ fn partition_properties<'a, T: VoxExt>(
         .map(|partition_property_id| {
             (
                 partition_property_id,
-                property_value_pool(main, palette, partition_property_id),
+                first_equal_ids(property_value_pool(main, palette, partition_property_id)),
             )
         })
         .collect())
@@ -525,35 +618,71 @@ fn property_value_pool<'a, T: VoxExt>(
         .expect("a property draws from a live value pool")
 }
 
-/// The value `material_id` holds for `property_id`, read from `value_pool`.
-fn material_value<'a>(
+/// The value id `material_id` draws for `property_id`.
+fn material_value_id(
     palette: &VoxPalette,
-    value_pool: &'a VoxValuePool,
     material_id: U32Id<BVoxMaterial>,
     property_id: U32Id<BVoxProperty>,
-) -> VoxValuePoolValueRef<'a> {
-    let value_id = palette
+) -> U32Id<BVoxValuePoolValue> {
+    palette
         .value_id(material_id, property_id)
-        .expect("a live material holds a value for every property");
-    value_pool
-        .value(value_id)
-        .expect("a material's value is one of its value pool's")
+        .expect("a live material holds a value for every property")
 }
 
-/// The voxj type name of `kind`'s values.
-fn kind_name(kind: &VoxValuePoolKind) -> &'static str {
-    match kind {
-        VoxValuePoolKind::Bool(_) => "bool",
-        VoxValuePoolKind::Float(_) => "float",
-        VoxValuePoolKind::Int(_) => "int",
-        VoxValuePoolKind::Json(_) => "json",
-        VoxValuePoolKind::String(_) => "string",
-        VoxValuePoolKind::Vec2Float(_) => "vec-2-float",
-        VoxValuePoolKind::Vec2Int(_) => "vec-2-int",
-        VoxValuePoolKind::Vec3Float(_) => "vec-3-float",
-        VoxValuePoolKind::Vec3Int(_) => "vec-3-int",
-        VoxValuePoolKind::Vec4Float(_) => "vec-4-float",
-        VoxValuePoolKind::Vec4Int(_) => "vec-4-int",
+/// Each value id of a value pool mapped to the first id in listing order
+/// holding an equal value.
+type FirstEqualIds = HashMap<U32Id<BVoxValuePoolValue>, U32Id<BVoxValuePoolValue>>;
+
+fn first_equal_ids(value_pool: &VoxValuePool) -> FirstEqualIds {
+    match value_pool.values() {
+        VoxValuePoolValues::Bool(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Float(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Int(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Json(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::String(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Vec2Float(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Vec2Int(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Vec3Float(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Vec3Int(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Vec4Float(values) => first_equal_column_ids(values),
+        VoxValuePoolValues::Vec4Int(values) => first_equal_column_ids(values),
+    }
+}
+
+fn first_equal_column_ids<T: PartialEq>(values: VoxValueColumn<'_, T>) -> FirstEqualIds {
+    let mut firsts: Vec<(U32Id<BVoxValuePoolValue>, &T)> = Vec::new();
+    let mut ids = HashMap::new();
+
+    for (value_id, value) in values.iter() {
+        let first_id = match firsts.iter().find(|(_, first)| *first == value) {
+            Some(&(first_id, _)) => first_id,
+
+            None => {
+                firsts.push((value_id, value));
+                value_id
+            }
+        };
+
+        ids.insert(value_id, first_id);
+    }
+
+    ids
+}
+
+/// The voxj type name of `values`'s kind.
+fn kind_name(values: VoxValuePoolValues<'_>) -> &'static str {
+    match values {
+        VoxValuePoolValues::Bool(_) => "bool",
+        VoxValuePoolValues::Float(_) => "float",
+        VoxValuePoolValues::Int(_) => "int",
+        VoxValuePoolValues::Json(_) => "json",
+        VoxValuePoolValues::String(_) => "string",
+        VoxValuePoolValues::Vec2Float(_) => "vec-2-float",
+        VoxValuePoolValues::Vec2Int(_) => "vec-2-int",
+        VoxValuePoolValues::Vec3Float(_) => "vec-3-float",
+        VoxValuePoolValues::Vec3Int(_) => "vec-3-int",
+        VoxValuePoolValues::Vec4Float(_) => "vec-4-float",
+        VoxValuePoolValues::Vec4Int(_) => "vec-4-int",
     }
 }
 

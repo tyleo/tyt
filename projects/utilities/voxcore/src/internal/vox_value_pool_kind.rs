@@ -5,10 +5,8 @@ use branded_id::soa::IdField;
 /// column.
 ///
 /// Each value column is keyed by the owning value pool's ids, so reading one
-/// directly is unsafe. Read through
-/// [`VoxValuePool::value`](crate::VoxValuePool::value) or
-/// [`VoxValuePool::iter_values`](crate::VoxValuePool::iter_values), and match
-/// this enum for the kind.
+/// directly is unsafe. Readers go through
+/// [`VoxValuePool::values`](crate::VoxValuePool::values).
 #[derive(Debug)]
 pub enum VoxValuePoolKind {
     /// Boolean values.

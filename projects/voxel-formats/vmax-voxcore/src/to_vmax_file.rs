@@ -13,10 +13,9 @@ use vmax::{
     snapshots::{VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
-    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
-    BVoxValuePoolValue, VoxExt, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
-    VoxValuePoolValueRef,
-    color::{value_pool_color, value_pool_lin_srgba_f64_color},
+    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxExt,
+    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValueColumn, VoxValuePool,
+    color::ColorValues,
     material::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, ROUGHNESS, TRANSMISSION,
         default_scalar,
@@ -489,7 +488,7 @@ fn new_palette_plan(
     let layout = PaletteLayout::resolve(main, palette_id)?;
 
     let color_table = match &layout.color {
-        Some(color) => Some(color_palette_colors(color.value_pool)?),
+        Some(color) => Some(color_palette_colors(color)?),
         None => None,
     };
     if color_table.is_none() && !layout.material.is_empty() {
@@ -543,10 +542,10 @@ struct PaletteLayout<'a> {
     palette: &'a VoxPalette,
 
     /// `baseColor`.
-    color: Option<LayoutProperty<'a>>,
+    color: Option<ColorProperty<'a>>,
 
     /// `emissiveColor`.
-    emissive_color: Option<LayoutProperty<'a>>,
+    emissive_color: Option<ColorProperty<'a>>,
 
     /// The material axis, in property order.
     material: Vec<LayoutProperty<'a>>,
@@ -569,17 +568,23 @@ impl<'a> PaletteLayout<'a> {
             let value_pool = main
                 .value_pool(property.value_pool_id)
                 .expect("a property draws from a live value pool");
-            let entry = LayoutProperty {
-                id,
-                name: &property.name,
-                value_pool,
-            };
-            match property.name.as_str() {
-                BASE_COLOR => color = Some(entry),
-                EMISSIVE_COLOR => emissive_color = Some(entry),
-                _ => material.push(entry),
+
+            let name = property.name.as_str();
+            match name {
+                BASE_COLOR => color = Some(ColorProperty::resolve(id, name, value_pool)?),
+
+                EMISSIVE_COLOR => {
+                    emissive_color = Some(ColorProperty::resolve(id, name, value_pool)?)
+                }
+
+                _ => material.push(LayoutProperty {
+                    id,
+                    name,
+                    value_pool,
+                }),
             }
         }
+
         Ok(PaletteLayout {
             palette,
             color,
@@ -604,29 +609,56 @@ struct LayoutProperty<'a> {
     value_pool: &'a VoxValuePool,
 }
 
-/// `value_pool` decoded to exactly [`PALETTE_COLORS`] 0-based RGBA entries,
-/// padded with transparent entries to that count.
+/// A color-axis property with its value pool read as colors.
+struct ColorProperty<'a> {
+    id: U32Id<BVoxProperty>,
+
+    value_pool: &'a VoxValuePool,
+
+    colors: ColorValues,
+}
+
+impl<'a> ColorProperty<'a> {
+    /// Reads property `id` over `value_pool`. Errors with `name` when the value
+    /// pool holds no colors.
+    fn resolve(id: U32Id<BVoxProperty>, name: &str, value_pool: &'a VoxValuePool) -> Result<Self> {
+        let colors = ColorValues::of(value_pool).ok_or_else(|| {
+            Error::invalid(format!("`{name}` draws from a value pool holding no color"))
+        })?;
+
+        Ok(Self {
+            id,
+            value_pool,
+            colors,
+        })
+    }
+}
+
+/// `color`'s value pool decoded to exactly [`PALETTE_COLORS`] 0-based RGBA
+/// entries, padded with transparent entries to that count.
 ///
 /// Errors when the value pool holds more colors than the budget, because the
-/// table is the pool whole. Errors when it holds no color, because a
-/// transparent stand-in would write a model Voxel Max renders as empty.
-fn color_palette_colors(value_pool: &VoxValuePool) -> Result<Vec<[u8; 4]>> {
-    if value_pool.len() > PALETTE_COLORS {
+/// table is the pool whole.
+fn color_palette_colors(color: &ColorProperty) -> Result<Vec<[u8; 4]>> {
+    if color.value_pool.len() > PALETTE_COLORS {
         return Err(Error::invalid(format!(
             "`{BASE_COLOR}` draws from a value pool of {} colors, but a Voxel Max palette holds \
              only {PALETTE_COLORS}",
-            value_pool.len()
+            color.value_pool.len()
         )));
     }
-    let mut cells: Vec<[u8; 4]> = Vec::new();
-    for (value_id, _) in value_pool.iter_values() {
-        let color = value_pool_color(value_pool, value_id).ok_or_else(|| {
-            Error::invalid(format!(
-                "`{BASE_COLOR}` draws from a value pool holding no color"
-            ))
-        })?;
-        cells.push(color);
-    }
+
+    let mut cells: Vec<[u8; 4]> = color
+        .value_pool
+        .iter_value_ids()
+        .map(|value_id| {
+            color
+                .colors
+                .srgba_u8(value_id)
+                .expect("a listed value id is the value pool's")
+        })
+        .collect();
+
     cells.resize(PALETTE_COLORS, [0, 0, 0, 0]);
     Ok(cells)
 }
@@ -693,9 +725,67 @@ fn slot_materials(
             .map(|(slot, material)| vmax_material(slot, material))
             .collect());
     }
+    let pools = MaterialPools::resolve(layout)?;
+
     (0..slot_count)
-        .map(|slot| pool_material(layout, slot as u8))
+        .map(|slot| pool_material(&pools, slot as u8))
         .collect()
+}
+
+/// The material-axis pools [`pool_material`] reads, each typed once. `None`
+/// where the palette does not bind the property.
+struct MaterialPools<'a> {
+    metallic: Option<VoxValueColumn<'a, f64>>,
+
+    roughness: Option<VoxValueColumn<'a, f64>>,
+
+    emissive_strength: Option<VoxValueColumn<'a, f64>>,
+
+    shadows: Option<VoxValueColumn<'a, bool>>,
+
+    absorption: Option<VoxValueColumn<'a, f64>>,
+
+    ior: Option<VoxValueColumn<'a, f64>>,
+
+    transmission: Option<VoxValueColumn<'a, f64>>,
+}
+
+impl<'a> MaterialPools<'a> {
+    /// Reads `layout`'s material axis. Errors when a bound scalar's pool
+    /// holds no floats or `shadows`'s pool holds no flags.
+    fn resolve(layout: &PaletteLayout<'a>) -> Result<Self> {
+        let scalar = |name: &str| -> Result<Option<VoxValueColumn<'a, f64>>> {
+            let Some(property) = layout.material_property(name) else {
+                return Ok(None);
+            };
+
+            property.value_pool.float_values().map(Some).ok_or_else(|| {
+                Error::invalid(format!(
+                    "`{name}` draws from a value pool holding no scalar"
+                ))
+            })
+        };
+
+        let shadows = match layout.material_property(SHADOWS) {
+            None => None,
+
+            Some(property) => Some(property.value_pool.boolean_values().ok_or_else(|| {
+                Error::invalid(format!(
+                    "`{SHADOWS}` draws from a value pool holding no flag"
+                ))
+            })?),
+        };
+
+        Ok(Self {
+            metallic: scalar(METALLIC)?,
+            roughness: scalar(ROUGHNESS)?,
+            emissive_strength: scalar(EMISSIVE_STRENGTH)?,
+            shadows,
+            absorption: scalar(ABSORPTION)?,
+            ior: scalar(IOR)?,
+            transmission: scalar(TRANSMISSION)?,
+        })
+    }
 }
 
 /// Rebuilds a Voxel Max material from its exact ext copy. The `mi` token is
@@ -724,63 +814,48 @@ fn vmax_material(slot: usize, material: &VMaxExtMaterial) -> VMaxMaterial {
 /// the slot's value id. Metalness and roughness map from the 0 to 1 factor to
 /// Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`]. A property the palette does not bind
-/// writes its vocabulary default, so it writes what it renders as. Errors when
-/// a bound scalar's pool holds no scalar at the slot.
-fn pool_material(layout: &PaletteLayout, slot: u8) -> Result<VMaxMaterial> {
+/// writes its vocabulary default, so it writes what it renders as.
+fn pool_material(pools: &MaterialPools, slot: u8) -> Result<VMaxMaterial> {
     let value_id = U32Id::from_u32(u32::from(slot));
-    let scalar = |name: &str| -> Result<Option<f64>> {
-        let Some(property) = layout.material_property(name) else {
-            return Ok(None);
-        };
-        scalar_value(property.value_pool, value_id)
-            .map(Some)
-            .ok_or_else(|| {
-                Error::invalid(format!(
-                    "`{name}` draws from a value pool holding no scalar at value {slot}"
-                ))
-            })
+
+    // `slot_materials` checked that every material-axis pool holds each slot.
+    let read = |values: Option<VoxValueColumn<'_, f64>>| -> Option<f64> {
+        values.map(|values| *values.get(value_id).expect("a dense pool holds every slot"))
     };
-    let flag = |name: &str| -> Option<bool> {
-        flag_value(layout.material_property(name)?.value_pool, value_id)
-    };
-    let carries = |name: &str| -> bool { layout.material_property(name).is_some() };
-    let dispersed = carries(IOR) || carries(TRANSMISSION) || carries(ABSORPTION);
+
+    let dispersed =
+        pools.ior.is_some() || pools.transmission.is_some() || pools.absorption.is_some();
+
     Ok(VMaxMaterial {
         mi: (usize::from(slot) + 1).to_string(),
-        mc: pbr_factor_to_vm_coefficient(unbound_scalar(scalar(METALLIC)?, METALLIC), METALLIC)?,
-        rc: pbr_factor_to_vm_coefficient(unbound_scalar(scalar(ROUGHNESS)?, ROUGHNESS), ROUGHNESS)?,
+        mc: pbr_factor_to_vm_coefficient(unbound_scalar(read(pools.metallic), METALLIC), METALLIC)?,
+        rc: pbr_factor_to_vm_coefficient(
+            unbound_scalar(read(pools.roughness), ROUGHNESS),
+            ROUGHNESS,
+        )?,
         // An unbound strength glows nowhere: the loader binds one whenever a
         // material glows.
-        sic: scalar(EMISSIVE_STRENGTH)?.unwrap_or(0.0),
+        sic: read(pools.emissive_strength).unwrap_or(0.0),
         // Voxel Max casts shadows by default.
-        sh: flag(SHADOWS).unwrap_or(true),
+        sh: pools
+            .shadows
+            .map(|shadows| {
+                *shadows
+                    .get(value_id)
+                    .expect("a dense pool holds every slot")
+            })
+            .unwrap_or(true),
         tc: None,
         md: match dispersed {
             true => Some(VMaxMaterialDispersion {
-                absorption: scalar(ABSORPTION)?.unwrap_or(0.0),
-                ior: unbound_scalar(scalar(IOR)?, IOR),
-                transmission: unbound_scalar(scalar(TRANSMISSION)?, TRANSMISSION),
+                absorption: read(pools.absorption).unwrap_or(0.0),
+                ior: unbound_scalar(read(pools.ior), IOR),
+                transmission: unbound_scalar(read(pools.transmission), TRANSMISSION),
             }),
 
             false => None,
         },
     })
-}
-
-/// The `f64` at `value_id` in a `float` value pool, or `None`.
-fn scalar_value(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> Option<f64> {
-    match value_pool.value(value_id) {
-        Some(VoxValuePoolValueRef::Float(number)) => Some(number),
-        _ => None,
-    }
-}
-
-/// The `bool` at `value_id` in a `bool` value pool, or `None`.
-fn flag_value(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> Option<bool> {
-    match value_pool.value(value_id) {
-        Some(VoxValuePoolValueRef::Bool(flag)) => Some(flag),
-        _ => None,
-    }
 }
 
 /// `value` when the property is bound, else the glTF vocabulary default the
@@ -888,7 +963,7 @@ fn check_emissive(
     if sic == 0.0 {
         return Ok(());
     }
-    let color = |property: Option<&LayoutProperty>, name: &str| -> Result<[f64; 3]> {
+    let color = |property: Option<&ColorProperty>, name: &str| -> Result<[f64; 3]> {
         let Some(property) = property else {
             return Err(Error::invalid(format!(
                 "material {} sits in a slot glowing at {sic}, but the palette binds no `{name}` \
@@ -900,9 +975,12 @@ fn check_emissive(
             .palette
             .value_id(material_id, property.id)
             .expect("a live material has a value id for every property");
-        pool_color(property.value_pool, value_id).ok_or_else(|| {
-            Error::invalid(format!("`{name}` draws from a value pool holding no color"))
-        })
+        let color = property
+            .colors
+            .lin_srgba_f64(value_id)
+            .expect("a live material draws one of its property's values");
+
+        Ok([color.red, color.green, color.blue])
     };
     let emissive = color(layout.emissive_color.as_ref(), EMISSIVE_COLOR)?;
     let base = color(layout.color.as_ref(), BASE_COLOR)?;
@@ -915,13 +993,6 @@ fn check_emissive(
         )));
     }
     Ok(())
-}
-
-/// The linear rgb at `value_id` in a color value pool, or `None` when the pool
-/// holds no float vectors.
-fn pool_color(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> Option<[f64; 3]> {
-    let color = value_pool_lin_srgba_f64_color(value_pool, value_id)?;
-    Some([color.red, color.green, color.blue])
 }
 
 /// The entry for an entity, or the error for an ext out of step with the

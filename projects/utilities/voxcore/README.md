@@ -91,7 +91,10 @@ main.validate()?;
 ## Reading Back
 
 `effective_palette` resolves an object's layer override rule once. Look a
-property up by name, then read voxel values by id.
+property up by name, then read its value pool through the accessor for its
+kind, such as `vec_4_float_values`. Inside a voxel loop, `voxel_value_id`
+gives each voxel's value id, and the typed column looks it up. A reader that
+takes any kind matches `values` once instead.
 
 ```rust
 let cube = main.object(cube_id).expect("retained above");
@@ -100,9 +103,16 @@ let base_color_id = palette
     .property_id_by_name(BASE_COLOR)
     .expect("bound above");
 
-let color = palette.voxel_value(corner_id, base_color_id);
-let red = VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]);
-assert_eq!(color, Some(red));
+let colors = palette
+    .property(base_color_id)
+    .expect("resolved above")
+    .value_pool()
+    .vec_4_float_values()
+    .expect("bound to colors above");
+
+let value_id = palette.voxel_value_id(corner_id, base_color_id);
+let color = value_id.and_then(|value_id| colors.get(value_id));
+assert_eq!(color, Some(&[1.0, 0.0, 0.0, 1.0]));
 ```
 
 ## Releasing and Compaction

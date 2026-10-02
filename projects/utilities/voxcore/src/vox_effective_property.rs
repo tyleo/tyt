@@ -1,6 +1,6 @@
 use crate::{
     BVoxLayer, BVoxMaterial, BVoxPalette, BVoxProperty, BVoxValuePoolValue, VoxPalette,
-    VoxValuePool, VoxValuePoolValueRef,
+    VoxValuePool,
 };
 use branded_id::U32Id;
 
@@ -56,13 +56,6 @@ impl<'a> VoxEffectiveProperty<'a> {
                 .expect("a material has a value id for every property");
             (material_id, value_id)
         })
-    }
-
-    /// The value `material_id` draws, or `None` if `material_id` is not one of
-    /// the winning palette's materials.
-    pub fn value(&self, material_id: U32Id<BVoxMaterial>) -> Option<VoxValuePoolValueRef<'_>> {
-        let value_id = self.value_id(material_id)?;
-        self.value_pool.value(value_id)
     }
 
     /// The value id `material_id` draws, or `None` if `material_id` is not one

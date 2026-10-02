@@ -1,6 +1,6 @@
 use crate::{
     Error, Result, VoxExt, VoxMain, VoxObject,
-    color::{CellColor, value_pool_color},
+    color::{CellColor, ColorValues},
     material::BASE_COLOR,
 };
 use branded_id::IdVec;
@@ -26,13 +26,17 @@ pub fn resolve_cell_color<'a, T: VoxExt>(
         .property(property_id)
         .expect("a resolved name identifies one of the effective palette's properties");
 
-    let value_pool = property.value_pool();
+    let color_values = ColorValues::of(property.value_pool()).ok_or(Error::NonColorProperty {
+        palette_id: property.palette_id(),
+        property_id: property.property_id,
+    })?;
+
     let mut colors = IdVec::default();
     for (material_id, value_id) in property.iter_values() {
-        let color = value_pool_color(value_pool, value_id).ok_or(Error::NonColorProperty {
-            palette_id: property.palette_id(),
-            property_id: property.property_id,
-        })?;
+        let color = color_values
+            .srgba_u8(value_id)
+            .expect("a material draws one of its property's values");
+
         let slot_id = material_id.to_usize_id();
         if slot_id.to_usize() >= colors.len() {
             colors.resize(slot_id.to_usize() + 1, [0, 0, 0, 0]);

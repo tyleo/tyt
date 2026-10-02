@@ -34,9 +34,9 @@ mod vox_palette;
 mod vox_property;
 mod vox_state;
 mod vox_value;
+mod vox_value_column;
 mod vox_value_pool;
-mod vox_value_pool_kind;
-mod vox_value_pool_value_ref;
+mod vox_value_pool_values;
 
 pub use b_vox_effective_property::*;
 pub use b_vox_hierarchy_node::*;
@@ -65,9 +65,9 @@ pub use vox_palette::*;
 pub use vox_property::*;
 pub use vox_state::*;
 pub use vox_value::*;
+pub use vox_value_column::*;
 pub use vox_value_pool::*;
-pub use vox_value_pool_kind::*;
-pub use vox_value_pool_value_ref::*;
+pub use vox_value_pool_values::*;
 
 // Optional API
 

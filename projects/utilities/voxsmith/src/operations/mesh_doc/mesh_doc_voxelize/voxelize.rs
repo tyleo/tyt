@@ -214,7 +214,7 @@ mod document_tests {
         TyVector3U32,
     };
     use voxcore::{
-        BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef,
+        BVoxValuePoolValue, VoxMain, VoxValuePool,
         color::srgba_u8_from_lin_srgba_f64,
         material::{
             BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, OCCLUSION_STRENGTH,
@@ -390,10 +390,11 @@ mod document_tests {
     /// encoded to sRGB from the stored linear color.
     fn voxel_hex(main: &VoxMain, position: TyVector3U32) -> String {
         let (value_pool, value_id) = voxel_attribute(main, position, BASE_COLOR);
-        let VoxValuePoolValueRef::Vec4Float(components) = value_pool.value(value_id).unwrap()
-        else {
-            panic!("baseColor is a four-float color");
-        };
+        let components = value_pool
+            .vec_4_float_values()
+            .expect("baseColor is a four-float color")
+            .get(value_id)
+            .unwrap();
         let bytes = <[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(TyLinSrgbaF64::new(
             components[0],
             components[1],
@@ -410,10 +411,11 @@ mod document_tests {
     /// samples.
     fn voxel_number(main: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
         let (value_pool, value_id) = voxel_attribute(main, position, attribute);
-        match value_pool.value(value_id).unwrap() {
-            VoxValuePoolValueRef::Float(number) => number,
-            other => panic!("{attribute} is a float, not {other:?}"),
-        }
+        *value_pool
+            .float_values()
+            .unwrap_or_else(|| panic!("{attribute} is a float"))
+            .get(value_id)
+            .unwrap()
     }
 
     /// Options at `meters` per voxel under the given modes, everything else
@@ -533,8 +535,8 @@ mod document_tests {
         let origin = TyVector3U32::new(0, 0, 0);
         let (value_pool, value_id) = voxel_attribute(&main, origin, BASE_COLOR);
         assert_eq!(
-            value_pool.value(value_id),
-            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.5, 0.0, 1.0]))
+            value_pool.vec_4_float_values().unwrap().get(value_id),
+            Some(&[1.0, 0.5, 0.0, 1.0])
         );
         assert_eq!(voxel_hex(&main, origin), "#FFBC00FF");
         assert_eq!(voxel_number(&main, origin, METALLIC), 0.25);
@@ -997,9 +999,11 @@ mod document_tests {
             &shell(1.0, MaterialMode::PerTexel),
         );
         let (value_pool, value_id) = voxel_attribute(&main, origin, EMISSIVE_COLOR);
-        let VoxValuePoolValueRef::Vec3Float(color) = value_pool.value(value_id).unwrap() else {
-            panic!("emissiveColor is a three-float color");
-        };
+        let color = value_pool
+            .vec_3_float_values()
+            .expect("emissiveColor is a three-float color")
+            .get(value_id)
+            .unwrap();
         assert!((color[1] - 0.503).abs() < 0.01, "{color:?}");
         assert!(color[0] < 0.001 && color[2] < 0.001, "{color:?}");
         assert_eq!(voxel_number(&main, origin, EMISSIVE_STRENGTH), 1.0);

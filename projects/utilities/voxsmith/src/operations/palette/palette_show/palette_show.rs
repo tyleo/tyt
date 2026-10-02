@@ -3,7 +3,7 @@ use crate::{
     operations::palette::{
         PaletteRef, PaletteShowLabel, PaletteShowLayout, PaletteShowOptions,
         PaletteShowPresentation, PaletteShowReading, PaletteShowTableShape, PropertyRef,
-        PropertySelector,
+        PropertySelector, palette_show::StoredColor,
     },
     utilities::{VectorComponent, property_names},
 };
@@ -17,10 +17,9 @@ use treegrid::{
     TreeGridRenderMdTables, TreeGridRenderTextColumns, TreeGridRenderTextRows, TreeGridSwatch,
     TreeGridTableShapeKind,
 };
-use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbF64, TySrgbaF64};
 use voxcore::{
-    BVoxValuePoolValue, VoxExt, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
-    VoxValuePoolValueRef, material::MaterialPropertyKind,
+    BVoxValuePoolValue, VoxExt, VoxMain, VoxPalette, VoxValue, VoxValueColumn, VoxValuePool,
+    VoxValuePoolValues, material::MaterialPropertyKind,
 };
 
 /// Renders the value collections `selectors` name in `main`, each a
@@ -61,9 +60,15 @@ struct ValueCollection {
 /// A selector's reading with `auto` resolved to the key's default.
 #[derive(Clone, Copy)]
 enum Reading {
-    LinearFloat,
-
     Plain,
+
+    Color(ColorReading),
+}
+
+/// A reading that spells a color-shaped value as a color.
+#[derive(Clone, Copy)]
+enum ColorReading {
+    LinearFloat,
 
     SrgbFloat,
 
@@ -212,15 +217,16 @@ fn build_value_collection<T: VoxExt>(
 
     // A material holds one value id per property, so the lookup with
     // this palette's own property id always resolves.
-    let samples = palette
+    let value_ids: Vec<_> = palette
         .iter_materials()
         .map(|material_id| {
-            let value_id = palette
+            palette
                 .value_id(material_id, property_id)
-                .expect("a material holds a value for every property");
-            sample(key, value_pool, value_id, reading, component)
+                .expect("a material holds a value for every property")
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect();
+
+    let samples = samples(key, value_pool, &value_ids, reading, component)?;
 
     Ok(ValueCollection {
         palette_index,
@@ -234,18 +240,18 @@ fn build_value_collection<T: VoxExt>(
 /// The width of the value pool's vector values, or `None` for a non-vector
 /// kind.
 fn vector_width(value_pool: &VoxValuePool) -> Option<usize> {
-    match value_pool.kind() {
-        VoxValuePoolKind::Bool(_)
-        | VoxValuePoolKind::Float(_)
-        | VoxValuePoolKind::Int(_)
-        | VoxValuePoolKind::Json(_)
-        | VoxValuePoolKind::String(_) => None,
+    match value_pool.values() {
+        VoxValuePoolValues::Bool(_)
+        | VoxValuePoolValues::Float(_)
+        | VoxValuePoolValues::Int(_)
+        | VoxValuePoolValues::Json(_)
+        | VoxValuePoolValues::String(_) => None,
 
-        VoxValuePoolKind::Vec2Float(_) | VoxValuePoolKind::Vec2Int(_) => Some(2),
+        VoxValuePoolValues::Vec2Float(_) | VoxValuePoolValues::Vec2Int(_) => Some(2),
 
-        VoxValuePoolKind::Vec3Float(_) | VoxValuePoolKind::Vec3Int(_) => Some(3),
+        VoxValuePoolValues::Vec3Float(_) | VoxValuePoolValues::Vec3Int(_) => Some(3),
 
-        VoxValuePoolKind::Vec4Float(_) | VoxValuePoolKind::Vec4Int(_) => Some(4),
+        VoxValuePoolValues::Vec4Float(_) | VoxValuePoolValues::Vec4Int(_) => Some(4),
     }
 }
 
@@ -253,8 +259,8 @@ fn vector_width(value_pool: &VoxValuePool) -> Option<usize> {
 /// components.
 fn color_shape(value_pool: &VoxValuePool) -> bool {
     matches!(
-        value_pool.kind(),
-        VoxValuePoolKind::Vec3Float(_) | VoxValuePoolKind::Vec4Float(_)
+        value_pool.values(),
+        VoxValuePoolValues::Vec3Float(_) | VoxValuePoolValues::Vec4Float(_)
     )
 }
 
@@ -278,23 +284,25 @@ fn resolve_reading(
                          vec-4-float value pool"
                     )));
                 }
-                Ok(Reading::SrgbHex)
+                Ok(Reading::Color(ColorReading::SrgbHex))
             }
 
             Some(MaterialPropertyKind::Scalar) | None => Ok(Reading::Plain),
         },
 
         PaletteShowReading::LinearFloat => {
-            color_reading(key, value_pool, "linear-float", Reading::LinearFloat)
+            color_reading(key, value_pool, "linear-float", ColorReading::LinearFloat)
         }
 
         PaletteShowReading::Plain => Ok(Reading::Plain),
 
         PaletteShowReading::SrgbFloat => {
-            color_reading(key, value_pool, "srgb-float", Reading::SrgbFloat)
+            color_reading(key, value_pool, "srgb-float", ColorReading::SrgbFloat)
         }
 
-        PaletteShowReading::SrgbHex => color_reading(key, value_pool, "srgb-hex", Reading::SrgbHex),
+        PaletteShowReading::SrgbHex => {
+            color_reading(key, value_pool, "srgb-hex", ColorReading::SrgbHex)
+        }
     }
 }
 
@@ -304,10 +312,10 @@ fn color_reading(
     key: &str,
     value_pool: &VoxValuePool,
     name: &str,
-    reading: Reading,
+    reading: ColorReading,
 ) -> Result<Reading> {
     if color_shape(value_pool) {
-        Ok(reading)
+        Ok(Reading::Color(reading))
     } else {
         Err(Error::invalid(format!(
             "property `{key}` does not bind a vec-3-float or vec-4-float value pool, which \
@@ -316,159 +324,253 @@ fn color_reading(
     }
 }
 
-/// The sample for the value at `value_id` under the resolved `reading` and an
-/// optional vector `component`. An sRGB reading errors on a spelled component
-/// outside `[0, 1]`.
-fn sample(
+/// The samples for the values `value_ids` draw, under the resolved `reading`
+/// and an optional vector `component`. The kind and the reading match once
+/// for all values.
+fn samples(
     key: &str,
     value_pool: &VoxValuePool,
-    value_id: U32Id<BVoxValuePoolValue>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
     reading: Reading,
     component: Option<VectorComponent>,
-) -> Result<TreeGridJsonValue> {
-    match component {
-        Some(component) => sample_component(key, value_pool, value_id, reading, component),
-        None => sample_whole(key, value_pool, value_id, reading),
+) -> Result<Vec<TreeGridJsonValue>> {
+    let Reading::Color(reading) = reading else {
+        return Ok(match component {
+            Some(component) => plain_component_samples(value_pool, value_ids, component.index()),
+            None => plain_samples(value_pool, value_ids),
+        });
+    };
+
+    match value_pool.values() {
+        VoxValuePoolValues::Vec3Float(colors) => {
+            color_samples(key, colors, value_ids, reading, component)
+        }
+
+        VoxValuePoolValues::Vec4Float(colors) => {
+            color_samples(key, colors, value_ids, reading, component)
+        }
+
+        _ => unreachable!("a color reading resolves only on a color shape"),
     }
 }
 
-/// The sample for a whole value under `reading`. The color readings spell the
-/// stored linear color. `plain` spells any value as it is.
-fn sample_whole(
+/// The color-reading samples for the colors `value_ids` draw. A component's
+/// grayscale swatch shows the sRGB byte the whole-color spelling carries for
+/// that channel. An sRGB reading errors on a component outside `[0, 1]`.
+fn color_samples<C: StoredColor>(
     key: &str,
-    value_pool: &VoxValuePool,
-    value_id: U32Id<BVoxValuePoolValue>,
-    reading: Reading,
-) -> Result<TreeGridJsonValue> {
-    match reading {
-        Reading::LinearFloat => {
-            let floats = color_floats(value_pool, value_id);
-            Ok(match floats[..] {
-                [r, g, b] => TreeGridJsonValue::lin_srgb(TyLinSrgbF64::new(r, g, b)),
-                [r, g, b, a] => TreeGridJsonValue::lin_srgba(TyLinSrgbaF64::new(r, g, b, a)),
-                _ => unreachable!("a color reading resolves only on a color shape"),
-            })
-        }
+    colors: VoxValueColumn<'_, C>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+    reading: ColorReading,
+    component: Option<VectorComponent>,
+) -> Result<Vec<TreeGridJsonValue>> {
+    let colors = drawn(colors, value_ids);
 
-        Reading::Plain => Ok(sample_plain(value_pool, value_id)),
+    let Some(component) = component else {
+        let spell: fn(&str, &C) -> Result<TreeGridJsonValue> = match reading {
+            ColorReading::LinearFloat => linear_float_sample,
+            ColorReading::SrgbFloat => srgb_float_sample,
+            ColorReading::SrgbHex => srgb_hex_sample,
+        };
 
-        Reading::SrgbFloat => {
-            let floats = color_floats(value_pool, value_id);
-            require_unit(key, &floats)?;
-            // The rgb components spell transfer-encoded. Alpha passes through.
-            let encode = |component| round_six_decimals(encode_component(component));
-            Ok(match floats[..] {
-                [r, g, b] => {
-                    TreeGridJsonValue::srgb(TySrgbF64::new(encode(r), encode(g), encode(b)))
-                }
+        return colors.map(|color| spell(key, color)).collect();
+    };
 
-                [r, g, b, a] => {
-                    TreeGridJsonValue::srgba(TySrgbaF64::new(encode(r), encode(g), encode(b), a))
-                }
+    let spell: fn(&str, &C, usize) -> Result<TreeGridJsonValue> = match (reading, component) {
+        (ColorReading::LinearFloat, _) => linear_float_component_sample,
+        (ColorReading::SrgbFloat, VectorComponent::A) => srgb_float_alpha_component_sample,
+        (ColorReading::SrgbFloat, _) => srgb_float_rgb_component_sample,
+        (ColorReading::SrgbHex, _) => srgb_hex_component_sample,
+    };
 
-                _ => unreachable!("a color reading resolves only on a color shape"),
-            })
-        }
-
-        Reading::SrgbHex => {
-            let floats = color_floats(value_pool, value_id);
-            require_unit(key, &floats)?;
-            let bytes = color_bytes(value_pool, value_id);
-            Ok(if floats.len() == 4 {
-                TreeGridJsonValue::srgba8(bytes)
-            } else {
-                TreeGridJsonValue::srgb8([bytes[0], bytes[1], bytes[2]])
-            })
-        }
-    }
-}
-
-/// The sample for one component under `reading`. A color reading's grayscale
-/// swatch is the channel's sRGB appearance, the same byte the whole-vector
-/// spelling carries. `plain` maps the stored number onto the raw ramp.
-fn sample_component(
-    key: &str,
-    value_pool: &VoxValuePool,
-    value_id: U32Id<BVoxValuePoolValue>,
-    reading: Reading,
-    component: VectorComponent,
-) -> Result<TreeGridJsonValue> {
     let index = component.index();
-    match reading {
-        Reading::LinearFloat => {
-            let stored = color_floats(value_pool, value_id)[index];
-            let byte = color_bytes(value_pool, value_id)[index];
-            Ok(TreeGridJsonValue::float(stored).with_swatch(TreeGridSwatch::Gray(byte)))
-        }
-
-        Reading::Plain => Ok(sample_plain_component(value_pool, value_id, index)),
-
-        Reading::SrgbFloat => {
-            let stored = color_floats(value_pool, value_id)[index];
-            require_unit(key, &[stored])?;
-            // The rgb components spell transfer-encoded. Alpha passes through.
-            let spelled = if index < 3 {
-                round_six_decimals(encode_component(stored))
-            } else {
-                stored
-            };
-            let byte = color_bytes(value_pool, value_id)[index];
-            Ok(TreeGridJsonValue::float(spelled).with_swatch(TreeGridSwatch::Gray(byte)))
-        }
-
-        Reading::SrgbHex => {
-            let stored = color_floats(value_pool, value_id)[index];
-            require_unit(key, &[stored])?;
-            let byte = color_bytes(value_pool, value_id)[index];
-            Ok(TreeGridJsonValue::new(format!("{byte:02X}"))
-                .with_swatch(TreeGridSwatch::Gray(byte)))
-        }
-    }
+    colors.map(|color| spell(key, color, index)).collect()
 }
 
-/// The `plain` sample for a whole value: the stored value as it is, with a
-/// `float` or `int` number on the grayscale ramp.
-fn sample_plain(
-    value_pool: &VoxValuePool,
-    value_id: U32Id<BVoxValuePoolValue>,
-) -> TreeGridJsonValue {
-    let value = value_pool
-        .value(value_id)
-        .expect("a material draws a retained value");
-    match value {
-        VoxValuePoolValueRef::Bool(flag) => TreeGridJsonValue::bool(flag),
-        VoxValuePoolValueRef::Float(number) => TreeGridJsonValue::unorm(number),
-        VoxValuePoolValueRef::Int(number) => TreeGridJsonValue::unorm(number as f64),
-        VoxValuePoolValueRef::Json(value) => TreeGridJsonValue::json(vox_value_to_json(value)),
-        VoxValuePoolValueRef::String(text) => TreeGridJsonValue::new(text.to_owned()),
-        VoxValuePoolValueRef::Vec2Float(vector) => float_array_json(vector),
-        VoxValuePoolValueRef::Vec2Int(vector) => int_array_json(vector),
-        VoxValuePoolValueRef::Vec3Float(vector) => float_array_json(vector),
-        VoxValuePoolValueRef::Vec3Int(vector) => int_array_json(vector),
-        VoxValuePoolValueRef::Vec4Float(vector) => float_array_json(vector),
-        VoxValuePoolValueRef::Vec4Int(vector) => int_array_json(vector),
-    }
+fn linear_float_sample<C: StoredColor>(_key: &str, color: &C) -> Result<TreeGridJsonValue> {
+    Ok(color.linear_float())
 }
 
-/// The `plain` sample for one vector component: the stored number on the
-/// grayscale ramp.
-fn sample_plain_component(
-    value_pool: &VoxValuePool,
-    value_id: U32Id<BVoxValuePoolValue>,
+fn srgb_float_sample<C: StoredColor>(key: &str, color: &C) -> Result<TreeGridJsonValue> {
+    require_unit(key, color.components())?;
+    Ok(color.srgb_float())
+}
+
+fn srgb_hex_sample<C: StoredColor>(key: &str, color: &C) -> Result<TreeGridJsonValue> {
+    require_unit(key, color.components())?;
+    Ok(color.srgb_hex())
+}
+
+/// One color component under `linear-float`: the stored number.
+fn linear_float_component_sample<C: StoredColor>(
+    _key: &str,
+    color: &C,
     index: usize,
-) -> TreeGridJsonValue {
-    let value = value_pool
-        .value(value_id)
-        .expect("a material draws a retained value");
-    match value {
-        VoxValuePoolValueRef::Vec2Float(vector) => TreeGridJsonValue::unorm(vector[index]),
-        VoxValuePoolValueRef::Vec2Int(vector) => TreeGridJsonValue::unorm(vector[index] as f64),
-        VoxValuePoolValueRef::Vec3Float(vector) => TreeGridJsonValue::unorm(vector[index]),
-        VoxValuePoolValueRef::Vec3Int(vector) => TreeGridJsonValue::unorm(vector[index] as f64),
-        VoxValuePoolValueRef::Vec4Float(vector) => TreeGridJsonValue::unorm(vector[index]),
-        VoxValuePoolValueRef::Vec4Int(vector) => TreeGridJsonValue::unorm(vector[index] as f64),
-        _ => unreachable!("a component was validated against a vector shape"),
+) -> Result<TreeGridJsonValue> {
+    let byte = color.display_bytes()[index];
+    Ok(TreeGridJsonValue::float(color.components()[index]).with_swatch(TreeGridSwatch::Gray(byte)))
+}
+
+/// One rgb component under `srgb-float`: transfer-encoded.
+fn srgb_float_rgb_component_sample<C: StoredColor>(
+    key: &str,
+    color: &C,
+    index: usize,
+) -> Result<TreeGridJsonValue> {
+    require_unit(key, &[color.components()[index]])?;
+    let byte = color.display_bytes()[index];
+    Ok(
+        TreeGridJsonValue::float(color.srgb_float_rgb_component(index))
+            .with_swatch(TreeGridSwatch::Gray(byte)),
+    )
+}
+
+/// The alpha component under `srgb-float`: passed through.
+fn srgb_float_alpha_component_sample<C: StoredColor>(
+    key: &str,
+    color: &C,
+    index: usize,
+) -> Result<TreeGridJsonValue> {
+    let stored = color.components()[index];
+    require_unit(key, &[stored])?;
+    let byte = color.display_bytes()[index];
+    Ok(TreeGridJsonValue::float(stored).with_swatch(TreeGridSwatch::Gray(byte)))
+}
+
+/// One color component under `srgb-hex`: its sRGB byte.
+fn srgb_hex_component_sample<C: StoredColor>(
+    key: &str,
+    color: &C,
+    index: usize,
+) -> Result<TreeGridJsonValue> {
+    require_unit(key, &[color.components()[index]])?;
+    let byte = color.display_bytes()[index];
+    Ok(TreeGridJsonValue::new(format!("{byte:02X}")).with_swatch(TreeGridSwatch::Gray(byte)))
+}
+
+/// The `plain` samples for whole values: each stored value as it is, with a
+/// `float` or `int` number on the grayscale ramp.
+fn plain_samples(
+    value_pool: &VoxValuePool,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+) -> Vec<TreeGridJsonValue> {
+    match value_pool.values() {
+        VoxValuePoolValues::Bool(flags) => {
+            spelled(flags, value_ids, |&flag| TreeGridJsonValue::bool(flag))
+        }
+
+        VoxValuePoolValues::Float(numbers) => spelled(numbers, value_ids, |&number| {
+            TreeGridJsonValue::unorm(number)
+        }),
+
+        VoxValuePoolValues::Int(numbers) => spelled(numbers, value_ids, |&number| {
+            TreeGridJsonValue::unorm(number as f64)
+        }),
+
+        VoxValuePoolValues::Json(values) => spelled(values, value_ids, |value| {
+            TreeGridJsonValue::json(vox_value_to_json(value))
+        }),
+
+        VoxValuePoolValues::String(texts) => spelled(texts, value_ids, |text| {
+            TreeGridJsonValue::new(text.clone())
+        }),
+
+        VoxValuePoolValues::Vec2Float(vectors) => {
+            spelled(vectors, value_ids, |vector| float_array_json(vector))
+        }
+
+        VoxValuePoolValues::Vec2Int(vectors) => {
+            spelled(vectors, value_ids, |vector| int_array_json(vector))
+        }
+
+        VoxValuePoolValues::Vec3Float(vectors) => {
+            spelled(vectors, value_ids, |vector| float_array_json(vector))
+        }
+
+        VoxValuePoolValues::Vec3Int(vectors) => {
+            spelled(vectors, value_ids, |vector| int_array_json(vector))
+        }
+
+        VoxValuePoolValues::Vec4Float(vectors) => {
+            spelled(vectors, value_ids, |vector| float_array_json(vector))
+        }
+
+        VoxValuePoolValues::Vec4Int(vectors) => {
+            spelled(vectors, value_ids, |vector| int_array_json(vector))
+        }
     }
+}
+
+/// The `plain` samples for vector component `index`: each stored number on
+/// the grayscale ramp.
+fn plain_component_samples(
+    value_pool: &VoxValuePool,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+    index: usize,
+) -> Vec<TreeGridJsonValue> {
+    match value_pool.values() {
+        VoxValuePoolValues::Vec2Float(vectors) => float_components(vectors, value_ids, index),
+
+        VoxValuePoolValues::Vec2Int(vectors) => int_components(vectors, value_ids, index),
+
+        VoxValuePoolValues::Vec3Float(vectors) => float_components(vectors, value_ids, index),
+
+        VoxValuePoolValues::Vec3Int(vectors) => int_components(vectors, value_ids, index),
+
+        VoxValuePoolValues::Vec4Float(vectors) => float_components(vectors, value_ids, index),
+
+        VoxValuePoolValues::Vec4Int(vectors) => int_components(vectors, value_ids, index),
+
+        VoxValuePoolValues::Bool(_)
+        | VoxValuePoolValues::Float(_)
+        | VoxValuePoolValues::Int(_)
+        | VoxValuePoolValues::Json(_)
+        | VoxValuePoolValues::String(_) => {
+            unreachable!("a component was validated against a vector shape")
+        }
+    }
+}
+
+/// Ramp samples of component `index` of each float vector `value_ids` draws.
+fn float_components<const N: usize>(
+    vectors: VoxValueColumn<'_, [f64; N]>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+    index: usize,
+) -> Vec<TreeGridJsonValue> {
+    spelled(vectors, value_ids, |vector| {
+        TreeGridJsonValue::unorm(vector[index])
+    })
+}
+
+/// Ramp samples of component `index` of each int vector `value_ids` draws.
+fn int_components<const N: usize>(
+    vectors: VoxValueColumn<'_, [i64; N]>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+    index: usize,
+) -> Vec<TreeGridJsonValue> {
+    spelled(vectors, value_ids, |vector| {
+        TreeGridJsonValue::unorm(vector[index] as f64)
+    })
+}
+
+fn spelled<T>(
+    values: VoxValueColumn<'_, T>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+    spell: impl Fn(&T) -> TreeGridJsonValue,
+) -> Vec<TreeGridJsonValue> {
+    drawn(values, value_ids).map(spell).collect()
+}
+
+/// The value each of `value_ids` draws from `values`, in material order.
+fn drawn<'a, T>(
+    values: VoxValueColumn<'a, T>,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+) -> impl Iterator<Item = &'a T> {
+    value_ids.iter().map(move |&value_id| {
+        values
+            .get(value_id)
+            .expect("a material draws a retained value")
+    })
 }
 
 /// Requires every component an sRGB reading would spell to lie in `[0, 1]`:
@@ -487,17 +589,6 @@ fn require_unit(key: &str, components: &[f64]) -> Result<()> {
     }
 }
 
-/// Transfer-encodes one linear rgb component to its sRGB spelling.
-fn encode_component(component: f64) -> f64 {
-    TySrgbF64::from_linear(TyLinSrgbF64::new(component, 0.0, 0.0)).red
-}
-
-/// Rounds an encoded component to six decimal places, the display precision
-/// of the `srgb-float` reading.
-fn round_six_decimals(value: f64) -> f64 {
-    (value * 1e6).round() / 1e6
-}
-
 /// A float vector as a JSON array, each component spelled as a number.
 fn float_array_json(vector: &[f64]) -> TreeGridJsonValue {
     TreeGridJsonValue::json(Value::Array(
@@ -513,31 +604,6 @@ fn int_array_json(vector: &[i64]) -> TreeGridJsonValue {
     TreeGridJsonValue::json(Value::Array(
         vector.iter().map(|&component| json!(component)).collect(),
     ))
-}
-
-/// The `[r, g, b, a]` bytes for the stored linear color at `value_id`,
-/// encoded to sRGB at display. The alpha only quantizes, and a
-/// three-component color takes opaque alpha.
-fn color_bytes(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> [u8; 4] {
-    let [r, g, b, a] = match color_floats(value_pool, value_id)[..] {
-        [r, g, b] => [r, g, b, 1.0],
-        [r, g, b, a] => [r, g, b, a],
-        _ => unreachable!("a color reading resolves only on a color shape"),
-    };
-    <[u8; 4]>::from(TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, a)).into_format::<u8, u8>())
-}
-
-/// The stored linear float components of the color at `value_id`, three or
-/// four long by shape.
-fn color_floats(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> Vec<f64> {
-    let value = value_pool
-        .value(value_id)
-        .expect("a material draws a retained value");
-    match value {
-        VoxValuePoolValueRef::Vec3Float(color) => color.to_vec(),
-        VoxValuePoolValueRef::Vec4Float(color) => color.to_vec(),
-        _ => unreachable!("a color reading resolves only on a color shape"),
-    }
 }
 
 /// A number as JSON: an integer when it is integral and fits `i64`, else a

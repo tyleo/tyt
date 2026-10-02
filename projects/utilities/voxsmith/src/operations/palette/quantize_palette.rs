@@ -128,7 +128,7 @@ mod tests {
     use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
     use voxcore::{
         BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette,
-        VoxValuePool, VoxValuePoolValueRef,
+        VoxValueColumn, VoxValuePool,
         color::{lin_srgba_f64_from_srgba_u8, srgba_u8_from_lin_srgba_f64},
         material::{BASE_COLOR, METALLIC, ROUGHNESS},
     };
@@ -172,20 +172,24 @@ mod tests {
     }
 
     /// The value a material holds for the property `name`.
-    fn material_value<'a>(
+    fn material_value<'a, T>(
         main: &'a VoxMain,
         palette_id: U32Id<BVoxPalette>,
         material_id: U32Id<BVoxMaterial>,
         name: &str,
-    ) -> VoxValuePoolValueRef<'a> {
+        column: fn(&'a VoxValuePool) -> Option<VoxValueColumn<'a, T>>,
+    ) -> &'a T {
         let property_id = main
             .palette(palette_id)
             .unwrap()
             .property_id_by_name(name)
             .unwrap();
-        main.material_value(palette_id, material_id, property_id)
-            .and_then(|(value_pool, value_id)| value_pool.value(value_id))
-            .unwrap()
+
+        let (value_pool, value_id) = main
+            .material_value(palette_id, material_id, property_id)
+            .unwrap();
+
+        column(value_pool).unwrap().get(value_id).unwrap()
     }
 
     /// The `#RRGGBBAA` hex of a material's `baseColor`, uppercase.
@@ -194,10 +198,13 @@ mod tests {
         palette_id: U32Id<BVoxPalette>,
         material_id: U32Id<BVoxMaterial>,
     ) -> String {
-        match material_value(main, palette_id, material_id, BASE_COLOR) {
-            VoxValuePoolValueRef::Vec4Float(&color) => hex_of(color),
-            other => panic!("material has no vec-4-float baseColor: {other:?}"),
-        }
+        hex_of(*material_value(
+            main,
+            palette_id,
+            material_id,
+            BASE_COLOR,
+            VoxValuePool::vec_4_float_values,
+        ))
     }
 
     /// One object over a palette of `properties`, each drawing from its own
@@ -386,8 +393,14 @@ mod tests {
 
         let material_id = voxel_material(&main, object_id, TyVector3U32::new(0, 0, 0));
         assert_eq!(
-            material_value(&main, palette_id, material_id, "tag"),
-            VoxValuePoolValueRef::Float(1.0)
+            material_value(
+                &main,
+                palette_id,
+                material_id,
+                "tag",
+                VoxValuePool::float_values
+            ),
+            &1.0
         );
     }
 
@@ -752,15 +765,17 @@ mod tests {
             .palette(palette_id)
             .unwrap()
             .iter_materials()
-            .map(|material_id| material_value(&main, palette_id, material_id, METALLIC))
+            .map(|material_id| {
+                *material_value(
+                    &main,
+                    palette_id,
+                    material_id,
+                    METALLIC,
+                    VoxValuePool::float_values,
+                )
+            })
             .collect();
-        assert_eq!(
-            metallic,
-            [
-                VoxValuePoolValueRef::Float(0.0),
-                VoxValuePoolValueRef::Float(1.0)
-            ]
-        );
+        assert_eq!(metallic, [0.0, 1.0]);
     }
 
     #[test]
@@ -807,7 +822,15 @@ mod tests {
                 .palette(palette_id)
                 .unwrap()
                 .iter_materials()
-                .map(|material_id| material_value(&main, palette_id, material_id, METALLIC))
+                .map(|material_id| {
+                    *material_value(
+                        &main,
+                        palette_id,
+                        material_id,
+                        METALLIC,
+                        VoxValuePool::float_values,
+                    )
+                })
                 .collect();
             metallic.dedup();
             assert_eq!(metallic.len(), 2, "method {method:?}");
@@ -835,15 +858,17 @@ mod tests {
             .palette(palette_id)
             .unwrap()
             .iter_materials()
-            .map(|material_id| material_value(&main, palette_id, material_id, ROUGHNESS))
+            .map(|material_id| {
+                *material_value(
+                    &main,
+                    palette_id,
+                    material_id,
+                    ROUGHNESS,
+                    VoxValuePool::float_values,
+                )
+            })
             .collect();
-        assert_eq!(
-            values,
-            [
-                VoxValuePoolValueRef::Float(0.12),
-                VoxValuePoolValueRef::Float(0.9)
-            ]
-        );
+        assert_eq!(values, [0.12, 0.9]);
     }
 
     #[test]

@@ -1,6 +1,5 @@
 use crate::{
-    BVoxEffectiveProperty, BVoxMaterial, BVoxVoxel, VoxEffectiveProperty, VoxObject,
-    VoxValuePoolValueRef,
+    BVoxEffectiveProperty, BVoxValuePoolValue, BVoxVoxel, VoxEffectiveProperty, VoxObject,
 };
 use branded_id::{IdVec, U32Id, UsizeId};
 use std::collections::HashMap;
@@ -10,8 +9,9 @@ use std::collections::HashMap;
 ///
 /// Build with [`effective_palette`](crate::VoxState::effective_palette).
 /// Resolve a name to an id once with
-/// [`property_id_by_name`](Self::property_id_by_name),
-/// then read values by id inside voxel loops.
+/// [`property_id_by_name`](Self::property_id_by_name). Read the property's
+/// value pool once through the accessor for its kind. Inside voxel loops, read
+/// value ids with [`voxel_value_id`](Self::voxel_value_id).
 #[derive(Debug)]
 pub struct VoxEffectivePalette<'a> {
     /// The object the view resolves.
@@ -45,27 +45,17 @@ impl<'a> VoxEffectivePalette<'a> {
         self.property_id_by_name.get(name).copied()
     }
 
-    /// The value `material_id` draws for property `property_id`, or `None` if
-    /// either id is unknown.
-    pub fn value(
-        &self,
-        property_id: UsizeId<BVoxEffectiveProperty>,
-        material_id: U32Id<BVoxMaterial>,
-    ) -> Option<VoxValuePoolValueRef<'_>> {
-        self.properties.get(property_id)?.value(material_id)
-    }
-
-    /// The value the voxel at `voxel_id` reads for property `property_id`,
+    /// The value id the voxel at `voxel_id` reads for property `property_id`
     /// through the material it samples in the winning layer. `None` for a dead
     /// voxel or an unknown property id.
-    pub fn voxel_value(
+    pub fn voxel_value_id(
         &self,
         voxel_id: U32Id<BVoxVoxel>,
         property_id: UsizeId<BVoxEffectiveProperty>,
-    ) -> Option<VoxValuePoolValueRef<'_>> {
+    ) -> Option<U32Id<BVoxValuePoolValue>> {
         let property = self.properties.get(property_id)?;
         let material_id = self.object.voxel_material(voxel_id, property.layer_id)?;
-        property.value(material_id)
+        property.value_id(material_id)
     }
 }
 
@@ -73,7 +63,7 @@ impl<'a> VoxEffectivePalette<'a> {
 mod tests {
     use crate::{
         BVoxPalette, BVoxValuePool, BVoxValuePoolValue, Error, VoxMain, VoxObject, VoxPalette,
-        VoxValuePool, VoxValuePoolValueRef,
+        VoxValuePool,
     };
     use branded_id::{U32Id, UsizeId};
     use ty_math::TyVector3U32;
@@ -142,8 +132,8 @@ mod tests {
 
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         assert_eq!(
-            effective.voxel_value(voxel_id, property_id),
-            Some(VoxValuePoolValueRef::Int(20))
+            effective.voxel_value_id(voxel_id, property_id),
+            Some(value_id(1))
         );
     }
 
@@ -158,7 +148,7 @@ mod tests {
 
         let effective = state.effective_palette(&object).unwrap();
         let property_id = effective.property_id_by_name("v").unwrap();
-        assert_eq!(effective.voxel_value(voxel_id, property_id), None);
+        assert_eq!(effective.voxel_value_id(voxel_id, property_id), None);
     }
 
     #[test]
@@ -223,19 +213,11 @@ mod tests {
 
         let effective = state.effective_palette(&object).unwrap();
         let v_id = effective.property_id_by_name("v").unwrap();
-        assert_eq!(
-            effective.value(v_id, sparse_id),
-            Some(VoxValuePoolValueRef::Int(30))
-        );
-        assert_eq!(
-            effective.value(v_id, keep_id),
-            Some(VoxValuePoolValueRef::Int(10))
-        );
-        assert_eq!(effective.value(v_id, doomed_id), None);
-        assert_eq!(
-            effective.voxel_value(voxel_id, v_id),
-            Some(VoxValuePoolValueRef::Int(30))
-        );
+        let v = effective.property(v_id).unwrap();
+        assert_eq!(v.value_id(sparse_id), Some(value_id(2)));
+        assert_eq!(v.value_id(keep_id), Some(value_id(0)));
+        assert_eq!(v.value_id(doomed_id), None);
+        assert_eq!(effective.voxel_value_id(voxel_id, v_id), Some(value_id(2)));
     }
 
     #[test]
@@ -246,10 +228,7 @@ mod tests {
         let effective = state.effective_palette(&object).unwrap();
         assert_eq!(effective.property_count(), 0);
         assert_eq!(effective.property_id_by_name("v"), None);
-        assert_eq!(
-            effective.value(UsizeId::from_usize(0), U32Id::from_u32(0)),
-            None
-        );
+        assert!(effective.property(UsizeId::from_usize(0)).is_none());
     }
 
     #[test]

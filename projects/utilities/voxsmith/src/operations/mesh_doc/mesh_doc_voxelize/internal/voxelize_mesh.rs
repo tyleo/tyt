@@ -674,7 +674,7 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::TyLinSrgbaF64;
     use voxcore::{
-        BVoxMaterial, BVoxPalette, VoxMain, VoxValuePoolValueRef,
+        BVoxMaterial, BVoxPalette, VoxMain, VoxValueColumn, VoxValuePool,
         material::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC},
     };
 
@@ -706,28 +706,33 @@ mod tests {
     ) -> f64 {
         let palette = main.palette(palette_id).unwrap();
         let property_id = palette.property_id_by_name(property).unwrap();
-        match main
+        let (value_pool, value_id) = main
             .material_value(palette_id, material_id, property_id)
-            .and_then(|(value_pool, value_id)| value_pool.value(value_id))
-        {
-            Some(VoxValuePoolValueRef::Float(number)) => number,
-            other => panic!("expected a float value pool, got {other:?}"),
-        }
+            .unwrap();
+
+        *value_pool
+            .float_values()
+            .expect("a float value pool")
+            .get(value_id)
+            .unwrap()
     }
 
-    /// The values of the pool `property` draws from, in listing order.
-    fn values<'a>(
+    /// The values of the pool `property` draws from in listing order, read
+    /// through `column`.
+    fn values<'a, T: Copy>(
         main: &'a VoxMain,
         palette_id: U32Id<BVoxPalette>,
         property: &str,
-    ) -> Vec<VoxValuePoolValueRef<'a>> {
+        column: fn(&'a VoxValuePool) -> Option<VoxValueColumn<'a, T>>,
+    ) -> Vec<T> {
         let palette = main.palette(palette_id).unwrap();
         let property_id = palette.property_id_by_name(property).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
         let value_pool = main.value_pool(value_pool_id).unwrap();
-        value_pool
-            .iter_values()
-            .map(|(value_id, _)| value_pool.value(value_id).unwrap())
+        column(value_pool)
+            .unwrap()
+            .iter()
+            .map(|(_, &value)| value)
             .collect()
     }
 
@@ -758,7 +763,16 @@ mod tests {
         // Two distinct materials share the strength, so both rows repeat the
         // deduplicated value pool's one value.
         assert_eq!(main.palette(palette_id).unwrap().material_count(), 2);
-        assert_eq!(values(&main, palette_id, EMISSIVE_STRENGTH).len(), 1);
+        assert_eq!(
+            values(
+                &main,
+                palette_id,
+                EMISSIVE_STRENGTH,
+                VoxValuePool::float_values
+            )
+            .len(),
+            1
+        );
         assert_eq!(
             number(&main, palette_id, material_ids[0], EMISSIVE_STRENGTH),
             2.0
@@ -829,11 +843,8 @@ mod tests {
         // Both materials land on the value pool, the out-of-range one at the
         // range's top.
         assert_eq!(
-            values(&main, palette_id, METALLIC),
-            vec![
-                VoxValuePoolValueRef::Float(0.0),
-                VoxValuePoolValueRef::Float(1.0)
-            ]
+            values(&main, palette_id, METALLIC, VoxValuePool::float_values),
+            [0.0, 1.0]
         );
     }
 
@@ -868,8 +879,13 @@ mod tests {
         // The hot red clamps onto the matte one, so the deduplicated
         // baseColor value pool holds one value.
         assert_eq!(
-            values(&main, palette_id, BASE_COLOR),
-            vec![VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0])]
+            values(
+                &main,
+                palette_id,
+                BASE_COLOR,
+                VoxValuePool::vec_4_float_values
+            ),
+            [[1.0, 0.0, 0.0, 1.0]]
         );
     }
 
@@ -909,15 +925,12 @@ mod tests {
 
         let (main, palette_id, _) =
             palette_of(vec![refracting, between], OutOfRangeProperty::Clamp).unwrap();
-        let values = values(&main, palette_id, IOR);
+        let values = values(&main, palette_id, IOR, VoxValuePool::float_values);
 
         assert!(
-            values.contains(&VoxValuePoolValueRef::Float(0.0)),
+            values.contains(&0.0),
             "the admitted zero clamped away: {values:?}"
         );
-        assert!(
-            values.contains(&VoxValuePoolValueRef::Float(1.0)),
-            "{values:?}"
-        );
+        assert!(values.contains(&1.0), "{values:?}");
     }
 }

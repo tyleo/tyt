@@ -37,7 +37,7 @@ pub fn order_palette_colors<T: VoxExt>(main: &mut VoxMain<T>, palette_id: U32Id<
             new_order.push(value_id);
         }
     }
-    for (value_id, _) in value_pool.iter_values() {
+    for value_id in value_pool.iter_value_ids() {
         if !seen.contains(&value_id) {
             new_order.push(value_id);
         }

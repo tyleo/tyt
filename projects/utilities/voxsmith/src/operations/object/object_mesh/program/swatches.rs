@@ -3,8 +3,8 @@ use branded_id::{IdVec, U32Id, UsizeId};
 use std::collections::HashMap;
 use vox_value_language::{BSwatch, BVoxel};
 use voxcore::{
-    BVoxEffectiveProperty, BVoxLayer, BVoxMaterial, BVoxVoxel, VoxEffectivePalette, VoxExt,
-    VoxMain, VoxObject, VoxValuePoolValueRef,
+    BVoxEffectiveProperty, BVoxLayer, BVoxMaterial, BVoxValuePoolValue, BVoxVoxel,
+    VoxEffectivePalette, VoxExt, VoxMain, VoxObject,
 };
 
 /// An object's swatches: its distinct flattened materials in first-seen
@@ -96,12 +96,12 @@ impl<'a> Swatches<'a> {
         &self.effective
     }
 
-    /// The value swatch `swatch_id` holds for `property_id`.
-    pub(crate) fn value(
+    /// The value id swatch `swatch_id` draws for `property_id`.
+    pub(crate) fn value_id(
         &self,
         swatch_id: U32Id<BSwatch>,
         property_id: UsizeId<BVoxEffectiveProperty>,
-    ) -> VoxValuePoolValueRef<'_> {
+    ) -> U32Id<BVoxValuePoolValue> {
         let property = self
             .effective
             .property(property_id)
@@ -116,7 +116,7 @@ impl<'a> Swatches<'a> {
         let material_id = self.keys[swatch_id.to_usize_id()][position];
 
         property
-            .value(material_id)
+            .value_id(material_id)
             .expect("a material holds a value for every property of its palette")
     }
 
@@ -141,7 +141,6 @@ mod tests {
     use ty_math::TyVector3U32;
     use voxcore::{
         BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool,
-        VoxValuePoolValueRef,
         material::{BASE_COLOR, METALLIC},
     };
 
@@ -223,14 +222,9 @@ mod tests {
         );
 
         let metallic = swatches.effective().property_id_by_name(METALLIC).unwrap();
-        assert_eq!(
-            swatches.value(U32Id::from_u32(0), metallic),
-            VoxValuePoolValueRef::Float(0.0)
-        );
-        assert_eq!(
-            swatches.value(U32Id::from_u32(1), metallic),
-            VoxValuePoolValueRef::Float(1.0)
-        );
+        // Swatch 0 is material 1 and draws metallic 0.0. Swatch 1 is material 0.
+        assert_eq!(swatches.value_id(U32Id::from_u32(0), metallic), value_id(1));
+        assert_eq!(swatches.value_id(U32Id::from_u32(1), metallic), value_id(0));
     }
 
     #[test]
@@ -244,18 +238,13 @@ mod tests {
 
         assert_eq!(swatches.count(), 3);
         let metallic = swatches.effective().property_id_by_name(METALLIC).unwrap();
-        assert_eq!(
-            swatches.value(U32Id::from_u32(1), metallic),
-            VoxValuePoolValueRef::Float(0.75)
-        );
+        // Swatch 1 samples the override layer's material 1 and draws 0.75.
+        assert_eq!(swatches.value_id(U32Id::from_u32(1), metallic), value_id(1));
         let color = swatches
             .effective()
             .property_id_by_name(BASE_COLOR)
             .unwrap();
-        assert_eq!(
-            swatches.value(U32Id::from_u32(2), color),
-            VoxValuePoolValueRef::Vec4Float(&[0.0, 0.0, 1.0, 1.0])
-        );
+        assert_eq!(swatches.value_id(U32Id::from_u32(2), color), value_id(1));
         assert_eq!(swatches.effective().property_count(), 2);
         assert!(
             swatches

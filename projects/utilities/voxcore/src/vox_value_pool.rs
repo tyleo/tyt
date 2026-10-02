@@ -1,18 +1,19 @@
-use crate::{BVoxValuePoolValue, Error, Result, VoxValue, VoxValuePoolKind, VoxValuePoolValueRef};
+use crate::{
+    BVoxValuePoolValue, Error, Result, VoxValue, VoxValueColumn, VoxValuePoolKind,
+    VoxValuePoolValues,
+};
 use branded_id::{
     U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
-use std::mem;
 
-/// A shared value pool: one [`VoxValuePoolKind`] column keyed by an id pool of
-/// value ids.
+/// A shared value pool: one typed column keyed by an id pool of value ids.
 ///
 /// Build a value pool with the constructor for its kind (for example
 /// [`float`](Self::float) or [`vec_4_float`](Self::vec_4_float)). Read values
-/// back by id with [`value`](Self::value) or in listing order with
-/// [`iter_values`](Self::iter_values), and match [`kind`](Self::kind) for the
-/// kind.
+/// back through the accessor for the kind the caller wants, such as
+/// [`float_values`](Self::float_values). A caller that takes any kind matches
+/// [`values`](Self::values) once.
 #[derive(Debug)]
 pub struct VoxValuePool {
     /// Value id pool. Its listing order is the value pool's value order.
@@ -139,11 +140,6 @@ impl VoxValuePool {
             value_ids,
             kind: VoxValuePoolKind::Vec4Int(values),
         })
-    }
-
-    /// The kind, for matching.
-    pub fn kind(&self) -> &VoxValuePoolKind {
-        &self.kind
     }
 
     /// Appends a `bool` value and returns its id. Errors, changing nothing, if
@@ -336,34 +332,26 @@ impl VoxValuePool {
     /// voxcore bug. [`VoxMain::validate`](crate::VoxMain::validate) audits for
     /// one anyway.
     pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
-        let ids = &self.value_ids;
+        match self.values() {
+            VoxValuePoolValues::Float(floats) => first_out_of_domain(floats, float_in_domain),
 
-        match &self.kind {
-            VoxValuePoolKind::Float(values) => first_out_of_domain(ids, values, float_in_domain),
+            VoxValuePoolValues::Int(ints) => first_out_of_domain(ints, int_in_domain),
 
-            VoxValuePoolKind::Int(values) => first_out_of_domain(ids, values, int_in_domain),
+            VoxValuePoolValues::Vec2Float(floats) => first_out_of_domain(floats, floats_in_domain),
 
-            VoxValuePoolKind::Vec2Float(values) => {
-                first_out_of_domain(ids, values, floats_in_domain)
-            }
+            VoxValuePoolValues::Vec2Int(ints) => first_out_of_domain(ints, ints_in_domain),
 
-            VoxValuePoolKind::Vec2Int(values) => first_out_of_domain(ids, values, ints_in_domain),
+            VoxValuePoolValues::Vec3Float(floats) => first_out_of_domain(floats, floats_in_domain),
 
-            VoxValuePoolKind::Vec3Float(values) => {
-                first_out_of_domain(ids, values, floats_in_domain)
-            }
+            VoxValuePoolValues::Vec3Int(ints) => first_out_of_domain(ints, ints_in_domain),
 
-            VoxValuePoolKind::Vec3Int(values) => first_out_of_domain(ids, values, ints_in_domain),
+            VoxValuePoolValues::Vec4Float(floats) => first_out_of_domain(floats, floats_in_domain),
 
-            VoxValuePoolKind::Vec4Float(values) => {
-                first_out_of_domain(ids, values, floats_in_domain)
-            }
+            VoxValuePoolValues::Vec4Int(ints) => first_out_of_domain(ints, ints_in_domain),
 
-            VoxValuePoolKind::Vec4Int(values) => first_out_of_domain(ids, values, ints_in_domain),
-
-            VoxValuePoolKind::Bool(_) | VoxValuePoolKind::Json(_) | VoxValuePoolKind::String(_) => {
-                None
-            }
+            VoxValuePoolValues::Bool(_)
+            | VoxValuePoolValues::Json(_)
+            | VoxValuePoolValues::String(_) => None,
         }
     }
 
@@ -398,13 +386,9 @@ impl VoxValuePool {
         self.value_ids.is_empty()
     }
 
-    /// Values in listing order, as `(id, value)`.
-    pub fn iter_values(
-        &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxValuePoolValue>, VoxValuePoolValueRef<'_>)> + '_ {
-        self.value_ids
-            .iter()
-            .map(move |value_id| (value_id, self.value_ref(value_id)))
+    /// Value ids in listing order.
+    pub fn iter_value_ids(&self) -> impl Iterator<Item = U32Id<BVoxValuePoolValue>> + '_ {
+        self.value_ids.iter()
     }
 
     /// Number of values.
@@ -439,46 +423,151 @@ impl VoxValuePool {
         self.value_ids.try_set_order(new_order_ids)
     }
 
-    /// The value at `id`, typed by the value pool's kind, or `None` if `id` is
-    /// not one of this value pool's values.
-    pub fn value(&self, id: U32Id<BVoxValuePoolValue>) -> Option<VoxValuePoolValueRef<'_>> {
-        self.value_ids.is_retained(id).then(|| self.value_ref(id))
+    /// The values, typed by the kind, for a caller that handles any kind.
+    pub fn values(&self) -> VoxValuePoolValues<'_> {
+        match &self.kind {
+            VoxValuePoolKind::Bool(values) => VoxValuePoolValues::Bool(self.column(values)),
+
+            VoxValuePoolKind::Float(values) => VoxValuePoolValues::Float(self.column(values)),
+
+            VoxValuePoolKind::Int(values) => VoxValuePoolValues::Int(self.column(values)),
+
+            VoxValuePoolKind::Json(values) => VoxValuePoolValues::Json(self.column(values)),
+
+            VoxValuePoolKind::String(values) => VoxValuePoolValues::String(self.column(values)),
+
+            VoxValuePoolKind::Vec2Float(values) => {
+                VoxValuePoolValues::Vec2Float(self.column(values))
+            }
+
+            VoxValuePoolKind::Vec2Int(values) => VoxValuePoolValues::Vec2Int(self.column(values)),
+
+            VoxValuePoolKind::Vec3Float(values) => {
+                VoxValuePoolValues::Vec3Float(self.column(values))
+            }
+
+            VoxValuePoolKind::Vec3Int(values) => VoxValuePoolValues::Vec3Int(self.column(values)),
+
+            VoxValuePoolKind::Vec4Float(values) => {
+                VoxValuePoolValues::Vec4Float(self.column(values))
+            }
+
+            VoxValuePoolKind::Vec4Int(values) => VoxValuePoolValues::Vec4Int(self.column(values)),
+        }
     }
 
-    /// The typed ref for a retained `id`.
-    fn value_ref(&self, id: U32Id<BVoxValuePoolValue>) -> VoxValuePoolValueRef<'_> {
-        // Safety: the id is retained, so it has a value in the column.
-        unsafe {
-            match &self.kind {
-                VoxValuePoolKind::Bool(values) => VoxValuePoolValueRef::Bool(*values.get(id)),
+    /// The values of a `bool` value pool, or `None` if it holds another kind.
+    pub fn boolean_values(&self) -> Option<VoxValueColumn<'_, bool>> {
+        let VoxValuePoolKind::Bool(values) = &self.kind else {
+            return None;
+        };
 
-                VoxValuePoolKind::Float(values) => VoxValuePoolValueRef::Float(*values.get(id)),
+        Some(self.column(values))
+    }
 
-                VoxValuePoolKind::Int(values) => VoxValuePoolValueRef::Int(*values.get(id)),
+    /// The values of a `float` value pool, or `None` if it holds another kind.
+    pub fn float_values(&self) -> Option<VoxValueColumn<'_, f64>> {
+        let VoxValuePoolKind::Float(values) = &self.kind else {
+            return None;
+        };
 
-                VoxValuePoolKind::Json(values) => VoxValuePoolValueRef::Json(values.get(id)),
+        Some(self.column(values))
+    }
 
-                VoxValuePoolKind::String(values) => VoxValuePoolValueRef::String(values.get(id)),
+    /// The values of an `int` value pool, or `None` if it holds another kind.
+    pub fn int_values(&self) -> Option<VoxValueColumn<'_, i64>> {
+        let VoxValuePoolKind::Int(values) = &self.kind else {
+            return None;
+        };
 
-                VoxValuePoolKind::Vec2Float(values) => {
-                    VoxValuePoolValueRef::Vec2Float(values.get(id))
-                }
+        Some(self.column(values))
+    }
 
-                VoxValuePoolKind::Vec2Int(values) => VoxValuePoolValueRef::Vec2Int(values.get(id)),
+    /// The values of a `json` value pool, or `None` if it holds another kind.
+    pub fn json_values(&self) -> Option<VoxValueColumn<'_, VoxValue>> {
+        let VoxValuePoolKind::Json(values) = &self.kind else {
+            return None;
+        };
 
-                VoxValuePoolKind::Vec3Float(values) => {
-                    VoxValuePoolValueRef::Vec3Float(values.get(id))
-                }
+        Some(self.column(values))
+    }
 
-                VoxValuePoolKind::Vec3Int(values) => VoxValuePoolValueRef::Vec3Int(values.get(id)),
+    /// The values of a `string` value pool, or `None` if it holds another kind.
+    pub fn string_values(&self) -> Option<VoxValueColumn<'_, String>> {
+        let VoxValuePoolKind::String(values) = &self.kind else {
+            return None;
+        };
 
-                VoxValuePoolKind::Vec4Float(values) => {
-                    VoxValuePoolValueRef::Vec4Float(values.get(id))
-                }
+        Some(self.column(values))
+    }
 
-                VoxValuePoolKind::Vec4Int(values) => VoxValuePoolValueRef::Vec4Int(values.get(id)),
-            }
-        }
+    /// The values of a `vec-2-float` value pool, or `None` if it holds another
+    /// kind.
+    pub fn vec_2_float_values(&self) -> Option<VoxValueColumn<'_, [f64; 2]>> {
+        let VoxValuePoolKind::Vec2Float(values) = &self.kind else {
+            return None;
+        };
+
+        Some(self.column(values))
+    }
+
+    /// The values of a `vec-2-int` value pool, or `None` if it holds another
+    /// kind.
+    pub fn vec_2_int_values(&self) -> Option<VoxValueColumn<'_, [i64; 2]>> {
+        let VoxValuePoolKind::Vec2Int(values) = &self.kind else {
+            return None;
+        };
+
+        Some(self.column(values))
+    }
+
+    /// The values of a `vec-3-float` value pool, or `None` if it holds another
+    /// kind.
+    pub fn vec_3_float_values(&self) -> Option<VoxValueColumn<'_, [f64; 3]>> {
+        let VoxValuePoolKind::Vec3Float(values) = &self.kind else {
+            return None;
+        };
+
+        Some(self.column(values))
+    }
+
+    /// The values of a `vec-3-int` value pool, or `None` if it holds another
+    /// kind.
+    pub fn vec_3_int_values(&self) -> Option<VoxValueColumn<'_, [i64; 3]>> {
+        let VoxValuePoolKind::Vec3Int(values) = &self.kind else {
+            return None;
+        };
+
+        Some(self.column(values))
+    }
+
+    /// The values of a `vec-4-float` value pool, or `None` if it holds another
+    /// kind.
+    pub fn vec_4_float_values(&self) -> Option<VoxValueColumn<'_, [f64; 4]>> {
+        let VoxValuePoolKind::Vec4Float(values) = &self.kind else {
+            return None;
+        };
+
+        Some(self.column(values))
+    }
+
+    /// The values of a `vec-4-int` value pool, or `None` if it holds another
+    /// kind.
+    pub fn vec_4_int_values(&self) -> Option<VoxValueColumn<'_, [i64; 4]>> {
+        let VoxValuePoolKind::Vec4Int(values) = &self.kind else {
+            return None;
+        };
+
+        Some(self.column(values))
+    }
+
+    fn column<'a, T>(
+        &'a self,
+        values: &'a IdField<BVoxValuePoolValue, T>,
+    ) -> VoxValueColumn<'a, T> {
+        // Safety: `values` is this value pool's column, which holds a value for
+        // every id it retains.
+        unsafe { VoxValueColumn::new(&self.value_ids, values) }
     }
 }
 
@@ -565,11 +654,7 @@ impl PartialEq for VoxValuePool {
     /// Compares kind and values in listing order. The id labels underneath the
     /// listing do not take part.
     fn eq(&self, other: &Self) -> bool {
-        mem::discriminant(&self.kind) == mem::discriminant(&other.kind)
-            && self
-                .iter_values()
-                .map(|(_, value)| value)
-                .eq(other.iter_values().map(|(_, value)| value))
+        self.values() == other.values()
     }
 }
 
@@ -628,16 +713,12 @@ fn checked_columns<T>(
     Ok(columns(values))
 }
 
-/// The id of the first value in `column` outside the domain.
+/// The id of the first of `values` outside the domain.
 fn first_out_of_domain<T>(
-    ids: &IdStruct<BVoxValuePoolValue>,
-    column: &IdField<BVoxValuePoolValue, T>,
+    values: VoxValueColumn<'_, T>,
     in_domain: fn(&T) -> bool,
 ) -> Option<U32Id<BVoxValuePoolValue>> {
-    // Safety: the column holds a value for every id in its id pool.
-    let values = unsafe { column.iter(ids) };
-
-    for (value_id, value) in ids.iter().zip(values) {
+    for (value_id, value) in values.iter() {
         if !in_domain(value) {
             return Some(value_id);
         }
@@ -660,7 +741,7 @@ fn retain_into<T>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        BVoxValuePoolValue, Error, VoxValue, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
+        BVoxValuePoolValue, Error, VoxValue, VoxValuePool, VoxValuePoolKind, VoxValuePoolValues,
         vox_value_pool::columns,
     };
     use branded_id::U32Id;
@@ -675,20 +756,12 @@ mod tests {
 
         assert_eq!(value_pool.len(), 3);
 
-        let values: Vec<_> = value_pool.iter_values().collect();
+        let floats = value_pool.float_values().unwrap();
+        let values: Vec<_> = floats.iter().collect();
         assert_eq!(values.len(), 3);
-
-        assert_eq!(
-            values[1],
-            (U32Id::from_u32(1), VoxValuePoolValueRef::Float(0.5))
-        );
-
-        assert_eq!(
-            value_pool.value(U32Id::from_u32(2)),
-            Some(VoxValuePoolValueRef::Float(1.0))
-        );
-
-        assert_eq!(value_pool.value(U32Id::from_u32(3)), None);
+        assert_eq!(values[1], (value_id(1), &0.5));
+        assert_eq!(floats.get(value_id(2)), Some(&1.0));
+        assert_eq!(floats.get(value_id(3)), None);
     }
 
     #[test]
@@ -698,9 +771,17 @@ mod tests {
         assert_eq!(value_pool.len(), 1);
 
         assert_eq!(
-            value_pool.value(U32Id::from_u32(0)),
-            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))
+            value_pool.vec_4_float_values().unwrap().get(value_id(0)),
+            Some(&[1.0, 0.0, 0.0, 1.0])
         );
+    }
+
+    #[test]
+    fn a_read_of_another_kind_is_none() {
+        let value_pool = VoxValuePool::float(vec![0.5]).unwrap();
+
+        assert!(value_pool.int_values().is_none());
+        assert!(matches!(value_pool.values(), VoxValuePoolValues::Float(_)));
     }
 
     #[test]
@@ -729,11 +810,10 @@ mod tests {
         assert_eq!(value_pool.move_value(b_id, 2), Ok(()));
 
         let order: Vec<_> = value_pool
-            .iter_values()
-            .map(|(_, value)| match value {
-                VoxValuePoolValueRef::String(text) => text.to_owned(),
-                other => panic!("unexpected value {other:?}"),
-            })
+            .string_values()
+            .unwrap()
+            .iter()
+            .map(|(_, text)| text.as_str())
             .collect();
 
         assert_eq!(order, ["a", "c", "b"]);
@@ -981,10 +1061,10 @@ mod tests {
 
         assert_eq!(copy, value_pool);
         assert_eq!(
-            copy.iter_values().collect::<Vec<_>>(),
+            copy.string_values().unwrap().iter().collect::<Vec<_>>(),
             [
-                (value_id(0), VoxValuePoolValueRef::String("a")),
-                (value_id(2), VoxValuePoolValueRef::String("c")),
+                (value_id(0), &"a".to_owned()),
+                (value_id(2), &"c".to_owned())
             ]
         );
     }
