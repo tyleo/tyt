@@ -10,6 +10,10 @@ use std::collections::HashMap;
 /// One material's value ids, keyed by property id.
 type MaterialRow = IdField<BVoxProperty, U32Id<BVoxValuePoolValue>>;
 
+/// A material's cells beside the properties they fill.
+type MaterialRowView<'a, TRow> =
+    IdStructView<'a, BVoxProperty, (&'a IdField<BVoxProperty, VoxProperty>, TRow)>;
+
 /// A material palette: named properties bound to the
 /// [`VoxValuePool`](crate::VoxValuePool)s a [`VoxMain`](crate::VoxMain) holds,
 /// and the materials that draw from them.
@@ -42,7 +46,7 @@ impl VoxPalette {
         // renumbers ids in that order.
         let rows_value_ids: Vec<Vec<_>> = self
             .material_rows()
-            .map(|row| row.iter().map(|(_, value_id)| *value_id).collect())
+            .map(|row| row.iter().map(|(_, (_, value_id))| *value_id).collect())
             .collect();
 
         self.properties.gc();
@@ -235,7 +239,7 @@ impl VoxPalette {
     ) -> Option<U32Id<BVoxValuePoolValue>> {
         let row = self.material_row(material_id)?;
 
-        let value_id = row.get(property_id)?;
+        let (_, value_id) = row.get(property_id)?;
 
         Some(*value_id)
     }
@@ -255,7 +259,7 @@ impl VoxPalette {
             return Err(Error::UnknownMaterial { material_id });
         };
 
-        let Some(cell) = row.into_mut(property_id) else {
+        let Some((_, cell)) = row.into_mut(property_id) else {
             return Err(Error::UnknownProperty { property_id });
         };
 
@@ -273,21 +277,9 @@ impl VoxPalette {
         &mut self,
         remaps: &IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
     ) {
-        // Each property's value pool, found once so each material's row is
-        // visited once for all of them.
-        let property_value_pool_ids: Vec<_> = self
-            .properties
-            .iter()
-            .map(|(property_id, property)| (property_id, property.value_pool_id))
-            .collect();
-
-        for mut row in self.material_rows_mut() {
-            for &(property_id, value_pool_id) in &property_value_pool_ids {
-                let cell = row
-                    .get_mut(property_id)
-                    .expect("a row has a cell for every property");
-
-                *cell = remaps[value_pool_id.to_usize_id()]
+        for row in self.material_rows_mut() {
+            for (_, (property, cell)) in row {
+                *cell = remaps[property.value_pool_id.to_usize_id()]
                     .new_id(*cell)
                     .expect("a material cell draws a live value in a valid state");
             }
@@ -317,75 +309,57 @@ impl VoxPalette {
         old_id: U32Id<BVoxValuePoolValue>,
         new_id: U32Id<BVoxValuePoolValue>,
     ) {
-        // The properties on `value_pool_id`, found once so each material's row
-        // is visited once for all of them.
-        let value_pool_property_ids: Vec<_> = self
-            .properties
-            .iter()
-            .filter(|(_, property)| property.value_pool_id == value_pool_id)
-            .map(|(property_id, _)| property_id)
-            .collect();
-
-        if value_pool_property_ids.is_empty() {
-            return;
-        }
-
-        for mut row in self.material_rows_mut() {
-            for &property_id in &value_pool_property_ids {
-                let cell = row
-                    .get_mut(property_id)
-                    .expect("a row has a cell for every property");
-
-                if *cell == old_id {
+        for row in self.material_rows_mut() {
+            for (_, (property, cell)) in row {
+                if property.value_pool_id == value_pool_id && *cell == old_id {
                     *cell = new_id;
                 }
             }
         }
     }
 
-    /// Material `material_id`'s cells by property, or `None` if it is not one
-    /// of this palette's materials.
+    /// Material `material_id`'s cells beside their properties, or `None` if
+    /// it is not one of this palette's materials.
     fn material_row(
         &self,
         material_id: U32Id<BVoxMaterial>,
-    ) -> Option<IdStructView<'_, BVoxProperty, &MaterialRow>> {
+    ) -> Option<MaterialRowView<'_, &MaterialRow>> {
         let row = self.materials.get(material_id)?;
 
         // Safety: every material row holds a value id for every property.
-        Some(unsafe { self.properties.ids().view(row) })
+        Some(unsafe { self.properties.view_with(row) })
     }
 
-    /// Material `material_id`'s cells by property, writable, or `None` if it
-    /// is not one of this palette's materials.
+    /// Material `material_id`'s cells beside their properties, writable, or
+    /// `None` if it is not one of this palette's materials.
     fn material_row_mut(
         &mut self,
         material_id: U32Id<BVoxMaterial>,
-    ) -> Option<IdStructView<'_, BVoxProperty, &mut MaterialRow>> {
+    ) -> Option<MaterialRowView<'_, &mut MaterialRow>> {
         let row = self.materials.get_mut(material_id)?;
 
         // Safety: every material row holds a value id for every property.
-        Some(unsafe { self.properties.ids().view(row) })
+        Some(unsafe { self.properties.view_with(row) })
     }
 
-    /// Every material's cells by property, in material order.
-    fn material_rows(&self) -> impl Iterator<Item = IdStructView<'_, BVoxProperty, &MaterialRow>> {
-        let property_ids = self.properties.ids();
+    /// Every material's cells beside their properties, in material order.
+    fn material_rows(&self) -> impl Iterator<Item = MaterialRowView<'_, &MaterialRow>> {
+        let properties = &self.properties;
 
         self.materials.iter().map(move |(_, row)| {
             // Safety: every material row holds a value id for every property.
-            unsafe { property_ids.view(row) }
+            unsafe { properties.view_with(row) }
         })
     }
 
-    /// Every material's cells by property, writable, in material order.
-    fn material_rows_mut(
-        &mut self,
-    ) -> impl Iterator<Item = IdStructView<'_, BVoxProperty, &mut MaterialRow>> {
-        let property_ids = self.properties.ids();
+    /// Every material's cells beside their properties, writable, in material
+    /// order.
+    fn material_rows_mut(&mut self) -> impl Iterator<Item = MaterialRowView<'_, &mut MaterialRow>> {
+        let properties = &self.properties;
 
         self.materials.iter_mut().map(move |(_, row)| {
             // Safety: every material row holds a value id for every property.
-            unsafe { property_ids.view(row) }
+            unsafe { properties.view_with(row) }
         })
     }
 }
