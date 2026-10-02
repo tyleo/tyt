@@ -32,20 +32,22 @@ const TRANSFORM_TOLERANCE: f64 = 1e-6;
 /// Errors if:
 ///
 /// 1. the state holds more than one palette, or a material id past 255
-/// 2. a hierarchy node has no ext entry, an entry keys nothing, or two
+/// 2. the ext's material entries or index map describe another palette
+/// 3. a hierarchy node has no ext entry, an entry keys nothing, or two
 ///    entries share a scene-node id
-/// 3. a node's children do not fit its entry's kind: a transform places one
+/// 4. a node's children do not fit its entry's kind: a transform places one
 ///    child node and no objects, a group places no objects, a shape places
 ///    objects and no child nodes, and a shape entry draws exactly the
 ///    objects its node places
-/// 4. a transform's first frame no longer projects to its node's transform
-/// 5. a model exceeds a MagicaVoxel limit such as the per-axis voxel cap
-/// 6. the palette's `baseColor` draws from a value pool that holds no colors
+/// 5. a transform's first frame no longer projects to its node's transform
+/// 6. a model exceeds a MagicaVoxel limit such as the per-axis voxel cap
+/// 7. the palette's `baseColor` draws from a value pool that holds no colors
 pub fn to_mvox_file(main: &MVoxVoxMain) -> Result<MVoxFile> {
     let ext = main.ext();
     let state = main.state();
 
     let palette_id = check_palette(state)?;
+    check_ext_palette(ext, palette_id)?;
     let file_palette = ext
         .palette_present
         .then(|| colors_from_palette(state, palette_id).map(|colors| MVoxPalette { colors }))
@@ -152,6 +154,28 @@ fn check_palette(state: &VoxState) -> Result<Option<U32Id<BVoxPalette>>> {
     }
 
     Ok(Some(palette_id))
+}
+
+/// Errors when the ext keeps material entries or an index map for a palette
+/// other than the state's one.
+fn check_ext_palette(ext: &MVoxExt, palette_id: Option<U32Id<BVoxPalette>>) -> Result<()> {
+    if ext.materials.is_empty() && ext.index_map.is_none() {
+        return Ok(());
+    }
+
+    if ext.palette_id == palette_id {
+        return Ok(());
+    }
+
+    let described = match ext.palette_id {
+        Some(ext_palette_id) => format!("palette {ext_palette_id}"),
+
+        None => "no palette".to_owned(),
+    };
+
+    Err(Error::Invalid(format!(
+        "mvox ext keeps material entries or an index map for {described}, not the state's palette"
+    )))
 }
 
 /// The 256 palette colors read back through `baseColor`: material `index`
@@ -1339,6 +1363,17 @@ mod tests {
         main.ext_mut().materials = BTreeMap::new();
 
         assert!(to_mvox_file(&main).is_ok());
+    }
+
+    /// Material entries for a palette other than the state's one describe the
+    /// wrong materials.
+    #[test]
+    fn entries_for_another_palette_error() {
+        let mut main = from_mvox_file(&materials_file()).unwrap();
+
+        main.ext_mut().palette_id = None;
+
+        assert!(to_mvox_file(&main).is_err());
     }
 
     #[cfg(feature = "codec")]

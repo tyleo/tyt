@@ -24,8 +24,8 @@ const SIGNED_TOLERANCE: f64 = 1e-6;
 ///
 /// Geometry, colors, and the scene graph become native voxcore entities. This
 /// holds the rest. The scene nodes are keyed by hierarchy node and the
-/// materials by material of the state's one palette. Both follow the state
-/// through the [`VoxExt`] hooks.
+/// materials by material of palette `palette_id`. Both follow the state through
+/// the [`VoxExt`] hooks.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct MVoxExt {
@@ -36,6 +36,19 @@ pub struct MVoxExt {
     /// came from the built-in palette and no chunk is written back.
     #[cfg_attr(feature = "serde", serde(rename = "palette-present"))]
     pub palette_present: bool,
+
+    /// The palette `materials` and `index_map` describe, or `None` once that
+    /// palette is released. Releasing another palette or its materials leaves
+    /// the entries alone.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "palette-id",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )
+    )]
+    pub palette_id: Option<U32Id<BVoxPalette>>,
 
     /// Per-material provenance, keyed by material. A material with no entry
     /// writes no `MATL` chunk.
@@ -246,26 +259,39 @@ impl VoxExt for MVoxExt {
     fn palette_will_release(
         &mut self,
         _state: &VoxState,
-        _palette_id: U32Id<BVoxPalette>,
+        palette_id: U32Id<BVoxPalette>,
     ) -> Result<()> {
+        if self.palette_id != Some(palette_id) {
+            return Ok(());
+        }
+
+        self.palette_id = None;
+
         self.materials.clear();
+
         self.index_map = None;
+
         Ok(())
     }
 
     fn materials_will_release(
         &mut self,
         _state: &VoxState,
-        _palette_id: U32Id<BVoxPalette>,
+        palette_id: U32Id<BVoxPalette>,
         material_ids: &[U32Id<BVoxMaterial>],
     ) -> Result<()> {
+        if self.palette_id != Some(palette_id) {
+            return Ok(());
+        }
+
         for material_id in material_ids {
             self.materials.remove(material_id);
         }
+
         Ok(())
     }
 
-    fn did_gc(&mut self, state: &VoxState, remap: &VoxGcRemap) -> Result<()> {
+    fn did_gc(&mut self, _state: &VoxState, remap: &VoxGcRemap) -> Result<()> {
         let scene_nodes = mem::take(&mut self.scene_nodes);
         for (old_id, mut entry) in scene_nodes {
             let node_id = remap
@@ -283,13 +309,17 @@ impl VoxExt for MVoxExt {
             self.scene_nodes.insert(node_id, entry);
         }
 
-        let Some((palette_id, _)) = state.iter_palettes().next() else {
-            return Ok(());
+        let Some(old_palette_id) = self.palette_id else {
+            return check_no_palette_entries(self);
         };
-        let old_palette_id = (0..remap.palettes.old_len() as u32)
-            .map(U32Id::<BVoxPalette>::from_u32)
-            .find(|&old_id| remap.palettes.new_id(old_id) == Some(palette_id))
-            .expect("a live palette was relabeled from an old id");
+
+        let palette_id = remap
+            .palettes
+            .new_id(old_palette_id)
+            .ok_or_else(|| stale("palette", old_palette_id.to_u32()))?;
+
+        self.palette_id = Some(palette_id);
+
         let material_remap = &remap.materials[old_palette_id.to_usize_id()];
 
         let materials = mem::take(&mut self.materials);
@@ -332,6 +362,18 @@ impl VoxExt for MVoxExt {
 
         Ok(())
     }
+}
+
+/// Errors when `ext` keeps material entries or an index map with no palette
+/// for them to describe.
+fn check_no_palette_entries(ext: &MVoxExt) -> Result<()> {
+    if ext.materials.is_empty() && ext.index_map.is_none() {
+        return Ok(());
+    }
+
+    Err(Error::Ext {
+        reason: "mvox ext keeps material entries or an index map but no palette".to_owned(),
+    })
 }
 
 fn scene_node_mut(
@@ -545,6 +587,8 @@ mod tests {
 
         let palette_id = main.retain_palette(palette).unwrap();
 
+        main.ext_mut().palette_id = Some(palette_id);
+
         main.ext_mut().materials.insert(
             material_id(1),
             MVoxExtMaterial {
@@ -573,6 +617,59 @@ mod tests {
         main.release_palette(palette_id).unwrap();
 
         assert!(main.ext().index_map.is_none());
+    }
+
+    /// Releasing another palette's material or that palette leaves the
+    /// entries alone, even where the material ids match.
+    #[test]
+    fn another_palettes_releases_leave_the_entries() {
+        let (mut main, _) = palette_main();
+
+        let ext = main.ext().clone();
+
+        let mut other = VoxPalette::default();
+
+        other.retain_material(Vec::new()).unwrap();
+
+        let other_material_id = other.retain_material(Vec::new()).unwrap();
+
+        assert!(ext.materials.contains_key(&other_material_id));
+
+        let other_id = main.retain_palette(other).unwrap();
+
+        main.release_material(other_id, other_material_id).unwrap();
+
+        main.release_palette(other_id).unwrap();
+
+        assert_eq!(main.ext(), &ext);
+    }
+
+    /// `gc` moves the entries' palette to its compacted id.
+    #[test]
+    fn gc_relabels_the_entries_palette() {
+        let mut main: VoxMain<MVoxExt> = VoxMain::default();
+
+        let spare_id = main.retain_palette(VoxPalette::default()).unwrap();
+
+        let palette_id = main.retain_palette(VoxPalette::default()).unwrap();
+
+        main.ext_mut().palette_id = Some(palette_id);
+
+        main.release_palette(spare_id).unwrap();
+
+        let remap = main.gc().unwrap();
+
+        assert_eq!(main.ext().palette_id, remap.palettes.new_id(palette_id));
+    }
+
+    /// `gc` refuses entries with no palette to describe.
+    #[test]
+    fn gc_refuses_entries_without_a_palette() {
+        let (mut main, _) = palette_main();
+
+        main.ext_mut().palette_id = None;
+
+        assert!(main.gc().is_err());
     }
 
     /// `gc` refuses an entry keyed by an id it found dead, since the ext was

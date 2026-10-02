@@ -40,11 +40,12 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// 3. a scene-node reference dangles
 /// 4. a checked insertion rejects a cross-reference
 pub fn from_mvox_file(file: &MVoxFile) -> Result<MVoxVoxMain> {
-    let ext = mvox_ext_from_file(file)?;
     let mut main = VoxMain::default();
 
     let palette = build_palette(&mut main, file)?;
     let palette_id = main.retain_palette(palette)?;
+
+    let ext = mvox_ext_from_file(file, palette_id)?;
 
     for model in &file.models {
         // The model grid becomes the object's build volume, turned to Y-up;
@@ -64,9 +65,9 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<MVoxVoxMain> {
 /// The ext of a read of `file`: the MagicaVoxel state with no native voxcore
 /// home. Scene node `n` in stored order keys hierarchy node `n`, a model index
 /// keys the object at that listing index, and a material's `MATL` id keys the
-/// material. Errors on a material id outside `0..=255`, since no material of
-/// the loaded palette has it.
-fn mvox_ext_from_file(file: &MVoxFile) -> Result<MVoxExt> {
+/// material of the loaded palette `palette_id`. Errors on a material id outside
+/// `0..=255`, since no material of the loaded palette has it.
+fn mvox_ext_from_file(file: &MVoxFile, palette_id: U32Id<BVoxPalette>) -> Result<MVoxExt> {
     let mut materials = BTreeMap::new();
     for material in &file.materials {
         let Ok(id) = u8::try_from(material.id) else {
@@ -93,6 +94,7 @@ fn mvox_ext_from_file(file: &MVoxFile) -> Result<MVoxExt> {
     Ok(MVoxExt {
         version: file.version,
         palette_present: file.palette.is_some(),
+        palette_id: Some(palette_id),
         materials,
         scene_nodes: file
             .scene_nodes
