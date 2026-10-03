@@ -2,7 +2,7 @@ use crate::{
     Error, MVoxExt, MVoxExtNode, MVoxVoxMain, PALETTE_COLORS, Result, SceneNodeKind,
     frame_translation, insert_synthesized_scene_node,
 };
-use branded_id::U32Id;
+use branded_id::{IdRange, U32Id};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::{
     TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3Ext, TyVector3F64, TyVector3I32,
@@ -158,9 +158,9 @@ fn merge_palettes(main: &mut VoxMain<()>) -> Result<()> {
     palette
         .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the one property name is distinct");
-    for index in 0..colors.len() {
+    for value_id in IdRange::from_len(colors.len()) {
         palette
-            .retain_material(vec![U32Id::from_u32(index as u32)])
+            .retain_material(vec![value_id])
             .expect("one value id for the one property");
     }
     let palette_id = main.retain_palette(palette)?;
@@ -359,7 +359,7 @@ fn model_box(object: &VoxObject) -> (TyVector3U32, TyVector3I32) {
 #[cfg(test)]
 mod tests {
     use crate::{MVoxExtNodeBody, from_mvox_file, to_mvox_file, to_mvox_vox_main};
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use mvox::{MVoxModel, MVoxPalette, MVoxSceneNodeBody};
     use std::collections::BTreeSet;
     use ty_math::{
@@ -419,9 +419,9 @@ mod tests {
         palette
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        for index in 0..4 {
+        for value_id in IdRange::from_len(4) {
             palette
-                .retain_material(vec![U32Id::from_u32(index)])
+                .retain_material(vec![value_id])
                 .expect("one value-index for the one binding");
         }
         let palette_id = main.retain_palette(palette).unwrap();
@@ -736,10 +736,8 @@ mod tests {
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
 
-        for color in 0..256u32 {
-            palette
-                .retain_material(vec![U32Id::from_u32(color)])
-                .unwrap();
+        for value_id in IdRange::from_len(256) {
+            palette.retain_material(vec![value_id]).unwrap();
         }
 
         let palette_id = main.retain_palette(palette).unwrap();

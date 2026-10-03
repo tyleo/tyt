@@ -3,11 +3,11 @@ use crate::{
     dependencies::object::EncodePng,
     operations::object::{
         Atlases, CheckedRecord, FacePartition, Images, MergeRules, MeshElement, MeshRecord,
-        MeshTarget, Method, Streams, Swatches, WriteContext, table_index, write_attributes,
-        write_extras, write_files, write_hierarchy, write_materials, write_primitive,
+        MeshTarget, Method, Streams, Swatches, WriteContext, write_attributes, write_extras,
+        write_files, write_hierarchy, write_materials, write_primitive,
     },
 };
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::IteratorExt};
 use meshdoc::{BMeshObject, MeshMain, MeshObject};
 use std::collections::{HashMap, HashSet};
 use voxcore::{Error as VoxError, VoxExt, VoxMain, VoxObject};
@@ -170,8 +170,7 @@ fn mesh_object<D: EncodePng, T: VoxExt>(
 
     let mut mesh_object = MeshObject::new(object.name().to_owned());
 
-    for (index, primitive_record) in record.primitives.iter().enumerate() {
-        let primitive_id = U32Id::from_u32(table_index(index));
+    for (primitive_id, primitive_record) in record.primitives.iter().enumerate_ids() {
         let faces = partition.faces(primitive_id);
 
         let mut primitive = write_primitive(

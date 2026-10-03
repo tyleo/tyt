@@ -2,7 +2,7 @@ use crate::{
     VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, place_object,
     synthesized_node, synthesized_object_state,
 };
-use branded_id::U32Id;
+use branded_id::{IdRange, U32Id, ext::IteratorExt};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
@@ -269,14 +269,13 @@ fn compacted_materials(
         return Ok(materials);
     };
     // The value remap is keyed by the pool's old id.
-    let old_pool_id = (0..remap.value_pools.old_len())
-        .map(|old| U32Id::from_u32(old as u32))
-        .find(|&old| remap.value_pools.new_id(old) == Some(new_pool_id))
+    let old_pool_id = IdRange::<U32Id<_>>::from_len(remap.value_pools.old_len())
+        .find(|&old_id| remap.value_pools.new_id(old_id) == Some(new_pool_id))
         .expect("a live pool has an old id");
     let values = &remap.value_pool_values[old_pool_id.to_usize_id()];
     let mut compacted: Vec<Option<VMaxExtMaterial>> = (0..values.new_len()).map(|_| None).collect();
-    for (slot, material) in materials.into_iter().enumerate() {
-        if let Some(new_id) = values.new_id(U32Id::from_u32(slot as u32)) {
+    for (old_id, material) in materials.into_iter().enumerate_ids::<U32Id<_>>() {
+        if let Some(new_id) = values.new_id(old_id) {
             compacted[new_id.to_u32() as usize] = Some(material);
         }
     }

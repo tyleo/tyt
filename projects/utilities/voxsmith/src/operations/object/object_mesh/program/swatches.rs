@@ -1,5 +1,5 @@
 use crate::Result;
-use branded_id::{IdVec, U32Id, UsizeId};
+use branded_id::{IdRange, IdVec, U32Id, UsizeId};
 use std::collections::HashMap;
 use vox_value_language::{BSwatch, BVoxel};
 use voxcore::{
@@ -36,9 +36,9 @@ impl<'a> Swatches<'a> {
 
         let mut identity_layer_ids = Vec::new();
 
-        for index in 0..effective.property_count() {
+        for property_id in IdRange::from_len(effective.property_count()) {
             let property = effective
-                .property(UsizeId::from_usize(index))
+                .property(property_id)
                 .expect("property ids below the count resolve");
 
             if !identity_layer_ids.contains(&property.layer_id()) {

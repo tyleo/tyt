@@ -4,7 +4,7 @@ use crate::{
     VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle, encode_axis_angle,
     pbr_factor_to_vm_coefficient, place_object, tighten,
 };
-use branded_id::U32Id;
+use branded_id::{IdRange, U32Id};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
 use vmax::{
@@ -689,11 +689,8 @@ fn slot_materials(
     let slot_count = first.value_pool.len();
     for property in &layout.material {
         let dense = property.value_pool.len() == slot_count
-            && (0..slot_count).all(|slot| {
-                property
-                    .value_pool
-                    .contains_value(U32Id::from_u32(slot as u32))
-            });
+            && IdRange::from_len(slot_count)
+                .all(|value_id| property.value_pool.contains_value(value_id));
         if !dense {
             return Err(Error::invalid(format!(
                 "`{}` holds {} values where `{}` holds {slot_count}, but a Voxel Max material \

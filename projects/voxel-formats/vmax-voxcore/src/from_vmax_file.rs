@@ -3,7 +3,7 @@ use crate::{
     VMaxExtMaterialDispersion, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, VMaxVoxMain,
     decode_axis_angle, synthesized_object_state, vm_coefficient_to_pbr_factor,
 };
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::IteratorExt};
 use std::collections::{BTreeMap, HashMap};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
@@ -686,13 +686,11 @@ fn build_hierarchy(
     }
 
     let mut roots = Vec::new();
-    for (node_index, parent) in parents.iter().enumerate() {
+    for (node_id, parent) in parents.iter().enumerate_ids() {
         match parent.and_then(|pid| node_index_of_id.get(pid)) {
-            Some(&parent_node_index) => nodes[parent_node_index]
-                .child_node_ids
-                .push(U32Id::from_u32(node_index as u32)),
+            Some(&parent_node_index) => nodes[parent_node_index].child_node_ids.push(node_id),
 
-            None => roots.push(U32Id::from_u32(node_index as u32)),
+            None => roots.push(node_id),
         }
     }
 

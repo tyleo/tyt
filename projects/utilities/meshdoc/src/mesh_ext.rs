@@ -157,7 +157,7 @@ mod tests {
         Error, MeshExt, MeshGcRemap, MeshHierarchyNode, MeshMain, MeshMaterial, MeshObject,
         MeshState, MeshTexture, Result, png_image, unit_triangle,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
 
     /// Records every hook the main fires, with what it could read.
     #[derive(Clone, Debug, Default, PartialEq)]
@@ -295,13 +295,8 @@ mod tests {
         }
 
         fn did_gc(&mut self, _state: &MeshState, remap: &MeshGcRemap) -> Result<()> {
-            let objects: Vec<Option<u32>> = (0..remap.objects.old_len() as u32)
-                .map(|old| {
-                    remap
-                        .objects
-                        .new_id(U32Id::from_u32(old))
-                        .map(|id| id.to_u32())
-                })
+            let objects: Vec<Option<u32>> = IdRange::<U32Id<_>>::from_len(remap.objects.old_len())
+                .map(|old_id| remap.objects.new_id(old_id).map(|id| id.to_u32()))
                 .collect();
             self.0.push(format!("gc objects {objects:?}"));
             Ok(())

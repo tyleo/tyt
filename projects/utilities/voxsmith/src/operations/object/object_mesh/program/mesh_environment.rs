@@ -2,7 +2,7 @@ use crate::{
     Error, Result,
     operations::object::{Computation, ComputedBinding, MeshElement, MeshGeometry, Swatches},
 };
-use branded_id::{U32Id, UsizeId};
+use branded_id::{IdRange, U32Id};
 use std::{
     collections::{BTreeSet, HashMap},
     slice,
@@ -41,9 +41,7 @@ impl MeshEnvironment {
 
         let effective = swatches.effective();
 
-        for index in 0..effective.property_count() {
-            let property_id = UsizeId::from_usize(index);
-
+        for property_id in IdRange::from_len(effective.property_count()) {
             let property = effective
                 .property(property_id)
                 .expect("property ids below the count resolve");
@@ -52,8 +50,8 @@ impl MeshEnvironment {
                 continue;
             }
 
-            let swatch_value_ids: Vec<_> = (0..swatches.count())
-                .map(|swatch| swatches.value_id(U32Id::from_u32(swatch as u32), property_id))
+            let swatch_value_ids: Vec<_> = IdRange::from_len(swatches.count())
+                .map(|swatch_id| swatches.value_id(swatch_id, property_id))
                 .collect();
 
             if let Some(value) =

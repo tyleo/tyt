@@ -123,8 +123,8 @@ mod tests {
             QuantizeOptions, ReductionMethod,
         },
     };
-    use branded_id::U32Id;
-    use std::num::NonZeroUsize;
+    use branded_id::{IdRange, U32Id, ext::IteratorExt};
+    use std::{iter, num::NonZeroUsize};
     use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
     use voxcore::{
         BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette,
@@ -240,14 +240,15 @@ mod tests {
         let palette_id = main.retain_palette(palette).unwrap();
         object.retain_layer(palette_id, material_ids[0]);
 
-        let mut voxel_index = 0u32;
-        for (index, &material_id) in material_ids.iter().enumerate() {
-            for _ in 0..1 + repeats.get(index).copied().unwrap_or(0) {
-                object
-                    .retain_voxel(U32Id::from_u32(voxel_index), &[material_id])
-                    .unwrap();
-                voxel_index += 1;
-            }
+        let placements = material_ids
+            .iter()
+            .enumerate()
+            .flat_map(|(index, &material_id)| {
+                iter::repeat_n(material_id, 1 + repeats.get(index).copied().unwrap_or(0))
+            });
+
+        for (voxel_id, material_id) in placements.enumerate_ids() {
+            object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
         let object_id = main.retain_object(object).unwrap();
         (main, palette_id, object_id)
@@ -299,8 +300,8 @@ mod tests {
         palette
             .retain_property(BASE_COLOR.to_owned(), base_value_pool_id, value_id(0))
             .unwrap();
-        let material_ids: Vec<_> = (0..colors.len())
-            .map(|index| palette.retain_material(vec![value_id(index)]).unwrap())
+        let material_ids: Vec<_> = IdRange::from_len(colors.len())
+            .map(|value_id| palette.retain_material(vec![value_id]).unwrap())
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();

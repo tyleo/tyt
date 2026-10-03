@@ -7,7 +7,7 @@ use crate::{
     },
     utilities::{check_material_property_ranges, check_material_range},
 };
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::IteratorExt};
 use meshdoc::{
     BMeshObject,
     material::{COLOR_RANGE, MaterialRange, scalar_range},
@@ -129,9 +129,8 @@ pub fn voxelize_mesh(
         object.set_origin(space.min_cell());
         object.retain_layer(palette_id, default_material_id);
 
-        for (index, sample_id) in samples.iter().enumerate() {
+        for (voxel_id, sample_id) in samples.iter().enumerate_ids() {
             if let Some(material_id) = sample_id {
-                let voxel_id = U32Id::from_u32(index as u32);
                 object
                     .retain_voxel(voxel_id, &[*material_id])
                     .expect("a grid index is a live voxel sampling the one layer");

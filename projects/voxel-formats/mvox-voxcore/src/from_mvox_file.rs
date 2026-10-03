@@ -3,7 +3,7 @@ use crate::{
     MVoxExtNodeBody, MVoxExtShapeModel, MVoxExtUnknownChunk, MVoxVoxMain, PALETTE_COLORS, Result,
     transform_from_frames,
 };
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::IteratorExt};
 use mvox::{
     MVoxCamera, MVoxFile, MVoxFrame, MVoxLayer, MVoxMaterial, MVoxMaterialType, MVoxModel,
     MVoxSceneNode, MVoxSceneNodeBody,
@@ -99,8 +99,8 @@ fn mvox_ext_from_file(file: &MVoxFile, palette_id: U32Id<BVoxPalette>) -> Result
         scene_nodes: file
             .scene_nodes
             .iter()
-            .enumerate()
-            .map(|(index, node)| (U32Id::from_u32(index as u32), node_provenance(node)))
+            .enumerate_ids()
+            .map(|(node_id, node)| (node_id, node_provenance(node)))
             .collect(),
         layers: file.layers.iter().map(layer_provenance).collect(),
         render_objects: file
@@ -444,9 +444,11 @@ fn build_hierarchy(
         nodes.push(vox_node);
     }
 
-    let roots = (0..nodes.len())
-        .filter(|&position| !referenced[position])
-        .map(|position| U32Id::from_u32(position as u32))
+    let roots = referenced
+        .iter()
+        .enumerate_ids()
+        .filter(|&(_, &referenced)| !referenced)
+        .map(|(node_id, _)| node_id)
         .collect();
 
     Ok((nodes, roots))

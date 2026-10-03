@@ -2,7 +2,7 @@ use crate::{
     BRenderLight, BRenderMaterial, BRenderPlacement, BRenderView, Error, RenderLight,
     RenderMaterial, RenderObject, RenderPlacement, RenderProjection, RenderView, Result,
 };
-use branded_id::{IdVec, U32Id, UsizeId, soa::IdList};
+use branded_id::{IdVec, U32Id, UsizeId, ext::IteratorExt, soa::IdList};
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     f64::consts::{FRAC_PI_2, PI},
@@ -298,13 +298,8 @@ impl RenderScene {
     pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BVoxObject>, &RenderObject)> + '_ {
         self.objects
             .iter()
-            .enumerate()
-            .filter_map(|(index, object)| {
-                let id =
-                    U32Id::from_u32(u32::try_from(index).expect("an object index is a u32 id"));
-
-                object.as_ref().map(|object| (id, object))
-            })
+            .enumerate_ids()
+            .filter_map(|(id, object)| object.as_ref().map(|object| (id, object)))
     }
 
     /// Number of objects.
@@ -891,7 +886,7 @@ mod tests {
         BRenderMaterial, Error, RenderLight, RenderMaterial, RenderObject, RenderPlacement,
         RenderProjection, RenderScene, RenderShadow, RenderView,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use std::f64::consts::{FRAC_PI_2, PI};
     use ty_math::{
         TyLinSrgbF64, TyPoseF64, TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32,
@@ -1336,9 +1331,9 @@ mod tests {
         palette
             .retain_property(METALLIC.to_owned(), metals, U32Id::from_u32(0))
             .unwrap();
-        for color in 0..2 {
+        for value_id in IdRange::from_len(2) {
             palette
-                .retain_material(vec![U32Id::from_u32(color), U32Id::from_u32(0)])
+                .retain_material(vec![value_id, U32Id::from_u32(0)])
                 .unwrap();
         }
         let palette_id = main.retain_palette(palette).unwrap();

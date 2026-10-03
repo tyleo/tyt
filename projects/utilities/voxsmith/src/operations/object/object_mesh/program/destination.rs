@@ -2,10 +2,10 @@ use crate::{
     Error, Result,
     operations::object::{
         AttributeWrite, CheckedDestination, ExtraForm, ExtraSource, ExtraWrite, FileForm, Landing,
-        MeshElement, MeshRecord, SlotProperty, SlotSource, table_index,
+        MeshElement, MeshRecord, SlotProperty, SlotSource,
     },
 };
-use branded_id::U32Id;
+use branded_id::ext::IteratorExt;
 use vox_value_language::{CheckedProgram, Expression, check_expression, parse_expression};
 
 /// A record element holding an expression the run writes somewhere.
@@ -49,9 +49,7 @@ impl Destination {
             Ok(())
         };
 
-        for (index, material) in record.materials.iter().enumerate() {
-            let material_id = U32Id::from_u32(table_index(index));
-
+        for (material_id, material) in record.materials.iter().enumerate_ids() {
             for slot in &material.slots {
                 let element = MeshElement::Slot {
                     material_id,
@@ -86,9 +84,7 @@ impl Destination {
             })?;
         }
 
-        for (index, primitive) in record.primitives.iter().enumerate() {
-            let primitive_id = U32Id::from_u32(table_index(index));
-
+        for (primitive_id, primitive) in record.primitives.iter().enumerate_ids() {
             destinations.push(parsed(
                 MeshElement::PrimitiveSelect { primitive_id },
                 Landing::Select,

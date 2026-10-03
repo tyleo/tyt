@@ -199,7 +199,7 @@ mod tests {
     use crate::{
         Error, from_qb_file, to_qb_file, to_qb_vox_main, to_qb_vox_main::duplicate_object,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use qbcl::qb::QbFile;
     use std::collections::BTreeSet;
     use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
@@ -236,9 +236,9 @@ mod tests {
         palette
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        for index in 0..3 {
+        for value_id in IdRange::from_len(3) {
             palette
-                .retain_material(vec![U32Id::from_u32(index)])
+                .retain_material(vec![value_id])
                 .expect("one value id for the one property");
         }
         let palette_id = main.retain_palette(palette).unwrap();

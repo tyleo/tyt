@@ -1,6 +1,6 @@
 use crate::{BVoxLayer, BVoxMaterial, BVoxPalette, BVoxVoxel, Error, Result, VoxLiveness};
 use branded_id::{
-    IdVec, U32Id,
+    IdRange, IdVec, U32Id,
     soa::{IdField, IdRemap, IdStruct, IdStructView, IdStructViewMut},
 };
 use std::collections::HashMap;
@@ -514,8 +514,7 @@ impl VoxObject {
         // Per live new cell, the live old cell it copies.
         let mut liveness = VoxLiveness::new(volume as usize);
         let mut sources = Vec::new();
-        for raster in 0..volume as u32 {
-            let new_id = U32Id::from_u32(raster);
+        for new_id in IdRange::from_len(volume as usize) {
             let position =
                 Self::raster_position(bounds, new_id).expect("a raster index is within the grid");
             let Some(old_position) = source(position) else {
@@ -587,7 +586,7 @@ impl VoxObject {
 
         // Per cell of the new grid, the cell of this grid that moves there.
         let volume = self.liveness.len();
-        let voxel_ids = (0..volume).map(|raster| U32Id::<BVoxVoxel>::from_u32(raster as u32));
+        let voxel_ids = IdRange::<U32Id<BVoxVoxel>>::from_len(volume);
         let mut source: IdVec<BVoxVoxel, U32Id<BVoxVoxel>> =
             IdVec::from_vec(vec![U32Id::from_u32(0); volume]);
         for voxel_id in voxel_ids.clone() {

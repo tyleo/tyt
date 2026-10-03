@@ -123,7 +123,7 @@ mod tests {
         FALLBACK_CONTENT_VERSION, SHADOWS, SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat,
         VMaxExtPalette, VMaxWriteOptions, from_vmax_file, to_vmax_file, to_vmax_vox_main,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{
         TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
@@ -255,9 +255,9 @@ mod tests {
                 U32Id::from_u32(0),
             )
             .unwrap();
-        for index in 0..9u32 {
+        for value_id in IdRange::from_len(9) {
             palette
-                .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
+                .retain_material(vec![U32Id::from_u32(0), value_id])
                 .unwrap();
         }
         let palette_id = main.retain_palette(palette).unwrap();
@@ -301,10 +301,8 @@ mod tests {
                 U32Id::from_u32(0),
             )
             .unwrap();
-        for index in 0..2u32 {
-            material_palette
-                .retain_material(vec![U32Id::from_u32(index)])
-                .unwrap();
+        for value_id in IdRange::from_len(2) {
+            material_palette.retain_material(vec![value_id]).unwrap();
         }
         let material_palette_id = main.retain_palette(material_palette).unwrap();
 
@@ -674,9 +672,9 @@ mod tests {
         palette
             .retain_property("baseColor".to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        for index in 0..hexes.len() {
+        for value_id in IdRange::from_len(hexes.len()) {
             palette
-                .retain_material(vec![U32Id::from_u32(index as u32)])
+                .retain_material(vec![value_id])
                 .expect("one value id per property");
         }
         main.retain_palette(palette).unwrap()

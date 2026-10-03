@@ -1,5 +1,5 @@
 use crate::{Error, GoxlVoxMain, Result, goxl_ext_from_file};
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::IteratorExt};
 use goxl::{GoxlBlock, GoxlFile};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3U32};
@@ -81,9 +81,9 @@ fn build_palette(
         .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
-    for (index, color) in order.iter().enumerate() {
+    for (value_id, color) in order.iter().enumerate_ids() {
         let material_id = palette
-            .retain_material(vec![U32Id::from_u32(index as u32)])
+            .retain_material(vec![value_id])
             .expect("one value id for the one property");
         material_ids.insert(*color, material_id);
     }

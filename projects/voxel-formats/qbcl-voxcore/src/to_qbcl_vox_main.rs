@@ -29,7 +29,7 @@ pub fn to_qbcl_vox_main(mut main: VoxMain<()>) -> Result<QbclVoxMain> {
 #[cfg(test)]
 mod tests {
     use crate::{QbclExtNodeBody, from_qbcl_file, to_qbcl_file, to_qbcl_vox_main};
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use qbcl::qbcl::{QbclFile, QbclMatrix, QbclModel, QbclNode, QbclNodeBody, QbclVoxel};
     use std::collections::BTreeSet;
     use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
@@ -65,9 +65,9 @@ mod tests {
         palette
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        for index in 0..3 {
+        for value_id in IdRange::from_len(3) {
             palette
-                .retain_material(vec![U32Id::from_u32(index)])
+                .retain_material(vec![value_id])
                 .expect("one value id for the one property");
         }
         let palette_id = main.retain_palette(palette).unwrap();

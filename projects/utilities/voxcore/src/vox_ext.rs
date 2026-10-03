@@ -247,7 +247,7 @@ mod tests {
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxVoxel, Error, Result, VoxExt,
         VoxGcRemap, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxState, VoxValuePool,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use std::collections::{HashMap, HashSet};
     use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 
@@ -546,13 +546,8 @@ mod tests {
         }
 
         fn did_gc(&mut self, _state: &VoxState, remap: &VoxGcRemap) -> Result<()> {
-            let objects: Vec<Option<u32>> = (0..remap.objects.old_len() as u32)
-                .map(|old| {
-                    remap
-                        .objects
-                        .new_id(U32Id::from_u32(old))
-                        .map(|id| id.to_u32())
-                })
+            let objects: Vec<Option<u32>> = IdRange::<U32Id<_>>::from_len(remap.objects.old_len())
+                .map(|old_id| remap.objects.new_id(old_id).map(|id| id.to_u32()))
                 .collect();
             self.0.push(format!("gc objects {objects:?}"));
             Ok(())

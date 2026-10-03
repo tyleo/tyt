@@ -1,5 +1,5 @@
 use crate::test_utilities::HookRecorder;
-use branded_id::U32Id;
+use branded_id::{IdRange, U32Id};
 use ty_math::{TyVector3I32, TyVector3U32};
 use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
@@ -23,10 +23,8 @@ pub fn two_material_scene(
         .retain_property("baseColor".to_owned(), value_pool_id, U32Id::from_u32(0))
         .unwrap();
 
-    for value in 0..2 {
-        palette
-            .retain_material(vec![U32Id::from_u32(value)])
-            .unwrap();
+    for value_id in IdRange::from_len(2) {
+        palette.retain_material(vec![value_id]).unwrap();
     }
 
     let palette_id = main.retain_palette(palette).unwrap();

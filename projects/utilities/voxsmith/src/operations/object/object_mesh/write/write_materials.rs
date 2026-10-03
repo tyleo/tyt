@@ -3,10 +3,10 @@ use crate::{
     dependencies::object::EncodePng,
     operations::object::{
         FileForm, Images, MeshElement, SlotProperty, SlotSource, WriteContext, check_f32_range,
-        table_index, write_extras,
+        write_extras,
     },
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::{IdVec, U32Id, ext::IteratorExt};
 use meshdoc::{
     BMeshMaterial, MeshAlphaMode, MeshMain, MeshMaterial, MeshTextureRef,
     material::{
@@ -35,9 +35,7 @@ pub fn write_materials<D: EncodePng>(
 
     let mut document_ids = IdVec::default();
 
-    for (index, material_record) in record.materials.iter().enumerate() {
-        let material_id = U32Id::from_u32(table_index(index));
-
+    for (material_id, material_record) in record.materials.iter().enumerate_ids() {
         let mut material = MeshMaterial::new(material_record.name.clone().unwrap_or_default());
 
         for slot in &material_record.slots {

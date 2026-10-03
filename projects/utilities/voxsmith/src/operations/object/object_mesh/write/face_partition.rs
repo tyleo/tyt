@@ -128,7 +128,7 @@ mod tests {
             MeshElement, MeshRecord, Method, PrimitiveRecord, Swatches, TextureShape,
         },
     };
-    use branded_id::{IdVec, U32Id};
+    use branded_id::{IdRange, IdVec, U32Id};
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool, material::METALLIC};
     use voxsurface::mesh_grid;
@@ -201,8 +201,8 @@ mod tests {
         let atlases = Atlases::new(TextureShape::Pot, &swatches, &culled);
 
         match FacePartition::derive(&record, &run, &atlases) {
-            Ok(partition) => Ok((0..selects.len())
-                .map(|index| partition.faces(U32Id::from_u32(index as u32)).to_vec())
+            Ok(partition) => Ok(IdRange::from_len(selects.len())
+                .map(|primitive_id| partition.faces(primitive_id).to_vec())
                 .collect()),
 
             Err(Error::MeshRecord { element, .. }) => Err(element),

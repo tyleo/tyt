@@ -2,10 +2,10 @@ use crate::{
     Error, Result,
     operations::object::{
         ArrayDomain, FaceSpan, Landing, MeshElement, MeshGeometry, MeshRecord, ProgramRun,
-        Provenance, Streams, Swatches, table_index,
+        Provenance, Streams, Swatches,
     },
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::{IdRange, IdVec, U32Id};
 use std::collections::HashMap;
 use ty_math::TyVector3U32;
 use vox_value_language::{
@@ -125,8 +125,8 @@ impl<'a> MergeRules<'a> {
 
         // A written swatch stream seats a span on one texel, and a voxel
         // stream on one voxel's.
-        for index in 0..record.primitives.len() {
-            for domain in streams.primitive_list(U32Id::from_u32(table_index(index))) {
+        for primitive_id in IdRange::from_len(record.primitives.len()) {
+            for domain in streams.primitive_list(primitive_id) {
                 match domain {
                     ArrayDomain::Corner | ArrayDomain::Face => {}
                     ArrayDomain::Swatch => gathered.same_swatch = true,

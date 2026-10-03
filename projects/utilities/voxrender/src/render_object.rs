@@ -1,5 +1,5 @@
 use crate::{BRenderMaterial, Error, Result};
-use branded_id::{IdVec, U32Id};
+use branded_id::{IdVec, U32Id, ext::IteratorExt};
 use ty_math::TyVector3U32;
 use voxcore::{BVoxVoxel, VoxObject};
 use voxsurface::SurfaceGrid;
@@ -94,14 +94,9 @@ impl RenderObject {
     ) -> impl Iterator<Item = (U32Id<BVoxVoxel>, U32Id<BRenderMaterial>)> + '_ {
         self.voxels
             .iter()
-            .enumerate()
-            .filter_map(|(index, material_id)| {
-                material_id.map(|material_id| {
-                    (
-                        U32Id::from_u32(u32::try_from(index).expect("the grid fits the cell cap")),
-                        material_id,
-                    )
-                })
+            .enumerate_ids()
+            .filter_map(|(voxel_id, material_id)| {
+                material_id.map(|material_id| (voxel_id, material_id))
             })
     }
 

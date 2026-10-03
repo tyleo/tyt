@@ -5,7 +5,7 @@ use crate::{
         SlotProperty, SlotSource, table_index,
     },
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::{IdVec, U32Id, ext::IteratorExt};
 use meshdoc::{BMeshMaterial, BMeshPrimitive, BMeshUvStream};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -92,9 +92,7 @@ impl Streams {
         let mut materials: IdVec<BMeshMaterial, Vec<ArrayDomain>> = IdVec::default();
         let mut material_bakes: IdVec<BMeshMaterial, BTreeSet<ArrayDomain>> = IdVec::default();
 
-        for (index, material) in record.materials.iter().enumerate() {
-            let material_id = U32Id::from_u32(table_index(index));
-
+        for (material_id, material) in record.materials.iter().enumerate_ids() {
             // Each texture as `(element, value domain, fixed)`, a written
             // file fixing the layout its image already has.
             let mut textures: Vec<(MeshElement, ArrayDomain, bool)> = Vec::new();
@@ -194,9 +192,7 @@ impl Streams {
 
         let mut primitives: IdVec<BMeshPrimitive, Vec<ArrayDomain>> = IdVec::default();
 
-        for (index, primitive) in record.primitives.iter().enumerate() {
-            let primitive_id = U32Id::from_u32(table_index(index));
-
+        for (primitive_id, primitive) in record.primitives.iter().enumerate_ids() {
             if let Some(material_id) = primitive.material_id
                 && material_id.to_usize_id().to_usize() >= materials.len()
             {
@@ -243,9 +239,7 @@ impl Streams {
         let mut stream_ids: IdVec<BMeshMaterial, BTreeMap<ArrayDomain, U32Id<BMeshUvStream>>> =
             IdVec::from_vec(vec![BTreeMap::new(); materials.len()]);
 
-        for (index, list) in materials.iter().enumerate() {
-            let material_id: U32Id<BMeshMaterial> = U32Id::from_u32(table_index(index));
-
+        for (material_id, list) in materials.iter().enumerate_ids::<U32Id<BMeshMaterial>>() {
             for &bake in &material_bakes[material_id.to_usize_id()] {
                 // The material's list is what a primitive writes by default,
                 // so its position stands where no primitive draws the material.
@@ -256,12 +250,14 @@ impl Streams {
 
                 let mut first_primitive_id: Option<U32Id<BMeshPrimitive>> = None;
 
-                for (index, primitive) in record.primitives.iter().enumerate() {
+                for (primitive_id, primitive) in record
+                    .primitives
+                    .iter()
+                    .enumerate_ids::<U32Id<BMeshPrimitive>>()
+                {
                     if primitive.material_id != Some(material_id) {
                         continue;
                     }
-
-                    let primitive_id = U32Id::from_u32(table_index(index));
 
                     let at = primitives[primitive_id.to_usize_id()]
                         .iter()
@@ -313,9 +309,7 @@ impl Streams {
 
             let mut writer: Option<(U32Id<BMeshPrimitive>, usize)> = None;
 
-            for (index, list) in primitives.iter().enumerate() {
-                let primitive_id = U32Id::from_u32(table_index(index));
-
+            for (primitive_id, list) in primitives.iter().enumerate_ids() {
                 let Some(at) = list.iter().position(|&domain| domain == bake) else {
                     continue;
                 };

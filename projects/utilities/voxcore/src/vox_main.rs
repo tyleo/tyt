@@ -1551,7 +1551,7 @@ mod tests {
         BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxHierarchyNode, VoxMain,
         VoxObject, VoxPalette, VoxValuePool,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use std::collections::{HashMap, HashSet};
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 
@@ -2560,8 +2560,8 @@ mod tests {
             .retain_property("v".to_owned(), ints_id, value_id(0))
             .unwrap();
 
-        let material_ids: Vec<_> = (0..4)
-            .map(|index| palette.retain_material(vec![value_id(index)]).unwrap())
+        let material_ids: Vec<_> = IdRange::from_len(4)
+            .map(|value_id| palette.retain_material(vec![value_id]).unwrap())
             .collect();
 
         let live_palette_id = main.retain_palette(palette).unwrap();

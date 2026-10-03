@@ -1,5 +1,5 @@
-use crate::{Result, operations::object::table_index, utilities::placing_nodes};
-use branded_id::U32Id;
+use crate::{Result, utilities::placing_nodes};
+use branded_id::{U32Id, ext::IteratorExt};
 use meshdoc::{BMeshHierarchyNode, BMeshObject, MeshHierarchyNode, MeshMain};
 use std::collections::{HashMap, HashSet};
 use ty_math::TyTransformF64;
@@ -30,8 +30,8 @@ pub fn write_hierarchy<T: VoxExt>(
         .iter_hierarchy_nodes()
         .map(|(node_id, _)| node_id)
         .filter(|node_id| placing.contains(node_id))
-        .enumerate()
-        .map(|(index, node_id)| (node_id, U32Id::from_u32(table_index(index))))
+        .enumerate_ids()
+        .map(|(mesh_node_id, node_id)| (node_id, mesh_node_id))
         .collect();
 
     let mut placed = HashSet::new();

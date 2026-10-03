@@ -155,7 +155,7 @@ mod tests {
             ReductionMethod,
         },
     };
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use std::num::NonZeroUsize;
     use ty_math::TyVector3U32;
     use voxcore::{
@@ -198,12 +198,8 @@ mod tests {
         palette
             .retain_property(name.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        let material_ids: Vec<_> = (0..colors.len())
-            .map(|index| {
-                palette
-                    .retain_material(vec![U32Id::from_u32(index as u32)])
-                    .unwrap()
-            })
+        let material_ids: Vec<_> = IdRange::from_len(colors.len())
+            .map(|value_id| palette.retain_material(vec![value_id]).unwrap())
             .collect();
         let palette_id = main.retain_palette(palette).unwrap();
         (palette_id, material_ids)
@@ -221,11 +217,9 @@ mod tests {
         for (palette_id, samples) in layers {
             object.retain_layer(*palette_id, samples[0]);
         }
-        for index in 0..count {
+        for (index, voxel_id) in IdRange::from_len(count).enumerate() {
             let row: Vec<_> = layers.iter().map(|(_, samples)| samples[index]).collect();
-            object
-                .retain_voxel(U32Id::from_u32(index as u32), &row)
-                .unwrap();
+            object.retain_voxel(voxel_id, &row).unwrap();
         }
         main.retain_object(object).unwrap()
     }

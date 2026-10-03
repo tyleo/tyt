@@ -2,7 +2,7 @@ use crate::{
     GoxlExt, GoxlExtCamera, GoxlExtImage, GoxlExtLight, GoxlExtMaterial, GoxlExtPreview,
     GoxlExtUnknownChunk, layer_provenance,
 };
-use branded_id::U32Id;
+use branded_id::ext::IteratorExt;
 use goxl::{GoxlCamera, GoxlFile, GoxlLight, GoxlMaterial};
 
 /// The ext of a read of `file`: everything but the blocks, with one layer
@@ -24,8 +24,8 @@ pub fn goxl_ext_from_file(file: &GoxlFile) -> GoxlExt {
         layers: file
             .layers
             .iter()
-            .enumerate()
-            .map(|(index, layer)| (U32Id::from_u32(index as u32), layer_provenance(layer)))
+            .enumerate_ids()
+            .map(|(layer_id, layer)| (layer_id, layer_provenance(layer)))
             .collect(),
         cameras: file.cameras.iter().map(camera_provenance).collect(),
         light: file.light.as_ref().map(light_provenance),

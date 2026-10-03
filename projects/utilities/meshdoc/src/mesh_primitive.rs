@@ -2,7 +2,7 @@ use crate::{
     BMeshMaterial, BMeshTriangle, BMeshUvStream, BMeshVertex, BMeshVertexAttribute, Error,
     MeshTriangle, MeshVertexAttribute, Result,
 };
-use branded_id::{IdSlice, IdVec, U32Id};
+use branded_id::{IdSlice, IdVec, U32Id, ext::IteratorExt};
 use ty_math::{TyLinSrgbaF64, TyVector2F64, TyVector3F64, TyVector4F64};
 
 /// One drawable piece of a [`MeshObject`](crate::MeshObject), in meters on
@@ -172,8 +172,8 @@ impl MeshPrimitive {
     {
         self.uv_streams
             .iter()
-            .enumerate()
-            .map(|(index, stream)| (U32Id::from_u32(index as u32), stream.as_id_slice()))
+            .enumerate_ids()
+            .map(|(stream_id, stream)| (stream_id, stream.as_id_slice()))
     }
 
     /// Appends a UV stream and returns its id. Errors, changing nothing, if
@@ -230,10 +230,7 @@ impl MeshPrimitive {
     pub fn iter_vertex_attributes(
         &self,
     ) -> impl Iterator<Item = (U32Id<BMeshVertexAttribute>, &MeshVertexAttribute)> + '_ {
-        self.vertex_attributes
-            .iter()
-            .enumerate()
-            .map(|(index, attribute)| (U32Id::from_u32(index as u32), attribute))
+        self.vertex_attributes.iter().enumerate_ids()
     }
 
     /// Appends a further vertex attribute and returns its id. Errors,

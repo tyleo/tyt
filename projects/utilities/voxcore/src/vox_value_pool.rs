@@ -4,6 +4,7 @@ use crate::{
 };
 use branded_id::{
     U32Id,
+    ext::IteratorExt,
     soa::{IdList, IdRemap, IdStruct},
 };
 
@@ -627,11 +628,9 @@ fn checked_values<T>(
     values: Vec<T>,
     in_domain: fn(&T) -> bool,
 ) -> Result<IdList<BVoxValuePoolValue, T>> {
-    for (index, value) in (0..).zip(&values) {
+    for (value_id, value) in values.iter().enumerate_ids() {
         if !in_domain(value) {
-            return Err(Error::MalformedValuePoolValue {
-                value_id: U32Id::from_u32(index),
-            });
+            return Err(Error::MalformedValuePoolValue { value_id });
         }
     }
 

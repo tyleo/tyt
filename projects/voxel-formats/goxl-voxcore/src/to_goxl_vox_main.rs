@@ -258,7 +258,7 @@ fn tiles(object: &VoxObject, world: TyVector3I32) -> Result<Vec<([i32; 3], VoxOb
 #[cfg(test)]
 mod tests {
     use crate::{from_goxl_file, placement, to_goxl_file, to_goxl_vox_main};
-    use branded_id::U32Id;
+    use branded_id::{IdRange, U32Id};
     use goxl::{GoxlBlock, GoxlFile};
     use std::collections::BTreeSet;
     use ty_math::{
@@ -296,9 +296,9 @@ mod tests {
         palette
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        for index in 0..4 {
+        for value_id in IdRange::from_len(4) {
             palette
-                .retain_material(vec![U32Id::from_u32(index)])
+                .retain_material(vec![value_id])
                 .expect("one value id for the one property");
         }
         let palette_id = main.retain_palette(palette).unwrap();

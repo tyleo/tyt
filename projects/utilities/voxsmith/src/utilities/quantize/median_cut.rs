@@ -76,16 +76,16 @@ fn longest_axis(point_box: &[QuantizePoint]) -> (usize, f64) {
 #[cfg(test)]
 mod tests {
     use crate::utilities::{QuantizePoint, median_cut};
-    use branded_id::U32Id;
+    use branded_id::ext::IteratorExt;
     use ty_math::TyVector4F64;
 
     /// One box of 1D points at `values`, material ids in order.
     fn points(values: &[f64]) -> Vec<QuantizePoint> {
         values
             .iter()
-            .enumerate()
-            .map(|(index, &value)| QuantizePoint {
-                material_id: U32Id::from_u32(index as u32),
+            .enumerate_ids()
+            .map(|(material_id, &value)| QuantizePoint {
+                material_id,
                 coords: TyVector4F64::new(value, 0.0, 0.0, 0.0),
                 population: 1,
             })

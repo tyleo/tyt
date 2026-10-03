@@ -703,16 +703,16 @@ fn representative_point(cluster: &[QuantizePoint]) -> QuantizePoint {
 #[cfg(test)]
 mod tests {
     use crate::utilities::{QuantizePoint, quantize::choose_quantize_plan::allocate_slots};
-    use branded_id::U32Id;
+    use branded_id::ext::IteratorExt;
     use ty_math::TyVector4F64;
 
     /// A partition of one point per population.
     fn partition(populations: &[u64]) -> Vec<QuantizePoint> {
         populations
             .iter()
-            .enumerate()
-            .map(|(index, &population)| QuantizePoint {
-                material_id: U32Id::from_u32(index as u32),
+            .enumerate_ids()
+            .map(|(material_id, &population)| QuantizePoint {
+                material_id,
                 coords: TyVector4F64::ZERO,
                 population,
             })

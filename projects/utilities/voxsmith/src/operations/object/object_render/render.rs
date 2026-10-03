@@ -6,7 +6,7 @@ use crate::{
     },
     utilities::select_objects,
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::{IdVec, U32Id, ext::IteratorExt};
 use std::collections::HashSet;
 use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64};
 use voxcore::{BVoxObject, Error as VoxError, VoxExt, VoxMain};
@@ -65,16 +65,13 @@ pub fn render<T: VoxExt>(
 
         let view_id = scene.retain_view(view)?;
 
-        let light_ids = (0..)
-            .zip(record.lights.iter())
-            .map(|(index, light)| {
-                let light = resolve_light(
-                    U32Id::from_u32(index),
-                    light,
-                    subject.as_ref(),
-                    &node_frames,
-                    &view.pose,
-                )?;
+        let light_ids = record
+            .lights
+            .iter()
+            .enumerate_ids()
+            .map(|(light_id, light)| {
+                let light =
+                    resolve_light(light_id, light, subject.as_ref(), &node_frames, &view.pose)?;
 
                 Ok(scene.retain_light(light)?)
             })
