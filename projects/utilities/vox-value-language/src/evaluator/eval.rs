@@ -89,7 +89,7 @@ mod tests {
         Groupings, Scalar, TypeEnvironment, ValueEnvironment, assert_close, bools, check, eval,
         f64s, groupings, lamp, parse, run, step, strings, ty, types_of, u8s, u32s,
     };
-    use branded_id::{IdVec, U32Id};
+    use branded_id::{IdVec, U32Id, UsizeId};
     use std::collections::HashMap;
 
     #[test]
@@ -397,7 +397,9 @@ mod tests {
 
         assert_eq!(
             eval(&checked_lamp(&types_of(&environment)), &environment),
-            Err(Error::FacePieces { face: 1 })
+            Err(Error::FacePieces {
+                face_id: UsizeId::from_usize(1)
+            })
         );
 
         let environment = ValueEnvironment {
@@ -407,7 +409,10 @@ mod tests {
 
         assert_eq!(
             eval(&checked_lamp(&types_of(&environment)), &environment),
-            Err(Error::PieceVoxel { face: 1, voxel: 2 })
+            Err(Error::PieceVoxel {
+                face_id: UsizeId::from_usize(1),
+                voxel_id: U32Id::from_u32(2)
+            })
         );
 
         let environment = ValueEnvironment {
@@ -418,8 +423,8 @@ mod tests {
         assert_eq!(
             eval(&checked_lamp(&types_of(&environment)), &environment),
             Err(Error::VoxelSwatch {
-                voxel: 1,
-                swatch: 1,
+                voxel_id: UsizeId::from_usize(1),
+                swatch_id: U32Id::from_u32(1),
                 swatches: 1
             })
         );

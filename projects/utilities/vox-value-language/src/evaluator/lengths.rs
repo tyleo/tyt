@@ -1,4 +1,5 @@
 use crate::{Domain, Error, Groupings, Result};
+use branded_id::ext::IteratorExt;
 
 /// The entry count of every domain, fixed by the groupings.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -18,34 +19,31 @@ impl Lengths {
     pub(crate) fn from_groupings(groupings: &Groupings) -> Result<Lengths> {
         let swatches = groupings.swatch_count;
 
-        if let Some((voxel, swatch_id)) = groupings
+        if let Some((voxel_id, &swatch_id)) = groupings
             .voxel_swatches
             .iter()
-            .enumerate()
+            .enumerate_ids()
             .find(|(_, swatch_id)| swatch_id.to_usize_id().to_usize() >= swatches)
         {
             return Err(Error::VoxelSwatch {
-                voxel,
-                swatch: swatch_id.to_u32(),
+                voxel_id,
+                swatch_id,
                 swatches,
             });
         }
 
         let voxels = groupings.voxel_swatches.len();
 
-        for (face, pieces) in groupings.face_voxels.iter().enumerate() {
+        for (face_id, pieces) in groupings.face_voxels.iter().enumerate_ids() {
             if pieces.is_empty() {
-                return Err(Error::FacePieces { face });
+                return Err(Error::FacePieces { face_id });
             }
 
-            if let Some(voxel_id) = pieces
+            if let Some(&voxel_id) = pieces
                 .iter()
                 .find(|voxel_id| voxel_id.to_usize_id().to_usize() >= voxels)
             {
-                return Err(Error::PieceVoxel {
-                    face,
-                    voxel: voxel_id.to_u32(),
-                });
+                return Err(Error::PieceVoxel { face_id, voxel_id });
             }
         }
 
@@ -74,6 +72,7 @@ impl Lengths {
 #[cfg(test)]
 mod tests {
     use crate::{Domain, Error, Groupings, Lengths, groupings};
+    use branded_id::{U32Id, UsizeId};
 
     #[test]
     fn the_groupings_fix_every_length() {
@@ -122,8 +121,8 @@ mod tests {
         assert_eq!(
             Lengths::from_groupings(&groupings(2, &[0, 1, 2], &[])),
             Err(Error::VoxelSwatch {
-                voxel: 2,
-                swatch: 2,
+                voxel_id: UsizeId::from_usize(2),
+                swatch_id: U32Id::from_u32(2),
                 swatches: 2
             })
         );

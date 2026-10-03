@@ -1,4 +1,7 @@
-use crate::{CheckFailure, Dimension, Domain, EvalFailure, ParseFailure, Type};
+use crate::{
+    BFace, BSwatch, BVoxel, CheckFailure, Dimension, Domain, EvalFailure, ParseFailure, Type,
+};
+use branded_id::{U32Id, UsizeId};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -43,7 +46,7 @@ pub enum Error {
     },
 
     /// A face lists no voxel pieces.
-    FacePieces { face: usize },
+    FacePieces { face_id: UsizeId<BFace> },
 
     /// The type environment holds a name the value environment lacks.
     MissingValue { name: String },
@@ -59,7 +62,11 @@ pub enum Error {
     },
 
     /// A face's piece points past the voxel table.
-    PieceVoxel { face: usize, voxel: u32 },
+    PieceVoxel {
+        face_id: UsizeId<BFace>,
+
+        voxel_id: U32Id<BVoxel>,
+    },
 
     /// A string was given a width above vec1.
     StringWidth { dimension: Dimension },
@@ -79,9 +86,9 @@ pub enum Error {
 
     /// A voxel's swatch lies at or past the swatch count.
     VoxelSwatch {
-        voxel: usize,
+        voxel_id: UsizeId<BVoxel>,
 
-        swatch: u32,
+        swatch_id: U32Id<BSwatch>,
 
         swatches: usize,
     },
@@ -128,7 +135,11 @@ impl Display for Error {
                 failure,
             } => write!(formatter, "{failure}"),
 
-            Error::FacePieces { face } => write!(formatter, "face {face} lists no voxel pieces"),
+            Error::FacePieces { face_id } => write!(
+                formatter,
+                "face {} lists no voxel pieces",
+                face_id.to_usize()
+            ),
 
             Error::MissingValue { name } => {
                 write!(formatter, "`{name}` has a type but no value")
@@ -146,10 +157,12 @@ impl Display for Error {
                 )
             }
 
-            Error::PieceVoxel { face, voxel } => {
+            Error::PieceVoxel { face_id, voxel_id } => {
                 write!(
                     formatter,
-                    "face {face} names voxel {voxel} past the voxel table"
+                    "face {} names voxel {} past the voxel table",
+                    face_id.to_usize(),
+                    voxel_id.to_u32()
                 )
             }
 
@@ -171,12 +184,14 @@ impl Display for Error {
             ),
 
             Error::VoxelSwatch {
-                voxel,
-                swatch,
+                voxel_id,
+                swatch_id,
                 swatches,
             } => write!(
                 formatter,
-                "voxel {voxel} samples swatch {swatch}, past the {swatches} swatches"
+                "voxel {} samples swatch {}, past the {swatches} swatches",
+                voxel_id.to_usize(),
+                swatch_id.to_u32()
             ),
         }
     }
