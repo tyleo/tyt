@@ -153,12 +153,14 @@ fn group_objects_beside_nodes(main: &mut VoxMain<()>) -> Result<()> {
 mod tests {
     use crate::{
         FALLBACK_CONTENT_VERSION, SHADOWS, SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat,
-        VMaxExtPalette, VMaxWriteOptions, from_vmax_file, to_vmax_file, to_vmax_vox_main,
+        VMaxExtPalette, VMaxWriteOptions, decode_axis_angle, from_vmax_file, to_vmax_file,
+        to_vmax_vox_main,
     };
     use branded_id::{IdRange, U32Id};
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{
-        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
+        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3Ext, TyVector3F64,
+        TyVector3U32,
     };
     use vmax::{
         VMaxFile, VMaxSceneCamera,
@@ -1507,6 +1509,69 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("glows"), "{error}");
+    }
+
+    /// Voxel Max places an object by `T(t_p) * R * S` over its workspace grid,
+    /// so the voxel at grid position `v` renders centered at
+    /// `t_p + R*S*(v + 0.5)`, turning about the grid's origin rather than the
+    /// content center. Each voxel of a rotated object renders where its node
+    /// places it.
+    #[test]
+    fn writes_a_rotated_object_where_voxel_max_renders_it() {
+        let mut main = VoxMain::default();
+        let palette_id = retain_rgba_palette(&mut main, &["#FF0000FF"]);
+        main.retain_object(color_object(
+            palette_id,
+            TyVector3U32::new(3, 2, 1),
+            &[([0, 0, 0], 0), ([2, 1, 0], 0)],
+        ))
+        .unwrap();
+        let transform = TyTransformF64::new(
+            TyVector3F64::new(5.0, 7.0, -3.0),
+            TyQuaternionF64::from_axis_angle(TyVector3F64::X, (-70f64).to_radians()),
+            TyVector3F64::new(1.0, 1.0, 1.0),
+        );
+        let node_id = main
+            .retain_hierarchy_node(object_node("o", 0, transform))
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+        main.validate().unwrap();
+        let mut placed: Vec<_> = [[0.5, 0.5, 0.5], [2.5, 1.5, 0.5]]
+            .into_iter()
+            .map(|center| {
+                let center =
+                    transform.position + transform.rotation * TyVector3F64::from_array(center);
+                center.yup_to_zup()
+            })
+            .collect();
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let object = &file.scene_json_file.objects[0];
+        let rotation = decode_axis_angle(object.rotation);
+        let mut rendered: Vec<_> = contents_voxels(&file, &object.data)
+            .iter()
+            .map(|voxel| {
+                let grid = TyVector3F64::from_array(voxel.position.map(f64::from))
+                    + TyVector3F64::splat(0.5);
+                TyVector3F64::from_array(object.position) + rotation * grid
+            })
+            .collect();
+        let order =
+            |a: &TyVector3F64, b: &TyVector3F64| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y));
+        placed.sort_by(order);
+        rendered.sort_by(order);
+        assert_eq!(rendered.len(), placed.len());
+        for (rendered, placed) in rendered.iter().zip(&placed) {
+            assert!(
+                (*rendered - *placed).length() < 1e-9,
+                "{rendered:?} != {placed:?}"
+            );
+        }
     }
 
     /// A 6-hex source color widens to opaque RGBA: the missing alpha defaults to

@@ -63,7 +63,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
             continue;
         }
         // The object and its placing transform turn together, so the node
-        // keeps pivoting about the content center.
+        // stays on the object's content center.
         let (vox_object, data, transform) =
             build_object(serde, object, &mut main, &mut palette_provenance)?;
         let object_id = main.retain_object(vox_object.zup_to_yup())?;
@@ -138,8 +138,10 @@ fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
 
 /// The integer grid `origin`: the min corner offset from the placing node in
 /// the node's local voxel frame. `round(box_min - center)` so the node
-/// transform's position lands on the content center (the pivot); any odd-extent
-/// half-voxel remainder is absorbed by that position, keeping rendering exact.
+/// transform's position lands on the content center, where a voxcore rotation
+/// of the node then pivots. Voxel Max's own `t_p` turns about the grid origin,
+/// which [`object_transform`] accounts for. Any odd-extent half-voxel remainder
+/// is absorbed by the node position, keeping rendering exact.
 fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
     (TyVector3I32::from_array(box_min).as_dvec3() - TyVector3F64::from_array(center))
         .round()
@@ -147,24 +149,19 @@ fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
         .to_array()
 }
 
-/// The node transform that places an object so rotating the node pivots its
-/// grid about the content center. Voxel Max renders a voxel at `t_p + center +
-/// R*S*(voxel - center)`, and a voxel is `box_min + local`, which sits at
-/// node-local `origin + local`, so the node position is `t_p + center +
-/// R*S*(box_min - center - origin)`. The bracket is the sub-voxel remainder
-/// `box_min - center - origin`, so the position lands on the pivot and
-/// rendering stays exact for any integer `origin`.
+/// The node transform that places an object as Voxel Max renders it. Voxel
+/// Max places an object by `T(t_p) * R * S` over its workspace grid, so a
+/// voxel at grid position `voxel` renders at `t_p + R*S*voxel`. A voxel is
+/// `box_min + local`, which sits at node-local `origin + local`, so the node
+/// position is `t_p + R*S*(box_min - origin)`.
 fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) -> TyTransformF64 {
     let rotation = decode_axis_angle(object.rotation);
     let scale = TyVector3F64::from_array(object.scale);
-    let center = TyVector3F64::from_array(object.center);
     let box_min = TyVector3I32::from_array(box_min).as_dvec3();
     let origin = TyVector3I32::from_array(origin).as_dvec3();
 
-    // t_p + center + R*S*(box_min - center - origin); the bracket is the
-    // sub-voxel remainder.
-    let offset = (box_min - center - origin) * scale;
-    let position = TyVector3F64::from_array(object.position) + center + rotation * offset;
+    let offset = (box_min - origin) * scale;
+    let position = TyVector3F64::from_array(object.position) + rotation * offset;
 
     TyTransformF64::new(position, rotation, scale)
 }
@@ -214,9 +211,9 @@ fn build_object(
 
     // The runtime grid is exactly tight: the occupied voxel extent, re-based so
     // the voxels fill it from the origin. An empty object is a degenerate [0,
-    // 0, 0] grid seated at its content box so the placing node still pivots
-    // about the recorded center. `origin` offsets that grid from the node so
-    // the node transform pivots about the content center.
+    // 0, 0] grid seated at its content box so the placing node still sits on
+    // the recorded center. `origin` offsets that grid from the node so the
+    // node lands on the content center.
     let (box_min, bounds) = match min_corner(&voxels) {
         Some(min) => (min, object_bounds(&voxels, min)),
 
@@ -820,7 +817,7 @@ mod tests {
     use crate::{VMaxWriteOptions, from_vmax_file, to_vmax_file};
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
-    use ty_math::{TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxLegacyChunkVoxels, VMaxMaterial, VMaxObject,
         VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
@@ -957,6 +954,73 @@ mod tests {
             .hierarchy_node(U32Id::<BVoxHierarchyNode>::from_u32(0))
             .expect("the placing node");
         assert_eq!(node.transform.position, TyVector3F64::new(1.0, 2.0, -2.0));
+    }
+
+    /// Voxel Max places an object by `T(t_p) * R * S` over its workspace grid,
+    /// so the voxel at grid position `v` renders centered at
+    /// `t_p + R*(v + 0.5)` for a unit scale, turning about the grid's origin
+    /// rather than the content center. Each loaded voxel lands there through
+    /// its placing node.
+    #[test]
+    fn places_a_rotated_object_where_voxel_max_renders_it() {
+        let voxel = |x: i32, y: i32, z: i32| VMaxVoxel {
+            position: [x, y, z],
+            material_idx: 0,
+            color_idx: 1,
+        };
+        let grid = [[128, 127, 3], [130, 129, 5]];
+        let mut file = one_object_file(
+            [129.5, 128.5, 4.5],
+            VMaxViewBox {
+                min: [120, 120, 0],
+                max: [140, 140, 10],
+                flat: None,
+            },
+            &grid.map(|[x, y, z]| voxel(x, y, z)),
+        );
+        let object = &mut file.scene_json_file.objects[0];
+        object.position = [-120.0, -100.0, 30.0];
+        object.rotation = [1.0, 0.0, 0.0, 1.2];
+        let rotation = TyQuaternionF64::from_axis_angle(TyVector3F64::X, 1.2);
+        let mut rendered: Vec<_> = grid
+            .iter()
+            .map(|cell| {
+                let center =
+                    TyVector3F64::from_array(cell.map(f64::from)) + TyVector3F64::splat(0.5);
+                TyVector3F64::new(-120.0, -100.0, 30.0) + rotation * center
+            })
+            .collect();
+
+        let main = from_vmax_file(&file).expect("a rotated object loads");
+
+        let node = main
+            .hierarchy_node(U32Id::<BVoxHierarchyNode>::from_u32(0))
+            .expect("the placing node");
+        let object = main
+            .object(U32Id::<BVoxObject>::from_u32(0))
+            .expect("the one object");
+        let origin = object.origin().as_dvec3();
+        let mut placed: Vec<_> = object
+            .iter_live()
+            .map(|voxel_id| {
+                let cell = object
+                    .voxel_position(voxel_id)
+                    .expect("a live cell")
+                    .as_dvec3();
+                let local = origin + cell + TyVector3F64::splat(0.5);
+                (node.transform.position + node.transform.rotation * local).yup_to_zup()
+            })
+            .collect();
+        let order = |a: &TyVector3F64, b: &TyVector3F64| a.x.total_cmp(&b.x);
+        rendered.sort_by(order);
+        placed.sort_by(order);
+        assert_eq!(placed.len(), rendered.len());
+        for (placed, rendered) in placed.iter().zip(&rendered) {
+            assert!(
+                (*placed - *rendered).length() < 1e-9,
+                "{placed:?} != {rendered:?}"
+            );
+        }
     }
 
     /// An object naming a contents file the package lacks errors with the

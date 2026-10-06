@@ -56,8 +56,9 @@ fn object_placement(
 
 /// The Voxel Max content bounds `(e_c, e_mi, e_ma)` for a grid of `bounds`
 /// whose min corner sits at `box_min`: the box center and its symmetric
-/// half-extents. Voxel Max renders and frames against this and pivots about the
-/// center.
+/// half-extents. Voxel Max frames against this box, and its rotate gizmo
+/// pivots about it. The stored placement `T(t_p) * R * S` turns about the grid
+/// origin instead.
 fn content_box(box_min: [i32; 3], bounds: TyVector3U32) -> ([f64; 3], [f64; 3], [f64; 3]) {
     let box_local = TyBoundsF64::from_min_size(
         TyVector3I32::from_array(box_min).as_dvec3(),

@@ -1146,29 +1146,29 @@ fn object_from_node(
 }
 
 /// Recovers an object's `t_p`, the inverse of the read path's
-/// `object_transform`. It backs out the `t_p` Voxel Max renders with from the
-/// node's transform, the content center it pivots about, and the grid `origin`:
-/// `t_p = position - center - R*S* (box_min - center - origin)`. Uses the
-/// axis-angle the object writes, so the two stay exact inverses.
+/// `object_transform`. Voxel Max places an object by `T(t_p) * R * S` over its
+/// workspace grid, so a voxel at grid position `v` renders at `t_p + R*S*v`.
+/// The voxel sits at node-local `origin + (v - box_min)`, so
+/// `t_p = position - R*S*(box_min - origin)`. Uses the axis-angle the object
+/// writes, so the two stay exact inverses.
 fn unbake_position(
     transform: &TyTransformF64,
     rotation: TyQuaternionF64,
     placement: &ObjectPlacement,
 ) -> [f64; 3] {
-    let center = placement.center;
     let box_min = placement.box_min;
     let origin = placement.origin;
     let scale = transform.scale;
     let offset = TyVector3F64::new(
-        (box_min[0] as f64 - center[0] - origin[0] as f64) * scale.x,
-        (box_min[1] as f64 - center[1] - origin[1] as f64) * scale.y,
-        (box_min[2] as f64 - center[2] - origin[2] as f64) * scale.z,
+        (box_min[0] - origin[0]) as f64 * scale.x,
+        (box_min[1] - origin[1]) as f64 * scale.y,
+        (box_min[2] - origin[2]) as f64 * scale.z,
     );
     let rotated = rotation * offset;
     [
-        transform.position.x - center[0] - rotated.x,
-        transform.position.y - center[1] - rotated.y,
-        transform.position.z - center[2] - rotated.z,
+        transform.position.x - rotated.x,
+        transform.position.y - rotated.y,
+        transform.position.z - rotated.z,
     ]
 }
 
@@ -1519,8 +1519,8 @@ mod tests {
             parent_id: Some("g".to_owned()),
             hidden: None,
             // Canonical placement the reverse path emits: the grid is centered
-            // in the workspace, the content box is symmetric about the center,
-            // and the placement pivots about it.
+            // in the workspace, and the content box is symmetric about the
+            // center.
             position: [-127.0, -127.0, 0.0],
             rotation: [0.0, 0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
