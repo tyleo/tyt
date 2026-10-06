@@ -10,7 +10,7 @@ use ty_math::{TyBoundsF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
     VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
-    snapshots::{VMaxVoxel, encode_vmax_snapshots},
+    snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxExt,
@@ -38,6 +38,10 @@ const FALLBACK_PALETTE: &str = "palette1.png";
 /// always lists exactly this many, real materials in the low slots and the rest
 /// padded with the neutral default.
 const MATERIAL_SLOTS: usize = 8;
+
+/// The extent order every written object takes: Voxel Max's object grid of
+/// 512 voxels on a side, whose default work area shows the whole grid.
+const OBJECT_EXTENT_ORDER: i64 = 9;
 
 /// How far a node's rotation may drift from its preserved axis-angle before
 /// the writer encodes the live rotation instead.
@@ -158,7 +162,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                     // absent.
                     let contents = VMaxContentsVmaxbFile {
                         snapshots: encode_vmax_snapshots(&voxels),
-                        ..contents_editor_state(object_state, &object_placement)
+                        ..contents_editor_state(object_state)
                     };
                     contents_files.insert(data.clone(), contents);
                     contents_by_object.insert(object_id, data.clone());
@@ -199,13 +203,11 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         contents_files,
         palette_settings_files,
         palette_png_files,
-        history_vmaxhb_files: BTreeMap::new(),
-        history_vmaxhvsb_files: BTreeMap::new(),
-        history_vmaxhvsc_files: BTreeMap::new(),
         selection_vmaxb_files: BTreeMap::new(),
         thumbnail_png: None,
         contents_vmax_pngs: BTreeMap::new(),
         group_pngs: BTreeMap::new(),
+        other_files: BTreeMap::new(),
     })
 }
 
@@ -1077,25 +1079,21 @@ fn reconstruct_voxels(
         .collect())
 }
 
-/// The editor state a contents file carries, without its snapshots: the
-/// entry's session as it is, with the canvas `vp` re-scoped to the derived
-/// build volume.
-fn contents_editor_state(
-    object_state: &VMaxExtObjectState,
-    placement: &ObjectPlacement,
-) -> VMaxContentsVmaxbFile {
-    let mut tools = object_state.tools.clone();
-    if let Some(tools) = tools.as_mut() {
-        tools.vp = Some(placement.view_box.clone());
-    }
+/// The contents file an object writes from its kept state: its version, raised
+/// to the snapshot version since the voxels write as snapshots, its camera,
+/// and the extent of order 9, so Voxel Max's default work area spans the whole
+/// object grid and shows every voxel. No editor state is written.
+fn contents_editor_state(object_state: &VMaxExtObjectState) -> VMaxContentsVmaxbFile {
     VMaxContentsVmaxbFile {
         snapshots: Vec::new(),
         uuid: object_state.uuid.clone(),
-        v: object_state.v,
-        tools,
-        brush: object_state.brush.clone(),
+        v: object_state.v.max(SNAPSHOT_CONTENTS_VERSION),
+        tools: None,
         cam: object_state.cam.clone(),
         pal: None,
+        eo: Some(OBJECT_EXTENT_ORDER),
+        chunks: Vec::new(),
+        voxels: Vec::new(),
     }
 }
 
@@ -1358,7 +1356,7 @@ mod tests {
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
         VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera,
-        VMaxSceneJsonFile, VMaxViewBox,
+        VMaxSceneJsonFile,
         snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
     };
     use voxcore::{
@@ -1536,9 +1534,11 @@ mod tests {
             uuid: "u".to_owned(),
             v: 4,
             tools: None,
-            brush: None,
             cam: None,
             pal: None,
+            eo: Some(9),
+            chunks: Vec::new(),
+            voxels: Vec::new(),
         };
 
         let mut contents_files = BTreeMap::new();
@@ -1568,13 +1568,11 @@ mod tests {
             contents_files,
             palette_settings_files,
             palette_png_files,
-            history_vmaxhb_files: BTreeMap::new(),
-            history_vmaxhvsb_files: BTreeMap::new(),
-            history_vmaxhvsc_files: BTreeMap::new(),
             selection_vmaxb_files: BTreeMap::new(),
             thumbnail_png: None,
             contents_vmax_pngs: BTreeMap::new(),
             group_pngs: BTreeMap::new(),
+            other_files: BTreeMap::new(),
         }
     }
 
@@ -1705,7 +1703,6 @@ mod tests {
         let object_state = &ext.object_states[&object_id];
         assert_eq!(object_state.uuid, "00000000-0000-0001-0000-000000000001");
         assert_eq!(object_state.v, 4);
-        assert!(object_state.tools.is_some() && object_state.brush.is_some());
         assert_eq!(
             object_state.cam.as_ref().map(|cam| cam.o),
             Some([127.5, 127.5, 0.5])
@@ -1724,13 +1721,10 @@ mod tests {
         assert_eq!(added.t_al, "f");
         let contents = &file.contents_files[&added.data];
         assert_eq!(contents.uuid, "00000000-0000-0001-0000-000000000001");
-        assert_eq!(
-            contents.tools.as_ref().and_then(|tools| tools.vp.clone()),
-            Some(VMaxViewBox {
-                min: [127, 127, 0],
-                max: [127, 127, 0],
-            })
-        );
+        // No editor state is written, and the extent of order 9 makes Voxel
+        // Max's default work area span the whole object grid.
+        assert_eq!(contents.tools, None);
+        assert_eq!(contents.eo, Some(9));
 
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);

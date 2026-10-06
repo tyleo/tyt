@@ -11,4 +11,11 @@ pub struct VMaxExtentRange {
 
     /// Maximum corner.
     pub max: Vec<i64>,
+
+    /// Whether the region is a flat work plane (`f`).
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "f", default, skip_serializing_if = "Option::is_none")
+    )]
+    pub flat: Option<bool>,
 }

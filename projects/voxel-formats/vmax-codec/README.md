@@ -7,23 +7,29 @@ without loss.
 A `.vmax` package is a directory of files, but the codec never touches the
 filesystem itself. You give `from_vmax_package` a way to list and read the
 package's files and `to_vmax_package` a way to write them, so the same code works
-against a folder, a zip, or bytes already in memory. Reading parses every file
-the package can hold into typed fields. An unknown filename or an unmodeled key
-is an error, which keeps a round trip lossless. Writing errors on a NaN, an
-infinity, or a data blob in `scene.json`.
+against a folder, a zip, or bytes already in memory. Reading parses the scene,
+contents, palettes, selections, and thumbnails into typed fields. It skips the
+undo history, which Voxel Max opens a package without, and a contents file's
+editor state beyond its work area. Any other file is kept as stored in
+`other_files`, as Voxel Max keeps a file it does not know. An unmodeled key in
+`scene.json` or a palette's settings is an error. An error names the file it
+comes from. Writing errors on a NaN, an infinity, or a data blob in
+`scene.json`.
 
 The codec is a dumb load/save: a `VMaxFile` is the parsed package in its
-on-disk shape, and `from_vmax_package` then `to_vmax_package` reproduces it. Voxel
+on-disk shape, and `from_vmax_package` then `to_vmax_package` reproduces it
+without the history and editor state it skips. Voxel
 geometry stays as the per-chunk snapshot edit log and palette colors stay packed
 or in their PNG. The `vmax` crate's `snapshots` and `palette` modules decode
 each on demand.
 
 The QuickLook thumbnails decode to `vmax::VMaxImage` pixel grids, split by role
 into `thumbnail_png` for the package preview, `contents_vmax_pngs` for each
-object, and `group_pngs` for each group. The `*.vmaxhb`, `*.vmaxhvsb`, and
-`*.vmaxhvsc` history files decode into typed sessions and snapshots. The
-undocumented per-command undo and redo payloads inside those files stay
-`vmax::VMaxValue` trees and round-trip uninterpreted.
+object, and `group_pngs` for each group. The per-file helpers still load and
+save the `*.vmaxhb`, `*.vmaxhvsb`, and `*.vmaxhvsc` history files one at a time
+as typed sessions and snapshots. The undocumented per-command undo and redo
+payloads inside those files stay `vmax::VMaxValue` trees and round-trip
+uninterpreted.
 
 ## Dependencies
 

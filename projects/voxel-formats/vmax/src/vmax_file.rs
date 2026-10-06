@@ -1,14 +1,14 @@
 use crate::{
-    VMaxContentsVmaxbFile, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile, VMaxHistoryVmaxhvscFile,
-    VMaxImage, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
-    VMaxSelectionVmaxbFile,
+    VMaxContentsVmaxbFile, VMaxImage, VMaxOpaqueFile, VMaxPalettePngFile,
+    VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxSelectionVmaxbFile,
 };
 use std::collections::BTreeMap;
 
 /// Parsed contents of a `.vmax` package directory: `scene.json` plus every
-/// other file the package holds. The lossless on-disk model a package
-/// round-trips through. Voxel geometry and palette colors stay in their stored
-/// form here (snapshots, packed bytes), decoded on demand.
+/// other file the package holds but its undo history, which Voxel Max opens a
+/// package without. The on-disk model a package round-trips through. Voxel
+/// geometry and palette colors stay in their stored form here (snapshots,
+/// packed bytes), decoded on demand.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VMaxFile {
     /// `scene.json`.
@@ -22,16 +22,6 @@ pub struct VMaxFile {
 
     /// `palette*.png` color tables, keyed by filename.
     pub palette_png_files: BTreeMap<String, VMaxPalettePngFile>,
-
-    /// `*.vmaxhb` undo-history streams (including `scene.vmaxhb`), keyed by
-    /// filename.
-    pub history_vmaxhb_files: BTreeMap<String, VMaxHistoryVmaxhbFile>,
-
-    /// `*.vmaxhvsb` history voxel-snapshot buffers, keyed by filename.
-    pub history_vmaxhvsb_files: BTreeMap<String, VMaxHistoryVmaxhvsbFile>,
-
-    /// `*.vmaxhvsc` history voxel-snapshot sidecars, keyed by filename.
-    pub history_vmaxhvsc_files: BTreeMap<String, VMaxHistoryVmaxhvscFile>,
 
     /// `*.selection.vmaxb` saved voxel selections, keyed by filename.
     pub selection_vmaxb_files: BTreeMap<String, VMaxSelectionVmaxbFile>,
@@ -47,4 +37,9 @@ pub struct VMaxFile {
     /// Per-group `QuickLook/<group-id>.png` previews, decoded, keyed by the
     /// group's id (the `QuickLook/`-stripped, `.png`-stripped filename).
     pub group_pngs: BTreeMap<String, VMaxImage>,
+
+    /// Every other file the package holds, keyed by its package path, as
+    /// stored: animations, import records, external meshes and their
+    /// textures, and any file a later Voxel Max adds.
+    pub other_files: BTreeMap<String, VMaxOpaqueFile>,
 }

@@ -1,6 +1,5 @@
 use crate::{ObjectPlacement, tighten};
 use ty_math::{TyBoundsF64, TyVector3I32, TyVector3U32};
-use vmax::VMaxViewBox;
 use voxcore::VoxObject;
 
 /// Tightens `object` to its live voxels and derives its internal-grid
@@ -52,7 +51,6 @@ fn object_placement(
         center,
         bounds_min,
         bounds_max,
-        view_box: object_view_box(canvas_min, edit_bounds),
     }
 }
 
@@ -70,17 +68,4 @@ fn content_box(box_min: [i32; 3], bounds: TyVector3U32) -> ([f64; 3], [f64; 3], 
         (-box_local.extents).to_array(),
         box_local.extents.to_array(),
     )
-}
-
-/// The `tools.vp` partition box for an object: its build volume at `origin`,
-/// inclusive, so Voxel Max frames the whole authored grid.
-fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
-    VMaxViewBox {
-        min: [origin[0] as i64, origin[1] as i64, origin[2] as i64],
-        max: [
-            origin[0] as i64 + size.x.max(1) as i64 - 1,
-            origin[1] as i64 + size.y.max(1) as i64 - 1,
-            origin[2] as i64 + size.z.max(1) as i64 - 1,
-        ],
-    }
 }

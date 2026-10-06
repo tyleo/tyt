@@ -9,7 +9,9 @@ use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U3
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
     VMaxSceneJsonFile, VMaxViewBox,
-    snapshots::{VMaxVoxel, decode_vmax_snapshots},
+    snapshots::{
+        SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, decode_vmax_legacy_chunks, decode_vmax_snapshots,
+    },
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool, VoxHierarchyNode,
@@ -182,7 +184,32 @@ fn build_object(
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
     } else {
-        decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)?
+        if object.data.ends_with(".scndata") {
+            return Err(Error::invalid(format!(
+                "object `{}` is an external mesh in `{}`, a SceneKit archive rather than \
+                 voxels, which this crate does not read",
+                object.name, object.data
+            )));
+        }
+        let contents = serde.contents_files.get(&object.data).ok_or_else(|| {
+            Error::invalid(format!(
+                "object `{}` names contents file `{}`, which the package does not hold",
+                object.name, object.data
+            ))
+        })?;
+        // Voxel Max reads an older contents file's legacy chunks in place of
+        // its snapshots.
+        let mut voxels = if contents.v < SNAPSHOT_CONTENTS_VERSION {
+            decode_vmax_legacy_chunks(contents.v, &contents.chunks, &contents.voxels)?
+        } else {
+            decode_vmax_snapshots(&contents.snapshots)?
+        };
+        if let Some((min, max)) = work_area(contents) {
+            voxels.retain(|voxel| {
+                (0..3).all(|axis| (min[axis]..=max[axis]).contains(&voxel.position[axis]))
+            });
+        }
+        voxels
     };
 
     // The runtime grid is exactly tight: the occupied voxel extent, re-based so
@@ -193,19 +220,18 @@ fn build_object(
     let (box_min, bounds) = match min_corner(&voxels) {
         Some(min) => (min, object_bounds(&voxels, min)),
 
-        // An empty object seats at its content box; lacking one, it seats at
-        // the build volume `vp.min` so the edit grid still contains the runtime
-        // grid, and only at the world origin when it has neither.
-        None => (
-            authored_box(object)
-                .map(|(box_min, _)| box_min)
-                .or_else(|| {
-                    view_box(serde, object)
-                        .map(|vp| [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32])
-                })
-                .unwrap_or([0, 0, 0]),
-            [0, 0, 0],
-        ),
+        // An empty object takes its content box, which a writer frames on its
+        // build volume; lacking one, it seats at the work area `vp.min` so the
+        // edit grid still contains the runtime grid, and only at the world
+        // origin when it has neither.
+        None => authored_box(object).unwrap_or_else(|| {
+            (
+                view_box(serde, object)
+                    .map(|vp| [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32])
+                    .unwrap_or([0, 0, 0]),
+                [0, 0, 0],
+            )
+        }),
     };
     let origin = pivot_origin(box_min, object.center);
     let transform = object_transform(object, box_min, origin);
@@ -260,12 +286,9 @@ fn build_object(
             (voxel.position[1] - box_min[1] + offset[1]) as u32,
             (voxel.position[2] - box_min[2] + offset[2]) as u32,
         );
-        let voxel_id = vox_object.voxel_id(position).ok_or_else(|| {
-            Error::invalid(format!(
-                "object \"{}\" voxel ({}, {}, {}) lies outside its build volume",
-                object.name, voxel.position[0], voxel.position[1], voxel.position[2]
-            ))
-        })?;
+        let voxel_id = vox_object
+            .voxel_id(position)
+            .expect("a voxel in the work area lies in the grid spanning it");
 
         let material_id = palette.combo_material_ids[&combo_key(voxel, palette.has_materials)];
         vox_object
@@ -303,6 +326,22 @@ fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
         bounds[2] = bounds[2].max((v.position[2] - box_min[2] + 1) as u32);
     }
     bounds
+}
+
+/// The region of an object's grid Voxel Max shows, as inclusive `(min, max)`
+/// corners: the work area `tools.vp`, else the extent `eo` names, which Voxel
+/// Max reads as 8 when absent or outside 5 to 9. `None` at the full extent of
+/// order 9, where every voxel shows. Voxel Max keeps a voxel outside the region
+/// but hides it, so the render a read gives leaves it out.
+fn work_area(contents: &VMaxContentsVmaxbFile) -> Option<([i32; 3], [i32; 3])> {
+    if let Some(vp) = contents.tools.as_ref().and_then(|tools| tools.vp.as_ref()) {
+        return Some((vp.min.map(|v| v as i32), vp.max.map(|v| v as i32)));
+    }
+    let order = contents
+        .eo
+        .filter(|order| (5..=9).contains(order))
+        .unwrap_or(8);
+    (order < 9).then(|| ([0; 3], [(1 << order) - 1; 3]))
 }
 
 /// The object's authored build volume (`tools.vp`) from its contents file, the
@@ -545,8 +584,19 @@ fn object_palette(
 fn combo_key(voxel: &VMaxVoxel, has_materials: bool) -> (u8, u8) {
     (
         voxel.color_idx,
-        if has_materials { voxel.material_idx } else { 0 },
+        if has_materials {
+            material_slot(voxel.material_idx)
+        } else {
+            0
+        },
     )
+}
+
+/// The material slot a voxel's material byte draws: its low three bits. Voxel
+/// Max sets the higher bits on a selected voxel and on editor-only layers, and
+/// reads the slot as `byte & 7`.
+fn material_slot(material_byte: u8) -> u8 {
+    material_byte & 7
 }
 
 /// The 0-based RGBA color table for an object. The `palette*.png` pixels when
@@ -723,18 +773,13 @@ fn vmax_ext_from_file(
     ext
 }
 
-/// Captures the editor state of a contents file for the ext. The tool partition
-/// (`tools.vp`) is dropped: it is the object's build volume, held natively as
-/// the object's grid, so it is rebuilt on write rather than stored here.
+/// Captures the state of a contents file the ext keeps: its version and its
+/// camera. The editor state is skipped, and the work area is held natively as
+/// the object's grid.
 fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VMaxExtObjectState {
     VMaxExtObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
-        tools: data.tools.clone().map(|mut tools| {
-            tools.vp = None;
-            tools
-        }),
-        brush: data.brush.clone(),
         cam: data.cam.clone(),
     }
 }
@@ -769,13 +814,14 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::from_vmax_file;
+    use crate::{VMaxWriteOptions, from_vmax_file, to_vmax_file};
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyVector3F64, TyVector3U32};
     use vmax::{
-        VMaxContentsVmaxbFile, VMaxFile, VMaxObject, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
-        snapshots::{VMaxVoxel, encode_vmax_snapshots},
+        VMaxContentsVmaxbFile, VMaxFile, VMaxLegacyChunkVoxels, VMaxMaterial, VMaxObject,
+        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
+        snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
     };
     use voxcore::{BVoxHierarchyNode, BVoxObject};
 
@@ -789,6 +835,7 @@ mod tests {
             VMaxViewBox {
                 min: [112, 112, 0],
                 max: [143, 143, 31],
+                flat: None,
             },
             &[],
         )
@@ -822,13 +869,12 @@ mod tests {
             snapshots: encode_vmax_snapshots(voxels),
             uuid: "u".to_owned(),
             v: 4,
-            tools: Some(VMaxTools {
-                vp: Some(vp),
-                ..Default::default()
-            }),
-            brush: None,
+            tools: Some(VMaxTools { vp: Some(vp) }),
             cam: None,
             pal: None,
+            eo: None,
+            chunks: Vec::new(),
+            voxels: Vec::new(),
         };
         let mut contents_files = BTreeMap::new();
         contents_files.insert("contents1.vmaxb".to_owned(), contents);
@@ -841,13 +887,11 @@ mod tests {
             contents_files,
             palette_settings_files: BTreeMap::new(),
             palette_png_files: BTreeMap::new(),
-            history_vmaxhb_files: BTreeMap::new(),
-            history_vmaxhvsb_files: BTreeMap::new(),
-            history_vmaxhvsc_files: BTreeMap::new(),
             selection_vmaxb_files: BTreeMap::new(),
             thumbnail_png: None,
             contents_vmax_pngs: BTreeMap::new(),
             group_pngs: BTreeMap::new(),
+            other_files: BTreeMap::new(),
         }
     }
 
@@ -877,6 +921,7 @@ mod tests {
             VMaxViewBox {
                 min: [0, 0, 0],
                 max: [1, 2, 3],
+                flat: None,
             },
             &[voxel(0, 0, 0), voxel(1, 2, 3)],
         );
@@ -904,5 +949,120 @@ mod tests {
             .hierarchy_node(U32Id::<BVoxHierarchyNode>::from_u32(0))
             .expect("the placing node");
         assert_eq!(node.transform.position, TyVector3F64::new(1.0, 2.0, -2.0));
+    }
+
+    /// An object naming a contents file the package lacks errors with the
+    /// object and the file rather than stopping the read.
+    #[test]
+    fn a_missing_contents_file_errors() {
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                flat: None,
+            },
+            &[VMaxVoxel {
+                position: [0, 0, 0],
+                material_idx: 0,
+                color_idx: 1,
+            }],
+        );
+        file.contents_files.clear();
+
+        let error = from_vmax_file(&file).expect_err("a missing contents file errors");
+
+        assert!(error.to_string().contains("contents1.vmaxb"), "{error}");
+    }
+
+    /// Voxel Max marks a selected voxel by setting the material byte's bit
+    /// 3, so the byte `9` draws slot 1, and a selection saved in the file
+    /// loads as the slot's material.
+    #[test]
+    fn a_selected_voxel_draws_its_slot() {
+        let voxel = |material_idx: u8| VMaxVoxel {
+            position: [0, 0, 0],
+            material_idx,
+            color_idx: 1,
+        };
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                ..Default::default()
+            },
+            &[voxel(9)],
+        );
+        file.scene_json_file.objects[0].palette = "palette1.png".to_owned();
+        let material = |mc: f64| VMaxMaterial {
+            mi: String::new(),
+            mc,
+            rc: 0.5,
+            sic: 0.0,
+            sh: true,
+            tc: None,
+            md: None,
+        };
+        file.palette_settings_files.insert(
+            "palette1.settings.vmaxpsb".to_owned(),
+            VMaxPaletteSettingsVmaxpsbFile {
+                materials: vec![material(0.1), material(0.9)],
+                ..Default::default()
+            },
+        );
+
+        let main = from_vmax_file(&file).expect("a selected voxel loads");
+
+        let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        let palette = main.effective_palette(object).unwrap();
+        let metallic = palette.property_id_by_name("metallic").unwrap();
+        let voxel_id = object.iter_live().next().unwrap();
+        let value_id = palette.voxel_value_id(voxel_id, metallic).unwrap();
+        let value = palette
+            .property(metallic)
+            .unwrap()
+            .value_pool()
+            .float_values()
+            .unwrap()
+            .get(value_id)
+            .copied();
+        assert_eq!(value, Some(1.0));
+    }
+
+    /// A contents file older than version 4 holds its voxels in legacy chunks,
+    /// which load as Voxel Max loads them, and write back as snapshots under
+    /// the snapshot version.
+    #[test]
+    fn loads_a_legacy_object_and_writes_it_as_snapshots() {
+        let mut file = one_object_file(
+            [128.5, 128.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [255, 255, 255],
+                flat: None,
+            },
+            &[],
+        );
+        let contents = file.contents_files.get_mut("contents1.vmaxb").unwrap();
+        contents.v = 2;
+        contents.snapshots.clear();
+        contents.chunks = [128, 128, 0, 1]
+            .into_iter()
+            .flat_map(i32::to_le_bytes)
+            .collect();
+        let mut data = vec![0u8; 2 * 32 * 32 * 32];
+        data[2] = 0;
+        data[3] = 1;
+        contents.voxels = vec![VMaxLegacyChunkVoxels(data)];
+
+        let main = from_vmax_file(&file).expect("a legacy object loads");
+
+        let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        assert_eq!(object.live_count(), 1);
+        let written = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let contents = written.contents_files.values().next().unwrap();
+        assert_eq!(contents.v, SNAPSHOT_CONTENTS_VERSION);
+        assert!(contents.chunks.is_empty() && !contents.snapshots.is_empty());
     }
 }

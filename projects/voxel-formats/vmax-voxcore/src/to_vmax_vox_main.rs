@@ -15,7 +15,7 @@ use voxcore::{BVoxHierarchyNode, VoxMain};
 /// no root is released because voxcore never places it. Each node, palette, and
 /// object then takes the entry the retain hooks would build for it: fresh ids,
 /// the node's rotation, the default anchor tokens, no exact material list, and
-/// the default editor session. The scene takes the fallback version and the
+/// a camera framed on the object. The scene takes the fallback version and the
 /// neutral camera.
 ///
 /// Lossy only on the material palette name, which stays empty.
