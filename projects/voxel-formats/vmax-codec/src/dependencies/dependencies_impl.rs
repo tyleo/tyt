@@ -365,6 +365,22 @@ mod tests {
         bytes
     }
 
+    /// The cache and pivot keys a current Voxel Max writes on objects and
+    /// groups parse into their fields.
+    #[test]
+    fn a_scene_from_a_current_voxel_max_parses() {
+        let json = br#"{"v":4,"objects":[{"id":"o","data":"contents.vmaxb","hist":"history.vmaxhb","pal":"palette.png","t_p":[0,0,0],"t_r":[0,0,0,0],"t_s":[1,1,1],"ind":[0,0,0],"e_c":[1,1,1],"e_mi":[-1,-1,-1],"e_ma":[1,1,1],"e_cm":[1,1,1],"e_cmv":2,"e_vc":8,"e_vm":8.5,"t_prp":[0.5,0.5,0.5]}],"groups":[{"id":"g","name":"group","t_p":[0,0,0],"t_r":[0,0,0,0],"t_s":[1,1,1],"ind":[0,1,0],"e_c":[0,0,0],"e_cm":[0,0,0],"e_cmv":2,"e_vc":8}]}"#;
+
+        let scene = DependenciesImpl.decode_vmax_scene_json(json).unwrap();
+
+        let object = &scene.objects[0];
+        assert_eq!(
+            (object.e_vc, object.e_vm, object.e_cmv, object.t_prp),
+            (Some(8), Some(8.5), Some(2), Some([0.5, 0.5, 0.5]))
+        );
+        assert_eq!(scene.groups[0].e_vc, Some(8));
+    }
+
     /// An array of exactly 256 objects takes 2-byte references, since Apple's
     /// reader, and so Voxel Max, rejects 1-byte references to 256 objects.
     #[test]

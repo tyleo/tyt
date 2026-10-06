@@ -196,6 +196,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
     let mut scene = main.ext().scene.clone();
     scene.groups = groups;
     scene.objects = objects;
+    keep_listed_selections(&mut scene);
     apply_scene_camera(&mut scene, options.scene_camera);
 
     Ok(VMaxFile {
@@ -412,7 +413,7 @@ fn group_from_node(
         name: node.name.clone(),
         id: ext_node.id.clone(),
         parent_id: placement.parent_id.clone(),
-        hidden: None,
+        hidden: ext_node.hidden,
         position: transform.position.to_array(),
         rotation,
         scale: transform.scale.to_array(),
@@ -425,6 +426,11 @@ fn group_from_node(
         center,
         bounds_min: Some([-half[0], -half[1], -half[2]]),
         bounds_max: Some(half),
+        t_prp: None,
+        e_cm: None,
+        e_cmv: None,
+        e_vc: None,
+        e_vm: None,
     }
 }
 
@@ -1118,7 +1124,7 @@ fn object_from_node(
         history: format!("history{suffix}.vmaxhb"),
         id: ext_node.id.clone(),
         parent_id,
-        hidden: None,
+        hidden: ext_node.hidden,
         position: unbake_position(transform, decode_axis_angle(rotation), placement),
         rotation,
         scale: transform.scale.to_array(),
@@ -1131,6 +1137,11 @@ fn object_from_node(
         center: placement.center,
         bounds_min: Some(placement.bounds_min),
         bounds_max: Some(placement.bounds_max),
+        t_prp: None,
+        e_cm: None,
+        e_cmv: None,
+        e_vc: None,
+        e_vm: None,
     }
 }
 
@@ -1159,6 +1170,19 @@ fn unbake_position(
         transform.position.y - center[1] - rotated.y,
         transform.position.z - center[2] - rotated.z,
     ]
+}
+
+/// Drops a kept active object (`ao`), active group (`ag`), or opening level
+/// (`vl`) that no longer names a listed entry. Voxel Max indexes `objects` and
+/// `groups` with the first two unchecked, so a stale index would stop it.
+fn keep_listed_selections(scene: &mut VMaxSceneJsonFile) {
+    let listed = |index: i64, count: usize| usize::try_from(index).is_ok_and(|index| index < count);
+    let (objects, groups) = (scene.objects.len(), scene.groups.len());
+    scene.ao = scene.ao.filter(|&index| listed(index, objects));
+    scene.ag = scene.ag.filter(|&index| listed(index, groups));
+    scene.vl = scene
+        .vl
+        .filter(|&level| level == -1 || listed(level, groups));
 }
 
 /// Writes each colored plan's color image and material sidecar.
@@ -1480,6 +1504,11 @@ mod tests {
             center: [1.0, 1.0, 1.0],
             bounds_min: Some([-1.0, -1.0, -1.0]),
             bounds_max: Some([1.0, 1.0, 1.0]),
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         };
         let object = VMaxObject {
             name: "obj".to_owned(),
@@ -1504,6 +1533,11 @@ mod tests {
             center: [128.0, 128.0, 1.0],
             bounds_min: Some([-1.0, -1.0, -1.0]),
             bounds_max: Some([1.0, 1.0, 1.0]),
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         };
 
         let scene_json_file = VMaxSceneJsonFile {
@@ -1697,6 +1731,7 @@ mod tests {
                 pivot_face: "8".to_owned(),
                 pivot_align: "4".to_owned(),
                 selected: None,
+                hidden: None,
             }
         );
         assert_eq!(ext.object_states.len(), 2);
@@ -2006,6 +2041,43 @@ mod tests {
         let main = from_vmax_file(&original).unwrap();
         let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
+    }
+
+    /// A hidden object or group stays hidden through a round trip, since
+    /// Voxel Max renders neither.
+    #[test]
+    fn keeps_hidden_nodes_hidden() {
+        let mut original = sample();
+        original.scene_json_file.objects[0].hidden = Some(true);
+        original.scene_json_file.groups[0].hidden = Some(true);
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(rebuilt, original);
+    }
+
+    /// A kept active object, active group, or opening level writes while it
+    /// names a listed entry, and drops once it does not, since Voxel Max
+    /// indexes with it unchecked.
+    #[test]
+    fn drops_selections_that_name_no_listed_entry() {
+        let mut original = sample();
+        original.scene_json_file.ao = Some(0);
+        original.scene_json_file.ag = Some(3);
+        original.scene_json_file.vl = Some(7);
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let scene = &rebuilt.scene_json_file;
+        assert_eq!((scene.ao, scene.ag, scene.vl), (Some(0), None, None));
     }
 
     /// A document written back through a bare state, its ext dropped, reads

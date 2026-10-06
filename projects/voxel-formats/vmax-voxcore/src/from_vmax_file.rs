@@ -795,6 +795,7 @@ fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
         pivot_face: object.t_pf.clone(),
         pivot_align: object.t_pa.clone(),
         selected: object.s,
+        hidden: object.hidden,
     }
 }
 
@@ -809,6 +810,7 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
         pivot_face: group.t_pf.clone(),
         pivot_align: group.t_pa.clone(),
         selected: group.s,
+        hidden: group.hidden,
     }
 }
 
@@ -864,6 +866,11 @@ mod tests {
             center,
             bounds_min: None,
             bounds_max: None,
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         };
         let contents = VMaxContentsVmaxbFile {
             snapshots: encode_vmax_snapshots(voxels),

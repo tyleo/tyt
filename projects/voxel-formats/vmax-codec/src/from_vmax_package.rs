@@ -147,6 +147,11 @@ mod tests {
             center: [0.0; 3],
             bounds_min: None,
             bounds_max: None,
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         }
     }
 

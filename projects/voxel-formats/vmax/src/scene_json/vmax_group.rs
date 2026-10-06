@@ -117,4 +117,56 @@ pub struct VMaxGroup {
         )
     )]
     pub bounds_max: Option<[f64; 3]>,
+
+    /// The pivot reference an imported joint fixes its pivot to (`t_prp`):
+    /// editor state, which a scene rebuilt from voxels leaves out.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            default,
+            serialize_with = "crate::finite"
+        )
+    )]
+    pub t_prp: Option<[f64; 3]>,
+
+    /// The cached center of mass (`e_cm`), which Voxel Max recomputes after a
+    /// load.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            default,
+            serialize_with = "crate::finite"
+        )
+    )]
+    pub e_cm: Option<[f64; 3]>,
+
+    /// The version of the cached center of mass (`e_cmv`). Voxel Max honors
+    /// `e_cm` only at version 2.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub e_cmv: Option<i64>,
+
+    /// The cached voxel count (`e_vc`), which Voxel Max recomputes after a
+    /// load.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub e_vc: Option<i64>,
+
+    /// The cached mass (`e_vm`), present when it differs from the voxel
+    /// count.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            default,
+            serialize_with = "crate::finite"
+        )
+    )]
+    pub e_vm: Option<f64>,
 }

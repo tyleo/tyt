@@ -45,6 +45,7 @@ pub fn synthesized_node(ext: &VMaxExt, node: &VoxHierarchyNode) -> VMaxExtNode {
         pivot_face: DEFAULT_PIVOT_FACE.to_owned(),
         pivot_align: DEFAULT_PIVOT_ALIGN.to_owned(),
         selected: None,
+        hidden: None,
     }
 }
 
