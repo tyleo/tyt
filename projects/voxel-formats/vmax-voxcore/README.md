@@ -23,8 +23,10 @@ state with no native voxcore home as its ext.
 - `to_vmax_vox_main`: a bare `VoxMain<()>` to a `VMaxVoxMain` with a
   synthesized ext, which writes as a document synthesized from the scene.
   The hierarchy becomes a tree first. A node placed along several paths is
-  cloned per extra path. A node no root reaches is released. `take_ext` on
-  the `VMaxVoxMain` takes the ext back off.
+  cloned per extra path. A node no root reaches is released. Voxel Max
+  objects are leaves, so a node placing both objects and child nodes moves
+  its objects onto a child node of their own and writes as a group.
+  `take_ext` on the `VMaxVoxMain` takes the ext back off.
 - `VMaxWriteOptions`: the writer's options. `Default` stores palette colors
   as PNG and keeps the ext's camera. `VMaxColorFormat` picks where each
   palette's colors are stored. `SceneCameraSource` picks the scene camera the

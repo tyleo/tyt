@@ -5,14 +5,16 @@ use crate::{
 use branded_id::U32Id;
 use std::collections::HashSet;
 use vmax::VMaxSceneJsonFile;
-use voxcore::{BVoxHierarchyNode, VoxMain};
+use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain};
 
 /// Gives a bare state a synthesized [`VMaxExt`], the state
 /// [`to_vmax_file`](crate::to_vmax_file()) writes as a document synthesized
 /// from the scene. Voxel Max models a tree, so the hierarchy becomes one first.
 /// A node reached along several paths is cloned per extra path, the way voxcore
 /// composes a node's placement along every path to it, and a node reached from
-/// no root is released because voxcore never places it. Each node, palette, and
+/// no root is released because voxcore never places it. Voxel Max parents
+/// objects only under groups, so a node placing both objects and child nodes
+/// moves its objects onto a child node of their own. Each node, palette, and
 /// object then takes the entry the retain hooks would build for it: fresh ids,
 /// the node's rotation, the default anchor tokens, no exact material list, and
 /// a camera framed on the object. The scene takes the fallback version and the
@@ -21,6 +23,7 @@ use voxcore::{BVoxHierarchyNode, VoxMain};
 /// Lossy only on the material palette name, which stays empty.
 pub fn to_vmax_vox_main(mut main: VoxMain<()>) -> Result<VMaxVoxMain> {
     unshare(&mut main)?;
+    group_objects_beside_nodes(&mut main)?;
 
     let mut ext = VMaxExt {
         scene: VMaxSceneJsonFile {
@@ -115,6 +118,35 @@ fn visit(
     let clone_id = main.retain_hierarchy_node(node)?;
     reached.insert(clone_id);
     Ok(clone_id)
+}
+
+/// Gives each node placing both objects and child nodes a first child node
+/// placing its objects. The writer writes a node placing objects as those
+/// objects, and Voxel Max parents an object only under a group, so the node's
+/// child nodes would otherwise name an object as their parent. The new node
+/// takes the node's name and the identity transform, so every object keeps its
+/// placement.
+fn group_objects_beside_nodes(main: &mut VoxMain<()>) -> Result<()> {
+    let mixed_ids: Vec<_> = main
+        .iter_hierarchy_nodes()
+        .filter(|(_, node)| !node.child_object_ids.is_empty() && !node.child_node_ids.is_empty())
+        .map(|(node_id, _)| node_id)
+        .collect();
+
+    for node_id in mixed_ids {
+        let node = main.hierarchy_node(node_id).expect("a listed node").clone();
+        let objects_id = main.retain_hierarchy_node(VoxHierarchyNode {
+            name: node.name,
+            child_object_ids: node.child_object_ids,
+            ..Default::default()
+        })?;
+
+        let mut child_node_ids = vec![objects_id];
+        child_node_ids.extend(node.child_node_ids);
+        main.set_hierarchy_node_children(node_id, child_node_ids, Vec::new())?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -953,9 +985,10 @@ mod tests {
         assert!(indices.iter().all(|&index| index >= 1));
     }
 
-    /// A node placing several objects and also parenting child nodes flattens
-    /// to sibling object-nodes sharing the node's placement, with the child
-    /// nodes hanging off the first object, and every object gets its own files.
+    /// A node placing several objects and also parenting child nodes becomes a
+    /// group, since Voxel Max objects are leaves: its objects flatten to
+    /// sibling objects sharing the node's placement, the child nodes sit beside
+    /// them under the group, and every object gets its own files.
     #[test]
     fn synthesizes_a_node_placing_objects_and_child_nodes() {
         let mut main = VoxMain::default();
@@ -968,8 +1001,8 @@ mod tests {
             ))
             .unwrap();
         }
-        // A fourth object placed by a child node, to confirm it hangs off the
-        // first object of the multi-object parent.
+        // A fourth object placed by a child node, which sits beside the three
+        // under the group.
         main.retain_object(color_object(
             palette_id,
             TyVector3U32::new(1, 1, 1),
@@ -977,7 +1010,7 @@ mod tests {
         ))
         .unwrap();
         // node 0 places objects 0, 1, 2 at +10x and parents node 1; node 1
-        // places object 3 at +1y of the first object.
+        // places object 3 at +1y of node 0.
         main.retain_hierarchy_nodes(vec![
             VoxHierarchyNode {
                 name: "layer".to_owned(),
@@ -1012,27 +1045,33 @@ mod tests {
             .map(|object| object.id.as_str())
             .collect();
         assert_eq!(ids.len(), 4);
+        // Every object sits in a group, the only parent Voxel Max resolves.
+        let group_ids: BTreeSet<&str> = file
+            .scene_json_file
+            .groups
+            .iter()
+            .map(|group| group.id.as_str())
+            .collect();
+        assert!(file.scene_json_file.objects.iter().all(|object| {
+            object
+                .parent_id
+                .as_deref()
+                .is_some_and(|parent_id| group_ids.contains(parent_id))
+        }));
 
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         let blue = [0, 0, 0xFF, 0xFF];
-        // The three siblings keep their place. The child node hangs off the
-        // first object, and a node placed under an object anchors at that
-        // object's content-center pivot, not its grid corner. The object
-        // re-centers on reload (its origin becomes round(box_min - center) on
-        // Voxel Max's axes, [-1, -1, 0] once turned back), so its descendant
-        // shifts by that origin, here to [11, 2, 0]. This only
-        // arises for object-under-object nesting, which other formats such as
-        // Goxel produce; Voxel Max objects are leaves, so a Voxel Max
-        // round-trip is unaffected.
+        // The three siblings keep their place, and the child keeps its place
+        // +1y of the node.
         assert_eq!(
             world_voxels(&reloaded),
             BTreeSet::from([
                 ([10, 0, 0], red),
                 ([10, 0, 0], green),
                 ([10, 0, 0], blue),
-                ([11, 2, 0], red),
+                ([10, 1, 0], red),
             ])
         );
     }

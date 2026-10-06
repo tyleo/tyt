@@ -693,8 +693,9 @@ fn build_hierarchy(
             transform: group_transform(group).zup_to_yup(),
         });
     }
+    // Voxel Max parents only under groups: a `pid` naming an object or
+    // nothing places the node at the scene root.
     for (index, object) in scene.objects.iter().enumerate() {
-        node_index_of_id.insert(&object.id, nodes.len());
         parents.push(object.parent_id.as_deref());
         nodes.push(VoxHierarchyNode {
             name: object.name.clone(),
@@ -1071,5 +1072,32 @@ mod tests {
         let contents = written.contents_files.values().next().unwrap();
         assert_eq!(contents.v, SNAPSHOT_CONTENTS_VERSION);
         assert!(contents.chunks.is_empty() && !contents.snapshots.is_empty());
+    }
+
+    /// Voxel Max parents only under groups, so an object whose `pid` names
+    /// another object loads at the scene root, as Voxel Max places it.
+    #[test]
+    fn an_object_parented_to_an_object_loads_at_the_root() {
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                flat: None,
+            },
+            &[VMaxVoxel {
+                position: [0, 0, 0],
+                material_idx: 0,
+                color_idx: 1,
+            }],
+        );
+        let mut child = file.scene_json_file.objects[0].clone();
+        child.id = "child".to_owned();
+        child.parent_id = Some("o".to_owned());
+        file.scene_json_file.objects.push(child);
+
+        let main = from_vmax_file(&file).expect("an object-parented object loads");
+
+        assert_eq!(main.root_hierarchy_node_ids().len(), 2);
     }
 }
