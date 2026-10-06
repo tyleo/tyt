@@ -1,8 +1,8 @@
 use crate::{
-    ABSORPTION, Error, ObjectPlacement, PALETTE_COLORS, Result, SHADOWS, SYNTH_CAMERA,
-    SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState,
-    VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle, encode_axis_angle,
-    pbr_factor_to_vm_coefficient, place_object, tighten,
+    ABSORPTION, Error, MATERIAL_SLOTS, ObjectPlacement, PALETTE_COLORS, Result, SHADOWS,
+    SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode,
+    VMaxExtObjectState, VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle,
+    encode_axis_angle, pbr_factor_to_vm_coefficient, place_object, tighten,
 };
 use branded_id::{IdRange, U32Id};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -32,12 +32,6 @@ const DEFAULT_ROUGHNESS: f64 = 0.9;
 /// Voxel Max read the package directory as a file and abort, so a colorless
 /// object shares the first color palette's name and writes no file of its own.
 const FALLBACK_PALETTE: &str = "palette1.png";
-
-/// The material slots every Voxel Max palette carries. A color cell's material
-/// is a bit in the settings `lc` byte, so at most 8 (0..=7) fit; the sidecar
-/// always lists exactly this many, real materials in the low slots and the rest
-/// padded with the neutral default.
-const MATERIAL_SLOTS: usize = 8;
 
 /// The extent order every written object takes: Voxel Max's object grid of
 /// 512 voxels on a side, whose default work area shows the whole grid.

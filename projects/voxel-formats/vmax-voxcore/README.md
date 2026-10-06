@@ -25,8 +25,14 @@ state with no native voxcore home as its ext.
   The hierarchy becomes a tree first. A node placed along several paths is
   cloned per extra path. A node no root reaches is released. Voxel Max
   objects are leaves, so a node placing both objects and child nodes moves
-  its objects onto a child node of their own and writes as a group.
-  `take_ext` on the `VMaxVoxMain` takes the ext back off.
+  its objects onto a child node of their own and writes as a group. A shared
+  palette needing more than Voxel Max's 8 material slots splits into one
+  palette per set of materials an object samples, unless a split would drop
+  an unsampled material. Each palette's material properties are then laid out
+  one value per slot, one slot per distinct set of values, unless they
+  already are. Every material keeps its values, and a material whose black
+  `emissiveColor` glows nowhere takes a slot at strength 0. `take_ext` on the
+  `VMaxVoxMain` takes the ext back off.
 - `VMaxWriteOptions`: the writer's options. `Default` stores palette colors
   as PNG and keeps the ext's camera. `VMaxColorFormat` picks where each
   palette's colors are stored. `SceneCameraSource` picks the scene camera the
