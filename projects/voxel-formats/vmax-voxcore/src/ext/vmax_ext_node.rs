@@ -1,5 +1,6 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use vmax::VMaxObject;
 
 /// Per-node Voxel Max provenance preserved in the `vmax` ext: the
 /// `scene.json` node fields the voxcore hierarchy does not represent.
@@ -51,4 +52,19 @@ pub struct VMaxExtNode {
         serde(rename = "h", default, skip_serializing_if = "Option::is_none")
     )]
     pub hidden: Option<bool>,
+
+    /// The scene object of the external mesh the node places, as the file
+    /// lists it: an object whose `data` names a SceneKit archive
+    /// (`*.scndata`) rather than voxels. voxcore models no mesh, so the node
+    /// places nothing, and the write emits this object with the node's name,
+    /// transform, and parent and the fields above.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "external-mesh",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )
+    )]
+    pub external_mesh: Option<VMaxObject>,
 }

@@ -19,7 +19,12 @@ state with no native voxcore home as its ext.
   hold one value per color cell.
   Every other property holds one value per material slot. A material pairs
   one cell with one slot. The writer converts nothing. An object with a
-  second layer, or a palette off the layout, errors where it departs.
+  second layer, or a palette off the layout, errors where it departs. An
+  external mesh, an object whose contents is a SceneKit archive
+  (`*.scndata`) rather than voxels, loads as a node placing nothing. The ext
+  keeps its object and every package file the scene does not model, such as
+  the mesh archives and their textures, and the writer puts them back as
+  stored. A conversion to another format leaves them out.
 - `to_vmax_vox_main`: a bare `VoxMain<()>` to a `VMaxVoxMain` with a
   synthesized ext, which writes as a document synthesized from the scene.
   The hierarchy becomes a tree first. A node placed along several paths is

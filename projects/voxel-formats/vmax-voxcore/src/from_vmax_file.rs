@@ -34,10 +34,14 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// voxcore's Y-up axes. The rest of the Voxel Max state becomes the ext. Voxel
 /// snapshots are decoded to voxels on the fly and palette color tables unpacked
 /// as needed. Color indices are 1-based in Voxel Max, so a voxel's color cell
-/// is `color_idx - 1`. The material byte is 0-based and used directly.
+/// is `color_idx - 1`. The material byte is 0-based and used directly. An
+/// external mesh, an object whose contents is a SceneKit archive rather than
+/// voxels, places nothing in voxcore: its node keeps the mesh in the ext, and
+/// the package's unmodeled files ride in the ext as stored, so the write puts
+/// both back.
 ///
-/// Errors on malformed geometry or on a cross-reference the checked insertions
-/// reject.
+/// Errors on malformed geometry, on an object whose contents file the package
+/// lacks, or on a cross-reference the checked insertions reject.
 pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut main = VoxMain::default();
@@ -49,9 +53,20 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     // collapse to a single object placed by several nodes.
     let mut object_transforms: Vec<TyTransformF64> = Vec::new();
     let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>)> = Vec::new();
-    let mut object_ids: Vec<U32Id<BVoxObject>> = Vec::new();
+    let mut object_ids: Vec<Option<U32Id<BVoxObject>>> = Vec::new();
     let mut instances: HashMap<InstanceKey, U32Id<BVoxObject>> = HashMap::new();
     for object in &scene.objects {
+        if is_external_mesh(object) {
+            if !serde.other_files.contains_key(&object.data) {
+                return Err(Error::invalid(format!(
+                    "object `{}` names external mesh `{}`, which the package does not hold",
+                    object.name, object.data
+                )));
+            }
+            object_transforms.push(mesh_transform(object).zup_to_yup());
+            object_ids.push(None);
+            continue;
+        }
         let key = InstanceKey::of(object);
         if let Some(&existing) = key.as_ref().and_then(|key| instances.get(key)) {
             // An instance shares the geometry it re-places, so it re-derives
@@ -59,7 +74,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
             let box_min = authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min);
             let origin = pivot_origin(box_min, object.center);
             object_transforms.push(object_transform(object, box_min, origin).zup_to_yup());
-            object_ids.push(existing);
+            object_ids.push(Some(existing));
             continue;
         }
         // The object and its placing transform turn together, so the node
@@ -69,7 +84,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
         let object_id = main.retain_object(vox_object.zup_to_yup())?;
         object_data.push((object_id, data));
         object_transforms.push(transform.zup_to_yup());
-        object_ids.push(object_id);
+        object_ids.push(Some(object_id));
         if let Some(key) = key {
             instances.insert(key, object_id);
         }
@@ -181,13 +196,6 @@ fn build_object(
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
     } else {
-        if object.data.ends_with(".scndata") {
-            return Err(Error::invalid(format!(
-                "object `{}` is an external mesh in `{}`, a SceneKit archive rather than \
-                 voxels, which this crate does not read",
-                object.name, object.data
-            )));
-        }
         let contents = serde.contents_files.get(&object.data).ok_or_else(|| {
             Error::invalid(format!(
                 "object `{}` names contents file `{}`, which the package does not hold",
@@ -668,13 +676,14 @@ fn vmax_ext_material(material: &VMaxMaterial) -> VMaxExtMaterial {
 
 /// Builds the voxcore hierarchy: one node per group then one per object, the
 /// latter placing its geometry. `object_ids[i]` is the object that scene object
-/// `i` places, so instances share a `child_objects` id. `object_transforms`
-/// already sit on Y-up axes. Group transforms turn here. Returns the nodes in
-/// id order and the root ids.
+/// `i` places, so instances share a `child_objects` id, or `None` for an
+/// external mesh, whose node places nothing. `object_transforms` already sit
+/// on Y-up axes. Group transforms turn here. Returns the nodes in id order and
+/// the root ids.
 fn build_hierarchy(
     scene: &VMaxSceneJsonFile,
     object_transforms: &[TyTransformF64],
-    object_ids: &[U32Id<BVoxObject>],
+    object_ids: &[Option<U32Id<BVoxObject>>],
 ) -> (Vec<VoxHierarchyNode>, Vec<U32Id<BVoxHierarchyNode>>) {
     let mut nodes: Vec<VoxHierarchyNode> = Vec::new();
     let mut node_index_of_id: HashMap<&str, usize> = HashMap::new();
@@ -697,7 +706,7 @@ fn build_hierarchy(
         nodes.push(VoxHierarchyNode {
             name: object.name.clone(),
             child_node_ids: Vec::new(),
-            child_object_ids: vec![object_ids[index]],
+            child_object_ids: object_ids[index].into_iter().collect(),
             transform: object_transforms[index],
         });
     }
@@ -712,6 +721,22 @@ fn build_hierarchy(
     }
 
     (nodes, roots)
+}
+
+/// Whether `object` is an external mesh: its `data` names a SceneKit archive
+/// (`*.scndata`) rather than voxels.
+fn is_external_mesh(object: &VMaxObject) -> bool {
+    object.data.ends_with(".scndata")
+}
+
+/// The transform for an external mesh's node: its `T(t_p) * R * S`, under
+/// which Voxel Max renders each vertex offset by the content center `e_c`.
+fn mesh_transform(object: &VMaxObject) -> TyTransformF64 {
+    TyTransformF64::new(
+        TyVector3F64::from_array(object.position),
+        decode_axis_angle(object.rotation),
+        TyVector3F64::from_array(object.scale),
+    )
 }
 
 /// The transform for a scene group, placed directly at its authored position.
@@ -754,6 +779,7 @@ fn vmax_ext_from_file(
         hierarchy_nodes,
         palettes,
         object_states: BTreeMap::new(),
+        other_files: serde.other_files.clone(),
     };
 
     for (object_id, data) in object_data {
@@ -783,7 +809,8 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VMaxExtObjectStat
 }
 
 /// The per-node provenance for a scene object. The hierarchy carries the
-/// parent. The write derives the content box from the object's tight bounds.
+/// parent. The write derives the content box from the object's tight bounds,
+/// and an external mesh keeps its object, content box and all.
 fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
     VMaxExtNode {
         id: object.id.clone(),
@@ -794,6 +821,7 @@ fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
         pivot_align: object.t_pa.clone(),
         selected: object.s,
         hidden: object.hidden,
+        external_mesh: is_external_mesh(object).then(|| object.clone()),
     }
 }
 
@@ -809,6 +837,7 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
         pivot_align: group.t_pa.clone(),
         selected: group.s,
         hidden: group.hidden,
+        external_mesh: None,
     }
 }
 

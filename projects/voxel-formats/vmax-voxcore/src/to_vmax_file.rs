@@ -51,9 +51,11 @@ const ROTATION_TOLERANCE: f64 = 1e-9;
 /// write in listing order, children before parents when the listing has them
 /// so, as Voxel Max's documents do. Every object and node transform turns back
 /// onto Voxel Max's Z-up axes. Each object's one palette is read unconverted in
-/// Voxel Max's layout, the one the loader builds. Errors when an entity has no
-/// ext entry, when an object has other than one layer, or when a palette
-/// departs from the layout.
+/// Voxel Max's layout, the one the loader builds. A node keeping an external
+/// mesh writes as that mesh's object, and the files the ext keeps write back
+/// as stored. Errors when an entity has no ext entry, when an object has other
+/// than one layer, when a palette departs from the layout, or when an external
+/// mesh's node also places objects or child nodes.
 pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
     let placements = ext_placements(main)?;
 
@@ -88,6 +90,18 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         let ext_node = placement.ext;
         let transform = node.transform.yup_to_zup();
         let rotation = node_rotation(ext_node, &transform);
+
+        if let Some(mesh) = &ext_node.external_mesh {
+            if !node.child_object_ids.is_empty() || !node.child_node_ids.is_empty() {
+                return Err(Error::invalid(format!(
+                    "node \"{}\" places the external mesh `{}`, so it cannot also place \
+                     objects or child nodes",
+                    node.name, mesh.data
+                )));
+            }
+            objects.push(mesh_from_node(placement, &transform, rotation, mesh));
+            continue;
+        }
 
         if node.child_object_ids.is_empty() {
             let (center, half) = subtree_box_local(main, placement.node_id, &mut box_memo);
@@ -202,7 +216,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         thumbnail_png: None,
         contents_vmax_pngs: BTreeMap::new(),
         group_pngs: BTreeMap::new(),
-        other_files: BTreeMap::new(),
+        other_files: main.ext().other_files.clone(),
     })
 }
 
@@ -290,12 +304,13 @@ fn node_rotation(ext_node: &VMaxExtNode, transform: &TyTransformF64) -> [f64; 4]
 /// The bounding box `(center, half)` of all geometry under `node_id`, in that
 /// node's local frame on Voxel Max's Z-up axes: the union of each child
 /// object's content box and each child node's box mapped through the child's
-/// transform on those axes. Voxel Max stores this per group as
-/// `e_c`/`e_mi`/`e_ma`; it is the union of the subtree, so it is derived here
-/// rather than kept in the ext. Memoized by node id so a subtree shared across
-/// parents is walked once. A node with no geometry collapses to a zero box.
-fn subtree_box_local<T: VoxExt>(
-    main: &VoxMain<T>,
+/// transform on those axes, and an external mesh's content box. Voxel Max
+/// stores this per group as `e_c`/`e_mi`/`e_ma`; it is the union of the
+/// subtree, so it is derived here rather than kept in the ext. Memoized by
+/// node id so a subtree shared across parents is walked once. A node with no
+/// geometry collapses to a zero box.
+fn subtree_box_local(
+    main: &VMaxVoxMain,
     node_id: U32Id<BVoxHierarchyNode>,
     memo: &mut HashMap<U32Id<BVoxHierarchyNode>, ([f64; 3], [f64; 3])>,
 ) -> ([f64; 3], [f64; 3]) {
@@ -306,6 +321,15 @@ fn subtree_box_local<T: VoxExt>(
         .hierarchy_node(node_id)
         .expect("a valid hierarchy node");
     let mut bounds: Option<([f64; 3], [f64; 3])> = None;
+    if let Some(mesh) = main
+        .ext()
+        .hierarchy_nodes
+        .get(&node_id)
+        .and_then(|ext_node| ext_node.external_mesh.as_ref())
+    {
+        let (center, half) = mesh_box_local(mesh);
+        extend_bounds(&mut bounds, center, half);
+    }
     for &object_id in &node.child_object_ids {
         let (center, half) = object_box_local(main, object_id);
         extend_bounds(&mut bounds, center, half);
@@ -357,6 +381,20 @@ fn object_box_local<T: VoxExt>(
         TyBoundsF64::from_min_size(tight.origin().as_dvec3(), bounds.as_dvec3())
     };
     (box_local.center.to_array(), box_local.extents.to_array())
+}
+
+/// An external mesh's content box `(center, half)` in its node's local frame
+/// on Voxel Max's Z-up axes: the `e_mi`..`e_ma` box about its content center
+/// `e_c`, about which Voxel Max renders the mesh's vertices. A mesh with no
+/// recorded box frames its center alone.
+fn mesh_box_local(mesh: &VMaxObject) -> ([f64; 3], [f64; 3]) {
+    let center = TyVector3F64::from_array(mesh.center);
+    let min = TyVector3F64::from_array(mesh.bounds_min.unwrap_or([0.0; 3]));
+    let max = TyVector3F64::from_array(mesh.bounds_max.unwrap_or([0.0; 3]));
+    (
+        (center + (min + max) / 2.0).to_array(),
+        ((max - min) / 2.0).to_array(),
+    )
 }
 
 /// Grows the running `(min, max)` AABB to include the box centered at `center`
@@ -425,6 +463,33 @@ fn group_from_node(
         e_cmv: None,
         e_vc: None,
         e_vm: None,
+    }
+}
+
+/// The scene object a node keeping an external mesh writes: the mesh's object
+/// as the ext keeps it, with the node's name, transform, and parent and the
+/// ext's node fields. `transform` places the node on Voxel Max's Z-up axes.
+fn mesh_from_node(
+    placement: &Placement<'_>,
+    transform: &TyTransformF64,
+    rotation: [f64; 4],
+    mesh: &VMaxObject,
+) -> VMaxObject {
+    let ext_node = placement.ext;
+    VMaxObject {
+        name: placement.node.name.clone(),
+        id: ext_node.id.clone(),
+        parent_id: placement.parent_id.clone(),
+        hidden: ext_node.hidden,
+        position: transform.position.to_array(),
+        rotation,
+        scale: transform.scale.to_array(),
+        ind: ext_node.index,
+        s: ext_node.selected,
+        t_al: ext_node.alignment.clone(),
+        t_pa: ext_node.pivot_align.clone(),
+        t_pf: ext_node.pivot_face.clone(),
+        ..mesh.clone()
     }
 }
 
@@ -1373,8 +1438,8 @@ mod tests {
     use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
-        VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera,
-        VMaxSceneJsonFile,
+        VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile,
+        VMaxSceneCamera, VMaxSceneJsonFile,
         snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
     };
     use voxcore::{
@@ -1726,6 +1791,7 @@ mod tests {
                 pivot_align: "4".to_owned(),
                 selected: None,
                 hidden: None,
+                external_mesh: None,
             }
         );
         assert_eq!(ext.object_states.len(), 2);
@@ -2072,6 +2138,86 @@ mod tests {
 
         let scene = &rebuilt.scene_json_file;
         assert_eq!((scene.ao, scene.ag, scene.vl), (Some(0), None, None));
+    }
+
+    /// The sample with an external mesh beside its object under the group,
+    /// and the mesh's archive, a texture, and an animation file the package
+    /// also holds. The mesh's content box reaches past the object's, so the
+    /// group's derived box spans both.
+    fn sample_with_mesh() -> VMaxFile {
+        let mut file = sample();
+        let mut mesh = file.scene_json_file.objects[0].clone();
+        mesh.name = "mesh".to_owned();
+        mesh.id = "m".to_owned();
+        mesh.data = "contents2.scndata".to_owned();
+        mesh.history = "history2.vmaxhb".to_owned();
+        mesh.ind = [0, 0, 2];
+        mesh.position = [0.5, 0.0, 0.0];
+        mesh.center = [1.0, 1.0, 3.0];
+        mesh.e_vc = Some(0);
+        file.scene_json_file.objects.push(mesh);
+        let group = &mut file.scene_json_file.groups[0];
+        group.center = [1.25, 1.0, 2.0];
+        group.bounds_min = Some([-1.25, -1.0, -2.0]);
+        group.bounds_max = Some([1.25, 1.0, 2.0]);
+        for (name, bytes) in [
+            ("contents2.scndata", &b"bvx2 mesh archive"[..]),
+            ("5A230798-EE6E-4F5E-AD20-46554C42E60E.vxtex", b"texture"),
+            ("animations.vmaxa", b"{}"),
+        ] {
+            file.other_files
+                .insert(name.to_owned(), VMaxOpaqueFile(bytes.to_vec()));
+        }
+        file
+    }
+
+    /// An external mesh loads as a node placing nothing, since voxcore models
+    /// no mesh, and writes back as its object with the package's other files
+    /// as stored.
+    #[test]
+    fn keeps_an_external_mesh_and_the_other_files() {
+        let original = sample_with_mesh();
+
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+
+        assert_eq!(main.iter_objects().count(), 1);
+        assert_eq!(rebuilt, original);
+    }
+
+    /// An external mesh whose archive the package lacks errors with the
+    /// object and the file.
+    #[test]
+    fn an_external_mesh_missing_its_archive_errors() {
+        let mut file = sample_with_mesh();
+        file.other_files.remove("contents2.scndata");
+
+        let error = from_vmax_file(&file).unwrap_err();
+
+        assert!(error.to_string().contains("contents2.scndata"), "{error}");
+    }
+
+    /// A Voxel Max object is a leaf, so a write errors once an external mesh's
+    /// node also places a child node.
+    #[test]
+    fn an_external_mesh_placing_a_child_errors() {
+        let mut main = from_vmax_file(&sample_with_mesh()).unwrap();
+        let mesh_id = main
+            .ext()
+            .hierarchy_nodes
+            .iter()
+            .find(|(_, ext_node)| ext_node.external_mesh.is_some())
+            .map(|(&node_id, _)| node_id)
+            .unwrap();
+        let child_id = main
+            .retain_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        main.set_hierarchy_node_children(mesh_id, vec![child_id], Vec::new())
+            .unwrap();
+
+        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+
+        assert!(error.to_string().contains("external mesh"), "{error}");
     }
 
     /// A document written back through a bare state, its ext dropped, reads
