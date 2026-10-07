@@ -31,7 +31,9 @@ pub fn write_primitive(
         .enumerate()
         .flat_map(|(quad, &face)| {
             geometry.indices[face * 6..face * 6 + 6]
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .map(move |corners| MeshTriangle {
                     vertex_ids: [0, 1, 2].map(|corner| {
                         let index = corners[corner] as usize - face * 4 + quad * 4;

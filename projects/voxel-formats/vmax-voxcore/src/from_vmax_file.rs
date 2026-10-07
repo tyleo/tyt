@@ -618,11 +618,7 @@ fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<[u8; 4]> {
             && !palette.colors.is_empty()
         {
             // The sidecar stores colors packed (4 bytes per cell); unpack them.
-            return palette
-                .colors
-                .chunks_exact(4)
-                .map(|c| [c[0], c[1], c[2], c[3]])
-                .collect();
+            return palette.colors.as_chunks::<4>().0.to_vec();
         }
     }
     (0..PALETTE_COLORS).map(|_| PLACEHOLDER_COLOR).collect()

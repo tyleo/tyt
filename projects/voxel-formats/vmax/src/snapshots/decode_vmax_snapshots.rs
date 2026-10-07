@@ -37,8 +37,7 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSnapshot]) -> Result<Vec<VMaxVoxel
             }
         };
 
-        for (slot, pair) in storage.ds.chunks_exact(2).enumerate() {
-            let (material, color) = (pair[0], pair[1]);
+        for (slot, &[material, color]) in storage.ds.as_chunks::<2>().0.iter().enumerate() {
             if color == 0 {
                 continue;
             }

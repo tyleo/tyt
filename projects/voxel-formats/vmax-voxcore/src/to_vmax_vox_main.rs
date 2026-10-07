@@ -1393,9 +1393,9 @@ mod tests {
         // The plist colors are 0-based: red first, blue last.
         let colors: Vec<[u8; 4]> = file.palette_settings_files["palette1.settings.vmaxpsb"]
             .colors
-            .chunks_exact(4)
-            .map(|c| [c[0], c[1], c[2], c[3]])
-            .collect();
+            .as_chunks::<4>()
+            .0
+            .to_vec();
         assert_eq!(colors.len(), 255);
         assert_eq!(colors[0], [0xFF, 0, 0, 0xFF]);
         assert_eq!(colors[254], [0, 0, 0xFF, 0xFF]);

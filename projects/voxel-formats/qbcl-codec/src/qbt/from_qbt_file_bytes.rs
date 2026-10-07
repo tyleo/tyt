@@ -143,7 +143,9 @@ fn read_voxels<D: DecompressZlib>(
         )));
     }
     Ok(raw
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|cell| QbtVoxel {
             r: cell[0],
             g: cell[1],

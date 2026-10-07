@@ -211,8 +211,7 @@ fn rle_decode(rle: &[u32]) -> Result<Vec<u32>> {
         )));
     }
     let mut out = Vec::new();
-    for pair in rle.chunks_exact(2) {
-        let (value, count) = (pair[0], pair[1]);
+    for &[value, count] in rle.as_chunks::<2>().0 {
         if count == 0 {
             return Err(invalid_data(format!(
                 "rle sample channel has a zero count for value {value}"
