@@ -4,7 +4,10 @@ use crate::{
     decode_axis_angle, synthesized_object_state, vm_coefficient_to_pbr_factor,
 };
 use branded_id::{IteratorExt, U32Id};
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    array::from_fn,
+    collections::{BTreeMap, HashMap},
+};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
@@ -52,7 +55,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     // One voxcore object per distinct geometry; instances of one geometry
     // collapse to a single object placed by several nodes.
     let mut object_transforms: Vec<TyTransformF64> = Vec::new();
-    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>)> = Vec::new();
+    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])> = Vec::new();
     let mut object_ids: Vec<Option<U32Id<BVoxObject>>> = Vec::new();
     let mut instances: HashMap<InstanceKey, U32Id<BVoxObject>> = HashMap::new();
     for object in &scene.objects {
@@ -79,10 +82,10 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
         }
         // The object and its placing transform turn together, so the node
         // stays on the object's content center.
-        let (vox_object, data, transform) =
+        let (vox_object, data, transform, camera_reference_center) =
             build_object(serde, object, &mut main, &mut palette_provenance)?;
         let object_id = main.retain_object(vox_object.zup_to_yup())?;
-        object_data.push((object_id, data));
+        object_data.push((object_id, data, camera_reference_center));
         object_transforms.push(transform.zup_to_yup());
         object_ids.push(Some(object_id));
         if let Some(key) = key {
@@ -191,7 +194,7 @@ fn build_object(
     object: &VMaxObject,
     main: &mut VoxMain<()>,
     palette_provenance: &mut BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
-) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
+) -> Result<(VoxObject, Option<String>, TyTransformF64, [f64; 3])> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
@@ -238,6 +241,7 @@ fn build_object(
             )
         }),
     };
+    let camera_reference_center = from_fn(|axis| box_min[axis] as f64 + bounds[axis] as f64 / 2.0);
     let origin = pivot_origin(box_min, object.center);
     let transform = object_transform(object, box_min, origin);
     // The build volume is the author's `tools.vp`; its `origin` offsets it from
@@ -269,7 +273,7 @@ fn build_object(
     ));
 
     if voxels.is_empty() {
-        return Ok((vox_object, data, transform));
+        return Ok((vox_object, data, transform, camera_reference_center));
     }
 
     // One palette carries the color table and the material list: each voxel
@@ -306,7 +310,7 @@ fn build_object(
             })?;
     }
 
-    Ok((vox_object, data, transform))
+    Ok((vox_object, data, transform, camera_reference_center))
 }
 
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.
@@ -748,15 +752,14 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 ///
 /// 1. `node_ids`: the hierarchy node ids in scene order, groups then objects
 /// 2. `palettes`: each object palette's provenance by palette id
-/// 3. `object_data`: each object's contents filename by object id, or `None`
-///    for an object with no contents file, which takes a synthesized editor
-///    state
+/// 3. `object_data`: each object's contents filename and live content center
+///    in its source grid, by object id. No filename takes a synthesized state.
 fn vmax_ext_from_file(
     serde: &VMaxFile,
     main: &VoxMain<()>,
     node_ids: &[U32Id<BVoxHierarchyNode>],
     palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
-    object_data: Vec<(U32Id<BVoxObject>, Option<String>)>,
+    object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])>,
 ) -> VMaxExt {
     let scene = &serde.scene_json_file;
     let mut scene_block = scene.clone();
@@ -778,9 +781,9 @@ fn vmax_ext_from_file(
         other_files: serde.other_files.clone(),
     };
 
-    for (object_id, data) in object_data {
+    for (object_id, data, camera_reference_center) in object_data {
         let entry = match data.and_then(|data| serde.contents_files.get(&data)) {
-            Some(contents) => object_state_from_contents(contents),
+            Some(contents) => object_state_from_contents(contents, camera_reference_center),
 
             None => {
                 let object = main.object(object_id).expect("a loaded object is live");
@@ -794,13 +797,18 @@ fn vmax_ext_from_file(
 }
 
 /// Captures the state of a contents file the ext keeps: its version and its
-/// camera. The editor state is skipped, and the work area is held natively as
-/// the object's grid.
-fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VMaxExtObjectState {
+/// camera frame and supported extent. Editor tool state is skipped, and the
+/// work area's margins are held natively as the object's grid.
+fn object_state_from_contents(
+    data: &VMaxContentsVmaxbFile,
+    camera_reference_center: [f64; 3],
+) -> VMaxExtObjectState {
     VMaxExtObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
         cam: data.cam.clone(),
+        extent_order: Some(data.eo.filter(|order| (5..=9).contains(order)).unwrap_or(8)),
+        camera_reference_center: Some(camera_reference_center),
     }
 }
 

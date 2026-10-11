@@ -5,8 +5,8 @@
 //! The state is a [`VMaxVoxMain`], a [`VoxMain`](voxcore::VoxMain) carrying a
 //! [`VMaxExt`] with the Voxel Max state that has no native voxcore home.
 //! [`from_vmax_file()`] loads a [`VMaxFile`](vmax::VMaxFile) into one and
-//! [`to_vmax_file()`] writes one back, exactly for a loaded document, with
-//! [`VMaxWriteOptions`] picking the color format and the scene camera.
+//! [`to_vmax_file()`] writes one back with equivalent world-space geometry,
+//! with [`VMaxWriteOptions`] picking colors, the scene camera and object sizes.
 //! [`to_vmax_vox_main()`] gives a bare `VoxMain<()>` a synthesized ext, and
 //! `take_ext` takes the ext back off. The ext keys an entry per entity by id
 //! and follows the state through voxcore's [`VoxExt`](voxcore::VoxExt) hooks.
@@ -25,6 +25,7 @@ mod scene_camera_source;
 mod to_vmax_file;
 mod to_vmax_vox_main;
 mod vmax_color_format;
+mod vmax_object_size;
 mod vmax_vox_main;
 mod vmax_write_options;
 
@@ -36,6 +37,7 @@ pub use scene_camera_source::*;
 pub use to_vmax_file::*;
 pub use to_vmax_vox_main::*;
 pub use vmax_color_format::*;
+pub use vmax_object_size::*;
 pub use vmax_vox_main::*;
 pub use vmax_write_options::*;
 

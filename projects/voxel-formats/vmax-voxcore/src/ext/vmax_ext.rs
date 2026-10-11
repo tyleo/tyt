@@ -237,9 +237,18 @@ impl VMaxExt {
         let object = state.object(object_id).expect("a regridded object is live");
         let (_, placement) = place_object(object);
         let old_center = content_center(old_bounds, old_voxel_ids);
-        for ((target, center), old_center) in cam.o.iter_mut().zip(placement.center).zip(old_center)
+        for (axis, ((target, center), old_center)) in cam
+            .o
+            .iter_mut()
+            .zip(placement.center)
+            .zip(old_center)
+            .enumerate()
         {
-            *target += center - old_center;
+            let delta = center - old_center;
+            *target += delta;
+            if let Some(reference) = &mut object_state.camera_reference_center {
+                reference[axis] += delta;
+            }
         }
         Ok(())
     }

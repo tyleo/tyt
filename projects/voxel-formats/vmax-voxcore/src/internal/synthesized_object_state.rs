@@ -22,6 +22,8 @@ pub fn synthesized_object_state(ext: &VMaxExt, object: &VoxObject) -> VMaxExtObj
         uuid,
         v: FALLBACK_CONTENT_VERSION,
         cam: Some(default_camera(placement.center)),
+        extent_order: None,
+        camera_reference_center: Some(placement.center),
     }
 }
 
