@@ -20,7 +20,8 @@ pub struct VMaxExtObjectState {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cam: Option<VMaxCamera>,
 
-    /// The supported cube order captured from a loaded contents file.
+    /// The editor cube order captured from a loaded viewport, or its storage
+    /// extent when no viewport is present.
     /// Absent for a synthesized object; automatic export then starts at 256.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub extent_order: Option<i64>,

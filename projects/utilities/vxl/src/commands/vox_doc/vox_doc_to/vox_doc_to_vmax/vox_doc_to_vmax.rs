@@ -23,6 +23,9 @@ const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     py: 0.0,
     wa: 0.25,
     z: 512.0,
+    aq: None,
+    op: None,
+    zf: None,
 };
 
 /// Converts a voxel file to the Voxel Max format.

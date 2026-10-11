@@ -807,9 +807,28 @@ fn object_state_from_contents(
         uuid: data.uuid.clone(),
         v: data.v,
         cam: data.cam.clone(),
-        extent_order: Some(data.eo.filter(|order| (5..=9).contains(order)).unwrap_or(8)),
+        extent_order: Some(contents_workspace_order(data)),
         camera_reference_center: Some(camera_reference_center),
     }
+}
+
+/// The editor viewport takes precedence over the storage extent. Voxel Max
+/// normalizes saved storage to 512 even when the viewport is 256 or smaller.
+/// Only cube widths are written without editor tool state, so an arbitrary
+/// viewport takes the smallest supported cube containing its dimensions.
+fn contents_workspace_order(data: &VMaxContentsVmaxbFile) -> i64 {
+    if let Some(viewport) = data.tools.as_ref().and_then(|tools| tools.vp.as_ref()) {
+        let required = (0..3)
+            .map(|axis| {
+                viewport.max[axis]
+                    .saturating_sub(viewport.min[axis])
+                    .saturating_add(1)
+            })
+            .max()
+            .unwrap_or(0);
+        return (5..=9).find(|&order| required <= (1 << order)).unwrap_or(9);
+    }
+    data.eo.filter(|order| (5..=9).contains(order)).unwrap_or(8)
 }
 
 /// The per-node provenance for a scene object. The hierarchy carries the

@@ -1507,7 +1507,7 @@ mod tests {
     use vmax::{
         VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial,
         VMaxMaterialDispersion, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
-        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera, VMaxSceneJsonFile,
+        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
         snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
     };
     use voxcore::{
@@ -2100,6 +2100,77 @@ mod tests {
             [32.0, 32.0, 1.0]
         );
         assert_eq!(placed_voxels(&resized), placed_voxels(&original));
+    }
+
+    /// Voxel Max saves its 512 storage extent even for a 256 editor viewport.
+    /// Automatic export must retain the viewport rather than enlarge it.
+    #[test]
+    fn keeps_a_256_viewport_when_voxel_max_saves_512_storage() {
+        let mut original = sample();
+        let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
+        contents.eo = Some(9);
+        contents.tools = Some(VMaxTools {
+            vp: Some(VMaxViewBox {
+                min: [0; 3],
+                max: [255; 3],
+                flat: None,
+            }),
+        });
+        contents.cam = Some(VMaxCamera {
+            o: [128.0, 128.0, 1.0],
+            ..Default::default()
+        });
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        assert_eq!(rebuilt.contents_files["contents.vmaxb"].eo, Some(8));
+        assert_eq!(
+            rebuilt.scene_json_file.objects[0].center,
+            [128.0, 128.0, 1.0]
+        );
+        assert_eq!(
+            rebuilt.contents_files["contents.vmaxb"]
+                .cam
+                .as_ref()
+                .unwrap()
+                .o,
+            [128.0, 128.0, 1.0]
+        );
+        assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+    }
+
+    /// Current scene and object camera keys survive a read/write cycle,
+    /// including authoritative orientation and orthographic zoom state.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn keeps_current_voxel_max_camera_fields() {
+        let mut original = sample();
+        original.scene_json_file.cam = Some(VMaxSceneCamera {
+            aq: Some([0.0, 0.0, 0.0, 1.0]),
+            op: Some(true),
+            zf: Some(1.5),
+            ..Default::default()
+        });
+        original
+            .contents_files
+            .get_mut("contents.vmaxb")
+            .unwrap()
+            .cam = Some(VMaxCamera {
+            aq: Some([0.0, 0.0, 0.0, 1.0]),
+            op: Some(false),
+            zf: Some(1.25),
+            o: [128.0, 128.0, 1.0],
+            ..Default::default()
+        });
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(rebuilt.scene_json_file.cam, original.scene_json_file.cam);
+        assert_eq!(
+            rebuilt.contents_files["contents.vmaxb"].cam,
+            original.contents_files["contents.vmaxb"].cam
+        );
     }
 
     /// A fixed workspace centers the live voxels and camera in that cube,
