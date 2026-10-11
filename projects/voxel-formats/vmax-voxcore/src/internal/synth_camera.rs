@@ -14,4 +14,7 @@ pub const SYNTH_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     py: 0.0,
     wa: 0.0,
     z: 512.0,
+    aq: None,
+    op: None,
+    zf: None,
 };

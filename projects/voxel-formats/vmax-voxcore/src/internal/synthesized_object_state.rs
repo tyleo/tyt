@@ -52,5 +52,6 @@ fn default_camera(target: [f64; 3]) -> VMaxCamera {
         py: 0.0,
         z: 512.0,
         o: target,
+        ..Default::default()
     }
 }
