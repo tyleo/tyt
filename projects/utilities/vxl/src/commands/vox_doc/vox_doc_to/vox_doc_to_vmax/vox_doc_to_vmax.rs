@@ -6,7 +6,7 @@ use clap::Parser;
 use std::path::PathBuf;
 use voxconv::{
     WriteFormat,
-    vmax::{SceneCameraSource, VMaxColorFormat, VMaxSceneCamera, VMaxWriteOptions},
+    vmax::{SceneCameraSource, VMaxColorFormat, VMaxObjectSize, VMaxSceneCamera, VMaxWriteOptions},
 };
 
 /// The top-corner scene camera `--camera corner` writes: the empty camera's
@@ -23,6 +23,9 @@ const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     py: 0.0,
     wa: 0.25,
     z: 512.0,
+    aq: None,
+    op: None,
+    zf: None,
 };
 
 /// Converts a voxel file to the Voxel Max format.
@@ -46,6 +49,11 @@ pub struct VoxDocToVmax {
     )]
     color_format: VMaxColorFormat,
 
+    /// The editable cube width for each voxel object. A fixed size compacts
+    /// empty canvas margins; voxels and scene pivots keep their world positions.
+    #[arg(value_name = "object-size", long, default_value = "auto", value_parser = cli_value_parser::<VMaxObjectSize>())]
+    object_size: VMaxObjectSize,
+
     /// Which scene camera the rebuilt document opens with. When omitted, the
     /// input's `vmax` ext camera is kept when present, else the empty default.
     #[arg(value_name = "camera", long)]
@@ -63,6 +71,7 @@ impl VoxDocToVmax {
         let to = WriteFormat::VMax(VMaxWriteOptions {
             color_format: self.color_format,
             scene_camera: resolve_scene_camera(self.camera),
+            object_size: self.object_size,
         });
 
         let output = self.input.output_path(self.output, to.extension());

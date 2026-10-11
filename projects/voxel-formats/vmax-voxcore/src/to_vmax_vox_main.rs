@@ -1,26 +1,43 @@
 use crate::{
-    FALLBACK_CONTENT_VERSION, Result, SYNTH_CAMERA, VMaxExt, VMaxExtPalette, VMaxVoxMain,
-    synthesized_node, synthesized_object_state,
+    FALLBACK_CONTENT_VERSION, MATERIAL_SLOTS, Result, SYNTH_CAMERA, VMaxExt, VMaxExtPalette,
+    VMaxVoxMain, synthesized_node, synthesized_object_state,
 };
-use branded_id::U32Id;
-use std::collections::HashSet;
+use branded_id::{IdRange, U32Id};
+use std::collections::{HashMap, HashSet};
 use vmax::VMaxSceneJsonFile;
-use voxcore::{BVoxHierarchyNode, VoxMain};
+use voxcore::{
+    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
+    BVoxValuePool, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxPalette, VoxValueColumn,
+    VoxValuePool, VoxValuePoolValues,
+    color::ColorValues,
+    material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH},
+};
 
 /// Gives a bare state a synthesized [`VMaxExt`], the state
 /// [`to_vmax_file`](crate::to_vmax_file()) writes as a document synthesized
 /// from the scene. Voxel Max models a tree, so the hierarchy becomes one first.
 /// A node reached along several paths is cloned per extra path, the way voxcore
 /// composes a node's placement along every path to it, and a node reached from
-/// no root is released because voxcore never places it. Each node, palette, and
+/// no root is released because voxcore never places it. Voxel Max parents
+/// objects only under groups, so a node placing both objects and child nodes
+/// moves its objects onto a child node of their own. A Voxel Max palette
+/// holds every property but `baseColor` and `emissiveColor` one value per
+/// material slot, so a palette holding them otherwise, such as one that pools
+/// each property's distinct values apart, is laid out in slots next. A
+/// palette several objects share that needs more slots than a Voxel Max
+/// palette holds splits first into one palette per set of materials an object
+/// samples. Every material keeps the values it draws. Each node, palette, and
 /// object then takes the entry the retain hooks would build for it: fresh ids,
 /// the node's rotation, the default anchor tokens, no exact material list, and
-/// the default editor session. The scene takes the fallback version and the
+/// a camera framed on the object. The scene takes the fallback version and the
 /// neutral camera.
 ///
 /// Lossy only on the material palette name, which stays empty.
 pub fn to_vmax_vox_main(mut main: VoxMain<()>) -> Result<VMaxVoxMain> {
     unshare(&mut main)?;
+    group_objects_beside_nodes(&mut main)?;
+    split_crowded_palettes(&mut main)?;
+    lay_out_material_slots(&mut main)?;
 
     let mut ext = VMaxExt {
         scene: VMaxSceneJsonFile {
@@ -117,26 +134,610 @@ fn visit(
     Ok(clone_id)
 }
 
+/// Gives each node placing both objects and child nodes a first child node
+/// placing its objects. The writer writes a node placing objects as those
+/// objects, and Voxel Max parents an object only under a group, so the node's
+/// child nodes would otherwise name an object as their parent. The new node
+/// takes the node's name and the identity transform, so every object keeps its
+/// placement.
+fn group_objects_beside_nodes(main: &mut VoxMain<()>) -> Result<()> {
+    let mixed_ids: Vec<_> = main
+        .iter_hierarchy_nodes()
+        .filter(|(_, node)| !node.child_object_ids.is_empty() && !node.child_node_ids.is_empty())
+        .map(|(node_id, _)| node_id)
+        .collect();
+
+    for node_id in mixed_ids {
+        let node = main.hierarchy_node(node_id).expect("a listed node").clone();
+        let objects_id = main.retain_hierarchy_node(VoxHierarchyNode {
+            name: node.name,
+            child_object_ids: node.child_object_ids,
+            ..Default::default()
+        })?;
+
+        let mut child_node_ids = vec![objects_id];
+        child_node_ids.extend(node.child_node_ids);
+        main.set_hierarchy_node_children(node_id, child_node_ids, Vec::new())?;
+    }
+
+    Ok(())
+}
+
+/// Splits each palette that several objects layer and that needs more than
+/// [`MATERIAL_SLOTS`] slots, as [`lay_out_material_slots`] counts them. A Voxel
+/// Max object reads a palette of its own, so each set of materials an object
+/// samples takes a palette, which objects sampling that same set share. The
+/// palette keeps every property and its value pool and holds those materials
+/// in their order. A palette holding a material no live voxel samples stays
+/// whole, since a split would drop that material, and errors at the write.
+fn split_crowded_palettes(main: &mut VoxMain<()>) -> Result<()> {
+    let palette_ids: Vec<_> = main
+        .iter_palettes()
+        .map(|(palette_id, _)| palette_id)
+        .collect();
+
+    for palette_id in palette_ids {
+        split_crowded_palette(main, palette_id)?;
+    }
+
+    Ok(())
+}
+
+/// Splits palette `palette_id` as [`split_crowded_palettes`] describes.
+fn split_crowded_palette(main: &mut VoxMain<()>, palette_id: U32Id<BVoxPalette>) -> Result<()> {
+    let palette = main.palette(palette_id).expect("a listed palette");
+    if slot_plan(main, palette).slot_material_ids.len() <= MATERIAL_SLOTS {
+        return Ok(());
+    }
+
+    // Each layer on the palette with the materials it samples, in palette
+    // order. Layers sampling the same materials share a split.
+    let mut splits: Vec<(Vec<U32Id<BVoxMaterial>>, Vec<_>)> = Vec::new();
+    let mut sampled_ids = HashSet::new();
+    for (object_id, object) in main.iter_objects() {
+        for (layer_id, layer_palette_id) in object.iter_layers() {
+            if layer_palette_id != palette_id {
+                continue;
+            }
+
+            let samples: HashSet<_> = object
+                .iter_live_samples(layer_id)
+                .expect("an iterated layer is one of the object's layers")
+                .map(|(_, material_id)| material_id)
+                .collect();
+            let material_ids: Vec<_> = palette
+                .iter_materials()
+                .filter(|material_id| samples.contains(material_id))
+                .collect();
+            sampled_ids.extend(samples);
+            match splits.iter_mut().find(|(ids, _)| *ids == material_ids) {
+                Some((_, layers)) => layers.push((object_id, layer_id)),
+                None => splits.push((material_ids, vec![(object_id, layer_id)])),
+            }
+        }
+    }
+    let layer_count: usize = splits.iter().map(|(_, layers)| layers.len()).sum();
+    let whole = palette
+        .iter_materials()
+        .all(|material_id| sampled_ids.contains(&material_id));
+    if layer_count < 2 || !whole {
+        return Ok(());
+    }
+
+    let properties: Vec<_> = palette
+        .iter_properties()
+        .map(|(property_id, property)| (property_id, property.name.clone(), property.value_pool_id))
+        .collect();
+    let mut built = Vec::with_capacity(splits.len());
+    for (material_ids, layers) in splits {
+        let mut split = VoxPalette::default();
+        for (_, name, value_pool_id) in &properties {
+            split.retain_property(name.clone(), *value_pool_id)?;
+        }
+
+        let mut replacement_ids = HashMap::new();
+        for &material_id in &material_ids {
+            let value_ids = properties
+                .iter()
+                .map(|&(property_id, _, _)| {
+                    palette
+                        .value_id(material_id, property_id)
+                        .expect("a live material has a value id for every property")
+                })
+                .collect();
+            replacement_ids.insert(material_id, split.retain_material(value_ids)?);
+        }
+        built.push((split, replacement_ids, layers));
+    }
+
+    for (split, replacement_ids, layers) in built {
+        let split_id = main.retain_palette(split)?;
+        for (object_id, layer_id) in layers {
+            move_layer_to_palette(main, object_id, layer_id, split_id, &replacement_ids)?;
+        }
+    }
+
+    main.release_palette(palette_id)?;
+    Ok(())
+}
+
+/// Moves layer `layer_id` of object `object_id` onto palette `palette_id`: a
+/// layer on the palette takes its place in the layer order, and each live
+/// voxel samples the replacement for the material it sampled.
+fn move_layer_to_palette(
+    main: &mut VoxMain<()>,
+    object_id: U32Id<BVoxObject>,
+    layer_id: U32Id<BVoxLayer>,
+    palette_id: U32Id<BVoxPalette>,
+    replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
+) -> Result<()> {
+    let object = main.object(object_id).expect("a listed object");
+    let layer_ids: Vec<_> = object.iter_layers().map(|(id, _)| id).collect();
+    let index = layer_ids
+        .iter()
+        .position(|&id| id == layer_id)
+        .expect("one of the object's layers");
+    let samples: Vec<(_, Vec<_>)> = object
+        .iter_live()
+        .map(|voxel_id| {
+            let sample_ids = layer_ids
+                .iter()
+                .map(|&id| {
+                    object
+                        .voxel_material(voxel_id, id)
+                        .expect("a live voxel samples every layer")
+                })
+                .collect();
+            (voxel_id, sample_ids)
+        })
+        .collect();
+    // An object with no live voxel takes the layer unfilled, since its split
+    // holds no material to fill with.
+    let moved_id = match samples.first() {
+        Some((_, sample_ids)) => {
+            main.retain_layer_filled(object_id, palette_id, replacement_ids[&sample_ids[index]])?
+        }
+
+        None => main.retain_layer(object_id, palette_id)?,
+    };
+    for (voxel_id, mut sample_ids) in samples {
+        sample_ids.push(replacement_ids[&sample_ids[index]]);
+        main.retain_voxel(object_id, voxel_id, &sample_ids)?;
+    }
+    main.release_layer(object_id, layer_id)?;
+    main.move_layer(object_id, moved_id, index)?;
+
+    Ok(())
+}
+
+/// Lays each palette's material axis out in Voxel Max's slots, the layout
+/// [`to_vmax_file`](crate::to_vmax_file()) reads: every property but
+/// `baseColor` and `emissiveColor` holds one value per slot, numbered from
+/// zero, and each material draws one slot from all of them. A palette already
+/// in slots stays as it is. Any other palette takes one slot per distinct set
+/// of material values, numbered in the order its materials first draw them,
+/// and its properties bind anew in their order, so every material keeps the
+/// values it draws. The color axis keeps its value pools. A value pool no
+/// property binds afterwards is released. A palette needing more than
+/// [`MATERIAL_SLOTS`] slots still errors at the write.
+///
+/// Voxel Max glows a slot in each voxel's base color at the slot's
+/// `emissiveStrength`, while a voxcore material glows in its `emissiveColor`
+/// scaled by that strength. A material whose `emissiveColor` is black over a
+/// `baseColor` that is not glows nowhere at any strength, so its slot reads a
+/// strength of 0, which looks the same. A palette in slots that places such a
+/// material on a glowing slot is laid out anew.
+fn lay_out_material_slots(main: &mut VoxMain<()>) -> Result<()> {
+    let palette_ids: Vec<_> = main
+        .iter_palettes()
+        .map(|(palette_id, _)| palette_id)
+        .collect();
+
+    let mut unbound_ids = Vec::new();
+    for palette_id in palette_ids {
+        unbound_ids.extend(lay_out_palette_slots(main, palette_id)?);
+    }
+
+    for value_pool_id in unbound_ids {
+        let bound = main.iter_palettes().any(|(_, palette)| {
+            palette
+                .iter_properties()
+                .any(|(_, property)| property.value_pool_id == value_pool_id)
+        });
+        if !bound && main.value_pool(value_pool_id).is_some() {
+            main.release_value_pool(value_pool_id)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// How a palette's materials fall into Voxel Max slots under
+/// [`lay_out_material_slots`].
+struct SlotPlan {
+    /// Whether the palette already holds its material axis in these slots.
+    in_slots: bool,
+
+    /// Each slot's first material, in slot order.
+    slot_material_ids: Vec<U32Id<BVoxMaterial>>,
+
+    /// The slot each material draws, in material order.
+    slots: Vec<U32Id<BVoxValuePoolValue>>,
+
+    /// The `emissiveStrength` property when it binds scalars, with the
+    /// strength each slot glows at in Voxel Max.
+    strengths: Option<(U32Id<BVoxProperty>, Vec<f64>)>,
+}
+
+/// The `(property, value pool)` pairs of `palette`'s material axis: every
+/// property but `baseColor` and `emissiveColor`, in property order.
+fn material_axis(palette: &VoxPalette) -> Vec<(U32Id<BVoxProperty>, U32Id<BVoxValuePool>)> {
+    palette
+        .iter_properties()
+        .filter(|(_, property)| !matches!(property.name.as_str(), BASE_COLOR | EMISSIVE_COLOR))
+        .map(|(property_id, property)| (property_id, property.value_pool_id))
+        .collect()
+}
+
+/// Plans `palette`'s slots as [`lay_out_material_slots`] describes.
+fn slot_plan(main: &VoxMain<()>, palette: &VoxPalette) -> SlotPlan {
+    let material_axis = material_axis(palette);
+    let value_id = |material_id: U32Id<BVoxMaterial>, property_id: U32Id<BVoxProperty>| {
+        palette
+            .value_id(material_id, property_id)
+            .expect("a live material has a value id for every property")
+    };
+
+    let unlit_ids = unlit_material_ids(main, palette);
+    let strength = palette
+        .property_id_by_name(EMISSIVE_STRENGTH)
+        .and_then(|property_id| {
+            let property = palette.property(property_id).expect("a named property");
+            let strengths = main
+                .value_pool(property.value_pool_id)
+                .expect("a property draws from a live value pool")
+                .float_values()?;
+            Some((property_id, strengths))
+        });
+    let stored_strength = |material_id| -> Option<f64> {
+        let (property_id, strengths) = strength?;
+        let strength = strengths
+            .get(value_id(material_id, property_id))
+            .expect("a live material draws one of its property's values");
+        Some(*strength)
+    };
+    // The strength `material_id`'s slot glows at in Voxel Max.
+    let slot_strength = |material_id| -> Option<f64> {
+        let strength = stored_strength(material_id)?;
+        Some(match unlit_ids.contains(&material_id) {
+            true => 0.0,
+            false => strength,
+        })
+    };
+
+    let lit_on_slot = unlit_ids
+        .iter()
+        .any(|&material_id| stored_strength(material_id).is_some_and(|strength| strength != 0.0));
+    let strength_id = strength.map(|(property_id, _)| property_id);
+    let same_slot = |a: U32Id<BVoxMaterial>, b: U32Id<BVoxMaterial>| {
+        material_axis.iter().all(|&(property_id, value_pool_id)| {
+            if Some(property_id) == strength_id {
+                return slot_strength(a) == slot_strength(b);
+            }
+
+            same_value(
+                main.value_pool(value_pool_id)
+                    .expect("a property draws from a live value pool"),
+                value_id(a, property_id),
+                value_id(b, property_id),
+            )
+        })
+    };
+
+    let mut slot_material_ids: Vec<U32Id<BVoxMaterial>> = Vec::new();
+    let mut slots = Vec::new();
+    for material_id in palette.iter_materials() {
+        let slot = slot_material_ids
+            .iter()
+            .position(|&slot_material_id| same_slot(slot_material_id, material_id));
+        let slot = slot.unwrap_or_else(|| {
+            slot_material_ids.push(material_id);
+            slot_material_ids.len() - 1
+        });
+        slots.push(U32Id::from_u32(
+            u32::try_from(slot).expect("a slot per material fits a material id"),
+        ));
+    }
+
+    let strengths = strength_id.map(|property_id| {
+        let strengths = slot_material_ids
+            .iter()
+            .map(|&material_id| slot_strength(material_id).expect("a strength reads a scalar"))
+            .collect();
+        (property_id, strengths)
+    });
+
+    SlotPlan {
+        in_slots: in_slots(main, palette, &material_axis) && !lit_on_slot,
+        slot_material_ids,
+        slots,
+        strengths,
+    }
+}
+
+/// One property of a palette being laid out in slots: the value pool it binds
+/// next and the value id each material draws from it, in material order.
+struct SlotBinding {
+    property_id: U32Id<BVoxProperty>,
+
+    name: String,
+
+    value_pool_id: U32Id<BVoxValuePool>,
+
+    value_ids: Vec<U32Id<BVoxValuePoolValue>>,
+}
+
+/// Lays palette `palette_id` out in slots as [`lay_out_material_slots`]
+/// describes and returns the value pools its material axis bound before.
+fn lay_out_palette_slots(
+    main: &mut VoxMain<()>,
+    palette_id: U32Id<BVoxPalette>,
+) -> Result<Vec<U32Id<BVoxValuePool>>> {
+    let palette = main.palette(palette_id).expect("a listed palette");
+    let plan = slot_plan(main, palette);
+    if plan.in_slots {
+        return Ok(Vec::new());
+    }
+
+    let material_ids: Vec<_> = palette.iter_materials().collect();
+    let material_axis = material_axis(palette);
+    let value_id = |material_id: U32Id<BVoxMaterial>, property_id: U32Id<BVoxProperty>| {
+        palette
+            .value_id(material_id, property_id)
+            .expect("a live material has a value id for every property")
+    };
+
+    let mut bindings = Vec::new();
+    let mut slot_value_pools = Vec::new();
+    for (property_id, property) in palette.iter_properties() {
+        let name = property.name.clone();
+        if !material_axis.iter().any(|&(id, _)| id == property_id) {
+            let value_ids = material_ids
+                .iter()
+                .map(|&material_id| value_id(material_id, property_id))
+                .collect();
+            bindings.push(SlotBinding {
+                property_id,
+                name,
+                value_pool_id: property.value_pool_id,
+                value_ids,
+            });
+            continue;
+        }
+
+        let slot_value_pool = match &plan.strengths {
+            Some((strength_id, strengths)) if *strength_id == property_id => {
+                VoxValuePool::float(strengths.clone())?
+            }
+
+            _ => {
+                let slot_value_ids: Vec<_> = plan
+                    .slot_material_ids
+                    .iter()
+                    .map(|&material_id| value_id(material_id, property_id))
+                    .collect();
+                gathered_value_pool(
+                    main.value_pool(property.value_pool_id)
+                        .expect("a property draws from a live value pool"),
+                    &slot_value_ids,
+                )?
+            }
+        };
+        slot_value_pools.push((bindings.len(), slot_value_pool));
+        bindings.push(SlotBinding {
+            property_id,
+            name,
+            value_pool_id: property.value_pool_id,
+            value_ids: plan.slots.clone(),
+        });
+    }
+
+    let unbound_ids = material_axis
+        .iter()
+        .map(|&(_, value_pool_id)| value_pool_id)
+        .collect();
+    for (index, value_pool) in slot_value_pools {
+        bindings[index].value_pool_id = main.retain_value_pool(value_pool);
+    }
+
+    for binding in bindings {
+        main.release_property(palette_id, binding.property_id)?;
+        let property_id = match binding.value_ids.first() {
+            Some(&default_value_id) => main.retain_property_filled(
+                palette_id,
+                binding.name,
+                binding.value_pool_id,
+                default_value_id,
+            )?,
+
+            None => main.retain_property(palette_id, binding.name, binding.value_pool_id)?,
+        };
+        for (&material_id, &value_id) in material_ids.iter().zip(&binding.value_ids) {
+            main.set_material_value(palette_id, material_id, property_id, value_id)?;
+        }
+    }
+
+    Ok(unbound_ids)
+}
+
+/// The materials of `palette` that glow nowhere but would glow on a glowing
+/// Voxel Max slot: each draws a black `emissiveColor` over a `baseColor` that
+/// is not black. Empty unless the palette binds both to colors.
+fn unlit_material_ids(main: &VoxMain<()>, palette: &VoxPalette) -> HashSet<U32Id<BVoxMaterial>> {
+    let colors = |name: &str| {
+        let property_id = palette.property_id_by_name(name)?;
+        let property = palette.property(property_id).expect("a named property");
+        let colors = ColorValues::of(
+            main.value_pool(property.value_pool_id)
+                .expect("a property draws from a live value pool"),
+        )?;
+        Some((property_id, colors))
+    };
+    let (Some(emissive), Some(base)) = (colors(EMISSIVE_COLOR), colors(BASE_COLOR)) else {
+        return HashSet::new();
+    };
+    let black = |(property_id, colors): &(U32Id<BVoxProperty>, ColorValues), material_id| {
+        let value_id = palette
+            .value_id(material_id, *property_id)
+            .expect("a live material has a value id for every property");
+        let color = colors
+            .lin_srgba_f64(value_id)
+            .expect("a live material draws one of its property's values");
+        color.red == 0.0 && color.green == 0.0 && color.blue == 0.0
+    };
+
+    palette
+        .iter_materials()
+        .filter(|&material_id| black(&emissive, material_id) && !black(&base, material_id))
+        .collect()
+}
+
+/// Whether `palette`'s material axis, its `(property, value pool)` pairs,
+/// already holds one value per slot the way the writer reads it: every value
+/// pool as long as the first, numbered densely from zero and no longer than
+/// [`MATERIAL_SLOTS`], and every material drawing one value id from them all.
+fn in_slots(
+    main: &VoxMain<()>,
+    palette: &VoxPalette,
+    material_axis: &[(U32Id<BVoxProperty>, U32Id<BVoxValuePool>)],
+) -> bool {
+    let value_pool = |value_pool_id| {
+        main.value_pool(value_pool_id)
+            .expect("a property draws from a live value pool")
+    };
+    let Some(&(_, first_value_pool_id)) = material_axis.first() else {
+        return true;
+    };
+    let slot_count = value_pool(first_value_pool_id).len();
+    let dense = material_axis.iter().all(|&(_, value_pool_id)| {
+        let value_pool = value_pool(value_pool_id);
+        value_pool.len() == slot_count
+            && IdRange::from_len(slot_count).all(|value_id| value_pool.contains_value(value_id))
+    });
+
+    slot_count <= MATERIAL_SLOTS
+        && dense
+        && palette.iter_materials().all(|material_id| {
+            let mut value_ids = material_axis.iter().map(|&(property_id, _)| {
+                palette
+                    .value_id(material_id, property_id)
+                    .expect("a live material has a value id for every property")
+            });
+            let first = value_ids.next();
+            value_ids.all(|value_id| Some(value_id) == first)
+        })
+}
+
+/// Whether value ids `a` and `b` of `value_pool` hold equal values.
+fn same_value(
+    value_pool: &VoxValuePool,
+    a: U32Id<BVoxValuePoolValue>,
+    b: U32Id<BVoxValuePoolValue>,
+) -> bool {
+    fn equal<T: PartialEq>(
+        values: VoxValueColumn<'_, T>,
+        a: U32Id<BVoxValuePoolValue>,
+        b: U32Id<BVoxValuePoolValue>,
+    ) -> bool {
+        values.get(a) == values.get(b)
+    }
+
+    match value_pool.values() {
+        VoxValuePoolValues::Bool(values) => equal(values, a, b),
+        VoxValuePoolValues::Float(values) => equal(values, a, b),
+        VoxValuePoolValues::Int(values) => equal(values, a, b),
+        VoxValuePoolValues::Json(values) => equal(values, a, b),
+        VoxValuePoolValues::String(values) => equal(values, a, b),
+        VoxValuePoolValues::Vec2Float(values) => equal(values, a, b),
+        VoxValuePoolValues::Vec2Int(values) => equal(values, a, b),
+        VoxValuePoolValues::Vec3Float(values) => equal(values, a, b),
+        VoxValuePoolValues::Vec3Int(values) => equal(values, a, b),
+        VoxValuePoolValues::Vec4Float(values) => equal(values, a, b),
+        VoxValuePoolValues::Vec4Int(values) => equal(values, a, b),
+    }
+}
+
+/// A value pool of `value_pool`'s kind holding its values at `value_ids`, in
+/// that order, repeats included.
+fn gathered_value_pool(
+    value_pool: &VoxValuePool,
+    value_ids: &[U32Id<BVoxValuePoolValue>],
+) -> Result<VoxValuePool> {
+    fn gathered<T: Clone>(
+        values: VoxValueColumn<'_, T>,
+        value_ids: &[U32Id<BVoxValuePoolValue>],
+    ) -> Vec<T> {
+        value_ids
+            .iter()
+            .map(|&value_id| {
+                values
+                    .get(value_id)
+                    .expect("a material draws one of its property's values")
+                    .clone()
+            })
+            .collect()
+    }
+
+    Ok(match value_pool.values() {
+        VoxValuePoolValues::Bool(values) => VoxValuePool::boolean(gathered(values, value_ids)),
+        VoxValuePoolValues::Float(values) => VoxValuePool::float(gathered(values, value_ids))?,
+        VoxValuePoolValues::Int(values) => VoxValuePool::int(gathered(values, value_ids))?,
+        VoxValuePoolValues::Json(values) => VoxValuePool::json(gathered(values, value_ids)),
+        VoxValuePoolValues::String(values) => VoxValuePool::string(gathered(values, value_ids)),
+        VoxValuePoolValues::Vec2Float(values) => {
+            VoxValuePool::vec_2_float(gathered(values, value_ids))?
+        }
+        VoxValuePoolValues::Vec2Int(values) => {
+            VoxValuePool::vec_2_int(gathered(values, value_ids))?
+        }
+        VoxValuePoolValues::Vec3Float(values) => {
+            VoxValuePool::vec_3_float(gathered(values, value_ids))?
+        }
+        VoxValuePoolValues::Vec3Int(values) => {
+            VoxValuePool::vec_3_int(gathered(values, value_ids))?
+        }
+        VoxValuePoolValues::Vec4Float(values) => {
+            VoxValuePool::vec_4_float(gathered(values, value_ids))?
+        }
+        VoxValuePoolValues::Vec4Int(values) => {
+            VoxValuePool::vec_4_int(gathered(values, value_ids))?
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         FALLBACK_CONTENT_VERSION, SHADOWS, SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat,
-        VMaxExtPalette, VMaxWriteOptions, from_vmax_file, to_vmax_file, to_vmax_vox_main,
+        VMaxExtPalette, VMaxWriteOptions, decode_axis_angle, from_vmax_file, to_vmax_file,
+        to_vmax_vox_main,
     };
     use branded_id::{IdRange, U32Id};
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{BTreeMap, BTreeSet, HashSet};
     use ty_math::{
-        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
+        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3Ext, TyVector3F64,
+        TyVector3U32,
     };
     use vmax::{
         VMaxFile, VMaxSceneCamera,
         snapshots::{VMaxVoxel, decode_vmax_snapshots},
     };
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxVoxel, VoxEffectivePalette,
-        VoxExt, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool,
+        BVoxValuePoolValue, BVoxVoxel, VoxEffectivePalette, VoxExt, VoxHierarchyNode, VoxMain,
+        VoxObject, VoxPalette, VoxValuePool,
         color::{ColorValues, lin_srgba_f64_from_srgba_u8},
-        material::BASE_COLOR,
+        material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, METALLIC, ROUGHNESS},
     };
 
     fn options(color_format: VMaxColorFormat) -> VMaxWriteOptions {
@@ -792,9 +1393,9 @@ mod tests {
         // The plist colors are 0-based: red first, blue last.
         let colors: Vec<[u8; 4]> = file.palette_settings_files["palette1.settings.vmaxpsb"]
             .colors
-            .chunks_exact(4)
-            .map(|c| [c[0], c[1], c[2], c[3]])
-            .collect();
+            .as_chunks::<4>()
+            .0
+            .to_vec();
         assert_eq!(colors.len(), 255);
         assert_eq!(colors[0], [0xFF, 0, 0, 0xFF]);
         assert_eq!(colors[254], [0, 0, 0xFF, 0xFF]);
@@ -953,9 +1554,10 @@ mod tests {
         assert!(indices.iter().all(|&index| index >= 1));
     }
 
-    /// A node placing several objects and also parenting child nodes flattens
-    /// to sibling object-nodes sharing the node's placement, with the child
-    /// nodes hanging off the first object, and every object gets its own files.
+    /// A node placing several objects and also parenting child nodes becomes a
+    /// group, since Voxel Max objects are leaves: its objects flatten to
+    /// sibling objects sharing the node's placement, the child nodes sit beside
+    /// them under the group, and every object gets its own files.
     #[test]
     fn synthesizes_a_node_placing_objects_and_child_nodes() {
         let mut main = VoxMain::default();
@@ -968,8 +1570,8 @@ mod tests {
             ))
             .unwrap();
         }
-        // A fourth object placed by a child node, to confirm it hangs off the
-        // first object of the multi-object parent.
+        // A fourth object placed by a child node, which sits beside the three
+        // under the group.
         main.retain_object(color_object(
             palette_id,
             TyVector3U32::new(1, 1, 1),
@@ -977,7 +1579,7 @@ mod tests {
         ))
         .unwrap();
         // node 0 places objects 0, 1, 2 at +10x and parents node 1; node 1
-        // places object 3 at +1y of the first object.
+        // places object 3 at +1y of node 0.
         main.retain_hierarchy_nodes(vec![
             VoxHierarchyNode {
                 name: "layer".to_owned(),
@@ -1012,27 +1614,33 @@ mod tests {
             .map(|object| object.id.as_str())
             .collect();
         assert_eq!(ids.len(), 4);
+        // Every object sits in a group, the only parent Voxel Max resolves.
+        let group_ids: BTreeSet<&str> = file
+            .scene_json_file
+            .groups
+            .iter()
+            .map(|group| group.id.as_str())
+            .collect();
+        assert!(file.scene_json_file.objects.iter().all(|object| {
+            object
+                .parent_id
+                .as_deref()
+                .is_some_and(|parent_id| group_ids.contains(parent_id))
+        }));
 
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         let blue = [0, 0, 0xFF, 0xFF];
-        // The three siblings keep their place. The child node hangs off the
-        // first object, and a node placed under an object anchors at that
-        // object's content-center pivot, not its grid corner. The object
-        // re-centers on reload (its origin becomes round(box_min - center) on
-        // Voxel Max's axes, [-1, -1, 0] once turned back), so its descendant
-        // shifts by that origin, here to [11, 2, 0]. This only
-        // arises for object-under-object nesting, which other formats such as
-        // Goxel produce; Voxel Max objects are leaves, so a Voxel Max
-        // round-trip is unaffected.
+        // The three siblings keep their place, and the child keeps its place
+        // +1y of the node.
         assert_eq!(
             world_voxels(&reloaded),
             BTreeSet::from([
                 ([10, 0, 0], red),
                 ([10, 0, 0], green),
                 ([10, 0, 0], blue),
-                ([11, 2, 0], red),
+                ([10, 1, 0], red),
             ])
         );
     }
@@ -1443,18 +2051,22 @@ mod tests {
         assert_eq!(written_sic(main), 2.0);
     }
 
-    /// A black emissive glows nowhere in voxcore. Its slot's strength would
-    /// glow in the base color in Voxel Max, so it errors like any other
-    /// emissive that differs from the base.
+    /// A black emissive glows nowhere in voxcore at any strength. Voxel Max
+    /// would glow its slot in the base color, so the slot reads strength 0,
+    /// which looks the same.
     #[test]
-    fn a_black_emissive_on_a_glowing_slot_errors() {
+    fn a_black_emissive_writes_a_slot_glowing_nowhere() {
         let main = emissive_main(color_floats("#808080FF"), [0.0; 3], 1.0);
-        let error = to_vmax_file(
-            &to_vmax_vox_main(main).unwrap(),
-            &options(VMaxColorFormat::All),
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("glows"), "{error}");
+        assert_eq!(written_sic(main), 0.0);
+    }
+
+    /// A black emissive over a black base color glows in its base color, so its
+    /// slot keeps its strength, as a Voxel Max document's black cell on a
+    /// glowing slot does.
+    #[test]
+    fn a_black_emissive_over_a_black_base_keeps_its_strength() {
+        let main = emissive_main(color_floats("#000000FF"), [0.0; 3], 2.0);
+        assert_eq!(written_sic(main), 2.0);
     }
 
     /// A glowing emissive that differs from the base color cannot be written:
@@ -1468,6 +2080,423 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("glows"), "{error}");
+    }
+
+    /// A state whose one palette binds `baseColor` over `colors` and each of
+    /// `properties` over its value pool, with one material per row of
+    /// `materials` drawing those value ids in property order, and one object
+    /// placing a voxel of each material along x.
+    fn material_main(
+        colors: &[&str],
+        properties: Vec<(&str, VoxValuePool)>,
+        materials: &[&[u32]],
+    ) -> VoxMain<()> {
+        let mut main = VoxMain::default();
+        let colors_id = main.retain_value_pool(
+            VoxValuePool::vec_4_float(colors.iter().map(|hex| color_floats(hex)).collect())
+                .unwrap(),
+        );
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), colors_id)
+            .unwrap();
+        for (name, value_pool) in properties {
+            let value_pool_id = main.retain_value_pool(value_pool);
+            palette
+                .retain_property(name.to_owned(), value_pool_id)
+                .unwrap();
+        }
+        for value_ids in materials {
+            palette
+                .retain_material(value_ids.iter().map(|&id| U32Id::from_u32(id)).collect())
+                .unwrap();
+        }
+        let palette_id = main.retain_palette(palette).unwrap();
+        let count = u32::try_from(materials.len()).unwrap();
+        let voxels: Vec<_> = (0..count).map(|x| ([x, 0, 0], x)).collect();
+        main.retain_object(color_object(
+            palette_id,
+            TyVector3U32::new(count, 1, 1),
+            &voxels,
+        ))
+        .unwrap();
+        main.retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
+        main.validate().unwrap();
+        main
+    }
+
+    /// The material slot each 1-based color cell's voxels write.
+    fn slots_by_cell(file: &VMaxFile) -> BTreeMap<u8, u8> {
+        contents_voxels(file, "contents.vmaxb")
+            .iter()
+            .map(|voxel| (voxel.color_idx, voxel.material_idx))
+            .collect()
+    }
+
+    /// The metallic and roughness coefficients of the first `count` slots the
+    /// written palette lists.
+    fn slot_coefficients(file: &VMaxFile, count: usize) -> Vec<(f64, f64)> {
+        file.palette_settings_files["palette1.settings.vmaxpsb"]
+            .materials
+            .iter()
+            .take(count)
+            .map(|material| (material.mc, material.rc))
+            .collect()
+    }
+
+    fn assert_coefficients(actual: &[(f64, f64)], expected: &[(f64, f64)]) {
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-6;
+        assert_eq!(actual.len(), expected.len());
+        for (&(mc, rc), &(want_mc, want_rc)) in actual.iter().zip(expected) {
+            assert!(close(mc, want_mc) && close(rc, want_rc), "{actual:?}");
+        }
+    }
+
+    /// A palette pooling each material property's distinct values apart, as
+    /// `sdf-doc voxelize` writes one, takes a slot per distinct set of values,
+    /// and every material keeps the values it draws.
+    #[test]
+    fn lays_out_per_property_value_pools_in_slots() {
+        let main = material_main(
+            &["#D9B04EFF", "#5C4033FF", "#2A4FB0FF"],
+            vec![
+                (METALLIC, VoxValuePool::float(vec![1.0, 0.0]).unwrap()),
+                (
+                    ROUGHNESS,
+                    VoxValuePool::float(vec![0.25, 0.6, 0.05]).unwrap(),
+                ),
+            ],
+            &[&[0, 0, 0], &[1, 1, 1], &[2, 1, 2]],
+        );
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            slots_by_cell(&file),
+            BTreeMap::from([(1, 0), (2, 1), (3, 2)])
+        );
+        assert_coefficients(
+            &slot_coefficients(&file, 3),
+            &[(0.9, 0.3), (0.1, 0.58), (0.1, 0.14)],
+        );
+    }
+
+    /// Materials drawing equal material values through different value ids
+    /// share one slot.
+    #[test]
+    fn merges_equal_material_values_into_one_slot() {
+        let main = material_main(
+            &["#FF0000FF", "#00FF00FF"],
+            vec![
+                (METALLIC, VoxValuePool::float(vec![0.5]).unwrap()),
+                (ROUGHNESS, VoxValuePool::float(vec![0.3, 0.3]).unwrap()),
+            ],
+            &[&[0, 0, 0], &[1, 0, 1]],
+        );
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(slots_by_cell(&file), BTreeMap::from([(1, 0), (2, 0)]));
+        assert_coefficients(&slot_coefficients(&file, 1), &[(0.5, 0.34)]);
+    }
+
+    /// The value pool and value ids each property of the first palette binds,
+    /// in property order.
+    fn palette_bindings<T: VoxExt>(
+        main: &VoxMain<T>,
+    ) -> Vec<(String, U32Id<BVoxValuePool>, Vec<U32Id<BVoxValuePoolValue>>)> {
+        let palette = main.palette(U32Id::from_u32(0)).unwrap();
+        palette
+            .iter_properties()
+            .map(|(property_id, property)| {
+                let value_ids = palette
+                    .iter_materials()
+                    .map(|material_id| palette.value_id(material_id, property_id).unwrap())
+                    .collect();
+                (property.name.clone(), property.value_pool_id, value_ids)
+            })
+            .collect()
+    }
+
+    /// A palette already holding one value per slot keeps its value pools and
+    /// value ids, so it writes as it did before, even with two slots holding
+    /// equal values.
+    #[test]
+    fn leaves_a_palette_in_slots_as_it_is() {
+        let main = material_main(
+            &["#FF0000FF", "#00FF00FF", "#0000FFFF"],
+            vec![
+                (METALLIC, VoxValuePool::float(vec![0.0, 1.0]).unwrap()),
+                (ROUGHNESS, VoxValuePool::float(vec![0.5, 0.5]).unwrap()),
+            ],
+            &[&[0, 1, 1], &[1, 0, 0], &[2, 1, 1]],
+        );
+        let before = palette_bindings(&main);
+
+        let main = to_vmax_vox_main(main).unwrap();
+
+        assert_eq!(palette_bindings(&main), before);
+    }
+
+    /// A material glowing nowhere leaves the glowing slot it shares for a slot
+    /// at strength 0, and the material glowing in its base color keeps its
+    /// strength.
+    #[test]
+    fn moves_a_material_glowing_nowhere_off_a_glowing_slot() {
+        let main = material_main(
+            &["#808080FF", "#FF0000FF"],
+            vec![
+                (
+                    EMISSIVE_COLOR,
+                    VoxValuePool::vec_3_float(vec![[0.0; 3], [1.0, 0.0, 0.0]]).unwrap(),
+                ),
+                (EMISSIVE_STRENGTH, VoxValuePool::float(vec![1.0]).unwrap()),
+            ],
+            &[&[0, 0, 0], &[1, 1, 0]],
+        );
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(slots_by_cell(&file), BTreeMap::from([(1, 0), (2, 1)]));
+        let materials = &file.palette_settings_files["palette1.settings.vmaxpsb"].materials;
+        assert_eq!((materials[0].sic, materials[1].sic), (0.0, 1.0));
+    }
+
+    /// A state whose one palette holds ten materials, each with its own color
+    /// and roughness, so the ten need ten slots, and one object per row of
+    /// `object_materials` sampling those materials, each placed by its own
+    /// root.
+    fn crowded_main(object_materials: &[&[u32]]) -> VoxMain<()> {
+        let mut main = VoxMain::default();
+        let colors_id = main.retain_value_pool(
+            VoxValuePool::vec_4_float(
+                (0..10)
+                    .map(|index| color_floats(&format!("#{:02X}0000FF", index * 20 + 10)))
+                    .collect(),
+            )
+            .unwrap(),
+        );
+        let roughness_id = main.retain_value_pool(
+            VoxValuePool::float((0..10).map(|index| f64::from(index) / 10.0).collect()).unwrap(),
+        );
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(BASE_COLOR.to_owned(), colors_id)
+            .unwrap();
+        palette
+            .retain_property(ROUGHNESS.to_owned(), roughness_id)
+            .unwrap();
+        for value_id in IdRange::from_len(10) {
+            palette.retain_material(vec![value_id, value_id]).unwrap();
+        }
+        let palette_id = main.retain_palette(palette).unwrap();
+
+        let mut root_ids = Vec::new();
+        for (index, material_indices) in (0..).zip(object_materials) {
+            let count = u32::try_from(material_indices.len()).unwrap();
+            let voxels: Vec<_> = (0..count)
+                .zip(material_indices.iter())
+                .map(|(x, &material)| ([x, 0, 0], material))
+                .collect();
+            main.retain_object(color_object(
+                palette_id,
+                TyVector3U32::new(count.max(1), 1, 1),
+                &voxels,
+            ))
+            .unwrap();
+            root_ids.push(
+                main.retain_hierarchy_node(object_node(
+                    "o",
+                    index,
+                    at(f64::from(index) * 20.0, 0.0, 0.0),
+                ))
+                .unwrap(),
+            );
+        }
+        main.set_root_hierarchy_node_ids(root_ids).unwrap();
+        main.validate().unwrap();
+        main
+    }
+
+    /// A shared palette needing more slots than Voxel Max holds splits into a
+    /// palette per set of materials an object samples. Objects sampling the
+    /// same set share one, each keeps its materials' values, and every voxel
+    /// keeps its color and place.
+    #[test]
+    fn splits_a_crowded_shared_palette_per_sampled_set() {
+        let main = crowded_main(&[&[0, 1, 2, 3, 4], &[5, 6, 7, 8, 9], &[4, 3, 2, 1, 0]]);
+        let placed = world_voxels(&main);
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let palettes: Vec<_> = file
+            .scene_json_file
+            .objects
+            .iter()
+            .map(|object| object.palette.as_str())
+            .collect();
+        assert_eq!(palettes, ["palette1.png", "palette2.png", "palette1.png"]);
+        let roughness = |name: &str| -> Vec<f64> {
+            file.palette_settings_files[name]
+                .materials
+                .iter()
+                .take(5)
+                .map(|material| material.rc)
+                .collect()
+        };
+        let coefficients = |factors: [f64; 5]| factors.map(|factor| 0.1 + factor * 0.8);
+        for (name, factors) in [
+            ("palette1.settings.vmaxpsb", [0.0, 0.1, 0.2, 0.3, 0.4]),
+            ("palette2.settings.vmaxpsb", [0.5, 0.6, 0.7, 0.8, 0.9]),
+        ] {
+            let written = roughness(name);
+            let close = written
+                .iter()
+                .zip(coefficients(factors))
+                .all(|(a, b)| (a - b).abs() < 1e-6);
+            assert!(close, "{name}: {written:?}");
+        }
+        assert_eq!(world_voxels(&from_vmax_file(&file).unwrap()), placed);
+    }
+
+    /// An object without a live voxel on a crowded shared palette takes an
+    /// empty split of its own rather than stopping the split.
+    #[test]
+    fn splits_a_crowded_palette_beside_an_empty_object() {
+        let main = crowded_main(&[&[0, 1, 2, 3, 4], &[5, 6, 7, 8, 9], &[]]);
+        let placed = world_voxels(&main);
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(world_voxels(&from_vmax_file(&file).unwrap()), placed);
+    }
+
+    /// Splitting a palette holding a material no voxel samples would drop the
+    /// material, so the palette stays whole and the write errors.
+    #[test]
+    fn a_crowded_palette_with_an_unsampled_material_errors() {
+        let main = crowded_main(&[&[0, 1, 2, 3, 4], &[5, 6, 7, 8]]);
+
+        let error = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("material slots"), "{error}");
+    }
+
+    /// A shared palette within Voxel Max's slots stays shared.
+    #[test]
+    fn keeps_a_shared_palette_within_the_slots() {
+        let mut main = crowded_main(&[&[0, 1, 2], &[3, 4, 5]]);
+        let unsampled: HashSet<_> = main
+            .palette(U32Id::from_u32(0))
+            .unwrap()
+            .iter_materials()
+            .skip(6)
+            .collect();
+        main.release_materials(U32Id::from_u32(0), &unsampled)
+            .unwrap();
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert!(
+            file.scene_json_file
+                .objects
+                .iter()
+                .all(|object| object.palette == "palette1.png")
+        );
+    }
+
+    /// Voxel Max places an object by `T(t_p) * R * S` over its workspace grid,
+    /// so the voxel at grid position `v` renders centered at
+    /// `t_p + R*S*(v + 0.5)`, turning about the grid's origin rather than the
+    /// content center. Each voxel of a rotated object renders where its node
+    /// places it.
+    #[test]
+    fn writes_a_rotated_object_where_voxel_max_renders_it() {
+        let mut main = VoxMain::default();
+        let palette_id = retain_rgba_palette(&mut main, &["#FF0000FF"]);
+        main.retain_object(color_object(
+            palette_id,
+            TyVector3U32::new(3, 2, 1),
+            &[([0, 0, 0], 0), ([2, 1, 0], 0)],
+        ))
+        .unwrap();
+        let transform = TyTransformF64::new(
+            TyVector3F64::new(5.0, 7.0, -3.0),
+            TyQuaternionF64::from_axis_angle(TyVector3F64::X, (-70f64).to_radians()),
+            TyVector3F64::new(1.0, 1.0, 1.0),
+        );
+        let node_id = main
+            .retain_hierarchy_node(object_node("o", 0, transform))
+            .unwrap();
+        main.set_root_hierarchy_node_ids(vec![node_id]).unwrap();
+        main.validate().unwrap();
+        let mut placed: Vec<_> = [[0.5, 0.5, 0.5], [2.5, 1.5, 0.5]]
+            .into_iter()
+            .map(|center| {
+                let center =
+                    transform.position + transform.rotation * TyVector3F64::from_array(center);
+                center.yup_to_zup()
+            })
+            .collect();
+
+        let file = to_vmax_file(
+            &to_vmax_vox_main(main).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let object = &file.scene_json_file.objects[0];
+        let rotation = decode_axis_angle(object.rotation);
+        let mut rendered: Vec<_> = contents_voxels(&file, &object.data)
+            .iter()
+            .map(|voxel| {
+                let grid = TyVector3F64::from_array(voxel.position.map(f64::from))
+                    + TyVector3F64::splat(0.5);
+                TyVector3F64::from_array(object.position) + rotation * grid
+            })
+            .collect();
+        let order =
+            |a: &TyVector3F64, b: &TyVector3F64| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y));
+        placed.sort_by(order);
+        rendered.sort_by(order);
+        assert_eq!(rendered.len(), placed.len());
+        for (rendered, placed) in rendered.iter().zip(&placed) {
+            assert!(
+                (*rendered - *placed).length() < 1e-9,
+                "{rendered:?} != {placed:?}"
+            );
+        }
     }
 
     /// A 6-hex source color widens to opaque RGBA: the missing alpha defaults to

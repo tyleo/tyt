@@ -167,7 +167,9 @@ fn read_model(size: [u32; 3], content: &mut ByteReader) -> Result<MVoxModel> {
     })?;
     let voxels = content
         .read_bytes(byte_len)?
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|voxel| MVoxVoxel {
             x: voxel[0],
             y: voxel[1],

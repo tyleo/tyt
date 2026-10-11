@@ -1,8 +1,9 @@
 use crate::{
-    ABSORPTION, Error, ObjectPlacement, PALETTE_COLORS, Result, SHADOWS, SYNTH_CAMERA,
-    SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState,
-    VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle, encode_axis_angle,
-    pbr_factor_to_vm_coefficient, place_object, tighten,
+    ABSORPTION, Error, MATERIAL_SLOTS, ObjectPlacement, PALETTE_COLORS, Result, SHADOWS,
+    SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode,
+    VMaxExtObjectState, VMaxExtPalette, VMaxObjectSize, VMaxVoxMain, VMaxWriteOptions,
+    decode_axis_angle, encode_axis_angle, pbr_factor_to_vm_coefficient, place_object,
+    place_object_in_workspace, tighten,
 };
 use branded_id::{IdRange, U32Id};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -10,7 +11,7 @@ use ty_math::{TyBoundsF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
     VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
-    snapshots::{VMaxVoxel, encode_vmax_snapshots},
+    snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxExt,
@@ -33,19 +34,13 @@ const DEFAULT_ROUGHNESS: f64 = 0.9;
 /// object shares the first color palette's name and writes no file of its own.
 const FALLBACK_PALETTE: &str = "palette1.png";
 
-/// The material slots every Voxel Max palette carries. A color cell's material
-/// is a bit in the settings `lc` byte, so at most 8 (0..=7) fit; the sidecar
-/// always lists exactly this many, real materials in the low slots and the rest
-/// padded with the neutral default.
-const MATERIAL_SLOTS: usize = 8;
-
 /// How far a node's rotation may drift from its preserved axis-angle before
 /// the writer encodes the live rotation instead.
 const ROTATION_TOLERANCE: f64 = 1e-9;
 
 /// Writes a [`VMaxVoxMain`] to a Voxel Max document, the inverse of
-/// [`from_vmax_file`](crate::from_vmax_file()). A loaded document writes back
-/// exactly through its ext. A state
+/// [`from_vmax_file`](crate::from_vmax_file()). A loaded document keeps its
+/// world-space geometry, hierarchy and palette provenance through its ext. A state
 /// [`to_vmax_vox_main`](crate::to_vmax_vox_main()) gave its ext writes as a
 /// document synthesized from the scene. The ext supplies each node's,
 /// palette's, and object's provenance and the scene-level state. The scene
@@ -53,9 +48,11 @@ const ROTATION_TOLERANCE: f64 = 1e-9;
 /// write in listing order, children before parents when the listing has them
 /// so, as Voxel Max's documents do. Every object and node transform turns back
 /// onto Voxel Max's Z-up axes. Each object's one palette is read unconverted in
-/// Voxel Max's layout, the one the loader builds. Errors when an entity has no
-/// ext entry, when an object has other than one layer, or when a palette
-/// departs from the layout.
+/// Voxel Max's layout, the one the loader builds. A node keeping an external
+/// mesh writes as that mesh's object, and the files the ext keeps write back
+/// as stored. Errors when an entity has no ext entry, when an object has other
+/// than one layer, when a palette departs from the layout, or when an external
+/// mesh's node also places objects or child nodes.
 pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
     let placements = ext_placements(main)?;
 
@@ -90,6 +87,18 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         let ext_node = placement.ext;
         let transform = node.transform.yup_to_zup();
         let rotation = node_rotation(ext_node, &transform);
+
+        if let Some(mesh) = &ext_node.external_mesh {
+            if !node.child_object_ids.is_empty() || !node.child_node_ids.is_empty() {
+                return Err(Error::invalid(format!(
+                    "node \"{}\" places the external mesh `{}`, so it cannot also place \
+                     objects or child nodes",
+                    node.name, mesh.data
+                )));
+            }
+            objects.push(mesh_from_node(placement, &transform, rotation, mesh));
+            continue;
+        }
 
         if node.child_object_ids.is_empty() {
             let (center, half) = subtree_box_local(main, placement.node_id, &mut box_memo);
@@ -133,18 +142,28 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
             };
 
             // Re-derive the object's internal-grid placement by convention:
-            // center the canvas in the 256-wide workspace, then seat the
+            // center its canvas in the chosen workspace, then seat the
             // runtime grid inside it by the runtime/edit origin offset. The
             // runtime grid is the live voxels' tight extent within the object's
             // build volume; the content box follows from it and the build
             // volume, the scene placement from the node transform. The object
             // turns back onto Z-up axes with its transform.
-            let (tight, object_placement) = place_object(&object.yup_to_zup());
             let object_state = ext_entry(
                 main.ext().object_states.get(&object_id),
                 "object",
                 object_id,
             )?;
+
+            let object = object.yup_to_zup();
+            let extent_order = object_extent_order(&object, object_state, options.object_size)?;
+            let (tight, object_placement) = place_object_in_workspace(
+                &object,
+                1 << extent_order,
+                options.object_size != VMaxObjectSize::Auto,
+            );
+            let previous_center = object_state
+                .camera_reference_center
+                .unwrap_or_else(|| place_object(&object).1.center);
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
@@ -158,7 +177,12 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                     // absent.
                     let contents = VMaxContentsVmaxbFile {
                         snapshots: encode_vmax_snapshots(&voxels),
-                        ..contents_editor_state(object_state, &object_placement)
+                        ..contents_editor_state(
+                            object_state,
+                            extent_order,
+                            object_placement.center,
+                            previous_center,
+                        )
                     };
                     contents_files.insert(data.clone(), contents);
                     contents_by_object.insert(object_id, data.clone());
@@ -192,6 +216,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
     let mut scene = main.ext().scene.clone();
     scene.groups = groups;
     scene.objects = objects;
+    keep_listed_selections(&mut scene);
     apply_scene_camera(&mut scene, options.scene_camera);
 
     Ok(VMaxFile {
@@ -199,13 +224,11 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         contents_files,
         palette_settings_files,
         palette_png_files,
-        history_vmaxhb_files: BTreeMap::new(),
-        history_vmaxhvsb_files: BTreeMap::new(),
-        history_vmaxhvsc_files: BTreeMap::new(),
         selection_vmaxb_files: BTreeMap::new(),
         thumbnail_png: None,
         contents_vmax_pngs: BTreeMap::new(),
         group_pngs: BTreeMap::new(),
+        other_files: main.ext().other_files.clone(),
     })
 }
 
@@ -293,12 +316,13 @@ fn node_rotation(ext_node: &VMaxExtNode, transform: &TyTransformF64) -> [f64; 4]
 /// The bounding box `(center, half)` of all geometry under `node_id`, in that
 /// node's local frame on Voxel Max's Z-up axes: the union of each child
 /// object's content box and each child node's box mapped through the child's
-/// transform on those axes. Voxel Max stores this per group as
-/// `e_c`/`e_mi`/`e_ma`; it is the union of the subtree, so it is derived here
-/// rather than kept in the ext. Memoized by node id so a subtree shared across
-/// parents is walked once. A node with no geometry collapses to a zero box.
-fn subtree_box_local<T: VoxExt>(
-    main: &VoxMain<T>,
+/// transform on those axes, and an external mesh's content box. Voxel Max
+/// stores this per group as `e_c`/`e_mi`/`e_ma`; it is the union of the
+/// subtree, so it is derived here rather than kept in the ext. Memoized by
+/// node id so a subtree shared across parents is walked once. A node with no
+/// geometry collapses to a zero box.
+fn subtree_box_local(
+    main: &VMaxVoxMain,
     node_id: U32Id<BVoxHierarchyNode>,
     memo: &mut HashMap<U32Id<BVoxHierarchyNode>, ([f64; 3], [f64; 3])>,
 ) -> ([f64; 3], [f64; 3]) {
@@ -309,6 +333,15 @@ fn subtree_box_local<T: VoxExt>(
         .hierarchy_node(node_id)
         .expect("a valid hierarchy node");
     let mut bounds: Option<([f64; 3], [f64; 3])> = None;
+    if let Some(mesh) = main
+        .ext()
+        .hierarchy_nodes
+        .get(&node_id)
+        .and_then(|ext_node| ext_node.external_mesh.as_ref())
+    {
+        let (center, half) = mesh_box_local(mesh);
+        extend_bounds(&mut bounds, center, half);
+    }
     for &object_id in &node.child_object_ids {
         let (center, half) = object_box_local(main, object_id);
         extend_bounds(&mut bounds, center, half);
@@ -362,6 +395,20 @@ fn object_box_local<T: VoxExt>(
     (box_local.center.to_array(), box_local.extents.to_array())
 }
 
+/// An external mesh's content box `(center, half)` in its node's local frame
+/// on Voxel Max's Z-up axes: the `e_mi`..`e_ma` box about its content center
+/// `e_c`, about which Voxel Max renders the mesh's vertices. A mesh with no
+/// recorded box frames its center alone.
+fn mesh_box_local(mesh: &VMaxObject) -> ([f64; 3], [f64; 3]) {
+    let center = TyVector3F64::from_array(mesh.center);
+    let min = TyVector3F64::from_array(mesh.bounds_min.unwrap_or([0.0; 3]));
+    let max = TyVector3F64::from_array(mesh.bounds_max.unwrap_or([0.0; 3]));
+    (
+        (center + (min + max) / 2.0).to_array(),
+        ((max - min) / 2.0).to_array(),
+    )
+}
+
 /// Grows the running `(min, max)` AABB to include the box centered at `center`
 /// with half-extents `half`.
 fn extend_bounds(bounds: &mut Option<([f64; 3], [f64; 3])>, center: [f64; 3], half: [f64; 3]) {
@@ -410,7 +457,7 @@ fn group_from_node(
         name: node.name.clone(),
         id: ext_node.id.clone(),
         parent_id: placement.parent_id.clone(),
-        hidden: None,
+        hidden: ext_node.hidden,
         position: transform.position.to_array(),
         rotation,
         scale: transform.scale.to_array(),
@@ -423,6 +470,38 @@ fn group_from_node(
         center,
         bounds_min: Some([-half[0], -half[1], -half[2]]),
         bounds_max: Some(half),
+        t_prp: None,
+        e_cm: None,
+        e_cmv: None,
+        e_vc: None,
+        e_vm: None,
+    }
+}
+
+/// The scene object a node keeping an external mesh writes: the mesh's object
+/// as the ext keeps it, with the node's name, transform, and parent and the
+/// ext's node fields. `transform` places the node on Voxel Max's Z-up axes.
+fn mesh_from_node(
+    placement: &Placement<'_>,
+    transform: &TyTransformF64,
+    rotation: [f64; 4],
+    mesh: &VMaxObject,
+) -> VMaxObject {
+    let ext_node = placement.ext;
+    VMaxObject {
+        name: placement.node.name.clone(),
+        id: ext_node.id.clone(),
+        parent_id: placement.parent_id.clone(),
+        hidden: ext_node.hidden,
+        position: transform.position.to_array(),
+        rotation,
+        scale: transform.scale.to_array(),
+        ind: ext_node.index,
+        s: ext_node.selected,
+        t_al: ext_node.alignment.clone(),
+        t_pa: ext_node.pivot_align.clone(),
+        t_pf: ext_node.pivot_face.clone(),
+        ..mesh.clone()
     }
 }
 
@@ -1077,25 +1156,77 @@ fn reconstruct_voxels(
         .collect())
 }
 
-/// The editor state a contents file carries, without its snapshots: the
-/// entry's session as it is, with the canvas `vp` re-scoped to the derived
-/// build volume.
+/// Chooses the supported editor extent containing the object's canvas in
+/// automatic mode, or its live grid for an explicit size. Oversized data is
+/// refused before encoding, so Voxel Max cannot silently hide it.
+fn object_extent_order(
+    object: &VoxObject,
+    object_state: &VMaxExtObjectState,
+    size: VMaxObjectSize,
+) -> Result<i64> {
+    let bounds = if size == VMaxObjectSize::Auto {
+        object.bounds()
+    } else {
+        object
+            .live_extent()
+            .map_or(object.bounds(), |(_, bounds)| bounds)
+    };
+    let required = bounds.x.max(bounds.y).max(bounds.z);
+    if let Some(dimension) = size.dimension() {
+        if required > dimension {
+            return Err(Error::invalid(format!(
+                "object \"{}\" needs {}x{}x{} voxels, which cannot fit the requested {dimension}x{dimension}x{dimension} workspace",
+                object.name(),
+                bounds.x,
+                bounds.y,
+                bounds.z
+            )));
+        }
+        return Ok(dimension.ilog2() as i64);
+    }
+    let preferred = object_state
+        .extent_order
+        .filter(|order| (5..=9).contains(order))
+        .unwrap_or(8);
+    (preferred..=9)
+        .find(|&order| required <= (1 << order))
+        .ok_or_else(|| {
+            Error::invalid(format!(
+                "object \"{}\" needs {}x{}x{} voxels, exceeding Voxel Max's 512x512x512 workspace",
+                object.name(),
+                bounds.x,
+                bounds.y,
+                bounds.z
+            ))
+        })
+}
+
+/// The contents file an object writes from its kept version and camera, with
+/// the chosen extent. Moving the grid moves the editor camera's target by the
+/// same amount; the separately compensated scene transform keeps every voxel
+/// and pivot in its authored scene position. No editor tool state is written.
 fn contents_editor_state(
     object_state: &VMaxExtObjectState,
-    placement: &ObjectPlacement,
+    extent_order: i64,
+    center: [f64; 3],
+    previous_center: [f64; 3],
 ) -> VMaxContentsVmaxbFile {
-    let mut tools = object_state.tools.clone();
-    if let Some(tools) = tools.as_mut() {
-        tools.vp = Some(placement.view_box.clone());
-    }
+    let cam = object_state.cam.clone().map(|mut cam| {
+        for axis in 0..3 {
+            cam.o[axis] += center[axis] - previous_center[axis];
+        }
+        cam
+    });
     VMaxContentsVmaxbFile {
         snapshots: Vec::new(),
         uuid: object_state.uuid.clone(),
-        v: object_state.v,
-        tools,
-        brush: object_state.brush.clone(),
-        cam: object_state.cam.clone(),
+        v: object_state.v.max(SNAPSHOT_CONTENTS_VERSION),
+        tools: None,
+        cam,
         pal: None,
+        eo: Some(extent_order),
+        chunks: Vec::new(),
+        voxels: Vec::new(),
     }
 }
 
@@ -1120,7 +1251,7 @@ fn object_from_node(
         history: format!("history{suffix}.vmaxhb"),
         id: ext_node.id.clone(),
         parent_id,
-        hidden: None,
+        hidden: ext_node.hidden,
         position: unbake_position(transform, decode_axis_angle(rotation), placement),
         rotation,
         scale: transform.scale.to_array(),
@@ -1133,34 +1264,52 @@ fn object_from_node(
         center: placement.center,
         bounds_min: Some(placement.bounds_min),
         bounds_max: Some(placement.bounds_max),
+        t_prp: None,
+        e_cm: None,
+        e_cmv: None,
+        e_vc: None,
+        e_vm: None,
     }
 }
 
 /// Recovers an object's `t_p`, the inverse of the read path's
-/// `object_transform`. It backs out the `t_p` Voxel Max renders with from the
-/// node's transform, the content center it pivots about, and the grid `origin`:
-/// `t_p = position - center - R*S* (box_min - center - origin)`. Uses the
-/// axis-angle the object writes, so the two stay exact inverses.
+/// `object_transform`. Voxel Max places an object by `T(t_p) * R * S` over its
+/// workspace grid, so a voxel at grid position `v` renders at `t_p + R*S*v`.
+/// The voxel sits at node-local `origin + (v - box_min)`, so
+/// `t_p = position - R*S*(box_min - origin)`. Uses the axis-angle the object
+/// writes, so the two stay exact inverses.
 fn unbake_position(
     transform: &TyTransformF64,
     rotation: TyQuaternionF64,
     placement: &ObjectPlacement,
 ) -> [f64; 3] {
-    let center = placement.center;
     let box_min = placement.box_min;
     let origin = placement.origin;
     let scale = transform.scale;
     let offset = TyVector3F64::new(
-        (box_min[0] as f64 - center[0] - origin[0] as f64) * scale.x,
-        (box_min[1] as f64 - center[1] - origin[1] as f64) * scale.y,
-        (box_min[2] as f64 - center[2] - origin[2] as f64) * scale.z,
+        (box_min[0] - origin[0]) as f64 * scale.x,
+        (box_min[1] - origin[1]) as f64 * scale.y,
+        (box_min[2] - origin[2]) as f64 * scale.z,
     );
     let rotated = rotation * offset;
     [
-        transform.position.x - center[0] - rotated.x,
-        transform.position.y - center[1] - rotated.y,
-        transform.position.z - center[2] - rotated.z,
+        transform.position.x - rotated.x,
+        transform.position.y - rotated.y,
+        transform.position.z - rotated.z,
     ]
+}
+
+/// Drops a kept active object (`ao`), active group (`ag`), or opening level
+/// (`vl`) that no longer names a listed entry. Voxel Max indexes `objects` and
+/// `groups` with the first two unchecked, so a stale index would stop it.
+fn keep_listed_selections(scene: &mut VMaxSceneJsonFile) {
+    let listed = |index: i64, count: usize| usize::try_from(index).is_ok_and(|index| index < count);
+    let (objects, groups) = (scene.objects.len(), scene.groups.len());
+    scene.ao = scene.ao.filter(|&index| listed(index, objects));
+    scene.ag = scene.ag.filter(|&index| listed(index, groups));
+    scene.vl = scene
+        .vl
+        .filter(|&level| level == -1 || listed(level, groups));
 }
 
 /// Writes each colored plan's color image and material sidecar.
@@ -1349,16 +1498,16 @@ fn apply_scene_camera(scene: &mut VMaxSceneJsonFile, scene_camera: SceneCameraSo
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VMaxExtNode, VMaxVoxMain, VMaxWriteOptions, from_vmax_file,
-        to_vmax_file, to_vmax_vox_main,
+        SceneCameraSource, VMaxExtNode, VMaxObjectSize, VMaxVoxMain, VMaxWriteOptions,
+        decode_axis_angle, from_vmax_file, to_vmax_file, to_vmax_vox_main,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use vmax::{
-        VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
-        VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera,
-        VMaxSceneJsonFile, VMaxViewBox,
+        VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial,
+        VMaxMaterialDispersion, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
+        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
         snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
     };
     use voxcore::{
@@ -1482,6 +1631,11 @@ mod tests {
             center: [1.0, 1.0, 1.0],
             bounds_min: Some([-1.0, -1.0, -1.0]),
             bounds_max: Some([1.0, 1.0, 1.0]),
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         };
         let object = VMaxObject {
             name: "obj".to_owned(),
@@ -1492,8 +1646,8 @@ mod tests {
             parent_id: Some("g".to_owned()),
             hidden: None,
             // Canonical placement the reverse path emits: the grid is centered
-            // in the workspace, the content box is symmetric about the center,
-            // and the placement pivots about it.
+            // in the workspace, and the content box is symmetric about the
+            // center.
             position: [-127.0, -127.0, 0.0],
             rotation: [0.0, 0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
@@ -1506,6 +1660,11 @@ mod tests {
             center: [128.0, 128.0, 1.0],
             bounds_min: Some([-1.0, -1.0, -1.0]),
             bounds_max: Some([1.0, 1.0, 1.0]),
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         };
 
         let scene_json_file = VMaxSceneJsonFile {
@@ -1536,9 +1695,11 @@ mod tests {
             uuid: "u".to_owned(),
             v: 4,
             tools: None,
-            brush: None,
             cam: None,
             pal: None,
+            eo: Some(8),
+            chunks: Vec::new(),
+            voxels: Vec::new(),
         };
 
         let mut contents_files = BTreeMap::new();
@@ -1568,13 +1729,11 @@ mod tests {
             contents_files,
             palette_settings_files,
             palette_png_files,
-            history_vmaxhb_files: BTreeMap::new(),
-            history_vmaxhvsb_files: BTreeMap::new(),
-            history_vmaxhvsc_files: BTreeMap::new(),
             selection_vmaxb_files: BTreeMap::new(),
             thumbnail_png: None,
             contents_vmax_pngs: BTreeMap::new(),
             group_pngs: BTreeMap::new(),
+            other_files: BTreeMap::new(),
         }
     }
 
@@ -1699,13 +1858,14 @@ mod tests {
                 pivot_face: "8".to_owned(),
                 pivot_align: "4".to_owned(),
                 selected: None,
+                hidden: None,
+                external_mesh: None,
             }
         );
         assert_eq!(ext.object_states.len(), 2);
         let object_state = &ext.object_states[&object_id];
         assert_eq!(object_state.uuid, "00000000-0000-0001-0000-000000000001");
         assert_eq!(object_state.v, 4);
-        assert!(object_state.tools.is_some() && object_state.brush.is_some());
         assert_eq!(
             object_state.cam.as_ref().map(|cam| cam.o),
             Some([127.5, 127.5, 0.5])
@@ -1724,13 +1884,9 @@ mod tests {
         assert_eq!(added.t_al, "f");
         let contents = &file.contents_files[&added.data];
         assert_eq!(contents.uuid, "00000000-0000-0001-0000-000000000001");
-        assert_eq!(
-            contents.tools.as_ref().and_then(|tools| tools.vp.clone()),
-            Some(VMaxViewBox {
-                min: [127, 127, 0],
-                max: [127, 127, 0],
-            })
-        );
+        // A newly generated one-voxel object takes a 256-wide workspace.
+        assert_eq!(contents.tools, None);
+        assert_eq!(contents.eo, Some(8));
 
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
@@ -1789,6 +1945,342 @@ mod tests {
         assert_eq!(
             object_state.cam.as_ref().map(|cam| cam.o),
             Some([128.5, 127.5, 0.5])
+        );
+    }
+
+    /// Native grid coordinates compose through every parent transform,
+    /// including non-uniform scale followed by a child's rotation.
+    fn placed_voxels(file: &VMaxFile) -> BTreeMap<String, Vec<[i64; 3]>> {
+        let groups: HashMap<_, _> = file
+            .scene_json_file
+            .groups
+            .iter()
+            .map(|group| (group.id.as_str(), group))
+            .collect();
+        let apply = |position: [f64; 3], rotation: [f64; 4], scale: [f64; 3], point| {
+            TyVector3F64::from_array(position)
+                + decode_axis_angle(rotation) * (TyVector3F64::from_array(scale) * point)
+        };
+        file.scene_json_file
+            .objects
+            .iter()
+            .map(|object| {
+                let mut points: Vec<_> =
+                    decode_vmax_snapshots(&file.contents_files[&object.data].snapshots)
+                        .unwrap()
+                        .into_iter()
+                        .map(|voxel| {
+                            let point =
+                                TyVector3F64::from_array(voxel.position.map(|v| v as f64 + 0.5));
+                            let mut point =
+                                apply(object.position, object.rotation, object.scale, point);
+                            let mut parent = object.parent_id.as_deref();
+                            while let Some(id) = parent {
+                                let group = groups[id];
+                                point = apply(group.position, group.rotation, group.scale, point);
+                                parent = group.parent_id.as_deref();
+                            }
+                            point.to_array().map(|v| (v * 1e7).round() as i64)
+                        })
+                        .collect();
+                points.sort();
+                (object.id.clone(), points)
+            })
+            .collect()
+    }
+
+    /// A 512 workspace must center the object at 256, with its editor camera
+    /// following it while nested, rotated, scaled instances keep their world
+    /// voxels and parents.
+    #[test]
+    fn a_512_workspace_centers_without_moving_nested_scaled_instances() {
+        let mut original = sample();
+        original.scene_json_file.groups[0].position = [7.0, 11.0, 13.0];
+        original.scene_json_file.groups[0].rotation = [0.0, 0.0, 1.0, 0.3];
+        original.scene_json_file.groups[0].scale = [1.5, 2.0, 0.5];
+        let mut nested = original.scene_json_file.groups[0].clone();
+        nested.id = "nested".to_owned();
+        nested.parent_id = Some("g".to_owned());
+        nested.position = [3.0, -4.0, 5.0];
+        nested.rotation = [1.0, 0.0, 0.0, 0.4];
+        nested.scale = [0.7, 1.1, 1.3];
+        nested.ind = [0, 0, 2];
+        original.scene_json_file.groups.push(nested);
+        let object = &mut original.scene_json_file.objects[0];
+        object.parent_id = Some("nested".to_owned());
+        object.rotation = [0.0, 1.0, 0.0, 0.7];
+        object.scale = [1.2, 0.8, 1.1];
+        let mut instance = object.clone();
+        instance.id = "instance".to_owned();
+        instance.position[0] += 23.0;
+        instance.parent_id = Some("g".to_owned());
+        instance.ind = [0, 0, 3];
+        original.scene_json_file.objects.push(instance);
+        let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
+        contents.eo = Some(9);
+        contents.cam = Some(VMaxCamera {
+            o: [128.0, 128.0, 1.0],
+            ..Default::default()
+        });
+        let main = from_vmax_file(&original).unwrap();
+        assert_eq!(main.iter_objects().count(), 1);
+        for (size, order) in [
+            (VMaxObjectSize::Auto, 9),
+            (VMaxObjectSize::Size256, 8),
+            (VMaxObjectSize::Size512, 9),
+        ] {
+            let rebuilt = to_vmax_file(
+                &main,
+                &VMaxWriteOptions {
+                    object_size: size,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let contents = &rebuilt.contents_files["contents.vmaxb"];
+            let half = (1 << order) as f64 / 2.0;
+            assert_eq!(contents.eo, Some(order));
+            assert_eq!(rebuilt.scene_json_file.objects[0].center, [half, half, 1.0]);
+            assert_eq!(contents.cam.as_ref().unwrap().o, [half, half, 1.0]);
+            assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+            for (before, after) in original
+                .scene_json_file
+                .objects
+                .iter()
+                .zip(&rebuilt.scene_json_file.objects)
+            {
+                assert_eq!(before.parent_id, after.parent_id);
+                assert_eq!(before.rotation, after.rotation);
+                assert_eq!(before.scale, after.scale);
+            }
+        }
+    }
+
+    /// An authored 32-wide workspace keeps its extent and editor camera
+    /// frame; changing it to 64 moves the grid and camera together.
+    #[test]
+    fn keeps_a_loaded_small_workspace_and_its_camera_frame() {
+        let mut original = sample();
+        original.scene_json_file.objects[0].center = [16.0, 16.0, 1.0];
+        original.scene_json_file.objects[0].position = [-15.0, -15.0, 0.0];
+        let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
+        let voxels: Vec<_> = decode_vmax_snapshots(&contents.snapshots)
+            .unwrap()
+            .into_iter()
+            .map(|mut voxel| {
+                voxel.position[0] -= 112;
+                voxel.position[1] -= 112;
+                voxel
+            })
+            .collect();
+        contents.snapshots = encode_vmax_snapshots(&voxels);
+        contents.eo = Some(5);
+        contents.cam = Some(VMaxCamera {
+            o: [16.0, 16.0, 1.0],
+            ..Default::default()
+        });
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        assert_eq!(rebuilt, original);
+        let resized = to_vmax_file(
+            &main,
+            &VMaxWriteOptions {
+                object_size: VMaxObjectSize::Size64,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(resized.contents_files["contents.vmaxb"].eo, Some(6));
+        assert_eq!(
+            resized.contents_files["contents.vmaxb"]
+                .cam
+                .as_ref()
+                .unwrap()
+                .o,
+            [32.0, 32.0, 1.0]
+        );
+        assert_eq!(placed_voxels(&resized), placed_voxels(&original));
+    }
+
+    /// Voxel Max saves its 512 storage extent even for a 256 editor viewport.
+    /// Automatic export must retain the viewport rather than enlarge it.
+    #[test]
+    fn keeps_a_256_viewport_when_voxel_max_saves_512_storage() {
+        let mut original = sample();
+        let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
+        contents.eo = Some(9);
+        contents.tools = Some(VMaxTools {
+            vp: Some(VMaxViewBox {
+                min: [0; 3],
+                max: [255; 3],
+                flat: None,
+            }),
+        });
+        contents.cam = Some(VMaxCamera {
+            o: [128.0, 128.0, 1.0],
+            ..Default::default()
+        });
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        assert_eq!(rebuilt.contents_files["contents.vmaxb"].eo, Some(8));
+        assert_eq!(
+            rebuilt.scene_json_file.objects[0].center,
+            [128.0, 128.0, 1.0]
+        );
+        assert_eq!(
+            rebuilt.contents_files["contents.vmaxb"]
+                .cam
+                .as_ref()
+                .unwrap()
+                .o,
+            [128.0, 128.0, 1.0]
+        );
+        assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+    }
+
+    /// Current scene and object camera keys survive a read/write cycle,
+    /// including authoritative orientation and orthographic zoom state.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn keeps_current_voxel_max_camera_fields() {
+        let mut original = sample();
+        original.scene_json_file.cam = Some(VMaxSceneCamera {
+            aq: Some([0.0, 0.0, 0.0, 1.0]),
+            op: Some(true),
+            zf: Some(1.5),
+            ..Default::default()
+        });
+        original
+            .contents_files
+            .get_mut("contents.vmaxb")
+            .unwrap()
+            .cam = Some(VMaxCamera {
+            aq: Some([0.0, 0.0, 0.0, 1.0]),
+            op: Some(false),
+            zf: Some(1.25),
+            o: [128.0, 128.0, 1.0],
+            ..Default::default()
+        });
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(rebuilt.scene_json_file.cam, original.scene_json_file.cam);
+        assert_eq!(
+            rebuilt.contents_files["contents.vmaxb"].cam,
+            original.contents_files["contents.vmaxb"].cam
+        );
+    }
+
+    /// A fixed workspace centers the live voxels and camera in that cube,
+    /// and rejects a width too small for any axis rather than hiding voxels.
+    #[test]
+    fn explicit_object_sizes_center_and_keep_world_voxels() {
+        let mut original = sample();
+        original
+            .contents_files
+            .get_mut("contents.vmaxb")
+            .unwrap()
+            .cam = Some(VMaxCamera {
+            o: [128.0, 128.0, 1.0],
+            ..Default::default()
+        });
+        let main = from_vmax_file(&original).unwrap();
+        let before = placed_voxels(&original);
+        for (size, width) in [
+            (VMaxObjectSize::Size32, 32),
+            (VMaxObjectSize::Size64, 64),
+            (VMaxObjectSize::Size128, 128),
+            (VMaxObjectSize::Size256, 256),
+            (VMaxObjectSize::Size512, 512),
+        ] {
+            let rebuilt = to_vmax_file(
+                &main,
+                &VMaxWriteOptions {
+                    object_size: size,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let center = [width as f64 / 2.0, width as f64 / 2.0, 1.0];
+            assert_eq!(rebuilt.scene_json_file.objects[0].center, center);
+            assert_eq!(
+                rebuilt.contents_files["contents.vmaxb"]
+                    .cam
+                    .as_ref()
+                    .unwrap()
+                    .o,
+                center
+            );
+            assert_eq!(placed_voxels(&rebuilt), before);
+        }
+    }
+
+    /// Large source grids take 512 automatically. An explicit 256 errors;
+    /// data past 512 errors even in automatic mode.
+    #[test]
+    fn object_size_refuses_clipping_and_selects_512_when_needed() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        let mut object = VoxObject::new("wide".to_owned(), TyVector3U32::new(300, 1, 1)).unwrap();
+        object.retain_layer(palette_id).unwrap();
+        for x in [0, 299] {
+            let id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object
+                .retain_voxel(id, &[U32Id::<BVoxMaterial>::from_u32(0)])
+                .unwrap();
+        }
+        let object_id = main.retain_object(object).unwrap();
+        let node_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "wide".to_owned(),
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
+        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let wide = file
+            .scene_json_file
+            .objects
+            .iter()
+            .find(|o| o.name == "wide")
+            .unwrap();
+        assert_eq!(wide.center, [256.0, 255.5, 0.5]);
+        assert_eq!(file.contents_files[&wide.data].eo, Some(9));
+        let error = to_vmax_file(
+            &main,
+            &VMaxWriteOptions {
+                object_size: VMaxObjectSize::Size256,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("300x1x1"));
+        let mut object =
+            VoxObject::new("too wide".to_owned(), TyVector3U32::new(513, 1, 1)).unwrap();
+        object.retain_layer(palette_id).unwrap();
+        for x in [0, 512] {
+            let id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object
+                .retain_voxel(id, &[U32Id::<BVoxMaterial>::from_u32(0)])
+                .unwrap();
+        }
+        let object_id = main.retain_object(object).unwrap();
+        let node_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "too wide".to_owned(),
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
+        assert!(
+            to_vmax_file(&main, &VMaxWriteOptions::default())
+                .unwrap_err()
+                .to_string()
+                .contains("512x512x512")
         );
     }
 
@@ -2012,6 +2504,123 @@ mod tests {
         let main = from_vmax_file(&original).unwrap();
         let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
+    }
+
+    /// A hidden object or group stays hidden through a round trip, since
+    /// Voxel Max renders neither.
+    #[test]
+    fn keeps_hidden_nodes_hidden() {
+        let mut original = sample();
+        original.scene_json_file.objects[0].hidden = Some(true);
+        original.scene_json_file.groups[0].hidden = Some(true);
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(rebuilt, original);
+    }
+
+    /// A kept active object, active group, or opening level writes while it
+    /// names a listed entry, and drops once it does not, since Voxel Max
+    /// indexes with it unchecked.
+    #[test]
+    fn drops_selections_that_name_no_listed_entry() {
+        let mut original = sample();
+        original.scene_json_file.ao = Some(0);
+        original.scene_json_file.ag = Some(3);
+        original.scene_json_file.vl = Some(7);
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let scene = &rebuilt.scene_json_file;
+        assert_eq!((scene.ao, scene.ag, scene.vl), (Some(0), None, None));
+    }
+
+    /// The sample with an external mesh beside its object under the group,
+    /// and the mesh's archive, a texture, and an animation file the package
+    /// also holds. The mesh's content box reaches past the object's, so the
+    /// group's derived box spans both.
+    fn sample_with_mesh() -> VMaxFile {
+        let mut file = sample();
+        let mut mesh = file.scene_json_file.objects[0].clone();
+        mesh.name = "mesh".to_owned();
+        mesh.id = "m".to_owned();
+        mesh.data = "contents2.scndata".to_owned();
+        mesh.history = "history2.vmaxhb".to_owned();
+        mesh.ind = [0, 0, 2];
+        mesh.position = [0.5, 0.0, 0.0];
+        mesh.center = [1.0, 1.0, 3.0];
+        mesh.e_vc = Some(0);
+        file.scene_json_file.objects.push(mesh);
+        let group = &mut file.scene_json_file.groups[0];
+        group.center = [1.25, 1.0, 2.0];
+        group.bounds_min = Some([-1.25, -1.0, -2.0]);
+        group.bounds_max = Some([1.25, 1.0, 2.0]);
+        for (name, bytes) in [
+            ("contents2.scndata", &b"bvx2 mesh archive"[..]),
+            ("5A230798-EE6E-4F5E-AD20-46554C42E60E.vxtex", b"texture"),
+            ("animations.vmaxa", b"{}"),
+        ] {
+            file.other_files
+                .insert(name.to_owned(), VMaxOpaqueFile(bytes.to_vec()));
+        }
+        file
+    }
+
+    /// An external mesh loads as a node placing nothing, since voxcore models
+    /// no mesh, and writes back as its object with the package's other files
+    /// as stored.
+    #[test]
+    fn keeps_an_external_mesh_and_the_other_files() {
+        let original = sample_with_mesh();
+
+        let main = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+
+        assert_eq!(main.iter_objects().count(), 1);
+        assert_eq!(rebuilt, original);
+    }
+
+    /// An external mesh whose archive the package lacks errors with the
+    /// object and the file.
+    #[test]
+    fn an_external_mesh_missing_its_archive_errors() {
+        let mut file = sample_with_mesh();
+        file.other_files.remove("contents2.scndata");
+
+        let error = from_vmax_file(&file).unwrap_err();
+
+        assert!(error.to_string().contains("contents2.scndata"), "{error}");
+    }
+
+    /// A Voxel Max object is a leaf, so a write errors once an external mesh's
+    /// node also places a child node.
+    #[test]
+    fn an_external_mesh_placing_a_child_errors() {
+        let mut main = from_vmax_file(&sample_with_mesh()).unwrap();
+        let mesh_id = main
+            .ext()
+            .hierarchy_nodes
+            .iter()
+            .find(|(_, ext_node)| ext_node.external_mesh.is_some())
+            .map(|(&node_id, _)| node_id)
+            .unwrap();
+        let child_id = main
+            .retain_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        main.set_hierarchy_node_children(mesh_id, vec![child_id], Vec::new())
+            .unwrap();
+
+        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+
+        assert!(error.to_string().contains("external mesh"), "{error}");
     }
 
     /// A document written back through a bare state, its ext dropped, reads

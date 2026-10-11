@@ -11,7 +11,7 @@ use std::{
     mem,
 };
 use ty_math::TyVector3U32;
-use vmax::VMaxSceneJsonFile;
+use vmax::{VMaxOpaqueFile, VMaxSceneJsonFile};
 use voxcore::{
     BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxVoxel, Error as VoxError, Result as VoxResult,
     VoxExt, VoxGcRemap, VoxObject, VoxState,
@@ -45,6 +45,19 @@ pub struct VMaxExt {
     /// Per-object editor state by object id.
     #[cfg_attr(feature = "serde", serde(rename = "object-states"))]
     pub object_states: BTreeMap<U32Id<BVoxObject>, VMaxExtObjectState>,
+
+    /// Every package file the scene does not model, by package path, as
+    /// stored: external meshes and their textures, animations, and any file a
+    /// later Voxel Max adds. The write puts each back.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "other-files",
+            default,
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub other_files: BTreeMap<String, VMaxOpaqueFile>,
 }
 
 fn refuse(reason: impl Display) -> VoxError {
@@ -224,9 +237,18 @@ impl VMaxExt {
         let object = state.object(object_id).expect("a regridded object is live");
         let (_, placement) = place_object(object);
         let old_center = content_center(old_bounds, old_voxel_ids);
-        for ((target, center), old_center) in cam.o.iter_mut().zip(placement.center).zip(old_center)
+        for (axis, ((target, center), old_center)) in cam
+            .o
+            .iter_mut()
+            .zip(placement.center)
+            .zip(old_center)
+            .enumerate()
         {
-            *target += center - old_center;
+            let delta = center - old_center;
+            *target += delta;
+            if let Some(reference) = &mut object_state.camera_reference_center {
+                reference[axis] += delta;
+            }
         }
         Ok(())
     }

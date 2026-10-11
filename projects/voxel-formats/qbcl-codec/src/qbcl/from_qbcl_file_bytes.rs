@@ -70,8 +70,10 @@ fn read_thumbnail(reader: &mut ByteReader) -> Result<QbclThumbnail> {
     })?;
     let pixels = reader
         .read_bytes(byte_len)?
-        .chunks_exact(4)
-        .map(|pixel| QbclColor::new(pixel[2], pixel[1], pixel[0], pixel[3]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[b, g, r, a]| QbclColor::new(r, g, b, a))
         .collect();
     Ok(QbclThumbnail {
         width,

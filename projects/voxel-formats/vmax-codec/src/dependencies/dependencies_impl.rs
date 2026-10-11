@@ -36,7 +36,110 @@ fn decode_plist<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
 fn encode_plist<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     plist::to_writer_binary(&mut bytes, value).map_err(|error| error.to_string())?;
-    Ok(bytes)
+    fit_object_refs(bytes)
+}
+
+/// Rewrites a binary plist so Apple's reader accepts its object references.
+/// CoreFoundation rejects a binary plist whose object count reaches
+/// `2^(8 * width)` for its reference width, while the `plist` crate sizes the
+/// width for the highest object index. A plist of exactly 256 objects then
+/// carries 1-byte references, and Voxel Max fails to open the file. Widens the
+/// references of such a plist and leaves any other untouched. Every object
+/// keeps its bytes but its references.
+fn fit_object_refs(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    let trailer = bytes
+        .len()
+        .checked_sub(32)
+        .ok_or("a binary plist ends in a 32-byte trailer")?;
+    let offset_width = usize::from(bytes[trailer + 6]);
+    let ref_width = usize::from(bytes[trailer + 7]);
+    let count = be_uint(&bytes[trailer + 8..trailer + 16]);
+    if ref_width >= 8 || count < 1 << (8 * ref_width) {
+        return Ok(bytes);
+    }
+    let table = be_uint(&bytes[trailer + 24..trailer + 32]) as usize;
+    let wide = uint_width(count);
+
+    let mut out = b"bplist00".to_vec();
+    let mut offsets = Vec::with_capacity(count as usize);
+    for index in 0..count as usize {
+        let at = table + index * offset_width;
+        let start = be_uint(&bytes[at..at + offset_width]) as usize;
+        offsets.push(out.len() as u64);
+        let kind = bytes[start] >> 4;
+        let (length, header_end) = object_length(&bytes, start)?;
+        match kind {
+            0xA | 0xC | 0xD => {
+                out.extend_from_slice(&bytes[start..header_end]);
+                let refs = if kind == 0xD { 2 * length } else { length };
+                for slot in 0..refs {
+                    let at = header_end + slot * ref_width;
+                    let object = be_uint(&bytes[at..at + ref_width]);
+                    out.extend_from_slice(&object.to_be_bytes()[8 - wide..]);
+                }
+            }
+
+            _ => out.extend_from_slice(&bytes[start..header_end + length]),
+        }
+    }
+
+    let table = out.len() as u64;
+    let offset_width = uint_width(table);
+    for offset in offsets {
+        out.extend_from_slice(&offset.to_be_bytes()[8 - offset_width..]);
+    }
+    out.extend_from_slice(&[0; 6]);
+    out.extend_from_slice(&[offset_width as u8, wide as u8]);
+    out.extend_from_slice(&count.to_be_bytes());
+    out.extend_from_slice(&bytes[trailer + 16..trailer + 24]);
+    out.extend_from_slice(&table.to_be_bytes());
+    Ok(out)
+}
+
+/// The object at `start` as `(length, header_end)`: a container's entry count
+/// or any other object's payload length in bytes, and where its marker and
+/// count end.
+fn object_length(bytes: &[u8], start: usize) -> Result<(usize, usize), String> {
+    let marker = bytes[start];
+    let low = usize::from(marker & 0x0f);
+    let counted = || -> (usize, usize) {
+        if low < 0x0f {
+            return (low, start + 1);
+        }
+        let width = 1 << (bytes[start + 1] & 0x0f);
+        let count = be_uint(&bytes[start + 2..start + 2 + width]) as usize;
+        (count, start + 2 + width)
+    };
+    Ok(match marker >> 4 {
+        0x0 => (0, start + 1),
+        0x1 | 0x2 => (1 << low, start + 1),
+        0x3 => (8, start + 1),
+        0x4 | 0x5 | 0x7 | 0xA | 0xC | 0xD => counted(),
+        0x6 => {
+            let (count, end) = counted();
+            (2 * count, end)
+        }
+
+        0x8 => (low + 1, start + 1),
+        kind => return Err(format!("binary plist object marker {kind:#x} is unknown")),
+    })
+}
+
+/// The big-endian unsigned integer in `bytes`.
+fn be_uint(bytes: &[u8]) -> u64 {
+    bytes
+        .iter()
+        .fold(0, |value, &byte| (value << 8) | u64::from(byte))
+}
+
+/// The narrowest plist integer width, 1, 2, 4, or 8 bytes, whose range holds
+/// `value` below its limit, as CoreFoundation requires of reference and offset
+/// widths.
+fn uint_width(value: u64) -> usize {
+    [1, 2, 4]
+        .into_iter()
+        .find(|&width| value < 1 << (8 * width))
+        .unwrap_or(8)
 }
 
 impl CompressLzfse for DependenciesImpl {
@@ -228,10 +331,84 @@ impl EncodePng for DependenciesImpl {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CompressLzfse, DecodePng, DecodeVMaxSceneJson, DecompressLzfse, DependenciesImpl,
-        EncodePng, EncodeVMaxSceneJson,
+        CompressLzfse, DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse,
+        DependenciesImpl, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson,
     };
-    use vmax::{VMaxImage, VMaxPalettePngFile, VMaxSceneJsonFile};
+    use std::collections::BTreeMap;
+    use vmax::{
+        VMaxHistoryVmaxhvscFile, VMaxImage, VMaxPalettePngFile, VMaxSceneJsonFile, VMaxValue,
+    };
+
+    /// A binary plist's object count and reference width, from its trailer.
+    fn objects_and_ref_width(bytes: &[u8]) -> (u64, u8) {
+        let trailer = &bytes[bytes.len() - 32..];
+        let count = trailer[8..16]
+            .iter()
+            .fold(0, |value, &byte| (value << 8) | u64::from(byte));
+        (count, trailer[7])
+    }
+
+    /// Encodes `file`, checks it holds `objects` objects at a reference width
+    /// CoreFoundation reads, and decodes it back.
+    fn encode_objects(file: &VMaxHistoryVmaxhvscFile, objects: u64) -> Vec<u8> {
+        let bytes = DependenciesImpl.encode_history_vmaxhvsc(file).unwrap();
+        let (count, width) = objects_and_ref_width(&bytes);
+        assert_eq!(count, objects);
+        assert!(
+            count < 1 << (8 * u32::from(width)),
+            "{count} objects at {width}-byte refs"
+        );
+        assert_eq!(
+            &DependenciesImpl.decode_history_vmaxhvsc(&bytes).unwrap(),
+            file
+        );
+        bytes
+    }
+
+    /// The cache and pivot keys a current Voxel Max writes on objects and
+    /// groups parse into their fields.
+    #[test]
+    fn a_scene_from_a_current_voxel_max_parses() {
+        let json = br#"{"v":4,"objects":[{"id":"o","data":"contents.vmaxb","hist":"history.vmaxhb","pal":"palette.png","t_p":[0,0,0],"t_r":[0,0,0,0],"t_s":[1,1,1],"ind":[0,0,0],"e_c":[1,1,1],"e_mi":[-1,-1,-1],"e_ma":[1,1,1],"e_cm":[1,1,1],"e_cmv":2,"e_vc":8,"e_vm":8.5,"t_prp":[0.5,0.5,0.5]}],"groups":[{"id":"g","name":"group","t_p":[0,0,0],"t_r":[0,0,0,0],"t_s":[1,1,1],"ind":[0,1,0],"e_c":[0,0,0],"e_cm":[0,0,0],"e_cmv":2,"e_vc":8}]}"#;
+
+        let scene = DependenciesImpl.decode_vmax_scene_json(json).unwrap();
+
+        let object = &scene.objects[0];
+        assert_eq!(
+            (object.e_vc, object.e_vm, object.e_cmv, object.t_prp),
+            (Some(8), Some(8.5), Some(2), Some([0.5, 0.5, 0.5]))
+        );
+        assert_eq!(scene.groups[0].e_vc, Some(8));
+    }
+
+    /// An array of exactly 256 objects takes 2-byte references, since Apple's
+    /// reader, and so Voxel Max, rejects 1-byte references to 256 objects.
+    #[test]
+    fn a_plist_of_256_objects_takes_references_apple_reads() {
+        let file = VMaxHistoryVmaxhvscFile((0..255).map(VMaxValue::Integer).collect());
+        encode_objects(&file, 256);
+    }
+
+    /// A dictionary's key and value references widen with the array's.
+    #[test]
+    fn a_dictionary_at_the_reference_limit_widens_its_references() {
+        let entries = (0..127)
+            .map(|index| (format!("key{index:03}"), VMaxValue::Integer(1000 + index)))
+            .collect::<BTreeMap<_, _>>();
+        let file = VMaxHistoryVmaxhvscFile(vec![VMaxValue::Dictionary(entries)]);
+        encode_objects(&file, 256);
+    }
+
+    /// A plist under the reference limit keeps the bytes the `plist` crate
+    /// writes.
+    #[test]
+    fn a_plist_under_the_reference_limit_keeps_its_bytes() {
+        let file = VMaxHistoryVmaxhvscFile((0..254).map(VMaxValue::Integer).collect());
+        let bytes = encode_objects(&file, 255);
+        let mut plain = Vec::new();
+        plist::to_writer_binary(&mut plain, &file).unwrap();
+        assert_eq!(bytes, plain);
+    }
 
     #[test]
     fn lzfse_round_trips_and_frames_the_stream() {

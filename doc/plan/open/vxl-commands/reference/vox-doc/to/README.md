@@ -32,4 +32,15 @@ Every target takes:
    preserved. Palettes and value pools ride through untouched. Given no
    selector, the whole document converts.
 
-Only `voxj` carries format-specific options in this plan; see its page.
+`vmax` additionally accepts `--object-size auto|32|64|128|256|512`.
+The default `auto` keeps a loaded object's supported workspace size when its
+canvas fits; new objects use 256 or 512. A fixed size centers each object's
+occupied voxels in that cube, compacts empty canvas margins, and errors when
+an object cannot fit. Its scene position, parent transforms and rotation
+pivot remain equivalent; the editor camera follows the internal grid.
+
+```sh
+vxl vox-doc to vmax scene.voxj --object-size 256
+```
+
+See the `voxj` page for its format-specific options.

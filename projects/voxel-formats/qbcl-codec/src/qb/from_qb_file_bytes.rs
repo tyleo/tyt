@@ -111,8 +111,10 @@ fn read_raw_voxels(
     })?;
     Ok(reader
         .read_bytes(byte_len)?
-        .chunks_exact(4)
-        .map(|cell| decode_color([cell[0], cell[1], cell[2], cell[3]], color_format))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&cell| decode_color(cell, color_format))
         .collect())
 }
 

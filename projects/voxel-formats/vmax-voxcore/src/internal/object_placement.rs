@@ -1,8 +1,6 @@
-use vmax::VMaxViewBox;
-
 /// An object's internal-grid placement derived for the Voxel Max write: where
-/// its voxels sit in the private workspace, and the content box and build
-/// volume that follow. The scene placement is recovered separately from the
+/// its voxels sit in the private workspace, and the content box that
+/// follows. The scene placement is recovered separately from the
 /// node transform.
 pub struct ObjectPlacement {
     /// The runtime grid's min corner in the workspace.
@@ -19,7 +17,4 @@ pub struct ObjectPlacement {
 
     /// The content box max relative to the center (`e_ma`): `bounds / 2`.
     pub bounds_max: [f64; 3],
-
-    /// The build volume (`tools.vp`): the edit grid placed in the workspace.
-    pub view_box: VMaxViewBox,
 }

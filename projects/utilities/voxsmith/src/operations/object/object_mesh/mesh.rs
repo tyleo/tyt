@@ -1079,8 +1079,8 @@ mod tests {
             panic!("a u16 value lands as u16");
         };
         assert_eq!(indices.len(), 20);
-        assert!(indices.chunks_exact(4).all(|block| {
-            block[0] % 4 == 0 && block == [block[0], block[0] + 1, block[0] + 2, block[0] + 3]
+        assert!(indices.as_chunks::<4>().0.iter().all(|block| {
+            block[0] % 4 == 0 && *block == [block[0], block[0] + 1, block[0] + 2, block[0] + 3]
         }));
         assert!(indices.windows(2).all(|pair| pair[0] < pair[1]));
 

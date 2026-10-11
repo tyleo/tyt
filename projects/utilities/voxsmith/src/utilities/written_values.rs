@@ -337,14 +337,7 @@ fn ints(components: Vec<i64>, dimension: Dimension) -> WrittenValues {
 
 /// `components` grouped into arrays of `N`.
 fn arrays<T: Copy, const N: usize>(components: &[T]) -> Vec<[T; N]> {
-    components
-        .chunks_exact(N)
-        .map(|chunk| {
-            chunk
-                .try_into()
-                .expect("a value holds whole vectors of its width")
-        })
-        .collect()
+    components.as_chunks::<N>().0.to_vec()
 }
 
 /// Errors unless every component of each color lies in the color range.

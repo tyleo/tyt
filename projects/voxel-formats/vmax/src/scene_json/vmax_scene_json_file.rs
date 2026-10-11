@@ -1,4 +1,4 @@
-use crate::{VMaxGroup, VMaxObject, VMaxSceneCamera};
+use crate::{VMaxGroup, VMaxObject, VMaxSceneCamera, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -25,11 +25,13 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cam: Option<VMaxSceneCamera>,
 
-    /// Antialiasing flag, e.g. `"t"`.
+    /// The face the scene camera's view snaps to: `"f"`, `"r"`, `"ba"`,
+    /// `"l"`, `"t"`, or `"bt"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub af: Option<String>,
 
-    /// Antialiasing quality level, e.g. `2`.
+    /// The active group, an index into `groups`. Voxel Max reads it unchecked,
+    /// so it must name a listed group.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub ag: Option<i64>,
 
@@ -43,15 +45,10 @@ pub struct VMaxSceneJsonFile {
     )]
     pub aint: Option<f64>,
 
-    /// Ambient-occlusion amount.
-    #[cfg_attr(
-        feature = "serde",
-        serde(
-            skip_serializing_if = "Option::is_none",
-            serialize_with = "crate::finite"
-        )
-    )]
-    pub ao: Option<f64>,
+    /// The active object, an index into `objects`. Voxel Max reads it
+    /// unchecked, so it must name a listed object.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub ao: Option<i64>,
 
     /// Background color, e.g. `"#151313FF"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
@@ -135,9 +132,19 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub nrn: Option<bool>,
 
-    /// Scene-level boolean flag present on some documents.
+    /// Whether the scene holds no object on purpose, which keeps Voxel Max
+    /// from rebuilding the objects from the scene's history.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub oie: Option<bool>,
+
+    /// The level the scene opens on: `-1` for the scene, else an index into
+    /// `groups`.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub vl: Option<i64>,
+
+    /// The textures each external mesh's contents file references, as stored.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub trsc: Option<VMaxValue>,
 
     /// Outline intensity.
     #[cfg_attr(

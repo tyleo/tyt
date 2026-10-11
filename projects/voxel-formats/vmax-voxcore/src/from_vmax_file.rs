@@ -4,12 +4,17 @@ use crate::{
     decode_axis_angle, synthesized_object_state, vm_coefficient_to_pbr_factor,
 };
 use branded_id::{IteratorExt, U32Id};
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    array::from_fn,
+    collections::{BTreeMap, HashMap},
+};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
     VMaxSceneJsonFile, VMaxViewBox,
-    snapshots::{VMaxVoxel, decode_vmax_snapshots},
+    snapshots::{
+        SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, decode_vmax_legacy_chunks, decode_vmax_snapshots,
+    },
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool, VoxHierarchyNode,
@@ -32,10 +37,14 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// voxcore's Y-up axes. The rest of the Voxel Max state becomes the ext. Voxel
 /// snapshots are decoded to voxels on the fly and palette color tables unpacked
 /// as needed. Color indices are 1-based in Voxel Max, so a voxel's color cell
-/// is `color_idx - 1`. The material byte is 0-based and used directly.
+/// is `color_idx - 1`. The material byte is 0-based and used directly. An
+/// external mesh, an object whose contents is a SceneKit archive rather than
+/// voxels, places nothing in voxcore: its node keeps the mesh in the ext, and
+/// the package's unmodeled files ride in the ext as stored, so the write puts
+/// both back.
 ///
-/// Errors on malformed geometry or on a cross-reference the checked insertions
-/// reject.
+/// Errors on malformed geometry, on an object whose contents file the package
+/// lacks, or on a cross-reference the checked insertions reject.
 pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut main = VoxMain::default();
@@ -46,10 +55,21 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     // One voxcore object per distinct geometry; instances of one geometry
     // collapse to a single object placed by several nodes.
     let mut object_transforms: Vec<TyTransformF64> = Vec::new();
-    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>)> = Vec::new();
-    let mut object_ids: Vec<U32Id<BVoxObject>> = Vec::new();
+    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])> = Vec::new();
+    let mut object_ids: Vec<Option<U32Id<BVoxObject>>> = Vec::new();
     let mut instances: HashMap<InstanceKey, U32Id<BVoxObject>> = HashMap::new();
     for object in &scene.objects {
+        if is_external_mesh(object) {
+            if !serde.other_files.contains_key(&object.data) {
+                return Err(Error::invalid(format!(
+                    "object `{}` names external mesh `{}`, which the package does not hold",
+                    object.name, object.data
+                )));
+            }
+            object_transforms.push(mesh_transform(object).zup_to_yup());
+            object_ids.push(None);
+            continue;
+        }
         let key = InstanceKey::of(object);
         if let Some(&existing) = key.as_ref().and_then(|key| instances.get(key)) {
             // An instance shares the geometry it re-places, so it re-derives
@@ -57,17 +77,17 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
             let box_min = authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min);
             let origin = pivot_origin(box_min, object.center);
             object_transforms.push(object_transform(object, box_min, origin).zup_to_yup());
-            object_ids.push(existing);
+            object_ids.push(Some(existing));
             continue;
         }
         // The object and its placing transform turn together, so the node
-        // keeps pivoting about the content center.
-        let (vox_object, data, transform) =
+        // stays on the object's content center.
+        let (vox_object, data, transform, camera_reference_center) =
             build_object(serde, object, &mut main, &mut palette_provenance)?;
         let object_id = main.retain_object(vox_object.zup_to_yup())?;
-        object_data.push((object_id, data));
+        object_data.push((object_id, data, camera_reference_center));
         object_transforms.push(transform.zup_to_yup());
-        object_ids.push(object_id);
+        object_ids.push(Some(object_id));
         if let Some(key) = key {
             instances.insert(key, object_id);
         }
@@ -136,8 +156,10 @@ fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
 
 /// The integer grid `origin`: the min corner offset from the placing node in
 /// the node's local voxel frame. `round(box_min - center)` so the node
-/// transform's position lands on the content center (the pivot); any odd-extent
-/// half-voxel remainder is absorbed by that position, keeping rendering exact.
+/// transform's position lands on the content center, where a voxcore rotation
+/// of the node then pivots. Voxel Max's own `t_p` turns about the grid origin,
+/// which [`object_transform`] accounts for. Any odd-extent half-voxel remainder
+/// is absorbed by the node position, keeping rendering exact.
 fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
     (TyVector3I32::from_array(box_min).as_dvec3() - TyVector3F64::from_array(center))
         .round()
@@ -145,24 +167,19 @@ fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
         .to_array()
 }
 
-/// The node transform that places an object so rotating the node pivots its
-/// grid about the content center. Voxel Max renders a voxel at `t_p + center +
-/// R*S*(voxel - center)`, and a voxel is `box_min + local`, which sits at
-/// node-local `origin + local`, so the node position is `t_p + center +
-/// R*S*(box_min - center - origin)`. The bracket is the sub-voxel remainder
-/// `box_min - center - origin`, so the position lands on the pivot and
-/// rendering stays exact for any integer `origin`.
+/// The node transform that places an object as Voxel Max renders it. Voxel
+/// Max places an object by `T(t_p) * R * S` over its workspace grid, so a
+/// voxel at grid position `voxel` renders at `t_p + R*S*voxel`. A voxel is
+/// `box_min + local`, which sits at node-local `origin + local`, so the node
+/// position is `t_p + R*S*(box_min - origin)`.
 fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) -> TyTransformF64 {
     let rotation = decode_axis_angle(object.rotation);
     let scale = TyVector3F64::from_array(object.scale);
-    let center = TyVector3F64::from_array(object.center);
     let box_min = TyVector3I32::from_array(box_min).as_dvec3();
     let origin = TyVector3I32::from_array(origin).as_dvec3();
 
-    // t_p + center + R*S*(box_min - center - origin); the bracket is the
-    // sub-voxel remainder.
-    let offset = (box_min - center - origin) * scale;
-    let position = TyVector3F64::from_array(object.position) + center + rotation * offset;
+    let offset = (box_min - origin) * scale;
+    let position = TyVector3F64::from_array(object.position) + rotation * offset;
 
     TyTransformF64::new(position, rotation, scale)
 }
@@ -177,36 +194,54 @@ fn build_object(
     object: &VMaxObject,
     main: &mut VoxMain<()>,
     palette_provenance: &mut BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
-) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
+) -> Result<(VoxObject, Option<String>, TyTransformF64, [f64; 3])> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
     } else {
-        decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)?
+        let contents = serde.contents_files.get(&object.data).ok_or_else(|| {
+            Error::invalid(format!(
+                "object `{}` names contents file `{}`, which the package does not hold",
+                object.name, object.data
+            ))
+        })?;
+        // Voxel Max reads an older contents file's legacy chunks in place of
+        // its snapshots.
+        let mut voxels = if contents.v < SNAPSHOT_CONTENTS_VERSION {
+            decode_vmax_legacy_chunks(contents.v, &contents.chunks, &contents.voxels)?
+        } else {
+            decode_vmax_snapshots(&contents.snapshots)?
+        };
+        if let Some((min, max)) = work_area(contents) {
+            voxels.retain(|voxel| {
+                (0..3).all(|axis| (min[axis]..=max[axis]).contains(&voxel.position[axis]))
+            });
+        }
+        voxels
     };
 
     // The runtime grid is exactly tight: the occupied voxel extent, re-based so
     // the voxels fill it from the origin. An empty object is a degenerate [0,
-    // 0, 0] grid seated at its content box so the placing node still pivots
-    // about the recorded center. `origin` offsets that grid from the node so
-    // the node transform pivots about the content center.
+    // 0, 0] grid seated at its content box so the placing node still sits on
+    // the recorded center. `origin` offsets that grid from the node so the
+    // node lands on the content center.
     let (box_min, bounds) = match min_corner(&voxels) {
         Some(min) => (min, object_bounds(&voxels, min)),
 
-        // An empty object seats at its content box; lacking one, it seats at
-        // the build volume `vp.min` so the edit grid still contains the runtime
-        // grid, and only at the world origin when it has neither.
-        None => (
-            authored_box(object)
-                .map(|(box_min, _)| box_min)
-                .or_else(|| {
-                    view_box(serde, object)
-                        .map(|vp| [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32])
-                })
-                .unwrap_or([0, 0, 0]),
-            [0, 0, 0],
-        ),
+        // An empty object takes its content box, which a writer frames on its
+        // build volume; lacking one, it seats at the work area `vp.min` so the
+        // edit grid still contains the runtime grid, and only at the world
+        // origin when it has neither.
+        None => authored_box(object).unwrap_or_else(|| {
+            (
+                view_box(serde, object)
+                    .map(|vp| [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32])
+                    .unwrap_or([0, 0, 0]),
+                [0, 0, 0],
+            )
+        }),
     };
+    let camera_reference_center = from_fn(|axis| box_min[axis] as f64 + bounds[axis] as f64 / 2.0);
     let origin = pivot_origin(box_min, object.center);
     let transform = object_transform(object, box_min, origin);
     // The build volume is the author's `tools.vp`; its `origin` offsets it from
@@ -238,7 +273,7 @@ fn build_object(
     ));
 
     if voxels.is_empty() {
-        return Ok((vox_object, data, transform));
+        return Ok((vox_object, data, transform, camera_reference_center));
     }
 
     // One palette carries the color table and the material list: each voxel
@@ -260,12 +295,9 @@ fn build_object(
             (voxel.position[1] - box_min[1] + offset[1]) as u32,
             (voxel.position[2] - box_min[2] + offset[2]) as u32,
         );
-        let voxel_id = vox_object.voxel_id(position).ok_or_else(|| {
-            Error::invalid(format!(
-                "object \"{}\" voxel ({}, {}, {}) lies outside its build volume",
-                object.name, voxel.position[0], voxel.position[1], voxel.position[2]
-            ))
-        })?;
+        let voxel_id = vox_object
+            .voxel_id(position)
+            .expect("a voxel in the work area lies in the grid spanning it");
 
         let material_id = palette.combo_material_ids[&combo_key(voxel, palette.has_materials)];
         vox_object
@@ -278,7 +310,7 @@ fn build_object(
             })?;
     }
 
-    Ok((vox_object, data, transform))
+    Ok((vox_object, data, transform, camera_reference_center))
 }
 
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.
@@ -303,6 +335,22 @@ fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
         bounds[2] = bounds[2].max((v.position[2] - box_min[2] + 1) as u32);
     }
     bounds
+}
+
+/// The region of an object's grid Voxel Max shows, as inclusive `(min, max)`
+/// corners: the work area `tools.vp`, else the extent `eo` names, which Voxel
+/// Max reads as 8 when absent or outside 5 to 9. `None` at the full extent of
+/// order 9, where every voxel shows. Voxel Max keeps a voxel outside the region
+/// but hides it, so the render a read gives leaves it out.
+fn work_area(contents: &VMaxContentsVmaxbFile) -> Option<([i32; 3], [i32; 3])> {
+    if let Some(vp) = contents.tools.as_ref().and_then(|tools| tools.vp.as_ref()) {
+        return Some((vp.min.map(|v| v as i32), vp.max.map(|v| v as i32)));
+    }
+    let order = contents
+        .eo
+        .filter(|order| (5..=9).contains(order))
+        .unwrap_or(8);
+    (order < 9).then(|| ([0; 3], [(1 << order) - 1; 3]))
 }
 
 /// The object's authored build volume (`tools.vp`) from its contents file, the
@@ -545,8 +593,19 @@ fn object_palette(
 fn combo_key(voxel: &VMaxVoxel, has_materials: bool) -> (u8, u8) {
     (
         voxel.color_idx,
-        if has_materials { voxel.material_idx } else { 0 },
+        if has_materials {
+            material_slot(voxel.material_idx)
+        } else {
+            0
+        },
     )
+}
+
+/// The material slot a voxel's material byte draws: its low three bits. Voxel
+/// Max sets the higher bits on a selected voxel and on editor-only layers, and
+/// reads the slot as `byte & 7`.
+fn material_slot(material_byte: u8) -> u8 {
+    material_byte & 7
 }
 
 /// The 0-based RGBA color table for an object. The `palette*.png` pixels when
@@ -563,11 +622,7 @@ fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<[u8; 4]> {
             && !palette.colors.is_empty()
         {
             // The sidecar stores colors packed (4 bytes per cell); unpack them.
-            return palette
-                .colors
-                .chunks_exact(4)
-                .map(|c| [c[0], c[1], c[2], c[3]])
-                .collect();
+            return palette.colors.as_chunks::<4>().0.to_vec();
         }
     }
     (0..PALETTE_COLORS).map(|_| PLACEHOLDER_COLOR).collect()
@@ -621,13 +676,14 @@ fn vmax_ext_material(material: &VMaxMaterial) -> VMaxExtMaterial {
 
 /// Builds the voxcore hierarchy: one node per group then one per object, the
 /// latter placing its geometry. `object_ids[i]` is the object that scene object
-/// `i` places, so instances share a `child_objects` id. `object_transforms`
-/// already sit on Y-up axes. Group transforms turn here. Returns the nodes in
-/// id order and the root ids.
+/// `i` places, so instances share a `child_objects` id, or `None` for an
+/// external mesh, whose node places nothing. `object_transforms` already sit
+/// on Y-up axes. Group transforms turn here. Returns the nodes in id order and
+/// the root ids.
 fn build_hierarchy(
     scene: &VMaxSceneJsonFile,
     object_transforms: &[TyTransformF64],
-    object_ids: &[U32Id<BVoxObject>],
+    object_ids: &[Option<U32Id<BVoxObject>>],
 ) -> (Vec<VoxHierarchyNode>, Vec<U32Id<BVoxHierarchyNode>>) {
     let mut nodes: Vec<VoxHierarchyNode> = Vec::new();
     let mut node_index_of_id: HashMap<&str, usize> = HashMap::new();
@@ -643,13 +699,14 @@ fn build_hierarchy(
             transform: group_transform(group).zup_to_yup(),
         });
     }
+    // Voxel Max parents only under groups: a `pid` naming an object or
+    // nothing places the node at the scene root.
     for (index, object) in scene.objects.iter().enumerate() {
-        node_index_of_id.insert(&object.id, nodes.len());
         parents.push(object.parent_id.as_deref());
         nodes.push(VoxHierarchyNode {
             name: object.name.clone(),
             child_node_ids: Vec::new(),
-            child_object_ids: vec![object_ids[index]],
+            child_object_ids: object_ids[index].into_iter().collect(),
             transform: object_transforms[index],
         });
     }
@@ -666,6 +723,22 @@ fn build_hierarchy(
     (nodes, roots)
 }
 
+/// Whether `object` is an external mesh: its `data` names a SceneKit archive
+/// (`*.scndata`) rather than voxels.
+fn is_external_mesh(object: &VMaxObject) -> bool {
+    object.data.ends_with(".scndata")
+}
+
+/// The transform for an external mesh's node: its `T(t_p) * R * S`, under
+/// which Voxel Max renders each vertex offset by the content center `e_c`.
+fn mesh_transform(object: &VMaxObject) -> TyTransformF64 {
+    TyTransformF64::new(
+        TyVector3F64::from_array(object.position),
+        decode_axis_angle(object.rotation),
+        TyVector3F64::from_array(object.scale),
+    )
+}
+
 /// The transform for a scene group, placed directly at its authored position.
 fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
     TyTransformF64::new(
@@ -679,15 +752,14 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 ///
 /// 1. `node_ids`: the hierarchy node ids in scene order, groups then objects
 /// 2. `palettes`: each object palette's provenance by palette id
-/// 3. `object_data`: each object's contents filename by object id, or `None`
-///    for an object with no contents file, which takes a synthesized editor
-///    state
+/// 3. `object_data`: each object's contents filename and live content center
+///    in its source grid, by object id. No filename takes a synthesized state.
 fn vmax_ext_from_file(
     serde: &VMaxFile,
     main: &VoxMain<()>,
     node_ids: &[U32Id<BVoxHierarchyNode>],
     palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
-    object_data: Vec<(U32Id<BVoxObject>, Option<String>)>,
+    object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])>,
 ) -> VMaxExt {
     let scene = &serde.scene_json_file;
     let mut scene_block = scene.clone();
@@ -706,11 +778,12 @@ fn vmax_ext_from_file(
         hierarchy_nodes,
         palettes,
         object_states: BTreeMap::new(),
+        other_files: serde.other_files.clone(),
     };
 
-    for (object_id, data) in object_data {
+    for (object_id, data, camera_reference_center) in object_data {
         let entry = match data.and_then(|data| serde.contents_files.get(&data)) {
-            Some(contents) => object_state_from_contents(contents),
+            Some(contents) => object_state_from_contents(contents, camera_reference_center),
 
             None => {
                 let object = main.object(object_id).expect("a loaded object is live");
@@ -723,24 +796,44 @@ fn vmax_ext_from_file(
     ext
 }
 
-/// Captures the editor state of a contents file for the ext. The tool partition
-/// (`tools.vp`) is dropped: it is the object's build volume, held natively as
-/// the object's grid, so it is rebuilt on write rather than stored here.
-fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VMaxExtObjectState {
+/// Captures the state of a contents file the ext keeps: its version and its
+/// camera frame and supported extent. Editor tool state is skipped, and the
+/// work area's margins are held natively as the object's grid.
+fn object_state_from_contents(
+    data: &VMaxContentsVmaxbFile,
+    camera_reference_center: [f64; 3],
+) -> VMaxExtObjectState {
     VMaxExtObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
-        tools: data.tools.clone().map(|mut tools| {
-            tools.vp = None;
-            tools
-        }),
-        brush: data.brush.clone(),
         cam: data.cam.clone(),
+        extent_order: Some(contents_workspace_order(data)),
+        camera_reference_center: Some(camera_reference_center),
     }
 }
 
+/// The editor viewport takes precedence over the storage extent. Voxel Max
+/// normalizes saved storage to 512 even when the viewport is 256 or smaller.
+/// Only cube widths are written without editor tool state, so an arbitrary
+/// viewport takes the smallest supported cube containing its dimensions.
+fn contents_workspace_order(data: &VMaxContentsVmaxbFile) -> i64 {
+    if let Some(viewport) = data.tools.as_ref().and_then(|tools| tools.vp.as_ref()) {
+        let required = (0..3)
+            .map(|axis| {
+                viewport.max[axis]
+                    .saturating_sub(viewport.min[axis])
+                    .saturating_add(1)
+            })
+            .max()
+            .unwrap_or(0);
+        return (5..=9).find(|&order| required <= (1 << order)).unwrap_or(9);
+    }
+    data.eo.filter(|order| (5..=9).contains(order)).unwrap_or(8)
+}
+
 /// The per-node provenance for a scene object. The hierarchy carries the
-/// parent. The write derives the content box from the object's tight bounds.
+/// parent. The write derives the content box from the object's tight bounds,
+/// and an external mesh keeps its object, content box and all.
 fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
     VMaxExtNode {
         id: object.id.clone(),
@@ -750,6 +843,8 @@ fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
         pivot_face: object.t_pf.clone(),
         pivot_align: object.t_pa.clone(),
         selected: object.s,
+        hidden: object.hidden,
+        external_mesh: is_external_mesh(object).then(|| object.clone()),
     }
 }
 
@@ -764,18 +859,21 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
         pivot_face: group.t_pf.clone(),
         pivot_align: group.t_pa.clone(),
         selected: group.s,
+        hidden: group.hidden,
+        external_mesh: None,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::from_vmax_file;
+    use crate::{VMaxWriteOptions, from_vmax_file, to_vmax_file};
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
-    use ty_math::{TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
     use vmax::{
-        VMaxContentsVmaxbFile, VMaxFile, VMaxObject, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
-        snapshots::{VMaxVoxel, encode_vmax_snapshots},
+        VMaxContentsVmaxbFile, VMaxFile, VMaxLegacyChunkVoxels, VMaxMaterial, VMaxObject,
+        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
+        snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
     };
     use voxcore::{BVoxHierarchyNode, BVoxObject};
 
@@ -789,6 +887,7 @@ mod tests {
             VMaxViewBox {
                 min: [112, 112, 0],
                 max: [143, 143, 31],
+                flat: None,
             },
             &[],
         )
@@ -817,18 +916,22 @@ mod tests {
             center,
             bounds_min: None,
             bounds_max: None,
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         };
         let contents = VMaxContentsVmaxbFile {
             snapshots: encode_vmax_snapshots(voxels),
             uuid: "u".to_owned(),
             v: 4,
-            tools: Some(VMaxTools {
-                vp: Some(vp),
-                ..Default::default()
-            }),
-            brush: None,
+            tools: Some(VMaxTools { vp: Some(vp) }),
             cam: None,
             pal: None,
+            eo: None,
+            chunks: Vec::new(),
+            voxels: Vec::new(),
         };
         let mut contents_files = BTreeMap::new();
         contents_files.insert("contents1.vmaxb".to_owned(), contents);
@@ -841,13 +944,11 @@ mod tests {
             contents_files,
             palette_settings_files: BTreeMap::new(),
             palette_png_files: BTreeMap::new(),
-            history_vmaxhb_files: BTreeMap::new(),
-            history_vmaxhvsb_files: BTreeMap::new(),
-            history_vmaxhvsc_files: BTreeMap::new(),
             selection_vmaxb_files: BTreeMap::new(),
             thumbnail_png: None,
             contents_vmax_pngs: BTreeMap::new(),
             group_pngs: BTreeMap::new(),
+            other_files: BTreeMap::new(),
         }
     }
 
@@ -877,6 +978,7 @@ mod tests {
             VMaxViewBox {
                 min: [0, 0, 0],
                 max: [1, 2, 3],
+                flat: None,
             },
             &[voxel(0, 0, 0), voxel(1, 2, 3)],
         );
@@ -904,5 +1006,214 @@ mod tests {
             .hierarchy_node(U32Id::<BVoxHierarchyNode>::from_u32(0))
             .expect("the placing node");
         assert_eq!(node.transform.position, TyVector3F64::new(1.0, 2.0, -2.0));
+    }
+
+    /// Voxel Max places an object by `T(t_p) * R * S` over its workspace grid,
+    /// so the voxel at grid position `v` renders centered at
+    /// `t_p + R*(v + 0.5)` for a unit scale, turning about the grid's origin
+    /// rather than the content center. Each loaded voxel lands there through
+    /// its placing node.
+    #[test]
+    fn places_a_rotated_object_where_voxel_max_renders_it() {
+        let voxel = |x: i32, y: i32, z: i32| VMaxVoxel {
+            position: [x, y, z],
+            material_idx: 0,
+            color_idx: 1,
+        };
+        let grid = [[128, 127, 3], [130, 129, 5]];
+        let mut file = one_object_file(
+            [129.5, 128.5, 4.5],
+            VMaxViewBox {
+                min: [120, 120, 0],
+                max: [140, 140, 10],
+                flat: None,
+            },
+            &grid.map(|[x, y, z]| voxel(x, y, z)),
+        );
+        let object = &mut file.scene_json_file.objects[0];
+        object.position = [-120.0, -100.0, 30.0];
+        object.rotation = [1.0, 0.0, 0.0, 1.2];
+        let rotation = TyQuaternionF64::from_axis_angle(TyVector3F64::X, 1.2);
+        let mut rendered: Vec<_> = grid
+            .iter()
+            .map(|cell| {
+                let center =
+                    TyVector3F64::from_array(cell.map(f64::from)) + TyVector3F64::splat(0.5);
+                TyVector3F64::new(-120.0, -100.0, 30.0) + rotation * center
+            })
+            .collect();
+
+        let main = from_vmax_file(&file).expect("a rotated object loads");
+
+        let node = main
+            .hierarchy_node(U32Id::<BVoxHierarchyNode>::from_u32(0))
+            .expect("the placing node");
+        let object = main
+            .object(U32Id::<BVoxObject>::from_u32(0))
+            .expect("the one object");
+        let origin = object.origin().as_dvec3();
+        let mut placed: Vec<_> = object
+            .iter_live()
+            .map(|voxel_id| {
+                let cell = object
+                    .voxel_position(voxel_id)
+                    .expect("a live cell")
+                    .as_dvec3();
+                let local = origin + cell + TyVector3F64::splat(0.5);
+                (node.transform.position + node.transform.rotation * local).yup_to_zup()
+            })
+            .collect();
+        let order = |a: &TyVector3F64, b: &TyVector3F64| a.x.total_cmp(&b.x);
+        rendered.sort_by(order);
+        placed.sort_by(order);
+        assert_eq!(placed.len(), rendered.len());
+        for (placed, rendered) in placed.iter().zip(&rendered) {
+            assert!(
+                (*placed - *rendered).length() < 1e-9,
+                "{placed:?} != {rendered:?}"
+            );
+        }
+    }
+
+    /// An object naming a contents file the package lacks errors with the
+    /// object and the file rather than stopping the read.
+    #[test]
+    fn a_missing_contents_file_errors() {
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                flat: None,
+            },
+            &[VMaxVoxel {
+                position: [0, 0, 0],
+                material_idx: 0,
+                color_idx: 1,
+            }],
+        );
+        file.contents_files.clear();
+
+        let error = from_vmax_file(&file).expect_err("a missing contents file errors");
+
+        assert!(error.to_string().contains("contents1.vmaxb"), "{error}");
+    }
+
+    /// Voxel Max marks a selected voxel by setting the material byte's bit
+    /// 3, so the byte `9` draws slot 1, and a selection saved in the file
+    /// loads as the slot's material.
+    #[test]
+    fn a_selected_voxel_draws_its_slot() {
+        let voxel = |material_idx: u8| VMaxVoxel {
+            position: [0, 0, 0],
+            material_idx,
+            color_idx: 1,
+        };
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                ..Default::default()
+            },
+            &[voxel(9)],
+        );
+        file.scene_json_file.objects[0].palette = "palette1.png".to_owned();
+        let material = |mc: f64| VMaxMaterial {
+            mi: String::new(),
+            mc,
+            rc: 0.5,
+            sic: 0.0,
+            sh: true,
+            tc: None,
+            md: None,
+        };
+        file.palette_settings_files.insert(
+            "palette1.settings.vmaxpsb".to_owned(),
+            VMaxPaletteSettingsVmaxpsbFile {
+                materials: vec![material(0.1), material(0.9)],
+                ..Default::default()
+            },
+        );
+
+        let main = from_vmax_file(&file).expect("a selected voxel loads");
+
+        let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        let palette = main.effective_palette(object).unwrap();
+        let metallic = palette.property_id_by_name("metallic").unwrap();
+        let voxel_id = object.iter_live().next().unwrap();
+        let value_id = palette.voxel_value_id(voxel_id, metallic).unwrap();
+        let value = palette
+            .property(metallic)
+            .unwrap()
+            .value_pool()
+            .float_values()
+            .unwrap()
+            .get(value_id)
+            .copied();
+        assert_eq!(value, Some(1.0));
+    }
+
+    /// A contents file older than version 4 holds its voxels in legacy chunks,
+    /// which load as Voxel Max loads them, and write back as snapshots under
+    /// the snapshot version.
+    #[test]
+    fn loads_a_legacy_object_and_writes_it_as_snapshots() {
+        let mut file = one_object_file(
+            [128.5, 128.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [255, 255, 255],
+                flat: None,
+            },
+            &[],
+        );
+        let contents = file.contents_files.get_mut("contents1.vmaxb").unwrap();
+        contents.v = 2;
+        contents.snapshots.clear();
+        contents.chunks = [128, 128, 0, 1]
+            .into_iter()
+            .flat_map(i32::to_le_bytes)
+            .collect();
+        let mut data = vec![0u8; 2 * 32 * 32 * 32];
+        data[2] = 0;
+        data[3] = 1;
+        contents.voxels = vec![VMaxLegacyChunkVoxels(data)];
+
+        let main = from_vmax_file(&file).expect("a legacy object loads");
+
+        let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        assert_eq!(object.live_count(), 1);
+        let written = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let contents = written.contents_files.values().next().unwrap();
+        assert_eq!(contents.v, SNAPSHOT_CONTENTS_VERSION);
+        assert!(contents.chunks.is_empty() && !contents.snapshots.is_empty());
+    }
+
+    /// Voxel Max parents only under groups, so an object whose `pid` names
+    /// another object loads at the scene root, as Voxel Max places it.
+    #[test]
+    fn an_object_parented_to_an_object_loads_at_the_root() {
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [0, 0, 0],
+                flat: None,
+            },
+            &[VMaxVoxel {
+                position: [0, 0, 0],
+                material_idx: 0,
+                color_idx: 1,
+            }],
+        );
+        let mut child = file.scene_json_file.objects[0].clone();
+        child.id = "child".to_owned();
+        child.parent_id = Some("o".to_owned());
+        file.scene_json_file.objects.push(child);
+
+        let main = from_vmax_file(&file).expect("an object-parented object loads");
+
+        assert_eq!(main.root_hierarchy_node_ids().len(), 2);
     }
 }

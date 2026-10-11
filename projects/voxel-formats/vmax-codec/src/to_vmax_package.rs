@@ -1,11 +1,10 @@
 use crate::{
     CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result,
-    to_contents_vmaxb_file_bytes, to_history_vmaxhb_file_bytes, to_history_vmaxhvsb_file_bytes,
-    to_history_vmaxhvsc_file_bytes, to_image_png_file_bytes, to_palette_png_file_bytes,
+    to_contents_vmaxb_file_bytes, to_image_png_file_bytes, to_palette_png_file_bytes,
     to_palette_settings_vmaxpsb_file_bytes, to_scene_json_file_bytes,
     to_selection_vmaxb_file_bytes,
 };
-use vmax::VMaxFile;
+use vmax::{VMaxFile, VMaxOpaqueFile};
 
 /// Writes a [`VMaxFile`] back to a `.vmax` package, encoding each file through
 /// `dependencies`, the inverse of
@@ -36,20 +35,8 @@ where
     for (name, png) in &file.palette_png_files {
         write(name, &to_palette_png_file_bytes(dependencies, png)?)?;
     }
-    for (name, history) in &file.history_vmaxhb_files {
-        write(name, &to_history_vmaxhb_file_bytes(dependencies, history)?)?;
-    }
-    for (name, history) in &file.history_vmaxhvsb_files {
-        write(
-            name,
-            &to_history_vmaxhvsb_file_bytes(dependencies, history)?,
-        )?;
-    }
-    for (name, history) in &file.history_vmaxhvsc_files {
-        write(
-            name,
-            &to_history_vmaxhvsc_file_bytes(dependencies, history)?,
-        )?;
+    for (name, VMaxOpaqueFile(bytes)) in &file.other_files {
+        write(name, bytes)?;
     }
     for (name, selection) in &file.selection_vmaxb_files {
         write(name, &to_selection_vmaxb_file_bytes(selection)?)?;

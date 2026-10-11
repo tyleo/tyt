@@ -1,12 +1,11 @@
 use crate::{
     DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse, Error, Result,
-    from_contents_vmaxb_file_bytes, from_history_vmaxhb_file_bytes,
-    from_history_vmaxhvsb_file_bytes, from_history_vmaxhvsc_file_bytes, from_image_png_file_bytes,
-    from_palette_png_file_bytes, from_palette_settings_vmaxpsb_file_bytes,
-    from_scene_json_file_bytes, from_selection_vmaxb_file_bytes,
+    from_contents_vmaxb_file_bytes, from_image_png_file_bytes, from_palette_png_file_bytes,
+    from_palette_settings_vmaxpsb_file_bytes, from_scene_json_file_bytes,
+    from_selection_vmaxb_file_bytes,
 };
 use std::collections::BTreeMap;
-use vmax::VMaxFile;
+use vmax::{VMaxFile, VMaxOpaqueFile};
 
 /// The package-level thumbnail's path within a `.vmax`.
 const THUMBNAIL_PATH: &str = "QuickLook/Thumbnail.png";
@@ -31,76 +30,62 @@ where
 {
     let scene_bytes =
         resolve("scene.json")?.ok_or_else(|| Error::Invalid("scene.json is missing".to_owned()))?;
-    let scene_json_file = from_scene_json_file_bytes(dependencies, &scene_bytes)?;
+    let scene_json_file = from_scene_json_file_bytes(dependencies, &scene_bytes)
+        .map_err(|error| Error::File("scene.json".to_owned(), Box::new(error)))?;
 
     let mut contents_files = BTreeMap::new();
     let mut palette_settings_files = BTreeMap::new();
     let mut palette_png_files = BTreeMap::new();
-    let mut history_vmaxhb_files = BTreeMap::new();
-    let mut history_vmaxhvsb_files = BTreeMap::new();
-    let mut history_vmaxhvsc_files = BTreeMap::new();
     let mut selection_vmaxb_files = BTreeMap::new();
     let mut thumbnail_png = None;
     let mut contents_vmax_pngs = BTreeMap::new();
     let mut group_pngs = BTreeMap::new();
+    let mut other_files = BTreeMap::new();
 
     // Classify every listed file by name and parse it into the matching map.
     // `scene.json` is already parsed above. `QuickLook/` thumbnails split by
     // role: the package `Thumbnail.png`, the per-object `contents*.vmaxb.png`,
-    // and the per-group `<id>.png` (everything else under `QuickLook/`).
-    // `.selection.vmaxb` is checked before `.vmaxb` so a selection sidecar is
-    // not mistaken for an object. Every kind Voxel Max writes is modeled, so an
-    // unrecognized name is reported rather than dropped.
+    // and the per-group `<id>.png`. `.selection.vmaxb` is checked before
+    // `.vmaxb` so a selection sidecar is not mistaken for an object. The undo
+    // history is skipped unread, since Voxel Max opens a package without it,
+    // and every other file is kept as stored, as Voxel Max keeps a file it
+    // does not know.
     for path in list()? {
-        if path == "scene.json" {
+        if path == "scene.json" || is_history(&path) {
             continue;
         }
         let Some(bytes) = resolve(&path)? else {
             continue;
         };
+        let in_file = |error: Error| Error::File(path.clone(), Box::new(error));
         if let Some(name) = path.strip_prefix(QUICK_LOOK_PREFIX) {
             if path == THUMBNAIL_PATH {
-                thumbnail_png = Some(from_image_png_file_bytes(dependencies, &bytes)?);
+                thumbnail_png =
+                    Some(from_image_png_file_bytes(dependencies, &bytes).map_err(in_file)?);
             } else if let Some(data) = name.strip_suffix(".png").and_then(strip_contents_suffix) {
-                contents_vmax_pngs.insert(data, from_image_png_file_bytes(dependencies, &bytes)?);
+                let image = from_image_png_file_bytes(dependencies, &bytes).map_err(in_file)?;
+                contents_vmax_pngs.insert(data, image);
             } else if let Some(id) = name.strip_suffix(".png") {
-                group_pngs.insert(
-                    id.to_owned(),
-                    from_image_png_file_bytes(dependencies, &bytes)?,
-                );
+                let image = from_image_png_file_bytes(dependencies, &bytes).map_err(in_file)?;
+                group_pngs.insert(id.to_owned(), image);
             } else {
-                return Err(Error::Invalid(format!(
-                    "unrecognized QuickLook file in .vmax package: {path}"
-                )));
+                other_files.insert(path, VMaxOpaqueFile(bytes));
             }
         } else if path.ends_with(".selection.vmaxb") {
-            selection_vmaxb_files.insert(path, from_selection_vmaxb_file_bytes(&bytes)?);
+            let selection = from_selection_vmaxb_file_bytes(&bytes).map_err(in_file)?;
+            selection_vmaxb_files.insert(path, selection);
         } else if path.ends_with(".vmaxb") {
-            contents_files.insert(path, from_contents_vmaxb_file_bytes(dependencies, &bytes)?);
+            let contents = from_contents_vmaxb_file_bytes(dependencies, &bytes).map_err(in_file)?;
+            contents_files.insert(path, contents);
         } else if path.ends_with(".settings.vmaxpsb") {
-            palette_settings_files.insert(
-                path,
-                from_palette_settings_vmaxpsb_file_bytes(dependencies, &bytes)?,
-            );
+            let settings =
+                from_palette_settings_vmaxpsb_file_bytes(dependencies, &bytes).map_err(in_file)?;
+            palette_settings_files.insert(path, settings);
         } else if path.ends_with(".png") {
-            palette_png_files.insert(path, from_palette_png_file_bytes(dependencies, &bytes)?);
-        } else if path.ends_with(".vmaxhb") {
-            history_vmaxhb_files
-                .insert(path, from_history_vmaxhb_file_bytes(dependencies, &bytes)?);
-        } else if path.ends_with(".vmaxhvsb") {
-            history_vmaxhvsb_files.insert(
-                path,
-                from_history_vmaxhvsb_file_bytes(dependencies, &bytes)?,
-            );
-        } else if path.ends_with(".vmaxhvsc") {
-            history_vmaxhvsc_files.insert(
-                path,
-                from_history_vmaxhvsc_file_bytes(dependencies, &bytes)?,
-            );
+            let palette = from_palette_png_file_bytes(dependencies, &bytes).map_err(in_file)?;
+            palette_png_files.insert(path, palette);
         } else {
-            return Err(Error::Invalid(format!(
-                "unrecognized file in .vmax package: {path}"
-            )));
+            other_files.insert(path, VMaxOpaqueFile(bytes));
         }
     }
 
@@ -109,13 +94,11 @@ where
         contents_files,
         palette_settings_files,
         palette_png_files,
-        history_vmaxhb_files,
-        history_vmaxhvsb_files,
-        history_vmaxhvsc_files,
         selection_vmaxb_files,
         thumbnail_png,
         contents_vmax_pngs,
         group_pngs,
+        other_files,
     })
 }
 
@@ -125,13 +108,20 @@ fn strip_contents_suffix(name: &str) -> Option<String> {
     name.ends_with(".vmaxb").then(|| name.to_owned())
 }
 
+/// Whether `path` names an undo-history file: `*.vmaxhb` (including
+/// `scene.vmaxhb`), `*.vmaxhvsb`, or `*.vmaxhvsc`.
+fn is_history(path: &str) -> bool {
+    [".vmaxhb", ".vmaxhvsb", ".vmaxhvsc"]
+        .iter()
+        .any(|extension| path.ends_with(extension))
+}
+
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{DependenciesImpl, Error, from_vmax_package, to_vmax_package};
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
-        VMaxFile, VMaxHistorySession, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile,
-        VMaxHistoryVmaxhvscFile, VMaxImage, VMaxObject, VMaxPalettePngFile,
+        VMaxFile, VMaxImage, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
         VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxSelectionVmaxbFile, VMaxValue,
         snapshots::{VMaxVoxel, encode_contents_vmaxb_file_from_voxels},
     };
@@ -157,6 +147,11 @@ mod tests {
             center: [0.0; 3],
             bounds_min: None,
             bounds_max: None,
+            t_prp: None,
+            e_cm: None,
+            e_cmv: None,
+            e_vc: None,
+            e_vm: None,
         }
     }
 
@@ -206,38 +201,15 @@ mod tests {
 
         // The optional file kinds the scene graph never references:
         // enumeration, not reference-following, must find and preserve each of
-        // them. History round-trips as typed plist; selection stays verbatim
-        // bytes.
-        let mut history_vmaxhb_files = BTreeMap::new();
-        history_vmaxhb_files.insert(
-            "history.vmaxhb".to_owned(),
-            VMaxHistoryVmaxhbFile {
-                sessions: vec![VMaxHistorySession {
-                    sid: 0,
-                    steps: Vec::new(),
-                    snapshots: Vec::new(),
-                    ssnapshots: vec![VMaxValue::String("scene-snap".to_owned())],
-                    osnapshots: Vec::new(),
-                }],
-                asid: 0,
-            },
+        // them. Selection and every other file stay as stored.
+        let mut other_files = BTreeMap::new();
+        other_files.insert(
+            "animations.vmaxa".to_owned(),
+            VMaxOpaqueFile(br#"{"clips":[]}"#.to_vec()),
         );
-        history_vmaxhb_files.insert(
-            "scene.vmaxhb".to_owned(),
-            VMaxHistoryVmaxhbFile {
-                sessions: Vec::new(),
-                asid: 9,
-            },
-        );
-        let mut history_vmaxhvsb_files = BTreeMap::new();
-        history_vmaxhvsb_files.insert(
-            "history.vmaxhvsb".to_owned(),
-            VMaxHistoryVmaxhvsbFile(Vec::new()),
-        );
-        let mut history_vmaxhvsc_files = BTreeMap::new();
-        history_vmaxhvsc_files.insert(
-            "history.vmaxhvsc".to_owned(),
-            VMaxHistoryVmaxhvscFile(Vec::new()),
+        other_files.insert(
+            "QuickLook/notes.txt".to_owned(),
+            VMaxOpaqueFile(b"kept".to_vec()),
         );
         let mut selection_vmaxb_files = BTreeMap::new();
         selection_vmaxb_files.insert(
@@ -256,13 +228,11 @@ mod tests {
             contents_files,
             palette_settings_files,
             palette_png_files,
-            history_vmaxhb_files,
-            history_vmaxhvsb_files,
-            history_vmaxhvsc_files,
             selection_vmaxb_files,
             thumbnail_png: Some(image()),
             contents_vmax_pngs,
             group_pngs,
+            other_files,
         }
     }
 
@@ -278,7 +248,7 @@ mod tests {
         })
         .unwrap();
 
-        // Every kind, including the history / selection / QuickLook files no
+        // Every kind, including the selection / QuickLook / other files no
         // scene object names, is written and read back through the same map.
         let read = from_vmax_package(
             &DependenciesImpl,
@@ -296,6 +266,35 @@ mod tests {
         assert!(dir.contains_key("QuickLook/Thumbnail.png"));
         assert!(dir.contains_key("QuickLook/contents.vmaxb.png"));
         assert!(dir.contains_key("QuickLook/group-id.png"));
+    }
+
+    /// The undo history is skipped unread, so a package whose history this
+    /// crate cannot decode still opens, as Voxel Max opens one without it.
+    #[test]
+    fn history_files_are_skipped() {
+        let mut dir: HashMap<String, Vec<u8>> = HashMap::new();
+        to_vmax_package(&DependenciesImpl, &sample(), |name, bytes| {
+            dir.insert(name.to_owned(), bytes.to_vec());
+            Ok(())
+        })
+        .unwrap();
+        for name in [
+            "history.vmaxhb",
+            "scene.vmaxhb",
+            "history1.vmaxhvsb",
+            "history1.vmaxhvsc",
+        ] {
+            dir.insert(name.to_owned(), b"not a plist".to_vec());
+        }
+
+        let read = from_vmax_package(
+            &DependenciesImpl,
+            || Ok(dir.keys().cloned().collect()),
+            |name| Ok(dir.get(name).cloned()),
+        )
+        .unwrap();
+
+        assert_eq!(read, sample());
     }
 
     #[test]

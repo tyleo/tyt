@@ -359,6 +359,7 @@ impl Dependencies for DependenciesImpl {
         let options = VMaxWriteOptions {
             color_format: vmax_color_format(color_format),
             scene_camera: SceneCameraSource::Ext,
+            ..Default::default()
         };
 
         save_with_ext(

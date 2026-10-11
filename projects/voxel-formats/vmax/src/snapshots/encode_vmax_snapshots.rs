@@ -58,17 +58,18 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
 
             let mut ds = vec![0u8; 2 * (max_morton - min_morton + 1) as usize];
             // Layer-color usage mask: one byte per palette index, indexed at
-            // `color - 1`, with bit `material` set for each material the color
-            // is drawn with in this chunk. Voxel Max reads the mask, not `ds`,
-            // to show a color's material, so a bit that misses the voxel's
-            // material shows the wrong slot.
+            // `color - 1`, with the bit of each material slot the color is
+            // drawn with in this chunk: the material byte's low three bits, as
+            // Voxel Max reads a selected voxel's byte. Voxel Max reads the
+            // mask, not `ds`, to show a color's material, so a bit that misses
+            // the voxel's material shows the wrong slot.
             let mut lc = vec![0u8; 256];
             for (morton, (material, color)) in slots {
                 let slot = (morton - min_morton) as usize;
                 ds[2 * slot] = material;
                 ds[2 * slot + 1] = color;
                 if color != 0 {
-                    lc[(color - 1) as usize] |= 1 << material;
+                    lc[(color - 1) as usize] |= 1 << (material & 7);
                 }
             }
 

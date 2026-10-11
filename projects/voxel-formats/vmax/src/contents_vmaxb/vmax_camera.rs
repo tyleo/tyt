@@ -33,6 +33,30 @@ pub struct VMaxCamera {
     /// Zoom.
     pub z: f64,
 
+    /// Authoritative camera orientation quaternion in current Voxel Max files.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            serialize_with = "crate::finite"
+        )
+    )]
+    pub aq: Option<[f64; 4]>,
+
+    /// Orthographic projection selection.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub op: Option<bool>,
+
+    /// Camera zoom scale factor.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            skip_serializing_if = "Option::is_none",
+            serialize_with = "crate::finite"
+        )
+    )]
+    pub zf: Option<f64>,
+
     /// Orbit origin `[x, y, z]`.
     pub o: [f64; 3],
 }

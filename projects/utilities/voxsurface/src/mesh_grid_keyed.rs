@@ -354,7 +354,7 @@ mod tests {
         let mesh = mesh_grid(&object, SurfaceMethod::Greedy);
         assert_eq!(mesh.quad_count(), 6);
 
-        for triangle in mesh.indices.chunks_exact(3) {
+        for triangle in mesh.indices.as_chunks::<3>().0 {
             let corner = |i: u32| mesh.positions[i as usize];
             let (p0, p1, p2) = (
                 corner(triangle[0]),

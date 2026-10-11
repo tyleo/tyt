@@ -27,10 +27,7 @@ impl DecodePng for DependenciesImpl {
         let frame = reader
             .next_frame(&mut buffer)
             .map_err(|error| error.to_string())?;
-        let pixels = buffer[..frame.buffer_size()]
-            .chunks_exact(4)
-            .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
-            .collect();
+        let pixels = buffer[..frame.buffer_size()].as_chunks::<4>().0.to_vec();
 
         Ok(GoxlRgbaImage {
             width: frame.width,

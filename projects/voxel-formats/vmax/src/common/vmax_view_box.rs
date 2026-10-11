@@ -12,4 +12,12 @@ pub struct VMaxViewBox {
 
     /// Maximum `[x, y, z]` corner.
     pub max: [i64; 3],
+
+    /// Whether the region is a flat work plane, such as a pixel-art canvas
+    /// (`f`).
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "f", default, skip_serializing_if = "Option::is_none")
+    )]
+    pub flat: Option<bool>,
 }

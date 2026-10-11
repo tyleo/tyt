@@ -39,19 +39,20 @@ fn decode_png(bytes: &[u8]) -> Result<DecodedImage, String> {
     let samples = &buffer[..frame.buffer_size()];
 
     let pixels = match reader.output_color_type().0 {
-        ColorType::Rgba => samples
-            .chunks_exact(4)
-            .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
-            .collect(),
+        ColorType::Rgba => samples.as_chunks::<4>().0.to_vec(),
 
         ColorType::Rgb => samples
-            .chunks_exact(3)
-            .map(|pixel| [pixel[0], pixel[1], pixel[2], 255])
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[r, g, b]| [r, g, b, 255])
             .collect(),
 
         ColorType::GrayscaleAlpha => samples
-            .chunks_exact(2)
-            .map(|pixel| [pixel[0], pixel[0], pixel[0], pixel[1]])
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&[gray, alpha]| [gray, gray, gray, alpha])
             .collect(),
 
         ColorType::Grayscale => samples
@@ -85,10 +86,7 @@ fn decode_jpeg(bytes: &[u8]) -> Result<DecodedImage, String> {
     Ok(DecodedImage {
         width: u32::from(info.width),
         height: u32::from(info.height),
-        pixels: samples
-            .chunks_exact(4)
-            .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
-            .collect(),
+        pixels: samples.as_chunks::<4>().0.to_vec(),
     })
 }
 

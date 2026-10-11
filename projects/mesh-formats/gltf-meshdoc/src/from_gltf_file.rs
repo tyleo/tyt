@@ -696,7 +696,9 @@ fn triangles_of(mode: Mode, indices: &[u32]) -> Result<Vec<MeshTriangle>> {
 
     Ok(match mode {
         Mode::Triangles => indices
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|corners| triangle(corners[0], corners[1], corners[2]))
             .collect(),
 

@@ -21,6 +21,9 @@ pub enum Error {
 
     /// A payload was readable but semantically malformed.
     Invalid(String),
+
+    /// Decoding the package file at the path failed with the inner error.
+    File(String, Box<Error>),
 }
 
 impl Display for Error {
@@ -32,6 +35,8 @@ impl Display for Error {
             | Error::Invalid(message) => write!(f, "{message}"),
 
             Error::Io(e) => e.fmt(f),
+
+            Error::File(path, error) => write!(f, "{path}: {error}"),
         }
     }
 }
@@ -40,6 +45,9 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Error::Io(e) => Some(e),
+
+            Error::File(_, error) => Some(error.as_ref()),
+
             Error::Json(_) | Error::Plist(_) | Error::Png(_) | Error::Invalid(_) => None,
         }
     }
