@@ -55,6 +55,7 @@ const ROTATION_TOLERANCE: f64 = 1e-9;
 /// mesh's node also places objects or child nodes.
 pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
     let placements = ext_placements(main)?;
+    let suffixes = object_file_suffixes(main, &placements);
 
     let mut objects: Vec<VMaxObject> = Vec::new();
     let mut groups: Vec<VMaxGroup> = Vec::new();
@@ -131,7 +132,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                 }
             };
             let plan = &plans[plan_index];
-            let suffix = object_file_suffix(object_id);
+            let suffix = &suffixes[&object_id];
             // The node's ext places its first object. An extra object gets a
             // per-object variant with a distinct id and index and its own
             // bounds.
@@ -201,7 +202,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                 &object_placement,
                 data,
                 pal,
-                &suffix,
+                suffix,
             ));
         }
     }
@@ -1080,6 +1081,54 @@ fn object_file_suffix(object_id: U32Id<BVoxObject>) -> String {
     } else {
         object_id.to_string()
     }
+}
+
+/// Each object's filename suffix. An external mesh keeps its stored `data`
+/// and `hist` names, so an object whose suffix a mesh's names already use
+/// takes the lowest number no object or mesh uses.
+fn object_file_suffixes(
+    main: &VMaxVoxMain,
+    placements: &[Placement<'_>],
+) -> HashMap<U32Id<BVoxObject>, String> {
+    let mesh_suffixes: HashSet<String> = placements
+        .iter()
+        .filter_map(|placement| placement.ext.external_mesh.as_ref())
+        .flat_map(|mesh| {
+            [
+                stored_file_suffix(&mesh.data, "contents"),
+                stored_file_suffix(&mesh.history, "history"),
+            ]
+        })
+        .flatten()
+        .map(str::to_owned)
+        .collect();
+    let mut suffixes: HashMap<U32Id<BVoxObject>, String> = main
+        .iter_objects()
+        .map(|(object_id, _)| (object_id, object_file_suffix(object_id)))
+        .collect();
+    let mut taken: HashSet<String> = suffixes.values().cloned().collect();
+    taken.extend(mesh_suffixes.iter().cloned());
+
+    let mut spare = (1u32..).map(|number| number.to_string());
+    let mut object_ids: Vec<U32Id<BVoxObject>> = suffixes.keys().copied().collect();
+    object_ids.sort();
+    for object_id in object_ids {
+        if mesh_suffixes.contains(&suffixes[&object_id]) {
+            let suffix = spare
+                .find(|suffix| !taken.contains(suffix))
+                .expect("an unused suffix");
+            taken.insert(suffix.clone());
+            suffixes.insert(object_id, suffix);
+        }
+    }
+    suffixes
+}
+
+/// The suffix in a stored `{prefix}{suffix}.{extension}` filename, or `None`
+/// when the name has another shape and so cannot meet a written one.
+fn stored_file_suffix<'a>(name: &'a str, prefix: &str) -> Option<&'a str> {
+    let (stem, _) = name.strip_prefix(prefix)?.split_once('.')?;
+    Some(stem)
 }
 
 /// The per-object ext for an extra object on a node placing several, such as a
@@ -2586,6 +2635,47 @@ mod tests {
 
         assert_eq!(main.iter_objects().count(), 1);
         assert_eq!(rebuilt, original);
+    }
+
+    /// An external mesh keeps its stored names while objects renumber, so an
+    /// object whose number a mesh's names use takes a free one, and no two
+    /// objects share a data or history file.
+    #[test]
+    fn an_object_does_not_take_an_external_mesh_s_file_names() {
+        let mut file = sample_with_mesh();
+        let archive = file.other_files.remove("contents2.scndata").unwrap();
+        file.other_files
+            .insert("contents1.scndata".to_owned(), archive);
+        let mesh = &mut file.scene_json_file.objects[1];
+        mesh.data = "contents1.scndata".to_owned();
+        mesh.history = "history1.vmaxhb".to_owned();
+        let mut object = file.scene_json_file.objects[0].clone();
+        object.id = "o2".to_owned();
+        object.ind = [0, 0, 3];
+        object.data = "contents2.vmaxb".to_owned();
+        object.history = "history2.vmaxhb".to_owned();
+        file.scene_json_file.objects.push(object);
+        let contents = file.contents_files["contents.vmaxb"].clone();
+        file.contents_files
+            .insert("contents2.vmaxb".to_owned(), contents);
+
+        let main = from_vmax_file(&file).unwrap();
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+
+        let names: Vec<(&str, &str)> = rebuilt
+            .scene_json_file
+            .objects
+            .iter()
+            .map(|object| (object.data.as_str(), object.history.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("contents.vmaxb", "history.vmaxhb"),
+                ("contents1.scndata", "history1.vmaxhb"),
+                ("contents2.vmaxb", "history2.vmaxhb"),
+            ]
+        );
     }
 
     /// An external mesh whose archive the package lacks errors with the

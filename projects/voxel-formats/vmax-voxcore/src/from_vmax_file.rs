@@ -41,7 +41,8 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// external mesh, an object whose contents is a SceneKit archive rather than
 /// voxels, places nothing in voxcore: its node keeps the mesh in the ext, and
 /// the package's unmodeled files ride in the ext as stored, so the write puts
-/// both back.
+/// both back. A voxel outside its object's work area, which Voxel Max keeps
+/// but hides, is left out, so the write drops it.
 ///
 /// Errors on malformed geometry, on an object whose contents file the package
 /// lacks, or on a cross-reference the checked insertions reject.
@@ -866,7 +867,7 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxWriteOptions, from_vmax_file, to_vmax_file};
+    use crate::{VMaxWriteOptions, from_vmax_file, from_vmax_file::work_area, to_vmax_file};
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
@@ -950,6 +951,49 @@ mod tests {
             group_pngs: BTreeMap::new(),
             other_files: BTreeMap::new(),
         }
+    }
+
+    /// The work area `tools.vp` wins over the extent order, so a voxel inside
+    /// the extent but outside `vp` is left out.
+    #[test]
+    fn leaves_out_voxels_outside_the_work_area() {
+        let voxel = |x: i32| VMaxVoxel {
+            position: [x, 0, 0],
+            material_idx: 0,
+            color_idx: 1,
+        };
+        let mut file = one_object_file(
+            [1.0, 1.0, 1.0],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [1, 1, 1],
+                flat: None,
+            },
+            &[voxel(0), voxel(1), voxel(2)],
+        );
+        file.contents_files.get_mut("contents1.vmaxb").unwrap().eo = Some(9);
+
+        let main = from_vmax_file(&file).unwrap();
+
+        let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        assert_eq!(object.iter_live().count(), 2);
+    }
+
+    /// Without `tools.vp`, the extent order `eo` bounds the shown region, read
+    /// as 8 when absent or outside 5 to 9, and order 9 shows every voxel.
+    #[test]
+    fn the_extent_order_bounds_the_work_area_without_a_view_box() {
+        let area = |eo: Option<i64>| {
+            work_area(&VMaxContentsVmaxbFile {
+                eo,
+                ..Default::default()
+            })
+        };
+
+        assert_eq!(area(None), Some(([0; 3], [255; 3])));
+        assert_eq!(area(Some(4)), Some(([0; 3], [255; 3])));
+        assert_eq!(area(Some(6)), Some(([0; 3], [63; 3])));
+        assert_eq!(area(Some(9)), None);
     }
 
     #[test]

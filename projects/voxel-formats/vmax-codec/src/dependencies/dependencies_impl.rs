@@ -399,6 +399,26 @@ mod tests {
         encode_objects(&file, 256);
     }
 
+    /// Data, reals, and ASCII and UTF-16 strings, short and with extended
+    /// counts, keep their payloads as the references around them widen.
+    #[test]
+    fn every_object_kind_keeps_its_payload_at_the_reference_limit() {
+        let file = VMaxHistoryVmaxhvscFile(
+            (0..255)
+                .map(|index| match index % 4 {
+                    0 => VMaxValue::Data(vec![index as u8; 1 + index as usize % 40]),
+                    1 => VMaxValue::Real(index as f64 + 0.5),
+                    2 => VMaxValue::String(format!("ascii string {index}")),
+                    _ => VMaxValue::String(format!(
+                        "{index}\u{e9}{}",
+                        "\u{2026}".repeat(index as usize % 20)
+                    )),
+                })
+                .collect(),
+        );
+        encode_objects(&file, 256);
+    }
+
     /// A plist under the reference limit keeps the bytes the `plist` crate
     /// writes.
     #[test]

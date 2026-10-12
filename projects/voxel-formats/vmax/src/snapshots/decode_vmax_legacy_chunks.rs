@@ -8,13 +8,17 @@ use std::collections::BTreeMap;
 /// four 32-bit integers.
 const RECORD_BYTES: usize = 16;
 
+/// The voxels a chunk holds.
+const CHUNK_VOXELS: usize = (CHUNK_PITCH * CHUNK_PITCH * CHUNK_PITCH) as usize;
+
 /// Decodes the voxels of a contents file older than version 4, as Voxel Max
 /// loads one. Each 16-byte record in `chunks` holds a voxel origin inside its
 /// chunk as little-endian 32-bit integers, and from version 1 a fourth integer
 /// of 1 marks a chunk of two-byte voxels. Each entry of `voxels` fills its
 /// chunk in Morton order: one color byte per voxel, or a material byte and a
 /// color in a marked chunk. A color of 0 is empty, and a later record of a
-/// chunk wins. Errors when the records and the voxel entries do not pair up.
+/// chunk wins. Errors when the records and the voxel entries do not pair up,
+/// or when an entry is not whole voxels or holds more than a chunk.
 /// Returns voxels sorted by `(x, y, z)`.
 pub fn decode_vmax_legacy_chunks(
     version: i64,
@@ -37,9 +41,17 @@ pub fn decode_vmax_legacy_chunks(
     }
 
     let mut decoded: BTreeMap<(i32, i32, i32), (u8, u8)> = BTreeMap::new();
-    for (record, VMaxLegacyChunkVoxels(data)) in records.iter().zip(voxels) {
+    for (index, (record, VMaxLegacyChunkVoxels(data))) in records.iter().zip(voxels).enumerate() {
         let (integers, _) = record.as_chunks::<4>();
         let integer = |index: usize| i32::from_le_bytes(integers[index]);
+        let two_byte = version >= 1 && integer(3) == 1;
+        let voxel_bytes = if two_byte { 2 } else { 1 };
+        if data.len() % voxel_bytes != 0 || data.len() / voxel_bytes > CHUNK_VOXELS {
+            return Err(Error::Invalid(format!(
+                "legacy chunk entry {index} spans {} bytes, not at most {CHUNK_VOXELS} whole {voxel_bytes}-byte voxels",
+                data.len()
+            )));
+        }
         let base = [0, 1, 2].map(|axis| integer(axis).div_euclid(CHUNK_PITCH) * CHUNK_PITCH);
         let mut place = |offset: usize, material: u8, color: u8| {
             if color == 0 {
@@ -53,7 +65,7 @@ pub fn decode_vmax_legacy_chunks(
             );
             decoded.insert(position, (material, color));
         };
-        if version >= 1 && integer(3) == 1 {
+        if two_byte {
             for (offset, &[material, color]) in data.as_chunks::<2>().0.iter().enumerate() {
                 place(offset, material, color);
             }
@@ -138,5 +150,31 @@ mod tests {
             .unwrap_err();
 
         assert!(error.to_string().contains("pair"), "{error}");
+    }
+
+    /// An entry past a chunk's voxels would spill into the next chunk, so it
+    /// errors.
+    #[test]
+    fn an_entry_must_fit_its_chunk() {
+        let data = vec![0u8; 32 * 32 * 32 + 1];
+
+        let error =
+            decode_vmax_legacy_chunks(0, &record([0, 0, 0], 0), &[VMaxLegacyChunkVoxels(data)])
+                .unwrap_err();
+
+        assert!(error.to_string().contains("whole"), "{error}");
+    }
+
+    /// A two-byte entry of odd length ends in half a voxel, so it errors.
+    #[test]
+    fn a_two_byte_entry_must_hold_whole_voxels() {
+        let error = decode_vmax_legacy_chunks(
+            1,
+            &record([0, 0, 0], 1),
+            &[VMaxLegacyChunkVoxels(vec![0; 3])],
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("whole"), "{error}");
     }
 }

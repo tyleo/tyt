@@ -14,8 +14,9 @@ const THUMBNAIL_PATH: &str = "QuickLook/Thumbnail.png";
 const QUICK_LOOK_PREFIX: &str = "QuickLook/";
 
 /// Reads a whole `.vmax` package into a [`VMaxFile`], decoding each file
-/// through `dependencies`. `scene.json` is required. A filename matching no
-/// known kind is an error.
+/// through `dependencies`. `scene.json` is required. The undo history is
+/// skipped, and a file matching no known kind is kept as stored in
+/// `other_files`.
 ///
 /// # Arguments
 /// * `list` - returns the package-relative path of every file, so `QuickLook/`
