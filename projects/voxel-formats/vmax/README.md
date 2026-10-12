@@ -14,7 +14,7 @@ A `.vmax` package holds:
 
 There is a type for each piece. History is typed sessions and steps; per-command undo/redo payloads vary by command, so they stay as untyped `VMaxValue` and round-trip unchanged. Saved selections are opaque raw bytes. Thumbnails and palette PNGs decode to pixels, not raw PNG bytes.
 
-A `VMaxFile` holds the scene and rendering data: every piece but the history, which Voxel Max opens a package without, and a contents file's editor state beyond its work area. Any other file stays opaque bytes in `other_files`.
+A `VMaxFile` holds the scene and rendering data: every piece but the history, which Voxel Max opens a package without, and a contents file's editor state beyond its work area. A contents file names each key it reads, editor state included, so an unknown key in it or in its snapshot stats is an error. Any other file stays opaque bytes in `other_files`.
 
 The `snapshots` module decodes and encodes an object's voxel snapshots, the baked edit log holding its geometry in a `contents*.vmaxb`:
 

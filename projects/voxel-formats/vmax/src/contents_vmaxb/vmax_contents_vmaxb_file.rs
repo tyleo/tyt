@@ -1,14 +1,15 @@
-use crate::{VMaxCamera, VMaxLegacyChunkVoxels, VMaxSnapshot, VMaxTools, VMaxValue};
+use crate::{VMaxCamera, VMaxDiscarded, VMaxLegacyChunkVoxels, VMaxSnapshot, VMaxTools, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Voxel object payload of a `contents*.vmaxb` binary plist: the geometry,
 /// camera, and extent Voxel Max renders the object from. The editor state a
-/// contents file also carries, such as the tool settings, the brush palette,
-/// and the building brush's records, is skipped on read and never written,
-/// since Voxel Max opens an object without it.
+/// contents file also carries, such as the tool settings and the brush
+/// palette, is named, read, and never written, since Voxel Max opens an
+/// object without it. An unknown key is an error.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VMaxContentsVmaxbFile {
     /// Per-chunk voxel snapshots: the baked geometry edit log.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -27,6 +28,10 @@ pub struct VMaxContentsVmaxbFile {
     /// tool context wherever a contents file carries one.
     #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
     pub tools: Option<VMaxTools>,
+
+    /// The brush palette, editor state.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
+    pub brush: Option<VMaxDiscarded>,
 
     /// Per-object camera.
     #[cfg_attr(

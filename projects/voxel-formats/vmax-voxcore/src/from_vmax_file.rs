@@ -42,7 +42,9 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// voxels, places nothing in voxcore: its node keeps the mesh in the ext, and
 /// the package's unmodeled files ride in the ext as stored, so the write puts
 /// both back. A voxel outside its object's work area, which Voxel Max keeps
-/// but hides, is left out, so the write drops it.
+/// but hides, is left out, so the write drops it. A contents file or palette
+/// no object references, which Voxel Max leaves behind when an object is
+/// deleted, is skipped, so the write drops it too.
 ///
 /// Errors on malformed geometry, on an object whose contents file the package
 /// lacks, or on a cross-reference the checked insertions reject.
@@ -928,6 +930,7 @@ mod tests {
             uuid: "u".to_owned(),
             v: 4,
             tools: Some(VMaxTools { vp: Some(vp) }),
+            brush: None,
             cam: None,
             pal: None,
             eo: None,
@@ -1259,5 +1262,47 @@ mod tests {
         let main = from_vmax_file(&file).expect("an object-parented object loads");
 
         assert_eq!(main.root_hierarchy_node_ids().len(), 2);
+    }
+
+    /// Voxel Max keeps a deleted object's contents file and palette in the
+    /// package. Nothing references them, so the load skips them and the
+    /// write leaves them out.
+    #[test]
+    fn skips_files_no_object_references() {
+        let mut file = one_object_file(
+            [0.5, 0.5, 0.5],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [31, 31, 31],
+                flat: None,
+            },
+            &[VMaxVoxel {
+                position: [0, 0, 0],
+                material_idx: 0,
+                color_idx: 1,
+            }],
+        );
+
+        let leftover = file.contents_files["contents1.vmaxb"].clone();
+
+        file.contents_files
+            .insert("contents9.vmaxb".to_owned(), leftover);
+
+        file.palette_settings_files.insert(
+            "palette9.settings.vmaxpsb".to_owned(),
+            VMaxPaletteSettingsVmaxpsbFile::default(),
+        );
+
+        let main = from_vmax_file(&file).expect("leftover files load");
+
+        let written = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+
+        assert_eq!(written.contents_files.len(), 1);
+
+        assert!(
+            !written
+                .palette_settings_files
+                .contains_key("palette9.settings.vmaxpsb")
+        );
     }
 }

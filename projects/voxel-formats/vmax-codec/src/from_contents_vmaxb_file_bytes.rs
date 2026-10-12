@@ -15,32 +15,99 @@ pub fn from_contents_vmaxb_file_bytes<D: DecompressLzfse + DecodeVMaxPlist>(
 
 #[cfg(test)]
 mod tests {
-    use plist::{Dictionary, Value, from_bytes};
-    use vmax::VMaxStats;
+    use plist::{self, Dictionary, Value, from_bytes};
+    use vmax::{VMaxContentsVmaxbFile, VMaxDiscarded, VMaxStats};
 
-    /// Current Voxel Max adds derived position-sum caches to chunk stats.
-    /// They must not prevent the authoritative bounds and count from reading.
-    #[test]
-    fn reads_stats_with_current_position_sum_caches() {
-        let mut dictionary = Dictionary::new();
-        dictionary.insert(
-            "min".to_owned(),
-            Value::Array([1, 2, 3, 0].map(|v| Value::Integer(v.into())).to_vec()),
-        );
-        dictionary.insert("count".to_owned(), Value::Integer(1.into()));
-        for key in ["psum", "spsum"] {
-            dictionary.insert(
-                key.to_owned(),
-                Value::Array([1, 2, 3].map(|v| Value::Integer(v.into())).to_vec()),
-            );
-        }
-        dictionary.insert("psv".to_owned(), Value::Integer(1.into()));
+    fn integers(values: &[i64]) -> Value {
+        Value::Array(values.iter().map(|&v| Value::Integer(v.into())).collect())
+    }
+
+    fn binary(dictionary: Dictionary) -> Vec<u8> {
         let mut bytes = Vec::new();
+
         Value::Dictionary(dictionary)
             .to_writer_binary(&mut bytes)
             .unwrap();
-        let stats = from_bytes::<VMaxStats>(&bytes).unwrap();
+
+        bytes
+    }
+
+    /// Current Voxel Max adds derived position-sum caches to chunk stats,
+    /// which read beside the authoritative bounds and count.
+    #[test]
+    fn reads_stats_with_current_position_sum_caches() {
+        let mut dictionary = Dictionary::new();
+
+        dictionary.insert("min".to_owned(), integers(&[1, 2, 3, 0]));
+
+        dictionary.insert("count".to_owned(), Value::Integer(1.into()));
+
+        dictionary.insert("psum".to_owned(), integers(&[1, 2, 3]));
+
+        dictionary.insert("spsum".to_owned(), integers(&[4, 5, 6]));
+
+        dictionary.insert("psv".to_owned(), Value::Integer(1.into()));
+
+        let stats = from_bytes::<VMaxStats>(&binary(dictionary)).unwrap();
+
         assert_eq!(stats.min, [1, 2, 3, 0]);
+
         assert_eq!(stats.count, 1);
+
+        assert_eq!(stats.psum, Some(vec![1, 2, 3]));
+
+        assert_eq!(stats.spsum, Some(vec![4, 5, 6]));
+
+        assert_eq!(stats.psv, Some(1));
+    }
+
+    /// A stats key the model does not name is an error, so a newer Voxel Max
+    /// key surfaces instead of reading silently.
+    #[test]
+    fn rejects_an_unknown_stats_key() {
+        let mut dictionary = Dictionary::new();
+
+        dictionary.insert("cuont".to_owned(), Value::Integer(1.into()));
+
+        let error = from_bytes::<VMaxStats>(&binary(dictionary)).unwrap_err();
+
+        assert!(error.to_string().contains("cuont"), "{error}");
+    }
+
+    /// The brush palette is editor state: it reads, keeps nothing, and is
+    /// never written.
+    #[test]
+    fn reads_and_discards_the_brush_palette() {
+        let mut brush = Dictionary::new();
+
+        brush.insert("name".to_owned(), Value::String("Default".to_owned()));
+
+        let mut dictionary = Dictionary::new();
+
+        dictionary.insert("brush".to_owned(), Value::Dictionary(brush));
+
+        let contents = from_bytes::<VMaxContentsVmaxbFile>(&binary(dictionary)).unwrap();
+
+        assert_eq!(contents.brush, Some(VMaxDiscarded));
+
+        let mut written = Vec::new();
+
+        plist::to_writer_binary(&mut written, &contents).unwrap();
+
+        let written = from_bytes::<Dictionary>(&written).unwrap();
+
+        assert!(!written.contains_key("brush"));
+    }
+
+    /// A contents key the model does not name is an error.
+    #[test]
+    fn rejects_an_unknown_contents_key() {
+        let mut dictionary = Dictionary::new();
+
+        dictionary.insert("bld".to_owned(), Value::Integer(1.into()));
+
+        let error = from_bytes::<VMaxContentsVmaxbFile>(&binary(dictionary)).unwrap_err();
+
+        assert!(error.to_string().contains("bld"), "{error}");
     }
 }

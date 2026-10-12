@@ -1,6 +1,7 @@
 // Public API
 
 mod vmax_brush_state;
+mod vmax_discarded;
 mod vmax_extent;
 mod vmax_extent_range;
 mod vmax_flag;
@@ -18,6 +19,7 @@ mod vmax_value;
 mod vmax_view_box;
 
 pub use vmax_brush_state::*;
+pub use vmax_discarded::*;
 pub use vmax_extent::*;
 pub use vmax_extent_range::*;
 pub use vmax_flag::*;
