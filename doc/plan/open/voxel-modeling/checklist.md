@@ -115,38 +115,71 @@ Trials then show which operations Claude reaches for and where the loop fails.
       of the 7 findings its changes answered and leaves a fourth untested.
       [Round 6](trials-round-6.md) clears 1 of the 3 findings its changes
       answered and leaves a second untested.
-- [ ] **S15. Phase 2 design.** Write the phase 2 steps from the six rounds and
+- [x] **S15. Phase 2 design.** Write the phase 2 steps from the six rounds and
       revise the README.
 
 ## Phase 2: follow-ups
 
-S15 writes phase 2's steps from the trials. Round 1's
-[findings](trials.md#findings) give the candidates so far:
+The six rounds set phase 2's steps. The steps cite findings by the numbers
+[round 6](trials-round-6.md#findings) gives them. A step that adds a call also
+adds the call's entry to the sdfj format. The candidates the trials asked for
+rarely or never [wait for a reason](README.md#waiting-for-a-reason).
 
-1. The operators and patterns Claude reached for and lacked, in findings 11, 24,
-   25, 26, 41, 47, and 59. Finding 50 adds a step that hollows the finished
-   grid without the walls a union's shell leaves
-2. The `.sdfj` changes those operators need
-3. The report data, inspection, and render support Claude lacked, in findings
-   23, 29, 33, 35, 38, 39, 42, 43, 46, 49, 51, 53, 58, and 60
-4. The contact sheet from the
-   [rendering follow-ups](../voxel-rendering-followups/README.md#waiting-for-a-reason),
-   for finding 8
-5. Coloring candidates:
-   1. Patterns that take patterns as entries, for knots over grain or moss over
-      cobbles. A pick that lands on a pattern lets that pattern decide the cell.
-      `speckle` over `grain` cannot layer today because `speckle` writes its
-      base into every cell it leaves unaccented
-   2. A `hueShift` option on `shades` that turns the darks' hue one way and the
-      lights' hue the other
-   3. A step that reads the finished grid as `coat` does and picks darker shades
-      in crevices and lighter ones on edges. Review renders shade crevices
-      already, but an exported mesh keeps only the colors. Finding 48 asks for
-      it
-6. Part candidates:
-   1. A step that runs a part's steps on another part's grid. vxl samples the
-      part's shapes at that grid's cells. Later steps can then carve, paint, or
-      coat across both parts
-   2. A rotation on parts that turns the part's shapes at any angle before
-      sampling. Finding 22 asks for it
-7. A `typescript` library group whose sources vxl builds before the model
+- [ ] **S16. Report.** The report data the rounds asked for, each printed only
+      where it applies:
+  1. A step line counts the face-connected pieces its kept cells form when they
+     form more than one for findings 10 and 24
+  2. A step line that lost cells lists the later steps that took them for
+     findings 7, 55, and 122
+  3. A `paint` or `coat` line lists the steps whose cells it recolored for
+     finding 34
+  4. `exposed` counts a cell beside a transparent material for finding 51
+  5. A part line gives the part's pivot for finding 42. A part's steps print
+     under its first place only for finding 23
+  6. A part with `free: true` reads `free` where it would read `detached` for
+     finding 38
+  7. `vox-doc show` prints node pivots and palette custom properties for
+     finding 39
+- [ ] **S17. Review sheet.** The contact sheet moves out of the
+      [rendering follow-ups](../voxel-rendering-followups/README.md#waiting-for-a-reason)
+      for findings 8, 17, and 19:
+  1. `review` tiles its four views and a view from behind into one PNG
+  2. `--pose` turns a part's node about an axis for one render for finding 35
+- [ ] **S18. Library colors.** Retune the `materials` library and `shades` under
+      the review rig:
+  1. Dark woods, iron, stone, and bark keep their pattern visible for finding 5
+  2. Metals, oak, walnut, rope, and grass read the hue their names give for
+     findings 20, 31, and 69
+  3. Every shade stays in the sRGB gamut and near the base's hue for findings
+     15 and 68
+  4. The default `spread` stops short of the swings that read as camouflage for
+     finding 65
+- [ ] **S19. Round 7.** Run the prompts after S16 to S18 and log the round
+      beside round 6. The round compares its passes and cost with round 5's
+      because round 6 ran the dropped review.
+- [ ] **S20. Grid steps.** Steps and options that read the grid as the earlier
+      steps left it:
+  1. An `add` option moves the shape toward a side until the shape meets a live
+     cell for finding 11. Gems then settle on a pile, and a tree stands on
+     displaced terrain without a guessed height
+  2. `prune` empties every face-connected piece under a cell count for finding
+     24
+  3. `onto` limits a `paint` or a `coat` to the kept cells of listed steps for
+     finding 34
+- [ ] **S21. New calls.** Calls the rounds built by hand:
+  1. `spline` draws a smooth 2D curve through points as an outline or a stroke
+     for finding 87
+  2. `sweep` runs a 2D profile along a 3D path of points and can taper it.
+     `helix` gives a coiled path for stairs, springs, and spirals. Both answer
+     finding 25
+  3. `text` lays out a string as a 2D shape in a built-in pixel font for
+     finding 47
+  4. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
+  5. `random` gives the model a seeded generator for placements and sizes for
+     findings 26 and 91
+- [ ] **S22. Rotation.** Turned shapes for finding 22:
+  1. A part's `rotate` option turns the part's shapes at any angle before
+     sampling
+  2. `flip` reflects a shape across axes without keeping the original
+- [ ] **S23. Round 8.** Run the prompts after S20 to S22 and log the round
+      beside round 7.

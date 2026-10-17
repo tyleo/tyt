@@ -62,9 +62,9 @@ thickness.
 Coordinates count meters. A model holds no voxel size because sampling stays a
 separate step: `vxl sdf-doc voxelize` takes the voxel size or a resolution from
 its flags. A box with corners on multiples of the voxel size fills exactly the
-cells between them. Models live at 16 to 64 voxels across, where a sphere of
-radius 2 voxels comes out as a stepped plus sign and boxes aligned to the grid
-carry most of the form.
+cells between them. Models run from 16 to several hundred voxels across. A
+sphere under a radius of about 3 voxels comes out as a plus sign. Boxes aligned
+to the grid carry the smallest forms.
 
 ## Steps
 
@@ -117,10 +117,8 @@ its arm all show up in the report before any render.
 
 The renders come from a built-in `review` render profile: orthographic `front`,
 `right`, and `top` views for checking proportions, and the perspective `hero`
-view for the look. A contact sheet tiling the views into one PNG would save
-three image reads per pass. The sheet waits in the
-[rendering follow-ups](../voxel-rendering-followups/README.md#waiting-for-a-reason),
-and this loop gives it a reason.
+view for the look. Phase 2 tiles the views and a view from behind into one
+contact sheet. One image read then covers every side.
 
 ```sh
 # chair-front.png, chair-right.png, chair-top.png, and chair-hero.png
@@ -171,9 +169,27 @@ skips the build voxelizes a stale `.sdfj`.
    shapes and patterns Claude reaches for and where the loop fails. The
    [prompts](trials.md#prompts) run from a chair to a small city and the lower
    deck of a pirate ship.
-2. **Follow-ups.** The trials set the second phase: the operators and patterns
-   Claude lacked, richer coloring, changes to the `.sdfj` format, and the
-   contact sheet.
+2. **Follow-ups.** The trials set the second phase. The report and a contact
+   sheet hand back more per pass, and the library's colors read truer. New
+   steps seat details, drop crumbs, and keep paint on its target. New calls draw
+   curves, text, and brickwork, and parts turn at any angle. Two more trial
+   rounds measure the changes.
+
+## Waiting for a reason
+
+Phase 1 left these candidates open, and the trials asked for them rarely or
+never:
+
+1. Patterns that take patterns as entries, for knots over grain or moss over
+   cobbles
+2. A `hueShift` option on `shades` that turns the darks' hue one way and the
+   lights' hue the other
+3. A step that picks darker shades in crevices and lighter ones on edges. Review
+   renders shade crevices already, but an exported mesh keeps only the colors
+4. A step that hollows the finished grid without the walls a union's shell
+   leaves
+5. A step that runs a part's steps on another part's grid
+6. A `typescript` library group whose sources vxl builds before the model
 
 ## Decisions
 
@@ -263,3 +279,5 @@ skips the build voxelizes a stale `.sdfj`.
     the part's object. Unique names within each list keep every voxj path
     unique. The `.sdfj` document mirrors voxj with `objects`, `nodes`, and
     `rootNodes`.
+19. Phase 2 builds the follow-ups the later rounds kept asking for. Phase 1's
+    other candidates wait for a reason.
