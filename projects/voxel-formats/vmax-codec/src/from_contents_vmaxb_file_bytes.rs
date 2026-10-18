@@ -32,6 +32,15 @@ mod tests {
         bytes
     }
 
+    /// A contents dictionary holding only its required per-object camera.
+    fn with_camera() -> Dictionary {
+        let mut dictionary = Dictionary::new();
+
+        dictionary.insert("cam".to_owned(), Value::Dictionary(Dictionary::new()));
+
+        dictionary
+    }
+
     /// Current Voxel Max adds derived position-sum caches to chunk stats,
     /// which read beside the authoritative bounds and count.
     #[test]
@@ -82,7 +91,7 @@ mod tests {
 
         brush.insert("name".to_owned(), Value::String("Default".to_owned()));
 
-        let mut dictionary = Dictionary::new();
+        let mut dictionary = with_camera();
 
         dictionary.insert("brush".to_owned(), Value::Dictionary(brush));
 
@@ -99,10 +108,19 @@ mod tests {
         assert!(!written.contains_key("brush"));
     }
 
+    /// A contents file without its per-object camera is an error, since Voxel
+    /// Max opens no package holding one.
+    #[test]
+    fn rejects_a_contents_file_without_a_camera() {
+        let error = from_bytes::<VMaxContentsVmaxbFile>(&binary(Dictionary::new())).unwrap_err();
+
+        assert!(error.to_string().contains("cam"), "{error}");
+    }
+
     /// A contents key the model does not name is an error.
     #[test]
     fn rejects_an_unknown_contents_key() {
-        let mut dictionary = Dictionary::new();
+        let mut dictionary = with_camera();
 
         dictionary.insert("bld".to_owned(), Value::Integer(1.into()));
 

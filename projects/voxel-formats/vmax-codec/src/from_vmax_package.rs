@@ -122,7 +122,7 @@ mod tests {
     use crate::{DependenciesImpl, Error, from_vmax_package, to_vmax_package};
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
-        VMaxFile, VMaxImage, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
+        VMaxCamera, VMaxFile, VMaxImage, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
         VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxSelectionVmaxbFile, VMaxValue,
         snapshots::{VMaxVoxel, encode_contents_vmaxb_file_from_voxels},
     };
@@ -185,6 +185,7 @@ mod tests {
                 },
             ],
             "uuid-a",
+            VMaxCamera::default(),
         );
         let settings = VMaxPaletteSettingsVmaxpsbFile {
             name: "pal".to_owned(),

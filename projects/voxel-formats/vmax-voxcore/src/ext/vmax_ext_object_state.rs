@@ -4,8 +4,8 @@ use vmax::VMaxCamera;
 
 /// Per-object Voxel Max state preserved in the `vmax` ext, so a rebuilt object
 /// restores what Voxel Max needs to open it: its contents version and its
-/// camera frame and supported workspace size. A synthesized object takes a
-/// camera framed on its geometry and automatic workspace sizing.
+/// camera frame and supported workspace size. A synthesized object keeps no
+/// camera and takes automatic workspace sizing.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -16,7 +16,7 @@ pub struct VMaxExtObjectState {
     /// Codable version.
     pub v: i64,
 
-    /// Per-object camera.
+    /// Per-object camera. Absent, the write frames the object's content.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cam: Option<VMaxCamera>,
 

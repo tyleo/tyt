@@ -1,27 +1,34 @@
 use crate::{
-    VMaxContentsVmaxbFile,
+    VMaxCamera, VMaxContentsVmaxbFile,
     snapshots::{VMaxVoxel, encode_vmax_snapshots},
 };
 
-/// Encodes voxels into a minimal `VMaxContentsVmaxbFile` payload. Used as
-/// the fallback when no preserved object state is available (e.g. a voxel
-/// document authored outside Voxel Max).
+/// Encodes voxels into a minimal `VMaxContentsVmaxbFile` payload viewed from
+/// `cam`, with no extent or editor state.
 pub fn encode_contents_vmaxb_file_from_voxels(
     voxels: &[VMaxVoxel],
     uuid: &str,
+    cam: VMaxCamera,
 ) -> VMaxContentsVmaxbFile {
     VMaxContentsVmaxbFile {
         snapshots: encode_vmax_snapshots(voxels),
         uuid: uuid.to_owned(),
         v: 4,
-        ..Default::default()
+        tools: None,
+        brush: None,
+        cam,
+        pal: None,
+        eo: None,
+        chunks: Vec::new(),
+        voxels: Vec::new(),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::snapshots::{
-        VMaxVoxel, decode_vmax_snapshots, encode_contents_vmaxb_file_from_voxels,
+    use crate::{
+        VMaxCamera,
+        snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_contents_vmaxb_file_from_voxels},
     };
 
     fn voxel(x: i32, y: i32, z: i32, material_idx: u8, color_idx: u8) -> VMaxVoxel {
@@ -43,7 +50,8 @@ mod tests {
             voxel(255, 255, 255, 3, 9),
         ];
         let decoded = decode_vmax_snapshots(
-            &encode_contents_vmaxb_file_from_voxels(&voxels, "uuid").snapshots,
+            &encode_contents_vmaxb_file_from_voxels(&voxels, "uuid", VMaxCamera::default())
+                .snapshots,
         )
         .unwrap();
         voxels.sort_by_key(|v| (v.position[0], v.position[1], v.position[2]));

@@ -47,8 +47,9 @@ state with no native voxcore home as its ext.
   document opens with. `VMaxObjectSize` selects the editor cube: `Auto`
   preserves a loaded extent when it fits and chooses 256 or 512 for a new
   object. A fixed size from 32 to 512 centers the live grid and refuses a
-  width too small for any axis. Editor camera targets move with the grid;
-  scene positions, rotations, scales and parent transforms stay equivalent.
+  width too small for any axis. Editor camera targets move with the grid,
+  and an object with no kept camera takes one framed on its content; scene
+  positions, rotations, scales and parent transforms stay equivalent.
 
 ## Package conversion
 

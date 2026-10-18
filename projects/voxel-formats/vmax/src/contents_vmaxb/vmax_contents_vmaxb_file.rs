@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// contents file also carries, such as the tool settings and the brush
 /// palette, is named, read, and never written, since Voxel Max opens an
 /// object without it. An unknown key is an error.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VMaxContentsVmaxbFile {
@@ -33,12 +33,9 @@ pub struct VMaxContentsVmaxbFile {
     #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
     pub brush: Option<VMaxDiscarded>,
 
-    /// Per-object camera.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub cam: Option<VMaxCamera>,
+    /// Per-object camera. Required: Voxel Max opens no package holding a
+    /// contents file without one.
+    pub cam: VMaxCamera,
 
     /// Embedded palette dictionary some objects carry (e.g. MagicaVoxel
     /// exports); shape differs from a `.vmaxpsb`, so kept as untyped

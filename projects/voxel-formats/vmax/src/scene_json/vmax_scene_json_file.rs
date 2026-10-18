@@ -1,4 +1,4 @@
-use crate::{VMaxGroup, VMaxObject, VMaxSceneCamera, VMaxValue};
+use crate::{VMaxDiscarded, VMaxGroup, VMaxObject, VMaxSceneCamera, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -45,10 +45,10 @@ pub struct VMaxSceneJsonFile {
     )]
     pub aint: Option<f64>,
 
-    /// The active object, an index into `objects`. Voxel Max reads it
-    /// unchecked, so it must name a listed object.
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub ao: Option<i64>,
+    /// The active object, which a scene opens inside: editor state, never
+    /// written, so a written scene opens on the scene.
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    pub ao: Option<VMaxDiscarded>,
 
     /// Background color, e.g. `"#151313FF"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]

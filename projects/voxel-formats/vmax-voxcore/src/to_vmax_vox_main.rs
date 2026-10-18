@@ -29,8 +29,8 @@ use voxcore::{
 /// samples. Every material keeps the values it draws. Each node, palette, and
 /// object then takes the entry the retain hooks would build for it: fresh ids,
 /// the node's rotation, the default anchor tokens, no exact material list, and
-/// a camera framed on the object. The scene takes the fallback version and the
-/// neutral camera.
+/// no object camera, so the write frames each object's content. The scene
+/// takes the fallback version and the neutral camera.
 ///
 /// Lossy only on the material palette name, which stays empty.
 pub fn to_vmax_vox_main(mut main: VoxMain<()>) -> Result<VMaxVoxMain> {
@@ -57,8 +57,8 @@ pub fn to_vmax_vox_main(mut main: VoxMain<()>) -> Result<VMaxVoxMain> {
         ext.palettes.insert(palette_id, VMaxExtPalette::default());
     }
 
-    for (object_id, object) in main.iter_objects() {
-        let entry = synthesized_object_state(&ext, object);
+    for (object_id, _) in main.iter_objects() {
+        let entry = synthesized_object_state(&ext);
         ext.object_states.insert(object_id, entry);
     }
 

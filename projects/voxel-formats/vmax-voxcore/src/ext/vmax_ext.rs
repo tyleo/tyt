@@ -104,8 +104,8 @@ fn rekey<K: Copy + Display + Ord, V>(
 
 /// A retained node, object, or palette takes the entry
 /// [`to_vmax_vox_main`](crate::to_vmax_vox_main()) would synthesize for it. A
-/// voxel remap or resample moves an object's camera target by as much as its
-/// content center moved, which keeps the author's framing. A gc rekeys every
+/// voxel remap or resample moves an object's kept camera target by as much as
+/// its content center moved, which keeps the author's framing. A gc rekeys every
 /// entry. An exact material list follows its material pools' surviving values.
 impl VoxExt for VMaxExt {
     fn hierarchy_node_did_retain(
@@ -130,11 +130,10 @@ impl VoxExt for VMaxExt {
 
     fn object_did_retain(
         &mut self,
-        state: &VoxState,
+        _state: &VoxState,
         object_id: U32Id<BVoxObject>,
     ) -> VoxResult<()> {
-        let object = state.object(object_id).expect("a retained object is live");
-        let entry = synthesized_object_state(self, object);
+        let entry = synthesized_object_state(self);
         insert(&mut self.object_states, object_id, entry, "object")
     }
 

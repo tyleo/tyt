@@ -102,7 +102,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let node_ids = main.retain_hierarchy_nodes(nodes)?;
     main.set_root_hierarchy_node_ids(roots)?;
 
-    let ext = vmax_ext_from_file(serde, &main, &node_ids, palette_provenance, object_data);
+    let ext = vmax_ext_from_file(serde, &node_ids, palette_provenance, object_data);
     Ok(main.put_ext(ext))
 }
 
@@ -759,7 +759,6 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 ///    in its source grid, by object id. No filename takes a synthesized state.
 fn vmax_ext_from_file(
     serde: &VMaxFile,
-    main: &VoxMain<()>,
     node_ids: &[U32Id<BVoxHierarchyNode>],
     palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
     object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])>,
@@ -788,10 +787,7 @@ fn vmax_ext_from_file(
         let entry = match data.and_then(|data| serde.contents_files.get(&data)) {
             Some(contents) => object_state_from_contents(contents, camera_reference_center),
 
-            None => {
-                let object = main.object(object_id).expect("a loaded object is live");
-                synthesized_object_state(&ext, object)
-            }
+            None => synthesized_object_state(&ext),
         };
         ext.object_states.insert(object_id, entry);
     }
@@ -809,7 +805,7 @@ fn object_state_from_contents(
     VMaxExtObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
-        cam: data.cam.clone(),
+        cam: Some(data.cam.clone()),
         extent_order: Some(contents_workspace_order(data)),
         camera_reference_center: Some(camera_reference_center),
     }
@@ -874,8 +870,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
     use vmax::{
-        VMaxContentsVmaxbFile, VMaxFile, VMaxLegacyChunkVoxels, VMaxMaterial, VMaxObject,
-        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
+        VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxLegacyChunkVoxels, VMaxMaterial,
+        VMaxObject, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
         snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
     };
     use voxcore::{BVoxHierarchyNode, BVoxObject};
@@ -931,7 +927,7 @@ mod tests {
             v: 4,
             tools: Some(VMaxTools { vp: Some(vp) }),
             brush: None,
-            cam: None,
+            cam: VMaxCamera::default(),
             pal: None,
             eo: None,
             chunks: Vec::new(),
@@ -988,8 +984,16 @@ mod tests {
     fn the_extent_order_bounds_the_work_area_without_a_view_box() {
         let area = |eo: Option<i64>| {
             work_area(&VMaxContentsVmaxbFile {
+                snapshots: Vec::new(),
+                uuid: String::new(),
+                v: 4,
+                tools: None,
+                brush: None,
+                cam: VMaxCamera::default(),
+                pal: None,
                 eo,
-                ..Default::default()
+                chunks: Vec::new(),
+                voxels: Vec::new(),
             })
         };
 

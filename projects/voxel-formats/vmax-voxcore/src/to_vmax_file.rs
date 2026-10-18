@@ -9,8 +9,8 @@ use branded_id::{IdRange, U32Id};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
 use vmax::{
-    VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
-    VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
+    VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
+    VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
     snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
@@ -162,9 +162,6 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                 1 << extent_order,
                 options.object_size != VMaxObjectSize::Auto,
             );
-            let previous_center = object_state
-                .camera_reference_center
-                .unwrap_or_else(|| place_object(&object).1.center);
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
@@ -179,10 +176,10 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                     let contents = VMaxContentsVmaxbFile {
                         snapshots: encode_vmax_snapshots(&voxels),
                         ..contents_editor_state(
+                            &object,
                             object_state,
                             extent_order,
                             object_placement.center,
-                            previous_center,
                         )
                     };
                     contents_files.insert(data.clone(), contents);
@@ -217,6 +214,8 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
     let mut scene = main.ext().scene.clone();
     scene.groups = groups;
     scene.objects = objects;
+    // The active object is editor state: a written scene opens on the scene.
+    scene.ao = None;
     keep_listed_selections(&mut scene);
     apply_scene_camera(&mut scene, options.scene_camera);
 
@@ -1251,21 +1250,19 @@ fn object_extent_order(
 }
 
 /// The contents file an object writes from its kept version and camera, with
-/// the chosen extent. Moving the grid moves the editor camera's target by the
-/// same amount; the separately compensated scene transform keeps every voxel
-/// and pivot in its authored scene position. No editor tool state is written.
+/// the chosen extent and the content `center` in the written grid. An object
+/// keeping no camera takes one framed on its content. No editor tool state is
+/// written.
 fn contents_editor_state(
+    object: &VoxObject,
     object_state: &VMaxExtObjectState,
     extent_order: i64,
     center: [f64; 3],
-    previous_center: [f64; 3],
 ) -> VMaxContentsVmaxbFile {
-    let cam = object_state.cam.clone().map(|mut cam| {
-        for axis in 0..3 {
-            cam.o[axis] += center[axis] - previous_center[axis];
-        }
-        cam
-    });
+    let cam = match &object_state.cam {
+        Some(cam) => moved_camera(object, object_state, cam, center),
+        None => framed_camera(center),
+    };
     VMaxContentsVmaxbFile {
         snapshots: Vec::new(),
         uuid: object_state.uuid.clone(),
@@ -1277,6 +1274,45 @@ fn contents_editor_state(
         eo: Some(extent_order),
         chunks: Vec::new(),
         voxels: Vec::new(),
+    }
+}
+
+/// A kept camera with its target moved as far as the write moved the content
+/// from where the camera was captured. The separately compensated scene
+/// transform keeps every voxel and pivot in its authored scene position.
+fn moved_camera(
+    object: &VoxObject,
+    object_state: &VMaxExtObjectState,
+    cam: &VMaxCamera,
+    center: [f64; 3],
+) -> VMaxCamera {
+    let previous_center = object_state
+        .camera_reference_center
+        .unwrap_or_else(|| place_object(object).1.center);
+    let mut cam = cam.clone();
+    for axis in 0..3 {
+        cam.o[axis] += center[axis] - previous_center[axis];
+    }
+    cam
+}
+
+/// The camera an object keeping none takes: a neutral framed-view rig
+/// orbiting the content `center` in the written grid, the rig Voxel Max
+/// writes when it frames an object, so the object opens framed on its content
+/// rather than on its grid's corner.
+fn framed_camera(center: [f64; 3]) -> VMaxCamera {
+    VMaxCamera {
+        wa: 0.0,
+        ha: 0.1959133446216583,
+        da: 0.0,
+        lwa: 0.25,
+        lha: 1.820913314819336,
+        lda: 0.0,
+        px: 0.0,
+        py: 0.0,
+        z: 512.0,
+        o: center,
+        ..Default::default()
     }
 }
 
@@ -1349,13 +1385,12 @@ fn unbake_position(
     ]
 }
 
-/// Drops a kept active object (`ao`), active group (`ag`), or opening level
-/// (`vl`) that no longer names a listed entry. Voxel Max indexes `objects` and
-/// `groups` with the first two unchecked, so a stale index would stop it.
+/// Drops a kept active group (`ag`) or opening level (`vl`) that no longer
+/// names a listed group. Voxel Max indexes `groups` with the first unchecked,
+/// so a stale index would stop it.
 fn keep_listed_selections(scene: &mut VMaxSceneJsonFile) {
     let listed = |index: i64, count: usize| usize::try_from(index).is_ok_and(|index| index < count);
-    let (objects, groups) = (scene.objects.len(), scene.groups.len());
-    scene.ao = scene.ao.filter(|&index| listed(index, objects));
+    let groups = scene.groups.len();
     scene.ag = scene.ag.filter(|&index| listed(index, groups));
     scene.vl = scene
         .vl
@@ -1555,7 +1590,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use vmax::{
-        VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial,
+        VMaxCamera, VMaxContentsVmaxbFile, VMaxDiscarded, VMaxFile, VMaxGroup, VMaxMaterial,
         VMaxMaterialDispersion, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
         VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
         snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
@@ -1746,7 +1781,7 @@ mod tests {
             v: 4,
             tools: None,
             brush: None,
-            cam: None,
+            cam: VMaxCamera::default(),
             pal: None,
             eo: Some(8),
             chunks: Vec::new(),
@@ -1917,10 +1952,7 @@ mod tests {
         let object_state = &ext.object_states[&object_id];
         assert_eq!(object_state.uuid, "00000000-0000-0001-0000-000000000001");
         assert_eq!(object_state.v, 4);
-        assert_eq!(
-            object_state.cam.as_ref().map(|cam| cam.o),
-            Some([127.5, 127.5, 0.5])
-        );
+        assert_eq!(object_state.cam, None);
 
         let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         let added = file
@@ -1935,15 +1967,32 @@ mod tests {
         assert_eq!(added.t_al, "f");
         let contents = &file.contents_files[&added.data];
         assert_eq!(contents.uuid, "00000000-0000-0001-0000-000000000001");
-        // A newly generated one-voxel object takes a 256-wide workspace.
+        // A newly generated one-voxel object takes a 256-wide workspace and a
+        // camera framed on its content.
         assert_eq!(contents.tools, None);
         assert_eq!(contents.eo, Some(8));
+        assert_eq!(contents.cam.o, added.center);
 
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
     }
 
-    /// A voxel remap moves the object's camera target by as much as the
+    /// Gives a retained one-voxel object a kept camera on its content center,
+    /// as a load would.
+    fn keep_camera_on_content(main: &mut VMaxVoxMain, object_id: U32Id<BVoxObject>) {
+        let center = [127.5, 127.5, 0.5];
+
+        let object_state = main.ext_mut().object_states.get_mut(&object_id).unwrap();
+
+        object_state.cam = Some(VMaxCamera {
+            o: center,
+            ..Default::default()
+        });
+
+        object_state.camera_reference_center = Some(center);
+    }
+
+    /// A voxel remap moves the object's kept camera target by as much as the
     /// content center moved, and keeps its uuid.
     #[test]
     fn a_voxel_remap_moves_the_camera_target_with_the_content() {
@@ -1955,6 +2004,7 @@ mod tests {
             .retain_voxel(U32Id::from_u32(0), &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
         let object_id = main.retain_object(object).unwrap();
+        keep_camera_on_content(&mut main, object_id);
         let uuid = main.ext().object_states[&object_id].uuid.clone();
 
         // The canvas widens by 2 and recenters 1 lower, and the voxel moves 2
@@ -1972,8 +2022,8 @@ mod tests {
         assert_eq!(object_state.uuid, uuid);
     }
 
-    /// A voxel resample moves the object's camera target by as much as the
-    /// content center moved, as a remap does.
+    /// A voxel resample moves the object's kept camera target by as much as
+    /// the content center moved, as a remap does.
     #[test]
     fn a_voxel_resample_moves_the_camera_target_with_the_content() {
         let mut main = from_vmax_file(&sample()).unwrap();
@@ -1984,6 +2034,7 @@ mod tests {
             .retain_voxel(U32Id::from_u32(0), &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
         let object_id = main.retain_object(object).unwrap();
+        keep_camera_on_content(&mut main, object_id);
 
         // The same regrid the remap test makes: the canvas widens by 2 and
         // the one voxel lands 2 up, so the content center moves 1 along x.
@@ -2069,10 +2120,10 @@ mod tests {
         original.scene_json_file.objects.push(instance);
         let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
         contents.eo = Some(9);
-        contents.cam = Some(VMaxCamera {
+        contents.cam = VMaxCamera {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
-        });
+        };
         let main = from_vmax_file(&original).unwrap();
         assert_eq!(main.iter_objects().count(), 1);
         for (size, order) in [
@@ -2092,7 +2143,7 @@ mod tests {
             let half = (1 << order) as f64 / 2.0;
             assert_eq!(contents.eo, Some(order));
             assert_eq!(rebuilt.scene_json_file.objects[0].center, [half, half, 1.0]);
-            assert_eq!(contents.cam.as_ref().unwrap().o, [half, half, 1.0]);
+            assert_eq!(contents.cam.o, [half, half, 1.0]);
             assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
             for (before, after) in original
                 .scene_json_file
@@ -2126,10 +2177,10 @@ mod tests {
             .collect();
         contents.snapshots = encode_vmax_snapshots(&voxels);
         contents.eo = Some(5);
-        contents.cam = Some(VMaxCamera {
+        contents.cam = VMaxCamera {
             o: [16.0, 16.0, 1.0],
             ..Default::default()
-        });
+        };
         let main = from_vmax_file(&original).unwrap();
         let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
@@ -2143,11 +2194,7 @@ mod tests {
         .unwrap();
         assert_eq!(resized.contents_files["contents.vmaxb"].eo, Some(6));
         assert_eq!(
-            resized.contents_files["contents.vmaxb"]
-                .cam
-                .as_ref()
-                .unwrap()
-                .o,
+            resized.contents_files["contents.vmaxb"].cam.o,
             [32.0, 32.0, 1.0]
         );
         assert_eq!(placed_voxels(&resized), placed_voxels(&original));
@@ -2167,10 +2214,10 @@ mod tests {
                 flat: None,
             }),
         });
-        contents.cam = Some(VMaxCamera {
+        contents.cam = VMaxCamera {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
-        });
+        };
         let main = from_vmax_file(&original).unwrap();
         let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt.contents_files["contents.vmaxb"].eo, Some(8));
@@ -2179,11 +2226,7 @@ mod tests {
             [128.0, 128.0, 1.0]
         );
         assert_eq!(
-            rebuilt.contents_files["contents.vmaxb"]
-                .cam
-                .as_ref()
-                .unwrap()
-                .o,
+            rebuilt.contents_files["contents.vmaxb"].cam.o,
             [128.0, 128.0, 1.0]
         );
         assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
@@ -2205,13 +2248,13 @@ mod tests {
             .contents_files
             .get_mut("contents.vmaxb")
             .unwrap()
-            .cam = Some(VMaxCamera {
+            .cam = VMaxCamera {
             aq: Some([0.0, 0.0, 0.0, 1.0]),
             op: Some(false),
             zf: Some(1.25),
             o: [128.0, 128.0, 1.0],
             ..Default::default()
-        });
+        };
         let rebuilt = to_vmax_file(
             &from_vmax_file(&original).unwrap(),
             &VMaxWriteOptions::default(),
@@ -2233,10 +2276,10 @@ mod tests {
             .contents_files
             .get_mut("contents.vmaxb")
             .unwrap()
-            .cam = Some(VMaxCamera {
+            .cam = VMaxCamera {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
-        });
+        };
         let main = from_vmax_file(&original).unwrap();
         let before = placed_voxels(&original);
         for (size, width) in [
@@ -2256,14 +2299,7 @@ mod tests {
             .unwrap();
             let center = [width as f64 / 2.0, width as f64 / 2.0, 1.0];
             assert_eq!(rebuilt.scene_json_file.objects[0].center, center);
-            assert_eq!(
-                rebuilt.contents_files["contents.vmaxb"]
-                    .cam
-                    .as_ref()
-                    .unwrap()
-                    .o,
-                center
-            );
+            assert_eq!(rebuilt.contents_files["contents.vmaxb"].cam.o, center);
             assert_eq!(placed_voxels(&rebuilt), before);
         }
     }
@@ -2574,14 +2610,13 @@ mod tests {
         assert_eq!(rebuilt, original);
     }
 
-    /// A kept active object, active group, or opening level writes while it
-    /// names a listed entry, and drops once it does not, since Voxel Max
-    /// indexes with it unchecked.
+    /// A kept active group or opening level writes while it names a listed
+    /// group, and drops once it does not, since Voxel Max indexes with it
+    /// unchecked.
     #[test]
     fn drops_selections_that_name_no_listed_entry() {
         let mut original = sample();
-        original.scene_json_file.ao = Some(0);
-        original.scene_json_file.ag = Some(3);
+        original.scene_json_file.ag = Some(0);
         original.scene_json_file.vl = Some(7);
 
         let rebuilt = to_vmax_file(
@@ -2591,7 +2626,23 @@ mod tests {
         .unwrap();
 
         let scene = &rebuilt.scene_json_file;
-        assert_eq!((scene.ao, scene.ag, scene.vl), (Some(0), None, None));
+        assert_eq!((scene.ag, scene.vl), (Some(0), None));
+    }
+
+    /// A read active object is editor state the write leaves out, so the
+    /// written scene opens on the scene.
+    #[test]
+    fn leaves_out_the_active_object() {
+        let mut original = sample();
+        original.scene_json_file.ao = Some(VMaxDiscarded);
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        assert_eq!(rebuilt.scene_json_file.ao, None);
     }
 
     /// The sample with an external mesh beside its object under the group,
