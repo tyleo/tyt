@@ -125,6 +125,7 @@ mod tests {
         let options = SdfSampleOptions {
             resolution: GridResolution::VoxelSize(0.5),
             frame: VoxelFrame::World,
+            record_writes: false,
         };
         let sampling = sample(&from_sdfj_file(&file).unwrap(), &options).unwrap();
 

@@ -32,8 +32,9 @@ writes a `.voxj` document:
 2. `--resolution <reference> <n>` sets the voxel size to a reference side of the
    model divided by `n`. `longest-world 32` fits 32 cells across the model's
    widest side
-3. `--fill-mode surface` keeps only the cells that show as a hollow shell one
-   cell thick. The default `--fill-mode solid` keeps every filled cell
+3. `--fill-mode surface` keeps only the cells that show: a hollow shell one
+   cell thick, plus the opaque cells seen through glass or water. The default
+   `--fill-mode solid` keeps every filled cell
 4. `--frame local` voxelizes each [part](#parts) once, and every place shares
    the part's object. The default `--frame world` samples every part on one
    lattice and writes an object for each place
@@ -552,6 +553,8 @@ type Value = boolean | number | string | number[] | IntValue | JsonValue;
    numbers and vectors of them, and `json` carries any other JSON value. A
    material without a custom property that another material sets takes the
    kind's empty value there: 0, a zero vector, `false`, `""`, or `null`.
+   `vxl palette show table.voxj --property '*' walkable value auto` lists the
+   property `walkable` per material.
 5. `shades` returns `count` versions of `base` that run from darkest to lightest
    with the original in the middle. Neighboring shades differ in perceived
    lightness by `spread`, and the other properties carry over. Darker shades mix
@@ -720,59 +723,67 @@ export default [stool];
 
 ```
 table.voxj  2768 voxels of 0.025 m  1 piece  22x22x22  [-0.275, 0, -0.275] .. [0.275, 0.55, 0.275]
-  add    legs       480 cells  360 kept  292 exposed  20x20x20  [-0.25, 0, -0.25] .. [0.25, 0.5, 0.25]
-  add    aprons     384 cells  312 kept  308 exposed  16x6x18   [-0.2, 0.35, -0.225] .. [0.2, 0.5, 0.225]
-  add    sides      384 cells  384 kept  356 exposed  18x6x16   [-0.225, 0.35, -0.2] .. [0.225, 0.5, 0.2]
-  add    shelf      648 cells  648 kept  640 exposed  18x2x18   [-0.225, 0.1, -0.225] .. [0.225, 0.15, 0.225]
-  add    top        968 cells  800 kept  672 exposed  22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]
-  paint  gilt       168 cells  168 kept  168 exposed  22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]
-  add    sapphires   96 cells   96 kept   48 exposed  14x4x4    [-0.175, 0.375, 0.175] .. [0.175, 0.475, 0.275]
+  add    legs       480 cells  360 kept  292 exposed  4 pieces  20x20x20  [-0.25, 0, -0.25] .. [0.25, 0.5, 0.25]                     lost to aprons, sides, shelf
+  add    aprons     384 cells  312 kept  308 exposed  2 pieces  16x6x18   [-0.2, 0.35, -0.225] .. [0.2, 0.5, 0.225]                  lost to sides, sapphires
+  add    sides      384 cells  384 kept  356 exposed  2 pieces  18x6x16   [-0.225, 0.35, -0.2] .. [0.225, 0.5, 0.2]
+  add    shelf      648 cells  648 kept  640 exposed            18x2x18   [-0.225, 0.1, -0.225] .. [0.225, 0.15, 0.225]
+  add    top        968 cells  800 kept  672 exposed            22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]              lost to gilt
+  paint  gilt       168 cells  168 kept  168 exposed            22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]    over top
+  add    sapphires   96 cells   96 kept   48 exposed  3 pieces  14x4x4    [-0.175, 0.375, 0.175] .. [0.175, 0.475, 0.275]
 ```
 
 1. A step's cells are the cells it wrote as it ran: every cell an `add` or a
    `set` filled, every live cell a `carve` emptied, and every live cell a
    `paint` or a `coat` recolored.
-2. The step keeps the cells no later step changed. `exposed` counts the kept
-   cells touching empty space across a face. A `carve` line has no `exposed`
-   count.
-3. A size counts cells along x, y, and z. Bounds run in meters from the min
+2. The step keeps the cells no later step changed, and `lost to` lists the
+   later steps that changed them. A `paint` or a `coat` line lists after `over`
+   the steps whose cells it recolored.
+3. `exposed` counts the kept cells that show: cells touching empty space across
+   a face, and opaque cells touching a material that lets light through. A
+   `carve` line has no `exposed` count.
+4. A step whose cells form more than one face-connected piece gives the piece
+   count. A cell a later step recolored still counts, and a cell a later step
+   emptied does not.
+5. A size counts cells along x, y, and z. Bounds run in meters from the min
    cell's min corner to the max cell's max corner and can feed a `box` directly.
    A step's size and bounds cover the cells it wrote.
-4. A step with `0 cells` wrote nothing: an `add` or a `set` fell between the
+6. A step with `0 cells` wrote nothing: an `add` or a `set` fell between the
    cell centers, or a `carve`, `paint`, or `coat` met no live cell. A step with
-   cells and `0 kept` was undone by later steps.
-5. `--fill-mode surface` thins the voxel counts on the model, part, and piece
+   cells and `0 kept` lost them all to the steps after `lost to`.
+7. `--fill-mode surface` thins the voxel counts on the model, part, and piece
    lines to the shell the document holds. The other fields read the cells before
    the fill.
 
-The top keeps 800 of its 968 cells because the gilt takes the rest. The
-sapphires keep all 96 cells and show 48 of them because half of each sapphire
-sits inside the apron.
+The legs read 4 pieces, one per leg. The top keeps 800 of its 968 cells because
+the gilt takes the rest. The sapphires keep all 96 cells and show 48 of them
+because half of each sapphire sits inside the apron.
 
-With parts, each place of a part gets a part line. The part's steps and child
-parts follow, indented one level past the part line. A part line counts the
-part's live cells. A part reads `detached` when neither it nor a part below it
-shares a face-connected piece with its parent. The model's line and the pieces
+With parts, each place of a part gets a part line with the part's pivot. The
+part's steps and child parts follow, indented one level past the part line. A
+part line counts the part's live cells. A part reads `detached` when neither it
+nor a part below it shares a face-connected piece with its parent. A part in
+several places lists its steps under its first place, and each later place's
+line reads `repeats` and the first place's path. The model's line and the pieces
 count the cells the parts cover together. A part reading `0 voxels` writes its
 node with no object. The report for a model in more than one face-connected
 piece ends with a line per piece. The piece lines run from the largest piece
-down and list the steps behind each piece's cells. A step name that repeats
-across lists takes its path of part names, such as `tree.1/tree/trunk`.
+down and list the steps whose live cells reach each piece. A step name that
+repeats across lists takes its path of part names, such as `tree.1/tree/trunk`.
 
 With its hands at `x * 3.25`, the [figure](#parts) leaves a one-voxel gap at
 each wrist:
 
 ```
 figure.voxj  392 voxels of 0.025 m  3 pieces  28x10x4  [-0.35, 0.3, -0.05] .. [0.35, 0.55, 0.05]
-  part  body  320 voxels  8x10x4  [-0.1, 0.3, -0.05] .. [0.1, 0.55, 0.05]
+  part  body  320 voxels  8x10x4  [-0.1, 0.3, -0.05] .. [0.1, 0.55, 0.05]  pivot [0, 0.3, 0]
     add  torso  320 cells  320 kept  224 exposed  8x10x4  [-0.1, 0.3, -0.05] .. [0.1, 0.55, 0.05]
-    part  arm.L  32 voxels  8x2x2  [0.075, 0.5, -0.025] .. [0.275, 0.55, 0.025]
+    part  arm.L  32 voxels  8x2x2  [0.075, 0.5, -0.025] .. [0.275, 0.55, 0.025]  pivot [0.1, 0.525, 0]
       add  L arm  32 cells  32 kept  32 exposed  8x2x2  [0.075, 0.5, -0.025] .. [0.275, 0.55, 0.025]
-      part  hand.L  8 voxels  2x2x2  [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]  detached
+      part  hand.L  8 voxels  2x2x2  [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]  pivot [0.325, 0.525, 0]  detached
         add  L hand  8 cells  8 kept  8 exposed  2x2x2  [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]
-    part  arm.R  32 voxels  8x2x2  [-0.275, 0.5, -0.025] .. [-0.075, 0.55, 0.025]
+    part  arm.R  32 voxels  8x2x2  [-0.275, 0.5, -0.025] .. [-0.075, 0.55, 0.025]  pivot [-0.1, 0.525, 0]
       add  R arm  32 cells  32 kept  32 exposed  8x2x2  [-0.275, 0.5, -0.025] .. [-0.075, 0.55, 0.025]
-      part  hand.R  8 voxels  2x2x2  [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  detached
+      part  hand.R  8 voxels  2x2x2  [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  pivot [-0.325, 0.525, 0]  detached
         add  R hand  8 cells  8 kept  8 exposed  2x2x2  [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]
   piece 1  376 voxels  22x10x4  [-0.275, 0.3, -0.05] .. [0.275, 0.55, 0.05]  from torso, L arm, R arm
   piece 2    8 voxels  2x2x2    [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  from R hand

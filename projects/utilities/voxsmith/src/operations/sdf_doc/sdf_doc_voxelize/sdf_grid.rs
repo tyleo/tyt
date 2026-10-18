@@ -30,6 +30,19 @@ impl SdfGrid {
         self.index(cell).map(|index| &self.cells[index])
     }
 
+    /// The lattice index of the cell at position `index` in `cells`.
+    pub fn lattice_index(&self, index: usize) -> TyVector3I32 {
+        let size = self.size.as_ivec3();
+        let index = index as i32;
+
+        self.min
+            + TyVector3I32::new(
+                index / (size.y * size.z),
+                index / size.z % size.y,
+                index % size.z,
+            )
+    }
+
     /// The position in `cells` of the cell at the lattice index `cell`, or
     /// `None` outside the grid.
     pub fn index(&self, cell: TyVector3I32) -> Option<usize> {

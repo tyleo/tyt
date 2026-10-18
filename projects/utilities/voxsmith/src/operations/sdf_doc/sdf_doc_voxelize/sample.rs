@@ -38,6 +38,7 @@ pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling>
                         &place.path,
                         voxel_size,
                         place.offset,
+                        options.record_writes,
                     )?);
                     grids.len() - 1
                 }
@@ -53,6 +54,7 @@ pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling>
                             &place.path,
                             voxel_size,
                             TyVector3F64::ZERO,
+                            options.record_writes,
                         )?);
                         shared_grids.insert(object_id, grids.len() - 1);
                         grids.len() - 1
@@ -77,6 +79,7 @@ pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling>
     Ok(SdfSampling {
         voxel_size,
         frame: options.frame,
+        writes_recorded: options.record_writes,
         places,
         grids,
         materials,
@@ -123,6 +126,7 @@ mod tests {
         SdfSampleOptions {
             resolution: GridResolution::VoxelSize(voxel_size),
             frame: VoxelFrame::World,
+            record_writes: true,
         }
     }
 
@@ -131,17 +135,10 @@ mod tests {
             .grids
             .iter()
             .flat_map(|grid| {
-                (0..grid.cells.len()).filter_map(move |index| {
-                    let size = grid.size.as_ivec3();
-                    let index = index as i32;
-                    let cell = grid.min
-                        + TyVector3I32::new(
-                            index / (size.y * size.z),
-                            index / size.z % size.y,
-                            index % size.z,
-                        );
-                    grid.cell(cell).unwrap().material.map(|_| cell)
-                })
+                grid.cells
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, cell)| cell.material.map(|_| grid.lattice_index(index)))
             })
             .collect()
     }
@@ -214,8 +211,19 @@ mod tests {
         let sampling = sample(&main, &at_size(1.0)).unwrap();
         let grid = &sampling.grids[0];
 
-        let written: Vec<u64> = grid.steps.iter().map(|record| record.written).collect();
+        let written: Vec<usize> = grid
+            .steps
+            .iter()
+            .map(|record| record.written.len())
+            .collect();
         assert_eq!(written, [64, 32, 16, 8, 1]);
+
+        let overwritten: Vec<&[u32]> = grid
+            .steps
+            .iter()
+            .map(|record| record.overwritten_steps.as_slice())
+            .collect();
+        assert_eq!(overwritten, [&[][..], &[0], &[0], &[0, 2], &[]]);
         assert_eq!(grid.size.to_array(), [6, 4, 4]);
 
         let cell = |x, y, z| *grid.cell(TyVector3I32::new(x, y, z)).unwrap();
@@ -260,7 +268,7 @@ mod tests {
             );
 
             let sampling = sample(&main, &at_size(1.0)).unwrap();
-            assert_eq!(sampling.grids[0].steps[1].written, written);
+            assert_eq!(sampling.grids[0].steps[1].written.len(), written);
         }
     }
 
@@ -424,6 +432,7 @@ mod tests {
             let options = SdfSampleOptions {
                 resolution: GridResolution::ReferenceCount { reference, count },
                 frame: VoxelFrame::World,
+                record_writes: false,
             };
             sample(&main, &options).unwrap().voxel_size
         };
@@ -440,6 +449,7 @@ mod tests {
                     count: 3,
                 },
                 frame: VoxelFrame::World,
+                record_writes: false,
             },
         )
         .unwrap();

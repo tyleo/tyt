@@ -443,9 +443,12 @@ cell from the cell's [frame position](#pattern-frames) as its step runs.
 A step in several parts' lists runs in each part. A part's `offset` moves the
 part's frame within its parent's frame.
 
-After a part's last step, `--fill-mode surface` empties every live cell of the
-part with no empty face neighbor. Cells outside the part's grid count as empty.
-The document holds the grids the fill mode leaves.
+After a part's last step, `--fill-mode surface` empties each of the part's live
+cells that does not show. A live cell shows when it has an empty face neighbor,
+or when its material is opaque and a face neighbor's material lets light
+through. A material lets light through when its pass at normal incidence is
+above zero in any channel. Cells outside the part's grid count as empty. The
+document holds the grids the fill mode leaves.
 
 ## Pattern frames
 
@@ -574,32 +577,39 @@ A pattern length left out takes its default count of cells times `g`.
    place of a part then takes a part line. The part's steps follow in list
    order, and its child parts come after them. A part's steps and child parts
    indent one level past the part's line. A lone root part takes no line, and
-   its steps and child parts follow the model's line.
+   its steps and child parts follow the model's line. A part's steps print under
+   its first place only, and each later place's line reads `repeats` and the
+   first place's path.
 2. An `add` or a `set` writes every cell it fills. A `carve` writes the live
    cells it empties, and a `paint` or a `coat` writes the live cells it
    recolors. A step keeps the cells whose last change came from the step.
-   `exposed` counts the kept live cells with an empty face neighbor. Cells
-   outside the part's grid count as empty. A step's size and bounds cover the
-   cells the step wrote.
-3. A part line's count, size, and bounds cover the part's live cells at that
-   place. A part with live cells reads `detached` when its parent has live cells
-   and no piece holding the cells of the part or a part below it holds a parent
-   cell. The model's line and the pieces cover the cells the placed parts cover
-   together.
-4. Pieces are the face-connected groups of the cells the placed parts cover. The
+   `exposed` counts the kept live cells that show, as the surface fill reads
+   them. A step's size and bounds cover the cells the step wrote.
+3. A step other than a `carve` gives the count of face-connected pieces among
+   its written cells that hold a material, when there is more than one. A
+   step line ends with `lost to` and the later steps whose writes changed the
+   step's cells, when any did. A `paint` or a `coat` line lists after `over` the
+   earlier steps whose cells it wrote over, when it wrote over any. Both lists
+   run in list order.
+4. A part line's count, size, and bounds cover the part's live cells at that
+   place, and its pivot gives the place's pivot in meters. A part with live
+   cells reads `detached` when its parent has live cells and no piece holding
+   the cells of the part or a part below it holds a parent cell. The model's
+   line and the pieces cover the cells the placed parts cover together.
+5. Pieces are the face-connected groups of the cells the placed parts cover. The
    report numbers the pieces from the largest. Among pieces of one size, the
    piece whose first cell comes first in a raster scan with x outermost takes
    the lower number. With more than one piece, the report ends with a line per
-   piece that lists the steps behind the piece's cells in list order. A step
-   name that repeats across lists takes its path of part names. The path leaves
-   out a lone root part.
-5. A size counts cells along x, y, and z. Bounds run in meters from the min
+   piece that lists in list order each step with a written cell in the piece
+   that holds a material. A step name that repeats across lists takes its path
+   of part names. The path leaves out a lone root part.
+6. A size counts cells along x, y, and z. Bounds run in meters from the min
    cell's min corner to the max cell's max corner. A line over no cells leaves
    out its size and bounds. The report rounds meters to six decimals, drops
    trailing zeros, and prints `-0` as `0`.
-6. A count of one takes a singular label, such as `1 cell`. The report pads the
+7. A count of one takes a singular label, such as `1 cell`. The report pads the
    fields of consecutive lines of one kind and depth into columns and aligns
-   the counts right.
+   the counts right. A column no line of a group fills takes no space.
 
 ## Checks
 

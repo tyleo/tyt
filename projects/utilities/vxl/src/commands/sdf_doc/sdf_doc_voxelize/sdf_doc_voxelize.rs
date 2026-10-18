@@ -130,6 +130,7 @@ impl SdfDocVoxelize {
                     &main,
                     &SdfSampleOptions {
                         frame: VoxelFrame::World,
+                        record_writes: true,
                         ..settings.sample
                     },
                 )?,
@@ -185,8 +186,15 @@ impl SdfDocVoxelize {
             )));
         }
 
+        let report = self.report.or(profile.report).unwrap_or(false);
+
         Ok(Settings {
-            sample: SdfSampleOptions { resolution, frame },
+            // Under the local frame the report samples the world frame again.
+            sample: SdfSampleOptions {
+                resolution,
+                frame,
+                record_writes: report && frame == VoxelFrame::World,
+            },
             vox_main: SdfVoxMainOptions {
                 fill_mode: self
                     .fill_mode
@@ -194,7 +202,7 @@ impl SdfDocVoxelize {
                     .unwrap_or(FillMode::Solid),
                 flatten,
             },
-            report: self.report.or(profile.report).unwrap_or(false),
+            report,
         })
     }
 }

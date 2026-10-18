@@ -1280,6 +1280,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(0.025),
                 frame: VoxelFrame::World,
+                record_writes: false,
             },
         )
         .unwrap();

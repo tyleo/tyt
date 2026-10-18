@@ -125,21 +125,22 @@ The six rounds set phase 2's steps. The steps cite findings by the numbers
 adds the call's entry to the sdfj format. The candidates the trials asked for
 rarely or never [wait for a reason](README.md#waiting-for-a-reason).
 
-- [ ] **S16. Report.** The report data the rounds asked for, each printed only
+- [x] **S16. Report.** The report data the rounds asked for, each printed only
       where it applies:
-  1. A step line counts the face-connected pieces its kept cells form when they
-     form more than one for findings 10 and 24
+  1. A step line counts the face-connected pieces its live cells form when they
+     form more than one for findings 10 and 24. A cell a later step recolored
+     still counts. A piece line lists every step whose live cells reach the
+     piece for finding 33
   2. A step line that lost cells lists the later steps that took them for
      findings 7, 55, and 122
   3. A `paint` or `coat` line lists the steps whose cells it recolored for
      finding 34
-  4. `exposed` counts a cell beside a transparent material for finding 51
+  4. `exposed` counts an opaque cell beside a material that lets light through
+     for finding 51
   5. A part line gives the part's pivot for finding 42. A part's steps print
      under its first place only for finding 23
-  6. A part with `free: true` reads `free` where it would read `detached` for
-     finding 38
-  7. `vox-doc show` prints node pivots and palette custom properties for
-     finding 39
+  6. The API doc points to `vxl palette show` for a custom property's values
+     for finding 39. `vxl node list --show-transforms` already prints the nodes
 - [ ] **S17. Review sheet.** The contact sheet moves out of the
       [rendering follow-ups](../voxel-rendering-followups/README.md#waiting-for-a-reason)
       for findings 8, 17, and 19:

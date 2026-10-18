@@ -10,4 +10,8 @@ pub struct SdfSampleOptions {
     /// [`VoxelFrame::World`] each place of a part samples on its own, and
     /// under [`VoxelFrame::Local`] each part samples once for all its places.
     pub frame: VoxelFrame,
+
+    /// Whether each step records the cells it wrote and the steps it wrote
+    /// over, which the [`report`](crate::operations::sdf_doc::report()) reads.
+    pub record_writes: bool,
 }

@@ -1,11 +1,12 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        SdfCell, SdfGrid, SdfSampling, SdfVoxMainOptions, has_open_face, retain_sdf_palette,
+        SdfCell, SdfGrid, SdfSampling, SdfVoxMainOptions, is_exposed, retain_sdf_palette,
+        see_through_materials,
     },
     utilities::{FillMode, FlattenMode, VoxelFrame},
 };
-use branded_id::{IdVec, IteratorExt, U32Id};
+use branded_id::{IdSlice, IdVec, IteratorExt, U32Id};
 use sdfcore::BSdfMaterial;
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
@@ -24,12 +25,14 @@ pub fn to_vox_main(sampling: &SdfSampling, options: &SdfVoxMainOptions) -> Resul
         ));
     }
 
+    let see_through = see_through_materials(&sampling.materials);
+
     let kept: Vec<Vec<SdfCell>> = sampling
         .grids
         .iter()
         .map(|grid| match options.fill_mode {
             FillMode::Solid => grid.cells.clone(),
-            FillMode::Surface => surface_cells(grid),
+            FillMode::Surface => surface_cells(grid, &see_through),
         })
         .collect();
 
@@ -405,10 +408,8 @@ fn snap(offset: TyVector3F64) -> TyVector3F64 {
     }))
 }
 
-/// The cells of `grid` with every live cell that has no open face emptied.
-fn surface_cells(grid: &SdfGrid) -> Vec<SdfCell> {
-    let size = grid.size.as_ivec3();
-
+/// The cells of `grid` with each hidden live cell emptied.
+fn surface_cells(grid: &SdfGrid, see_through: &IdSlice<BSdfMaterial, bool>) -> Vec<SdfCell> {
     grid.cells
         .iter()
         .enumerate()
@@ -417,15 +418,7 @@ fn surface_cells(grid: &SdfGrid) -> Vec<SdfCell> {
                 return *cell;
             }
 
-            let index = index as i32;
-            let position = grid.min
-                + TyVector3I32::new(
-                    index / (size.y * size.z),
-                    index / size.z % size.y,
-                    index % size.z,
-                );
-
-            if has_open_face(grid, position) {
+            if is_exposed(grid, grid.lattice_index(index), see_through) {
                 *cell
             } else {
                 SdfCell {
@@ -448,7 +441,8 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use sdfcore::{
-        SdfMain, SdfMaterial, SdfNode, SdfObject, SdfShape3d, SdfState, SdfStep, SdfStepMaterial,
+        SdfMain, SdfMaterial, SdfNode, SdfObject, SdfProperty, SdfPropertyValue, SdfShape3d,
+        SdfState, SdfStep, SdfStepMaterial,
     };
     use ty_math::TyVector3F64;
     use voxcore::VoxMain;
@@ -465,6 +459,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame,
+                record_writes: false,
             },
         )
         .unwrap();
@@ -656,6 +651,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::Local,
+                record_writes: false,
             },
         )
         .unwrap();
@@ -711,6 +707,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::World,
+                record_writes: false,
             },
         )
         .unwrap();
@@ -741,6 +738,54 @@ mod tests {
         );
 
         for (fill_mode, voxels) in [(FillMode::Solid, 27), (FillMode::Surface, 26)] {
+            let document = write(&main, VoxelFrame::World, fill_mode, FlattenMode::None);
+            let (_, object) = document.iter_objects().next().unwrap();
+            assert_eq!(object.live_count(), voxels);
+        }
+    }
+
+    #[test]
+    fn the_surface_fill_keeps_an_opaque_cell_seen_through_water() {
+        // A rock at the center of a 5x5x5 water block.
+        let mut state = single_part_main(
+            vec![
+                SdfShape3d::Box {
+                    min: TyVector3F64::ZERO,
+                    max: TyVector3F64::splat(5.0),
+                    round: None,
+                },
+                SdfShape3d::Box {
+                    min: TyVector3F64::splat(2.0),
+                    max: TyVector3F64::splat(3.0),
+                    round: None,
+                },
+            ],
+            vec![
+                SdfStep::Add {
+                    name: "water".to_string(),
+                    shape_id: U32Id::from_u32(0),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(1)),
+                },
+                SdfStep::Add {
+                    name: "rock".to_string(),
+                    shape_id: U32Id::from_u32(1),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+            ],
+        )
+        .state()
+        .clone();
+        state.materials[U32Id::from_u32(1).to_usize_id()] = SdfMaterial::Material {
+            properties: vec![SdfProperty {
+                name: "transmission".to_string(),
+                value: SdfPropertyValue::Number(1.0),
+            }],
+        };
+        let main = SdfMain::new(state).unwrap();
+
+        // The 98 shell cells and the rock stay, and the water around the rock
+        // goes.
+        for (fill_mode, voxels) in [(FillMode::Solid, 125), (FillMode::Surface, 99)] {
             let document = write(&main, VoxelFrame::World, fill_mode, FlattenMode::None);
             let (_, object) = document.iter_objects().next().unwrap();
             assert_eq!(object.live_count(), voxels);

@@ -28,7 +28,8 @@ const ALL_SIDES: [SdfSide; 6] = [
 
 /// Runs the steps of the object at `object_id` over its grid on the lattice of
 /// cells `voxel_size` across, with the object's shapes moved by `shift`.
-/// `place_path` holds the part names of the place an error reports.
+/// `place_path` holds the part names of the place an error reports. Each
+/// step's record holds its writes under `record_writes`.
 pub fn sample_grid(
     state: &SdfState,
     shapes: &SdfShapes,
@@ -36,6 +37,7 @@ pub fn sample_grid(
     place_path: &[String],
     voxel_size: f64,
     shift: TyVector3F64,
+    record_writes: bool,
 ) -> Result<SdfGrid> {
     let lattice = LatticeShapes::new(shapes, voxel_size, shift);
     let object = &state.objects[object_id.to_usize_id()];
@@ -115,6 +117,7 @@ pub fn sample_grid(
             step: index as u32,
             voxel_size,
             shift,
+            record_writes,
             record: SdfStepRecord::default(),
         };
 
@@ -141,6 +144,8 @@ struct StepRun<'a, 'b> {
     voxel_size: f64,
 
     shift: TyVector3F64,
+
+    record_writes: bool,
 
     record: SdfStepRecord,
 }
@@ -332,8 +337,8 @@ impl StepRun<'_, '_> {
             .expect("a step writes inside its grid");
         let written = &mut self.grid.cells[index];
 
-        if written.step != Some(self.step) {
-            self.record = self.record.with(cell);
+        if self.record_writes && written.step != Some(self.step) {
+            self.record.push(index as u32, cell, written.step);
         }
 
         *written = SdfCell {

@@ -14,6 +14,10 @@ pub struct SdfSampling {
     /// The frame the grids were sampled in.
     pub frame: VoxelFrame,
 
+    /// Whether each step's record holds the cells it wrote and the steps it
+    /// wrote over.
+    pub writes_recorded: bool,
+
     /// Every place of every part, each before its children, from the first
     /// root part.
     pub places: Vec<SdfPlace>,

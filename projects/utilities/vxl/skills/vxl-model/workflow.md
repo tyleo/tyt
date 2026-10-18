@@ -51,9 +51,12 @@ The report reads more reliably than the PNGs:
 
 1. The bounds on the model's line match the prompt's real size in meters
 2. A step at `0 cells` missed every cell center, and a step at `0 kept` lost
-   every cell to later steps
+   every cell to the steps after `lost to`
 3. A detail at `0 exposed` sits buried inside another form
-4. A second piece means a shape floats, and a part reading `detached` has a gap
+4. A step reading more pieces than the forms it draws broke on the grid or under
+   a later cut. A `paint` or a `coat` spilled when it reads `over` a step it
+   should miss
+5. A second piece means a shape floats, and a part reading `detached` has a gap
    at its joint
 
 `front`, `right`, and `top` draw without perspective and show heights, widths,
