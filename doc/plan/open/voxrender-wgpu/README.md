@@ -59,7 +59,8 @@ knows transparency, so a raster arm can show the glass the reference renders.
    research's
    [section 3.3](reference/research.md#33-exact-traversal-and-precision) on
    inputs that shared code quantizes once, so cell and face choices agree
-   exactly across GPUs. The goldens regenerate. If B1 finds the integer step
+   exactly across GPUs. The GPU tiers run it in i32 alone, grid entry
+   included. The goldens regenerate. If B1 finds the integer step
    costs more than 1.25x a float step on Quest, Quest keeps a float walk. Its
    goldens then tolerate a counted share of flipped samples
 2. Nothing enters `voxrender-wgpu` until a benchmark has picked it

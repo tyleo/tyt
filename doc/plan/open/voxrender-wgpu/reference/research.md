@@ -343,12 +343,17 @@ B6 counts.
    Amanatides and Woo's float step [73].
 4. **Exact ties go to the lowest axis**, x then y then z, matching the
    reference's `min_by` [74].
-5. **Grid entry from far away needs about R + F + DB bits**, around 49 at R =
-   20. Use native i64 where SHADER_INT64 exists, which includes Quest 3 [69].
-   Use u32 pairs elsewhere: a Galaxy S23 on its Adreno 740 driver reports
-   shaderInt64 false [75], and WGSL has no 64-bit integer [10]. This runs once
-   per ray per placement. Mip jumps update E with wrapping multiply-adds, which
-   are exact modulo 2^32.
+5. **Grid entry from far away runs in i32 too.** Exact entry needs about R +
+   F + DB bits, and WGSL has no 64-bit integer [10]. An f32 guess picks the
+   entry face e and the cell c on each other axis a. The remainder O_a * D_e -
+   O_e * D_a - c * 2^F * D_e is exact in wrapping i32 within two cells of the
+   ray, and its sign corrects the guess. A near-tie that picks a face too
+   early leaves the ray behind the grid on another axis, and the entry moves
+   to that axis. The guess holds up to 32 ulp of error per float op [9]. An
+   origin and its mirror must fit i32, so a ray starts within 2^18 cells of a
+   grid less the grid's size: 2.6 km at 1 cm voxels. This runs once per ray
+   per placement. Mip jumps update E with wrapping multiply-adds, which are
+   exact modulo 2^32.
 6. **Shared Rust code quantizes every input to a discrete decision once on the
    CPU**, and the reference uses the same code:
    - primary directions per eye and placement as D(i,j) = (G0 + i*Gx + j*Gy) >>
@@ -1036,8 +1041,7 @@ between the reference and the GPU upload.
    Apple A17-class phone.
 2. **The floor tier rasterizes.** Greedy meshes with 4x MSAA, fused forward
    shading, per-face or per-corner memo filled per brick, and dynamic
-   resolution, with no subgroups, no int64 and no 64-bit atomics. Integer
-   traversal setup runs through u32 pairs.
+   resolution, with no subgroups, no int64 and no 64-bit atomics.
 3. **The flagship tier runs the Quest hybrid** at phone resolution.
 4. **On Mali, compute stays off the path between fragment passes**, and storage
    usage stays off render targets.
@@ -1256,8 +1260,7 @@ such as per-face shadows.
   - output an id buffer beside color
   - run on NVIDIA, AMD and Apple Metal, on Quest 3, and on a Galaxy S23-class
     phone
-  - measure int32 add and compare throughput on Adreno 740, and i64 against
-    u32-pair setup cost
+  - measure int32 add and compare throughput on Adreno 740
   - for the record, count f32 DDA flips on the same scenes
 - **Threshold.** Zero id mismatches on every target. Color within tolerance on
   every pixel. The integer step costs at most 1.25x a float DDA step on Quest.
@@ -1484,7 +1487,7 @@ judged after B3 needs these in the reference first:
 7. QuestCraft. https://github.com/QuestCraftPlusPlus/QuestCraft
 8. VivecraftMod. https://github.com/Vivecraft/VivecraftMod
 9. Precision simulations from this research, run with python3 from their
-   folder: tie.py, flips.py, primary2.py, intdda.py, 2026.
+   folder: tie.py, flips.py, primary2.py, intdda.py, entry32.py, 2026.
    [precision-sim](precision-sim/)
 10. W3C. WGSL specification, CRD 21 Sep 2026. https://www.w3.org/TR/WGSL/
 11. wgpu repository at commit 1468594 (naga back/spv, back/msl, back/hlsl;
