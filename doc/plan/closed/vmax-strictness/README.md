@@ -57,8 +57,10 @@ errors, as `8071a505` made `decode_vmax_legacy_chunks` do.
    is a palette's name, its slots stored without dispersion, and its
    transmission colors. The slider map uses Voxel Max's f32 ends, and an
    off-span coefficient errors on read.
-4. `731564a3`: a palette edit sets a value in place when every material
-   drawing it writes the same result and no other cell draws it. Materials
+4. `731564a3` and `803f5d16`: a palette write edits the values its materials
+   draw in place. A value splits only where the materials drawing it write
+   different results, and a write never removes or merges values. Materials
    sharing a Voxel Max slot then still share it, so the edited palette writes
    back. An edit that splits a slot errors in the writer, naming the palette
-   and the material.
+   and the material. The repair tools this leaves open live in
+   [palette material tools](../../open/palette-material-tools/README.md).
