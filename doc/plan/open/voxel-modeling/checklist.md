@@ -120,8 +120,8 @@ Trials then show which operations Claude reaches for and where the loop fails.
 
 ## Phase 2: follow-ups
 
-The six rounds set phase 2's steps. The steps cite findings by the numbers
-[round 6](trials-round-6.md#findings) gives them. A step that adds a call also
+The trial rounds set phase 2's steps. The steps cite findings by the numbers
+[round 7](trials-round-7.md#findings) gives them. A step that adds a call also
 adds the call's entry to the sdfj format. The candidates the trials asked for
 rarely or never [wait for a reason](README.md#waiting-for-a-reason).
 
@@ -158,9 +158,10 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
      15 and 68
   4. The default `spread` stops short of the swings that read as camouflage for
      finding 65
-- [ ] **S19. Round 7.** Run the prompts after S16 to S18 and log the round
+- [x] **S19. Round 7.** Run the prompts after S16 to S18 and log the round
       beside round 6. The round compares its passes and cost with round 5's
-      because round 6 ran the dropped review.
+      because round 6 ran the dropped review. [Round 7](trials-round-7.md)
+      matches round 5's passes and cost.
 - [ ] **S20. Grid steps.** Steps and options that read the grid as the earlier
       steps left it:
   1. An `add` option moves the shape toward a side until the shape meets a live
@@ -172,7 +173,8 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
      finding 34
 - [ ] **S21. New calls.** Calls the rounds built by hand:
   1. `spline` draws a smooth 2D curve through points as an outline or a stroke
-     for finding 87
+     for finding 87. A straight stroke draws a face-connected line of cells
+     between two points for finding 130
   2. `sweep` runs a 2D profile along a 3D path of points and can taper it.
      `helix` gives a coiled path for stairs, springs, and spirals. Both answer
      finding 25
@@ -185,5 +187,17 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   1. Under `--flatten`, vxl samples a rotated part at its angle on the root
      part's grid
   2. `flip` reflects a shape across axes without keeping the original
-- [ ] **S23. Round 8.** Run the prompts after S20 to S22 and log the round
+- [ ] **S23. Round 7 fixes.** Answer round 7's
+      [findings](trials-round-7.md#findings) before the next round:
+  1. The review sheet keeps `<stem>.png` whatever views the command adds for
+     finding 126
+  2. The report ends with a block that repeats its `0 kept`, `0 exposed`, extra
+     piece, and broken-step lines for finding 4. The skill's done line points
+     to the block
+  3. A rotated part's line and the model line give posed world bounds and the
+     world pivot for finding 128
+  4. `coat` takes a slope limit for finding 135, and `gradient` takes its range
+     in either order for finding 136
+  5. The library's `oak` stays apart from `pine` for finding 13
+- [ ] **S24. Round 8.** Run the prompts after S20 to S23 and log the round
       beside round 7.

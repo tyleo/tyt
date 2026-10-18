@@ -49,34 +49,59 @@ def size_label(value):
     return f"{value * 1000:g} mm"
 
 
+VIEWS = ["hero", "front", "right", "back", "top"]
+
+
+def find_sheet(folder):
+    """Returns the folder's first review sheet, the PNG named for a report's
+    model with or without `-review`, or None."""
+    names = sorted(os.listdir(folder))
+    models = {n[: -len("-report.txt")] for n in names if n.endswith("-report.txt")}
+    return next((n for n in names if n.endswith(".png") and n[:-4].removesuffix("-review") in models), None)
+
+
+def crop_tile(sheet, index, *convert):
+    """Runs magick on one view of a review sheet, which tiles its views three to
+    a row with a border between them."""
+    width, height = map(int, subprocess.run(
+        ["magick", "identify", "-format", "%w %h", sheet], check=True, capture_output=True, text=True,
+    ).stdout.split())
+    border = 2 * width - 3 * height
+    tile = (width - 2 * border) // 3
+    if border < 0 or 3 * tile + 2 * border != width:
+        sys.exit(f"{sheet} at {width}x{height} is no five-view review sheet")
+    x, y = index % 3 * (tile + border), index // 3 * (tile + border)
+    return subprocess.run(
+        ["magick", sheet, "-crop", f"{tile}x{tile}+{x}+{y}", "+repage", *convert],
+        check=True, capture_output=True,
+    ).stdout
+
+
 def copy_images(run):
-    """Copies a run's final renders and shrinks each pass's hero render into a
-    data URI. The pass renders ride in the page because a published page holds
-    at most 511 files."""
+    """Crops a run's final review sheet into its views, copies its other PNGs,
+    and shrinks each pass's hero view into a data URI. The pass renders ride in
+    the page because a published page holds at most 511 files."""
     out = os.path.join(gallery, "runs", run)
     os.makedirs(out)
-    views, extras = [], []
+    sheet = find_sheet(slot_dir(run))
+    views = []
+    if sheet:
+        for index, view in enumerate(VIEWS):
+            crop_tile(os.path.join(slot_dir(run), sheet), index, os.path.join(out, view + ".png"))
+            views.append(view)
+    extras = []
     for name in sorted(os.listdir(slot_dir(run))):
-        if not name.endswith(".png"):
-            continue
-        stem = name[:-4]
-        view = next((v for v in ["front", "right", "top", "hero"] if stem.endswith("-" + v)), None)
-        target = view or f"extra-{stem}"
-        shutil.copy(os.path.join(slot_dir(run), name), os.path.join(out, target + ".png"))
-        (views if view else extras).append(target)
+        if name.endswith(".png") and name != sheet:
+            shutil.copy(os.path.join(slot_dir(run), name), os.path.join(out, f"extra-{name[:-4]}.png"))
+            extras.append(f"extra-{name[:-4]}")
     passes = []
     passes_dir = os.path.join(runs_dir, run, "passes")
     for snapshot in sorted(os.listdir(passes_dir)) if os.path.isdir(passes_dir) else []:
-        heroes = sorted(f for f in os.listdir(os.path.join(passes_dir, snapshot)) if f.endswith("-hero.png"))
-        if heroes:
-            webp = subprocess.run(
-                ["magick", os.path.join(passes_dir, snapshot, heroes[0]), "-resize", "360x360",
-                 "-quality", "82", "webp:-"],
-                check=True, capture_output=True,
-            ).stdout
+        pass_sheet = find_sheet(os.path.join(passes_dir, snapshot))
+        if pass_sheet:
+            webp = crop_tile(os.path.join(passes_dir, snapshot, pass_sheet), 0, "-resize", "360x360", "-quality", "82", "webp:-")
             passes.append("data:image/webp;base64," + base64.b64encode(webp).decode())
-    order = ["hero", "front", "right", "top"]
-    return sorted(views, key=order.index), extras, passes
+    return views, extras, passes
 
 
 shutil.rmtree(os.path.join(gallery, "runs"), ignore_errors=True)

@@ -190,6 +190,8 @@ never:
    leaves
 5. A step that runs a part's steps on another part's grid
 6. A `typescript` library group whose sources vxl builds before the model
+7. Review sheets that pick their views per model, such as a left view or no
+   back view behind a room, for round 7's finding 127
 
 ## Decisions
 

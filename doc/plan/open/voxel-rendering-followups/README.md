@@ -54,3 +54,6 @@ surface blurs a reflection.
 2. Area lights
 3. A tonemap that keeps a dark color's hue. The flare offset subtracts the same
    amount from every channel and turns a dark brown redder
+4. A backdrop that shows through openings in place of the white background
+5. Light cast from emissive materials onto nearby surfaces
+6. A clip plane that opens a room or a hull at render time

@@ -96,10 +96,10 @@ const RUN_ANALYSIS = {
     renders: {
       type: 'object',
       properties: {
-        front: { type: 'string' }, right: { type: 'string' }, top: { type: 'string' }, hero: { type: 'string' },
+        sheet: { type: 'string', description: 'the review sheet, which tiles the hero, front, right, back, and top views' },
         extra: { type: 'array', items: { type: 'string' }, description: 'any other final PNGs the session rendered, such as cutaways' },
       },
-      required: ['front', 'right', 'top', 'hero', 'extra'],
+      required: ['sheet', 'extra'],
       description: 'absolute paths of the final renders; empty strings when missing',
     },
     modelFile: { type: 'string', description: 'absolute path of the final model file' },
@@ -128,7 +128,7 @@ This job is read-only. Never edit, create, or delete anything under ~/voxel-tria
 
 For each run:
 1. Run \`python3 ${HARNESS}/summarize-transcript.py <run directory> > ~/voxel-trials/_runs/<run directory>/transcript.txt\` from the repository root, then read transcript.txt in full, in chunks with Read offsets when it is long. It holds the session's messages, commands, model edits, and reports, with images left out.
-2. Read the final model file. Look at the final renders with Read (front, right, top, hero, and any other PNG the session rendered last), and at the hero render in passes/01 to see how far the model came.
+2. Read the final model file. Look at the final renders with Read (the review sheet, which tiles the hero, front, right, back, and top views, and any other PNG the session rendered last), and at the sheet in passes/01 to see how far the model came.
 3. The skill the sessions followed is ~/voxel-trials/${t.dir}/.claude/skills/vxl-model/SKILL.md. Before listing an operation as lacking, confirm in SKILL.md that the API lacks it. When the API has it and the session missed it, list it under skillMisses instead.
 ${t.stress ? `\nThe prompt was chosen to stress this: ${t.stress}. Report how each run fared against each point.\n` : ''}${t.check ? `\n${t.check} Stay read-only.\n` : ''}
 Judge the model, not the process. A session may use any tools in any order, and a skipped skill step counts only where the model or the session's time suffered. Judge each result from the renders the way the person who wrote the prompt would. Be concrete and critical, and keep each list item to one or two sentences. Then write the whole object you return as JSON to ~/voxel-trials/_runs/${t.dir}/analysis.json and return it.`
