@@ -166,6 +166,54 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+### Quest builds
+
+`voxrender-bench` also builds as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The bench's README holds the build and run commands. Gradle needs no install because the bench checks in its wrapper.
+
+1. A JDK starts Gradle. Gradle then fetches the JDK its daemon pins. Adoptium recommends a package manager:
+
+   ```sh
+   brew install --cask temurin
+   ```
+
+2. The Rust Android target and cargo-ndk:
+
+   ```sh
+   rustup target add aarch64-linux-android
+   cargo install cargo-ndk --locked
+   ```
+
+3. Google's Android CLI, which replaces the deprecated `sdkmanager`:
+
+   ```sh
+   brew tap android/tap
+   brew install android-cli
+   ```
+
+4. Add these lines to your login shell's environment, then open a new shell:
+
+   ```sh
+   export JAVA_HOME="$(/usr/libexec/java_home)"
+   export ANDROID_HOME="$HOME/Library/Android/sdk"
+   export PATH="$ANDROID_HOME/platform-tools:$PATH"
+   ```
+
+   `platform-tools` comes first in `PATH` so no other `adb` shadows it.
+
+5. The SDK packages, at the versions the Gradle build pins:
+
+   ```sh
+   android --sdk="$ANDROID_HOME" sdk install platform-tools platforms/android-34 build-tools/36.0.0 ndk/30.0.16248370
+   ```
+
+6. `which -a adb` lists only `$ANDROID_HOME/platform-tools/adb`. A second `adb`, such as Homebrew's `android-platform-tools` cask, runs its own server on the same port. Meta Quest Developer Hub bundles another, so point its ADB Path setting at the SDK's `adb`.
+
+7. Developer mode on the headset:
+   1. At [developers.meta.com](https://developers.meta.com), create or join a team, then verify the account by SMS or a payment method
+   2. In the Meta Horizon phone app, open the headset's settings and turn on Developer Mode
+   3. Connect the headset by USB-C and allow USB debugging from this computer
+   4. `adb devices` lists the headset
+
 ## Releasing
 
 A release publishes the crates you name and only the workspace crates they need. `scripts/release.sh` picks them and needs `jq`, `perl`, and `curl`.

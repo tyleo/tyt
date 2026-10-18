@@ -73,8 +73,9 @@ knows transparency, so a raster arm can show the glass the reference renders.
 5. The Quest benchmarks run on a retail Quest 3 in developer mode
 6. The headset harness builds wgpu from the OpenXR session's Vulkan instance
    and device through wgpu-hal. bevy_mod_openxr runs the same pattern on Quest
-7. The repo README's Development section documents the Android setup, which
-   runs by hand. No build script fetches or configures it
+7. The repo README's Development section lists the Android tools and the steps
+   to install them by hand. No build script fetches or configures them.
+   `voxrender-bench`'s README holds the build and run commands
 8. Phones come last. B12 and the phone half of B1 run when a device is at
    hand
 

@@ -109,3 +109,16 @@ they land.
   lights. The S1 corner test and `precision_shadow_scene` share them. The
   scene's floor is a second placement, so its shadow rays also walk the
   cells' grid.
+
+## S5. Quest harness and B0
+
+- Gradle and cargo-ndk build the APK. cargo-apk last released in 2023 and
+  xbuild in 2022. Gradle is Android's official build. It takes the Khronos
+  loader as a Maven dependency.
+- The SDK installs through Google's Android CLI because Google deprecated
+  `sdkmanager`. The build never runs `cmdline-tools`, so no step installs
+  it.
+- Each tool installs by its maintainer's recommended route. Gradle comes
+  from the checked-in wrapper.
+- The Gradle task that runs cargo-ndk sets `ANDROID_NDK_HOME` from the
+  build's `ndkVersion`. A shell profile never pins a repo's NDK.
