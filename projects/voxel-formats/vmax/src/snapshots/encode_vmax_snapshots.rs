@@ -98,6 +98,8 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
                         psum: None,
                         spsum: None,
                         psv: None,
+                        emax: None,
+                        ecnt: None,
                     },
                     lc,
                     dlc: vec![0u8; 256],

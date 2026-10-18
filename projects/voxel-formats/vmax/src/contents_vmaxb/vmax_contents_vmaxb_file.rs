@@ -1,4 +1,7 @@
-use crate::{VMaxCamera, VMaxDiscarded, VMaxLegacyChunkVoxels, VMaxSnapshot, VMaxTools, VMaxValue};
+use crate::{
+    VMaxCamera, VMaxDiscarded, VMaxEmptyList, VMaxLegacyChunkVoxels, VMaxSnapshot, VMaxTools,
+    VMaxValue,
+};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +36,10 @@ pub struct VMaxContentsVmaxbFile {
     /// The brush palette, editor state.
     #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
     pub brush: Option<VMaxDiscarded>,
+
+    /// A list current Voxel Max writes empty, meaning unknown.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
+    pub bbr: Option<VMaxEmptyList>,
 
     /// Per-object camera. Required: Voxel Max opens no package holding a
     /// contents file without one.

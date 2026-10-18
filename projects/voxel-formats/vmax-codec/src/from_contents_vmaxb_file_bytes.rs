@@ -16,7 +16,9 @@ pub fn from_contents_vmaxb_file_bytes<D: DecompressLzfse + DecodeVMaxPlist>(
 #[cfg(test)]
 mod tests {
     use plist::{self, Dictionary, Value, from_bytes};
-    use vmax::{VMaxContentsVmaxbFile, VMaxDiscarded, VMaxStats, VMaxTools, VMaxViewBox};
+    use vmax::{
+        VMaxContentsVmaxbFile, VMaxDiscarded, VMaxEmptyList, VMaxStats, VMaxTools, VMaxViewBox,
+    };
 
     fn integers(values: &[i64]) -> Value {
         Value::Array(values.iter().map(|&v| Value::Integer(v.into())).collect())
@@ -70,6 +72,27 @@ mod tests {
         assert_eq!(stats.psv, Some(1));
     }
 
+    /// Current Voxel Max caches the voxels inside the work area, here from a
+    /// save whose work area hides 4 of 9 voxels.
+    #[test]
+    fn reads_stats_with_current_work_area_caches() {
+        let mut dictionary = Dictionary::new();
+
+        dictionary.insert("min".to_owned(), integers(&[0, 8192, 0, 8192]));
+
+        dictionary.insert("count".to_owned(), Value::Integer(9.into()));
+
+        dictionary.insert("emax".to_owned(), integers(&[72, 9362, 0, 9434]));
+
+        dictionary.insert("ecnt".to_owned(), Value::Integer(5.into()));
+
+        let stats = from_bytes::<VMaxStats>(&binary(dictionary)).unwrap();
+
+        assert_eq!(stats.emax, Some(vec![72, 9362, 0, 9434]));
+
+        assert_eq!(stats.ecnt, Some(5));
+    }
+
     /// A stats key the model does not name is an error, so a newer Voxel Max
     /// key surfaces instead of reading silently.
     #[test]
@@ -106,6 +129,40 @@ mod tests {
         let written = from_bytes::<Dictionary>(&written).unwrap();
 
         assert!(!written.contains_key("brush"));
+    }
+
+    /// The `bbr` list current Voxel Max writes empty reads, and is never
+    /// written.
+    #[test]
+    fn reads_an_empty_bbr_list() {
+        let mut dictionary = with_camera();
+
+        dictionary.insert("bbr".to_owned(), Value::Array(Vec::new()));
+
+        let contents = from_bytes::<VMaxContentsVmaxbFile>(&binary(dictionary)).unwrap();
+
+        assert_eq!(contents.bbr, Some(VMaxEmptyList));
+
+        let mut written = Vec::new();
+
+        plist::to_writer_binary(&mut written, &contents).unwrap();
+
+        let written = from_bytes::<Dictionary>(&written).unwrap();
+
+        assert!(!written.contains_key("bbr"));
+    }
+
+    /// A `bbr` list with entries is an error until the model knows what they
+    /// hold.
+    #[test]
+    fn rejects_a_bbr_list_with_entries() {
+        let mut dictionary = with_camera();
+
+        dictionary.insert("bbr".to_owned(), integers(&[1]));
+
+        let error = from_bytes::<VMaxContentsVmaxbFile>(&binary(dictionary)).unwrap_err();
+
+        assert!(error.to_string().contains("not empty"), "{error}");
     }
 
     /// A contents file without its per-object camera is an error, since Voxel

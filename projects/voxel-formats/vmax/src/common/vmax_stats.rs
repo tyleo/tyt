@@ -45,4 +45,14 @@ pub struct VMaxStats {
     /// meaning unknown.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub psv: Option<i64>,
+
+    /// Occupied-range maximum corner over the voxels inside the work area, a
+    /// cache Voxel Max writes when the work area hides voxels.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub emax: Option<Vec<i64>>,
+
+    /// Count of the voxels inside the work area, a cache like
+    /// [`emax`](Self::emax) that Voxel Max writes on every save.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub ecnt: Option<i64>,
 }

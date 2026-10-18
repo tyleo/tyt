@@ -918,6 +918,7 @@ mod tests {
             v: 4,
             tools: Some(VMaxTools::fresh(vp)),
             brush: None,
+            bbr: None,
             cam: VMaxCamera::default(),
             pal: None,
             eo: None,

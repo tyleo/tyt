@@ -16,6 +16,7 @@ pub fn encode_contents_vmaxb_file_from_voxels(
         v: 4,
         tools: None,
         brush: None,
+        bbr: None,
         cam,
         pal: None,
         eo: None,
