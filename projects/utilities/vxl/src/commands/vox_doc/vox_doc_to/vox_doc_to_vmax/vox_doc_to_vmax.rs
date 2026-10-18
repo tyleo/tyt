@@ -1,5 +1,5 @@
 use crate::{
-    Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser,
+    Dependencies, ObjectSelection, PositiveF64, Result, VoxelInput, cli_value_parser,
     commands::{CameraView, convert},
 };
 use clap::Parser;
@@ -54,6 +54,12 @@ pub struct VoxDocToVmax {
     #[arg(value_name = "camera", long)]
     camera: Option<CameraView>,
 
+    /// Multiplies each root node's position and scale by this factor.
+    /// Defaults to `1.0`. `vox-doc to voxj --scene-scale` with the inverse
+    /// reads the file back in meters.
+    #[arg(value_name = "scene-scale", long)]
+    scene_scale: Option<PositiveF64>,
+
     #[command(flatten)]
     selection: ObjectSelection,
 }
@@ -77,6 +83,7 @@ impl VoxDocToVmax {
             &output,
             &to,
             &self.selection,
+            self.scene_scale.map(|scale| scale.0),
         )
     }
 }

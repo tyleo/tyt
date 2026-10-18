@@ -35,6 +35,7 @@ impl VoxDocToGoxl {
             &output,
             &to,
             &self.selection,
+            None,
         )
     }
 }
