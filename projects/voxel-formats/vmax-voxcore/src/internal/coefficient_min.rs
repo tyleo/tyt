@@ -1,3 +1,3 @@
-/// The metalness or roughness coefficient a Voxel Max slider produces at
-/// 0 percent.
-pub const COEFFICIENT_MIN: f64 = 0.1;
+/// The metalness or roughness coefficient a Voxel Max slider stores at 0
+/// percent, in the single precision Voxel Max keeps.
+pub const COEFFICIENT_MIN: f32 = 0.1;

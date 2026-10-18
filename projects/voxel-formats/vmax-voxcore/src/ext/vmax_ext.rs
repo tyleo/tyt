@@ -1,8 +1,8 @@
 use crate::{
-    VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, mesh_texture_file,
-    place_object, synthesized_node, synthesized_object_state,
+    VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, mesh_texture_file, place_object,
+    synthesized_node, synthesized_object_state,
 };
-use branded_id::{IdRange, IdVec, IteratorExt, U32Id};
+use branded_id::{IdRange, U32Id};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
@@ -116,7 +116,7 @@ fn rekey<K: Copy + Display + Ord, V>(
 /// [`to_vmax_vox_main`](crate::to_vmax_vox_main()) would synthesize for it. A
 /// voxel remap or resample moves an object's kept camera target by as much as
 /// its content center moved, which keeps the author's framing. A gc rekeys every
-/// entry. An exact material list follows its material pools' surviving values.
+/// entry. A palette's slots follow its material pools' surviving values.
 impl VoxExt for VMaxExt {
     fn hierarchy_node_did_retain(
         &mut self,
@@ -212,17 +212,14 @@ impl VoxExt for VMaxExt {
         self.object_states = rekey(object_states, |id| remap.objects.new_id(id), "object")?;
 
         let palettes = mem::take(&mut self.palettes);
-        for (old_id, mut provenance) in palettes {
+        for (old_id, provenance) in palettes {
             let Some(new_id) = remap.palettes.new_id(old_id) else {
                 return Err(refuse(format!(
                     "gc dropped palette {old_id}, which the vmax ext holds"
                 )));
             };
-            if !provenance.materials.is_empty() {
-                let materials = mem::take(&mut provenance.materials);
-                provenance.materials = compacted_materials(state, remap, new_id, materials)?;
-            }
-            self.palettes.insert(new_id, provenance);
+            self.palettes
+                .insert(new_id, compacted_slots(state, remap, new_id, provenance));
         }
         Ok(())
     }
@@ -309,16 +306,15 @@ fn content_center(
     place_object(&shell).1.center
 }
 
-/// An exact material list after a gc of the material pools it indexes by
-/// slot: the surviving values' materials, in their compacted order. A palette
-/// binding no material axis keeps its list as it is. Refuses when a compacted
-/// value indexes no material.
-fn compacted_materials(
+/// Palette `palette_id`'s provenance after a gc of the material pools its
+/// slots index. A slot the gc dropped loses its entries. A palette binding no
+/// material axis keeps its slots as they are.
+fn compacted_slots(
     state: &VoxState,
     remap: &VoxGcRemap,
     palette_id: U32Id<BVoxPalette>,
-    materials: Vec<VMaxExtMaterial>,
-) -> VoxResult<Vec<VMaxExtMaterial>> {
+    provenance: VMaxExtPalette,
+) -> VMaxExtPalette {
     let palette = state.palette(palette_id).expect("a live palette");
     let Some(new_pool_id) = palette
         .iter_properties()
@@ -326,29 +322,25 @@ fn compacted_materials(
         .find(|property| property.name != BASE_COLOR && property.name != EMISSIVE_COLOR)
         .map(|property| property.value_pool_id)
     else {
-        return Ok(materials);
+        return provenance;
     };
     // The value remap is keyed by the pool's old id.
     let old_pool_id = IdRange::<U32Id<_>>::from_len(remap.value_pools.old_len())
         .find(|&old_id| remap.value_pools.new_id(old_id) == Some(new_pool_id))
         .expect("a live pool has an old id");
     let values = &remap.value_pool_values[old_pool_id.to_usize_id()];
-    let mut compacted: IdVec<_, Option<VMaxExtMaterial>> =
-        (0..values.new_len()).map(|_| None).collect();
-    for (old_id, material) in materials.into_iter().enumerate_ids::<U32Id<_>>() {
-        if let Some(new_id) = values.new_id(old_id) {
-            compacted[new_id.to_usize_id()] = Some(material);
-        }
+
+    VMaxExtPalette {
+        name: provenance.name,
+        slots_without_dispersion: provenance
+            .slots_without_dispersion
+            .into_iter()
+            .filter_map(|slot| values.new_id(slot))
+            .collect(),
+        transmission_colors: provenance
+            .transmission_colors
+            .into_iter()
+            .filter_map(|(slot, color)| Some((values.new_id(slot)?, color)))
+            .collect(),
     }
-    compacted
-        .into_iter()
-        .enumerate()
-        .map(|(slot, material)| {
-            material.ok_or_else(|| {
-                refuse(format!(
-                    "material pool value {slot} indexes no exact material in the vmax ext"
-                ))
-            })
-        })
-        .collect()
 }

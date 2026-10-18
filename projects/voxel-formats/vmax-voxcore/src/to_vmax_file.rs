@@ -1,7 +1,7 @@
 use crate::{
     ABSORPTION, Error, MATERIAL_SLOTS, ObjectPlacement, PALETTE_COLORS, Result, SHADOWS,
-    SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode,
-    VMaxExtObjectState, VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle,
+    SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtNode, VMaxExtObjectState,
+    VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, absent_dispersion, decode_axis_angle,
     encode_axis_angle, pbr_factor_to_vm_coefficient, place_object, place_object_in_workspace,
     tighten,
 };
@@ -761,25 +761,28 @@ fn color_palette_colors(color: &ColorProperty) -> Result<Vec<[u8; 4]>> {
     Ok(cells)
 }
 
-/// The material list a palette writes, in slot order: an exact list in
-/// `provenance` as it is, else one material per slot read from the
-/// material-axis pools. Empty when the palette binds no material axis,
-/// leaving Voxel Max its own defaults.
+/// The material list a palette writes, one material per slot read from the
+/// material-axis pools, in slot order. Empty when the palette binds no
+/// material axis, leaving Voxel Max its own defaults.
 ///
 /// Every material-axis pool holds one value per slot, so the pools must be
 /// the same length, densely numbered from zero, and no longer than
-/// [`MATERIAL_SLOTS`]. An exact list must be that length too. Anything else
-/// errors, including a pruned pool not yet compacted.
+/// [`MATERIAL_SLOTS`]. Anything else errors, including a pruned pool not yet
+/// compacted. A `provenance` entry for a slot the pools lack errors too.
 fn slot_materials(
     layout: &PaletteLayout,
     provenance: &VMaxExtPalette,
 ) -> Result<Vec<VMaxMaterial>> {
+    let slots = || {
+        provenance
+            .slots_without_dispersion
+            .iter()
+            .chain(provenance.transmission_colors.keys())
+    };
     let Some(first) = layout.material.first() else {
-        if !provenance.materials.is_empty() {
+        if let Some(slot) = slots().next() {
             return Err(Error::invalid(format!(
-                "vmax ext lists {} exact materials, but the palette binds no material property \
-                 to index them",
-                provenance.materials.len()
+                "vmax ext holds material slot {slot}, but the palette binds no material property"
             )));
         }
         return Ok(Vec::new());
@@ -805,25 +808,15 @@ fn slot_materials(
              {MATERIAL_SLOTS} material slots"
         )));
     }
-    if !provenance.materials.is_empty() {
-        if provenance.materials.len() != slot_count {
-            return Err(Error::invalid(format!(
-                "vmax ext lists {} exact materials, but the material pools hold {slot_count} \
-                 values",
-                provenance.materials.len()
-            )));
-        }
-        return Ok(provenance
-            .materials
-            .iter()
-            .enumerate()
-            .map(|(slot, material)| vmax_material(slot, material))
-            .collect());
+    if let Some(slot) = slots().find(|&&slot| !first.value_pool.contains_value(slot)) {
+        return Err(Error::invalid(format!(
+            "vmax ext holds material slot {slot}, but the material pools hold {slot_count} values"
+        )));
     }
     let pools = MaterialPools::resolve(layout)?;
 
     (0..slot_count)
-        .map(|slot| pool_material(&pools, slot as u8))
+        .map(|slot| pool_material(&pools, provenance, slot as u8))
         .collect()
 }
 
@@ -883,34 +876,18 @@ impl<'a> MaterialPools<'a> {
     }
 }
 
-/// Rebuilds a Voxel Max material from its exact ext copy. The `mi` token is
-/// derived from the 1-based slot and the transparency color `tc` is dropped,
-/// matching the writer's behavior.
-fn vmax_material(slot: usize, material: &VMaxExtMaterial) -> VMaxMaterial {
-    VMaxMaterial {
-        mi: (slot + 1).to_string(),
-        mc: material.metallic,
-        rc: material.roughness,
-        sic: material.emissive,
-        sh: material.shadows,
-        tc: material.transmission_color,
-        md: material
-            .dispersion
-            .as_ref()
-            .map(|dispersion| VMaxMaterialDispersion {
-                absorption: dispersion.absorption,
-                ior: dispersion.ior,
-                transmission: dispersion.transmission,
-            }),
-    }
-}
-
 /// The Voxel Max material in slot `slot`, read from each material-axis pool at
 /// the slot's value id. Metalness and roughness map from the 0 to 1 factor to
 /// Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`]. A property the palette does not bind
 /// writes its vocabulary default, so it writes what it renders as.
-fn pool_material(pools: &MaterialPools, slot: u8) -> Result<VMaxMaterial> {
+/// `provenance` supplies the slot's transmission color. A slot stored without
+/// dispersion writes none while its dispersion values are the absent ones.
+fn pool_material(
+    pools: &MaterialPools,
+    provenance: &VMaxExtPalette,
+    slot: u8,
+) -> Result<VMaxMaterial> {
     let value_id = U32Id::from_u32(u32::from(slot));
 
     // `slot_materials` checked that every material-axis pool holds each slot.
@@ -940,16 +917,17 @@ fn pool_material(pools: &MaterialPools, slot: u8) -> Result<VMaxMaterial> {
                     .expect("a dense pool holds every slot")
             })
             .unwrap_or(true),
-        tc: None,
-        md: match dispersed {
-            true => Some(VMaxMaterialDispersion {
+        tc: provenance.transmission_colors.get(&value_id).copied(),
+        md: dispersed
+            .then(|| VMaxMaterialDispersion {
                 absorption: read(pools.absorption).unwrap_or(0.0),
                 ior: unbound_scalar(read(pools.ior), IOR),
                 transmission: unbound_scalar(read(pools.transmission), TRANSMISSION),
+            })
+            .filter(|md| {
+                !provenance.slots_without_dispersion.contains(&value_id)
+                    || *md != absent_dispersion()
             }),
-
-            false => None,
-        },
     })
 }
 
@@ -1629,8 +1607,8 @@ fn apply_scene_camera(scene: &mut VMaxSceneJsonFile, scene_camera: SceneCameraSo
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VMaxExtNode, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle,
-        from_vmax_file, to_vmax_file, to_vmax_vox_main,
+        COEFFICIENT_MAX, COEFFICIENT_MIN, SceneCameraSource, VMaxExtNode, VMaxVoxMain,
+        VMaxWriteOptions, decode_axis_angle, from_vmax_file, to_vmax_file, to_vmax_vox_main,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1645,7 +1623,7 @@ mod tests {
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue,
         Result as VoxResult, VoxHierarchyNode, VoxObject,
-        material::{BASE_COLOR, EMISSIVE_COLOR, ROUGHNESS},
+        material::{BASE_COLOR, EMISSIVE_COLOR, IOR, ROUGHNESS},
     };
 
     fn material(
@@ -1850,7 +1828,13 @@ mod tests {
             palette_settings(
                 "mat",
                 vec![
-                    material("1", 0.0, 1.0, 0.0, true),
+                    material(
+                        "1",
+                        f64::from(COEFFICIENT_MIN),
+                        f64::from(COEFFICIENT_MAX),
+                        0.0,
+                        true,
+                    ),
                     material("2", 0.5, 0.25, 2.0, false),
                 ],
                 Vec::new(),
@@ -2756,13 +2740,16 @@ mod tests {
     }
 
     /// A reduction repaints onto a survivor, releases the rest, prunes the
-    /// value pools, and compacts. The exact material list follows the pools,
-    /// so the survivor keeps its exact material at its compacted value's slot,
-    /// and the reload records the list padded back out.
+    /// value pools, and compacts. The slot extras follow the pools, so the
+    /// survivor keeps its slot's transmission color at its compacted slot.
     #[test]
-    fn a_reduction_keeps_the_survivors_exact_material_through_prune_and_gc() {
+    fn a_reduction_keeps_the_survivors_slot_extras_through_prune_and_gc() {
         let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+        let provenance = main.ext_mut().palettes.get_mut(&palette_id).unwrap();
+        provenance.transmission_colors =
+            BTreeMap::from([(U32Id::from_u32(0), 0.25), (U32Id::from_u32(1), 0.75)]);
+        provenance.slots_without_dispersion = BTreeSet::from([U32Id::from_u32(1)]);
         // The palette's materials sort by color cell then slot: material 0 draws
         // cell 2 in slot 1 and material 1 draws cell 4 in slot 0. Keep material
         // 0, whose slot's values renumber to 0 once slot 0's are pruned away.
@@ -2773,19 +2760,28 @@ mod tests {
         main.release_material(palette_id, doomed_id).unwrap();
         main.prune_value_pools();
         main.gc().unwrap();
-        let exact = &main.ext().palettes[&palette_id].materials;
-        assert_eq!(exact.len(), 1);
-        assert_eq!(exact[0].emissive, 2.0);
+        let provenance = &main.ext().palettes[&palette_id];
+        assert_eq!(
+            provenance.transmission_colors,
+            BTreeMap::from([(U32Id::from_u32(0), 0.75)])
+        );
+        assert_eq!(
+            provenance.slots_without_dispersion,
+            BTreeSet::from([U32Id::from_u32(0)])
+        );
 
         let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let voxels =
             decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
         assert!(voxels.iter().all(|voxel| voxel.material_idx == 0));
         let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
-        assert_eq!(settings.materials[0], material("1", 0.5, 0.25, 2.0, false));
-
-        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
-        assert_eq!(reloaded.ext().palettes[&palette_id].materials.len(), 8);
+        assert_eq!(
+            settings.materials[0],
+            VMaxMaterial {
+                tc: Some(0.75),
+                ..material("1", 0.5, 0.25, 2.0, false)
+            }
+        );
     }
 
     /// An ext missing an entity's entry is malformed, so the writer errors
@@ -3204,18 +3200,16 @@ mod tests {
         assert_eq!(samples(&written), samples(&voxels));
     }
 
-    /// A material carrying dispersion, a transmission color (`tc`), and a
-    /// non-finite coefficient round-trips exactly, alongside a plain material
-    /// and the padded default slots. The value pools carry a neutral copy, but
-    /// the ext keeps the exact values, so the rebuilt document matches byte for
-    /// byte. Coefficients are f32-exact, as Voxel Max stores them.
+    /// A material carrying dispersion and a transmission color (`tc`)
+    /// round-trips exactly beside a plain material and the padded default
+    /// slots. Coefficients are f32-exact, as Voxel Max stores them.
     #[test]
     fn round_trips_rich_materials() {
         let mut original = sample();
         let mut materials = vec![
             VMaxMaterial {
                 mi: "1".to_owned(),
-                mc: f64::INFINITY,
+                mc: f32r(0.3),
                 rc: f32r(0.25),
                 sic: f32r(1.0),
                 sh: true,
@@ -3239,6 +3233,88 @@ mod tests {
         let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
         let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
+    }
+
+    /// A coefficient off the slider span errors on read with its key.
+    #[test]
+    fn an_off_span_coefficient_errors() {
+        let mut original = sample();
+        original
+            .palette_settings_files
+            .get_mut("palette1.settings.vmaxpsb")
+            .unwrap()
+            .materials[0]
+            .rc = 1.0;
+
+        let error = from_vmax_file(&DependenciesImpl, &original).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("`palette1.settings.vmaxpsb` material 1: `rc` is 1"),
+            "{error}"
+        );
+    }
+
+    /// Sets slot `slot` of palette 0's float property `name` to `value` in
+    /// place: the new value takes the old one's position and id.
+    fn set_slot_value(main: &mut VMaxVoxMain, name: &str, slot: u32, value: f64) {
+        let palette = main.palette(U32Id::from_u32(0)).unwrap();
+        let property_id = palette.property_id_by_name(name).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
+        let old_id = U32Id::from_u32(slot);
+        let new_id = main.retain_float_value(value_pool_id, value).unwrap();
+        let mut order: Vec<_> = main
+            .value_pool(value_pool_id)
+            .unwrap()
+            .iter_value_ids()
+            .filter(|&value_id| value_id != new_id)
+            .collect();
+        order.insert(order.iter().position(|&id| id == old_id).unwrap(), new_id);
+        main.reorder_value_pool(value_pool_id, &order).unwrap();
+        main.repoint_value_pool_value(value_pool_id, old_id, new_id)
+            .unwrap();
+        main.release_value_pool_value(value_pool_id, old_id)
+            .unwrap();
+        main.gc().unwrap();
+    }
+
+    /// A slot's edited pool value writes, whatever the read stored.
+    #[test]
+    fn an_edited_material_value_writes() {
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
+        set_slot_value(&mut main, ROUGHNESS, 1, 0.5);
+
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
+
+        let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
+        assert_eq!(settings.materials[1].rc, 0.5);
+    }
+
+    /// A slot stored without dispersion writes none while its dispersion
+    /// values are the absent ones. Once edited, it writes the edited values.
+    #[test]
+    fn a_slot_without_dispersion_writes_none_until_edited() {
+        let mut original = sample();
+        let settings = original
+            .palette_settings_files
+            .get_mut("palette1.settings.vmaxpsb")
+            .unwrap();
+        let dispersion = VMaxMaterialDispersion {
+            absorption: f32r(0.1),
+            ior: f32r(1.4),
+            transmission: f32r(0.3),
+        };
+        settings.materials[1].md = Some(dispersion);
+        let mut main = from_vmax_file(&DependenciesImpl, &original).unwrap();
+
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
+        assert_eq!(file, original);
+
+        set_slot_value(&mut main, IOR, 0, 1.25);
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
+        let md = file.palette_settings_files["palette1.settings.vmaxpsb"].materials[0].md;
+        assert_eq!(md.map(|md| md.ior), Some(1.25));
     }
 
     #[test]

@@ -13,24 +13,12 @@ use voxcore::{
     material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH},
 };
 
-/// Gives a bare state a synthesized [`VMaxExt`], the state
-/// [`to_vmax_file`](crate::to_vmax_file()) writes as a document synthesized
-/// from the scene. Voxel Max models a tree, so the hierarchy becomes one first.
-/// A node reached along several paths is cloned per extra path, the way voxcore
-/// composes a node's placement along every path to it, and a node reached from
-/// no root is released because voxcore never places it. Voxel Max parents
-/// objects only under groups, so a node placing both objects and child nodes
-/// moves its objects onto a child node of their own. A Voxel Max palette
-/// holds every property but `baseColor` and `emissiveColor` one value per
-/// material slot, so a palette holding them otherwise, such as one that pools
-/// each property's distinct values apart, is laid out in slots next. A
-/// palette several objects share that needs more slots than a Voxel Max
-/// palette holds splits first into one palette per set of materials an object
-/// samples. Every material keeps the values it draws. Each node, palette, and
-/// object then takes the entry the retain hooks would build for it: fresh ids,
-/// the node's rotation, the default anchor tokens, no exact material list, and
-/// no object camera, so the write frames each object's content. The scene
-/// takes the fallback version and the neutral camera.
+/// Gives a bare state a synthesized [`VMaxExt`], which
+/// [`to_vmax_file`](crate::to_vmax_file()) writes as a document built from the
+/// scene. The scene first reshapes to fit Voxel Max: a tree hierarchy, objects
+/// only under groups, and palettes in Voxel Max's material slots. Every
+/// material keeps the values it draws. Each entity then takes the entry the
+/// retain hooks would build for it.
 ///
 /// Lossy only on the material palette name, which stays empty.
 pub fn to_vmax_vox_main(mut main: VoxMain<()>) -> Result<VMaxVoxMain> {

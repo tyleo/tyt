@@ -1,13 +1,12 @@
 use crate::{
-    ABSORPTION, Error, PALETTE_COLORS, Result, SHADOWS, VMaxExt, VMaxExtMaterial,
-    VMaxExtMaterialDispersion, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, VMaxExtWorkArea,
-    VMaxVoxMain, decode_axis_angle, mesh_texture_file, synthesized_object_state,
-    vm_coefficient_to_pbr_factor,
+    ABSORPTION, Error, PALETTE_COLORS, Result, SHADOWS, VMaxExt, VMaxExtNode, VMaxExtObjectState,
+    VMaxExtPalette, VMaxExtWorkArea, VMaxVoxMain, absent_dispersion, decode_axis_angle,
+    mesh_texture_file, synthesized_object_state, vm_coefficient_to_pbr_factor,
 };
 use branded_id::{IteratorExt, U32Id};
 use std::{
     array::from_fn,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
@@ -23,7 +22,6 @@ use voxcore::{
     color::lin_srgba_f64_from_srgba_u8,
     material::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, ROUGHNESS, TRANSMISSION,
-        default_scalar,
     },
 };
 
@@ -427,7 +425,6 @@ struct ObjectPalette {
     /// The palette id in the state.
     palette_id: U32Id<BVoxPalette>,
 
-    /// The ext provenance carrying the name and exact material list.
     provenance: VMaxExtPalette,
 
     /// Each used color-and-material combination's material id.
@@ -448,8 +445,7 @@ struct ObjectPalette {
 /// material's `baseColor` value-index is `color_idx - 1`. Each material
 /// scalar value pool holds one value per Voxel Max material, in order; the
 /// material byte is 0-based, so a voxel's value-index is its `material_idx`.
-/// The exact material list rides in the ext provenance for a byte-exact
-/// write-back.
+/// The ext provenance holds what the pools have no place for.
 fn object_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
@@ -479,27 +475,16 @@ fn object_palette(
     // coefficient to the 0 to 1 glTF factor the value-pool name implies; see
     // [`vm_coefficient_to_pbr_factor`]. The remaining scalars are unbounded and
     // stay raw: `sic` is an unbounded emission strength, and `shadows` and
-    // `absorption` have no glTF counterpart. The exact coefficients ride in the
-    // ext for a byte-exact write-back.
+    // `absorption` have no glTF counterpart.
     if has_materials {
-        let metallic_value_pool_id = float_value_pool(
-            main,
-            materials
-                .iter()
-                .map(|m| vm_coefficient_to_pbr_factor(m.mc))
-                .collect(),
-        )?;
+        let metallic_value_pool_id =
+            float_value_pool(main, material_factors(object, &materials, "mc", |m| m.mc)?)?;
         palette
             .retain_property(METALLIC.to_owned(), metallic_value_pool_id)
             .expect("the property names are distinct");
         color_axis.push(false);
-        let roughness_value_pool_id = float_value_pool(
-            main,
-            materials
-                .iter()
-                .map(|m| vm_coefficient_to_pbr_factor(m.rc))
-                .collect(),
-        )?;
+        let roughness_value_pool_id =
+            float_value_pool(main, material_factors(object, &materials, "rc", |m| m.rc)?)?;
         palette
             .retain_property(ROUGHNESS.to_owned(), roughness_value_pool_id)
             .expect("the property names are distinct");
@@ -532,17 +517,10 @@ fn object_palette(
         color_axis.push(false);
 
         // Dispersion properties appear only when some material carries an `md`
-        // block. A material without one takes the glTF default ior and zero
-        // transmission and absorption; its absence rides in the ext.
+        // block. A material without one takes the absent dispersion's values.
+        // The ext records the absence.
         if materials.iter().any(|m| m.md.is_some()) {
-            let default_ior = default_scalar(IOR).expect("ior has a glTF default");
-            let ior_value_pool_id = float_value_pool(
-                main,
-                materials
-                    .iter()
-                    .map(|m| m.md.as_ref().map_or(default_ior, |d| d.ior))
-                    .collect(),
-            )?;
+            let ior_value_pool_id = float_value_pool(main, dispersion(&materials, |d| d.ior))?;
             palette
                 .retain_property(IOR.to_owned(), ior_value_pool_id)
                 .expect("the property names are distinct");
@@ -602,9 +580,20 @@ fn object_palette(
     }
 
     let palette_id = main.retain_palette(palette)?;
+    let slots = || (0..).map(U32Id::from_u32).zip(&materials);
     let provenance = VMaxExtPalette {
         name,
-        materials: materials.iter().map(vmax_ext_material).collect(),
+        slots_without_dispersion: match materials.iter().any(|m| m.md.is_some()) {
+            true => slots()
+                .filter(|(_, m)| m.md.is_none())
+                .map(|(slot, _)| slot)
+                .collect(),
+
+            false => BTreeSet::new(),
+        },
+        transmission_colors: slots()
+            .filter_map(|(slot, m)| Some((slot, m.tc?)))
+            .collect(),
     };
     Ok(ObjectPalette {
         palette_id,
@@ -642,29 +631,50 @@ fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<[u8; 4]> {
     if let Some(png) = serde.palette_png_files.get(&object.palette) {
         return png.0.iter().take(PALETTE_COLORS).copied().collect();
     }
-    if let Some(stem) = object.palette.strip_suffix(".png") {
-        let sidecar = format!("{stem}.settings.vmaxpsb");
-        if let Some(palette) = serde.palette_settings_files.get(&sidecar)
-            && !palette.colors.is_empty()
-        {
-            // The sidecar stores colors packed (4 bytes per cell); unpack them.
-            return palette.colors.as_chunks::<4>().0.to_vec();
-        }
+    if let Some(sidecar) = palette_sidecar(object)
+        && let Some(palette) = serde.palette_settings_files.get(&sidecar)
+        && !palette.colors.is_empty()
+    {
+        // The sidecar stores colors packed (4 bytes per cell); unpack them.
+        return palette.colors.as_chunks::<4>().0.to_vec();
     }
     (0..PALETTE_COLORS).map(|_| PLACEHOLDER_COLOR).collect()
 }
 
-/// An object's material-palette display name and its exact material list from
-/// the settings sidecar, or empty when it has no sidecar or no materials.
+/// An object's material-palette display name and its material list from the
+/// settings sidecar, or empty when it has no sidecar or no materials.
 fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMaterial>) {
-    let Some(stem) = object.palette.strip_suffix(".png") else {
+    let Some(sidecar) = palette_sidecar(object) else {
         return (String::new(), Vec::new());
     };
-    let sidecar = format!("{stem}.settings.vmaxpsb");
     match serde.palette_settings_files.get(&sidecar) {
         Some(settings) => (settings.name.clone(), settings.materials.clone()),
         None => (String::new(), Vec::new()),
     }
+}
+
+/// The settings sidecar beside `object`'s palette image.
+fn palette_sidecar(object: &VMaxObject) -> Option<String> {
+    let stem = object.palette.strip_suffix(".png")?;
+    Some(format!("{stem}.settings.vmaxpsb"))
+}
+
+/// The slider factor of each material's `key` coefficient, as `read` gets it.
+/// Errors with the sidecar and the material's 1-based number.
+fn material_factors(
+    object: &VMaxObject,
+    materials: &[VMaxMaterial],
+    key: &str,
+    read: impl Fn(&VMaxMaterial) -> f64,
+) -> Result<Vec<f64>> {
+    let sidecar = palette_sidecar(object).expect("an object with materials has a sidecar");
+    (1..)
+        .zip(materials)
+        .map(|(number, material)| {
+            vm_coefficient_to_pbr_factor(read(material), key)
+                .map_err(|error| Error::invalid(format!("`{sidecar}` material {number}: {error}")))
+        })
+        .collect()
 }
 
 /// A float value pool over `values`. Errors when `values` is empty or holds a
@@ -673,31 +683,16 @@ fn float_value_pool(main: &mut VoxMain<()>, values: Vec<f64>) -> Result<U32Id<BV
     Ok(main.retain_value_pool(VoxValuePool::float(values)?))
 }
 
-/// Each material's dispersion field `read`, or zero where dispersion is absent.
+/// Each material's dispersion field `read`, from the absent dispersion's
+/// values where the material has none.
 fn dispersion(
     materials: &[VMaxMaterial],
     read: impl Fn(&VMaxMaterialDispersion) -> f64,
 ) -> Vec<f64> {
     materials
         .iter()
-        .map(|m| m.md.as_ref().map_or(0.0, &read))
+        .map(|m| read(&m.md.unwrap_or_else(absent_dispersion)))
         .collect()
-}
-
-/// The exact ext copy of a Voxel Max material.
-fn vmax_ext_material(material: &VMaxMaterial) -> VMaxExtMaterial {
-    VMaxExtMaterial {
-        metallic: material.mc,
-        roughness: material.rc,
-        emissive: material.sic,
-        shadows: material.sh,
-        transmission_color: material.tc,
-        dispersion: material.md.as_ref().map(|d| VMaxExtMaterialDispersion {
-            absorption: d.absorption,
-            ior: d.ior,
-            transmission: d.transmission,
-        }),
-    }
 }
 
 /// Builds the voxcore hierarchy: one node per group then one per object, the
@@ -914,7 +909,7 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxWriteOptions, from_vmax_file, to_vmax_file};
+    use crate::{COEFFICIENT_MAX, COEFFICIENT_MIN, VMaxWriteOptions, from_vmax_file, to_vmax_file};
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
@@ -1298,7 +1293,10 @@ mod tests {
         file.palette_settings_files.insert(
             "palette1.settings.vmaxpsb".to_owned(),
             VMaxPaletteSettingsVmaxpsbFile {
-                materials: vec![material(0.1), material(0.9)],
+                materials: vec![
+                    material(f64::from(COEFFICIENT_MIN)),
+                    material(f64::from(COEFFICIENT_MAX)),
+                ],
                 ..Default::default()
             },
         );

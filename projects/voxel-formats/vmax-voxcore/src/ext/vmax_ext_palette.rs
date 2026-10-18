@@ -1,27 +1,39 @@
-use crate::VMaxExtMaterial;
+use branded_id::U32Id;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
+use voxcore::BVoxValuePoolValue;
 
-/// Per-palette Voxel Max provenance preserved in the `vmax` ext: a material
-/// palette's display name and its exact material list, by slot.
-///
-/// The palette's value pools carry the materials on the shared vocabulary,
-/// which narrows metalness and roughness to the slider span and has no place
-/// for a transmission color or an absent dispersion. The exact list is kept
-/// here for a byte-exact write-back. A palette with no exact list, such as a
-/// color-only one or one another format produced, writes its materials from its
-/// value pools.
+/// Per-palette Voxel Max provenance preserved in the `vmax` ext, holding what
+/// the value pools have no place for. A slot is a value id in the palette's
+/// material pools.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxExtPalette {
     /// Display name (Voxel Max `name`).
     pub name: String,
 
-    /// The exact materials, aligned by index with the material list a voxel's
-    /// `material_idx` selects. Empty for a palette with no exact list.
+    /// The slots Voxel Max stores with no dispersion (`md`). Each writes with
+    /// none while its dispersion values are the absent ones.
     #[cfg_attr(
         feature = "serde",
-        serde(default, skip_serializing_if = "Vec::is_empty")
+        serde(
+            rename = "slots-without-dispersion",
+            default,
+            skip_serializing_if = "BTreeSet::is_empty"
+        )
     )]
-    pub materials: Vec<VMaxExtMaterial>,
+    pub slots_without_dispersion: BTreeSet<U32Id<BVoxValuePoolValue>>,
+
+    /// Each slot's transmission color coefficient (Voxel Max `tc`). Only some
+    /// materials carry one.
+    #[cfg_attr(
+        feature = "serde",
+        serde(
+            rename = "transmission-colors",
+            default,
+            skip_serializing_if = "BTreeMap::is_empty"
+        )
+    )]
+    pub transmission_colors: BTreeMap<U32Id<BVoxValuePoolValue>, f64>,
 }

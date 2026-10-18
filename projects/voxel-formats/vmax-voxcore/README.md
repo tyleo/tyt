@@ -71,12 +71,11 @@ a fresh UUID, a fresh index triplet, and the default anchors or editor
 session.
 
 A release drops the entry. An external mesh's files go with the last node
-placing it. `gc` rekeys every entry to its compacted id. An exact material
-list follows its material pools' surviving values, so a pruned palette keeps
-the exact materials its slots still draw. The writer errors on an entity with
-no entry, on a node with two parents, and on a root that is also a child,
-because Voxel Max holds a tree. voxconv carries the ext through a Voxel Json
-document's `ext` block.
+placing it. `gc` rekeys every entry to its compacted id. A palette's slot
+entries follow its material pools' surviving values. The writer errors on an
+entity with no entry, on a node with two parents, and on a root that is also a
+child, because Voxel Max holds a tree. voxconv carries the ext through a Voxel
+Json document's `ext` block.
 
 The `serde` feature, on by default, derives serde for the ext types. A map
 keyed by id serializes under the bare ids.

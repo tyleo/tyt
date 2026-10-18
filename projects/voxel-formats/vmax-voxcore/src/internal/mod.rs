@@ -1,8 +1,9 @@
 // Internal API
 
+mod absent_dispersion;
 mod absorption;
+mod coefficient_max;
 mod coefficient_min;
-mod coefficient_span;
 mod decode_axis_angle;
 mod encode_axis_angle;
 mod fallback_content_version;
@@ -20,9 +21,10 @@ mod synthesized_object_state;
 mod tighten;
 mod vm_coefficient_to_pbr_factor;
 
+pub(crate) use absent_dispersion::*;
 pub(crate) use absorption::*;
+pub(crate) use coefficient_max::*;
 pub(crate) use coefficient_min::*;
-pub(crate) use coefficient_span::*;
 pub(crate) use decode_axis_angle::*;
 pub(crate) use encode_axis_angle::*;
 pub(crate) use fallback_content_version::*;
