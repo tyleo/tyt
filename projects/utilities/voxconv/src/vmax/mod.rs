@@ -11,7 +11,7 @@ pub use vmax::*;
 pub use vmax_dependencies::*;
 
 pub use ::vmax::VMaxSceneCamera;
-pub use ::vmax_voxcore::{SceneCameraSource, VMaxColorFormat, VMaxObjectSize, VMaxWriteOptions};
+pub use ::vmax_voxcore::{SceneCameraSource, VMaxColorFormat, VMaxWriteOptions};
 
 // Optional API
 

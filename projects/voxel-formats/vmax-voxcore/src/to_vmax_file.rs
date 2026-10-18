@@ -1,9 +1,9 @@
 use crate::{
     ABSORPTION, Error, MATERIAL_SLOTS, ObjectPlacement, PALETTE_COLORS, Result, SHADOWS,
     SYNTH_CAMERA, SceneCameraSource, VMaxColorFormat, VMaxExtMaterial, VMaxExtNode,
-    VMaxExtObjectState, VMaxExtPalette, VMaxObjectSize, VMaxVoxMain, VMaxWriteOptions,
-    decode_axis_angle, encode_axis_angle, pbr_factor_to_vm_coefficient, place_object,
-    place_object_in_workspace, tighten,
+    VMaxExtObjectState, VMaxExtPalette, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle,
+    encode_axis_angle, pbr_factor_to_vm_coefficient, place_object, place_object_in_workspace,
+    tighten,
 };
 use branded_id::{IdRange, U32Id};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -156,12 +156,8 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
             )?;
 
             let object = object.yup_to_zup();
-            let extent_order = object_extent_order(&object, object_state, options.object_size)?;
-            let (tight, object_placement) = place_object_in_workspace(
-                &object,
-                1 << extent_order,
-                options.object_size != VMaxObjectSize::Auto,
-            );
+            let extent_order = object_extent_order(&object, object_state)?;
+            let (tight, object_placement) = place_object_in_workspace(&object, 1 << extent_order);
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
@@ -1206,34 +1202,12 @@ fn reconstruct_voxels(
         .collect())
 }
 
-/// Chooses the supported editor extent containing the object's canvas in
-/// automatic mode, or its live grid for an explicit size. Oversized data is
-/// refused before encoding, so Voxel Max cannot silently hide it.
-fn object_extent_order(
-    object: &VoxObject,
-    object_state: &VMaxExtObjectState,
-    size: VMaxObjectSize,
-) -> Result<i64> {
-    let bounds = if size == VMaxObjectSize::Auto {
-        object.bounds()
-    } else {
-        object
-            .live_extent()
-            .map_or(object.bounds(), |(_, bounds)| bounds)
-    };
+/// Chooses the smallest supported editor extent containing the object's
+/// canvas, starting from a loaded object's extent. Oversized data is refused
+/// before encoding, so Voxel Max cannot silently hide it.
+fn object_extent_order(object: &VoxObject, object_state: &VMaxExtObjectState) -> Result<i64> {
+    let bounds = object.bounds();
     let required = bounds.x.max(bounds.y).max(bounds.z);
-    if let Some(dimension) = size.dimension() {
-        if required > dimension {
-            return Err(Error::invalid(format!(
-                "object \"{}\" needs {}x{}x{} voxels, which cannot fit the requested {dimension}x{dimension}x{dimension} workspace",
-                object.name(),
-                bounds.x,
-                bounds.y,
-                bounds.z
-            )));
-        }
-        return Ok(dimension.ilog2() as i64);
-    }
     let preferred = object_state
         .extent_order
         .filter(|order| (5..=9).contains(order))
@@ -1573,8 +1547,8 @@ fn apply_scene_camera(scene: &mut VMaxSceneJsonFile, scene_camera: SceneCameraSo
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VMaxExtNode, VMaxObjectSize, VMaxVoxMain, VMaxWriteOptions,
-        decode_axis_angle, from_vmax_file, to_vmax_file, to_vmax_vox_main,
+        SceneCameraSource, VMaxExtNode, VMaxVoxMain, VMaxWriteOptions, decode_axis_angle,
+        from_vmax_file, to_vmax_file, to_vmax_vox_main,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -2116,40 +2090,29 @@ mod tests {
         };
         let main = from_vmax_file(&original).unwrap();
         assert_eq!(main.iter_objects().count(), 1);
-        for (size, order) in [
-            (VMaxObjectSize::Auto, 9),
-            (VMaxObjectSize::Size256, 8),
-            (VMaxObjectSize::Size512, 9),
-        ] {
-            let rebuilt = to_vmax_file(
-                &main,
-                &VMaxWriteOptions {
-                    object_size: size,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-            let contents = &rebuilt.contents_files["contents.vmaxb"];
-            let half = (1 << order) as f64 / 2.0;
-            assert_eq!(contents.eo, Some(order));
-            assert_eq!(rebuilt.scene_json_file.objects[0].center, [half, half, 1.0]);
-            assert_eq!(contents.cam.o, [half, half, 1.0]);
-            assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
-            for (before, after) in original
-                .scene_json_file
-                .objects
-                .iter()
-                .zip(&rebuilt.scene_json_file.objects)
-            {
-                assert_eq!(before.parent_id, after.parent_id);
-                assert_eq!(before.rotation, after.rotation);
-                assert_eq!(before.scale, after.scale);
-            }
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let contents = &rebuilt.contents_files["contents.vmaxb"];
+        assert_eq!(contents.eo, Some(9));
+        assert_eq!(
+            rebuilt.scene_json_file.objects[0].center,
+            [256.0, 256.0, 1.0]
+        );
+        assert_eq!(contents.cam.o, [256.0, 256.0, 1.0]);
+        assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+        for (before, after) in original
+            .scene_json_file
+            .objects
+            .iter()
+            .zip(&rebuilt.scene_json_file.objects)
+        {
+            assert_eq!(before.parent_id, after.parent_id);
+            assert_eq!(before.rotation, after.rotation);
+            assert_eq!(before.scale, after.scale);
         }
     }
 
     /// An authored 32-wide workspace keeps its extent and editor camera
-    /// frame; changing it to 64 moves the grid and camera together.
+    /// frame.
     #[test]
     fn keeps_a_loaded_small_workspace_and_its_camera_frame() {
         let mut original = sample();
@@ -2174,20 +2137,6 @@ mod tests {
         let main = from_vmax_file(&original).unwrap();
         let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
-        let resized = to_vmax_file(
-            &main,
-            &VMaxWriteOptions {
-                object_size: VMaxObjectSize::Size64,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        assert_eq!(resized.contents_files["contents.vmaxb"].eo, Some(6));
-        assert_eq!(
-            resized.contents_files["contents.vmaxb"].cam.o,
-            [32.0, 32.0, 1.0]
-        );
-        assert_eq!(placed_voxels(&resized), placed_voxels(&original));
     }
 
     /// Voxel Max saves its 512 storage extent even for a 256 editor viewport.
@@ -2257,66 +2206,19 @@ mod tests {
         );
     }
 
-    /// A fixed workspace centers the live voxels and camera in that cube,
-    /// and rejects a width too small for any axis rather than hiding voxels.
-    #[test]
-    fn explicit_object_sizes_center_and_keep_world_voxels() {
-        let mut original = sample();
-        original
-            .contents_files
-            .get_mut("contents.vmaxb")
-            .unwrap()
-            .cam = VMaxCamera {
-            o: [128.0, 128.0, 1.0],
-            ..Default::default()
-        };
-        let main = from_vmax_file(&original).unwrap();
-        let before = placed_voxels(&original);
-        for (size, width) in [
-            (VMaxObjectSize::Size32, 32),
-            (VMaxObjectSize::Size64, 64),
-            (VMaxObjectSize::Size128, 128),
-            (VMaxObjectSize::Size256, 256),
-            (VMaxObjectSize::Size512, 512),
-        ] {
-            let rebuilt = to_vmax_file(
-                &main,
-                &VMaxWriteOptions {
-                    object_size: size,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-            let center = [width as f64 / 2.0, width as f64 / 2.0, 1.0];
-            assert_eq!(rebuilt.scene_json_file.objects[0].center, center);
-            assert_eq!(rebuilt.contents_files["contents.vmaxb"].cam.o, center);
-            assert_eq!(placed_voxels(&rebuilt), before);
-        }
-    }
-
     /// A framed camera aims at the content center and stands back twice the
     /// grid width.
     #[test]
     fn a_framed_camera_stands_back_with_the_grid_width() {
         let mut main = from_vmax_file(&sample()).unwrap();
 
-        for object_state in main.ext_mut().object_states.values_mut() {
-            object_state.cam = None;
-        }
+        for (order, width) in [(5, 32), (8, 256), (9, 512)] {
+            for object_state in main.ext_mut().object_states.values_mut() {
+                object_state.cam = None;
+                object_state.extent_order = Some(order);
+            }
 
-        for (size, width) in [
-            (VMaxObjectSize::Size32, 32),
-            (VMaxObjectSize::Size256, 256),
-            (VMaxObjectSize::Size512, 512),
-        ] {
-            let rebuilt = to_vmax_file(
-                &main,
-                &VMaxWriteOptions {
-                    object_size: size,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+            let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
 
             let cam = &rebuilt.contents_files["contents.vmaxb"].cam;
 
@@ -2326,10 +2228,9 @@ mod tests {
         }
     }
 
-    /// Large source grids take 512 automatically. An explicit 256 errors;
-    /// data past 512 errors even in automatic mode.
+    /// Large source grids take 512, and data past 512 errors.
     #[test]
-    fn object_size_refuses_clipping_and_selects_512_when_needed() {
+    fn selects_512_when_needed_and_refuses_past_it() {
         let mut main = from_vmax_file(&sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let mut object = VoxObject::new("wide".to_owned(), TyVector3U32::new(300, 1, 1)).unwrap();
@@ -2358,15 +2259,6 @@ mod tests {
             .unwrap();
         assert_eq!(wide.center, [256.0, 255.5, 0.5]);
         assert_eq!(file.contents_files[&wide.data].eo, Some(9));
-        let error = to_vmax_file(
-            &main,
-            &VMaxWriteOptions {
-                object_size: VMaxObjectSize::Size256,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("300x1x1"));
         let mut object =
             VoxObject::new("too wide".to_owned(), TyVector3U32::new(513, 1, 1)).unwrap();
         object.retain_layer(palette_id).unwrap();
