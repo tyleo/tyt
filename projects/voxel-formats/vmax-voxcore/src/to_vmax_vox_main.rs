@@ -728,6 +728,7 @@ mod tests {
         TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3Ext, TyVector3F64,
         TyVector3U32,
     };
+    use vmax::DependenciesImpl;
     use vmax::{
         VMaxFile, VMaxSceneCamera,
         snapshots::{VMaxVoxel, decode_vmax_snapshots},
@@ -775,6 +776,7 @@ mod tests {
         main.push_root_hierarchy_node_id(node_id).unwrap();
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &options(VMaxColorFormat::All),
         )
@@ -821,6 +823,7 @@ mod tests {
             .unwrap();
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -870,6 +873,7 @@ mod tests {
         main.validate().unwrap();
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -911,6 +915,7 @@ mod tests {
         main.validate().unwrap();
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -944,6 +949,7 @@ mod tests {
         main.validate().unwrap();
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1110,6 +1116,7 @@ mod tests {
     fn synthesizes_an_empty_state_without_an_ext() {
         let main = VoxMain::default();
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1126,11 +1133,12 @@ mod tests {
         let source = source_state();
         let expected = world_voxels(&source);
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(source).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(world_voxels(&reloaded), expected);
     }
 
@@ -1165,6 +1173,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1226,12 +1235,13 @@ mod tests {
         main.validate().expect("a well-formed source");
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 2);
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         assert_eq!(
@@ -1342,6 +1352,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1386,6 +1397,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &options(VMaxColorFormat::Plist),
         )
@@ -1408,7 +1420,7 @@ mod tests {
         assert_eq!(indices, [1, 255]);
         // It reads back without the out-of-range error, resolving to red and
         // blue.
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let resolved: BTreeSet<[u8; 4]> = world_voxels(&reloaded)
             .into_iter()
             .map(|(_, rgba)| rgba)
@@ -1442,13 +1454,14 @@ mod tests {
                 .unwrap();
             main.validate().unwrap();
             to_vmax_file(
+                &DependenciesImpl,
                 &to_vmax_vox_main(main).unwrap(),
                 &VMaxWriteOptions::default(),
             )
         };
 
         let file = synthesize(255).expect("255 colors fit the palette");
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(
             reloaded.object(U32Id::from_u32(0)).unwrap().live_count(),
             255
@@ -1486,6 +1499,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1503,7 +1517,7 @@ mod tests {
             ["palette1.png"]
         );
 
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(world_voxels(&reloaded), BTreeSet::from([([0, 0, 0], red)]));
     }
@@ -1539,6 +1553,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1599,6 +1614,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -1628,7 +1644,7 @@ mod tests {
                 .is_some_and(|parent_id| group_ids.contains(parent_id))
         }));
 
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         let blue = [0, 0, 0xFF, 0xFF];
@@ -1672,13 +1688,14 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
         assert_eq!(file.contents_files.len(), 1);
         assert_eq!(file.scene_json_file.objects.len(), 2);
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(reloaded.object_count(), 1);
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(
@@ -1716,11 +1733,12 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(
             world_voxels(&reloaded),
@@ -1756,11 +1774,12 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(
             world_voxels(&reloaded),
@@ -1798,12 +1817,13 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 1);
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(world_voxels(&reloaded), BTreeSet::from([([0, 0, 0], red)]));
     }
@@ -1835,11 +1855,12 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let node = reloaded.hierarchy_node(U32Id::from_u32(0)).unwrap();
 
         // The axis-angle round-trip reproduces the rotation to floating-point
@@ -1926,7 +1947,12 @@ mod tests {
                 .unwrap();
             main.validate().unwrap();
 
-            let file = to_vmax_file(&to_vmax_vox_main(main).unwrap(), &options(format)).unwrap();
+            let file = to_vmax_file(
+                &DependenciesImpl,
+                &to_vmax_vox_main(main).unwrap(),
+                &options(format),
+            )
+            .unwrap();
             // The material byte is 0-based and independent of the color offset:
             // the one material is index 0.
             assert!(
@@ -1935,7 +1961,7 @@ mod tests {
                     .all(|voxel| voxel.material_idx == 0)
             );
 
-            let reloaded = from_vmax_file(&file).unwrap();
+            let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
             let (palette_id, material_palette) = reloaded
                 .iter_palettes()
                 .find(|(_, palette)| palette.property_id_by_name("metallic").is_some())
@@ -2018,11 +2044,12 @@ mod tests {
     /// back through from-vmax, which carries it as `emissiveStrength`.
     fn written_sic(main: VoxMain<()>) -> f64 {
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &options(VMaxColorFormat::All),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let (palette_id, material_palette) = reloaded
             .iter_palettes()
             .find(|(_, palette)| palette.property_id_by_name("emissiveStrength").is_some())
@@ -2075,6 +2102,7 @@ mod tests {
     fn a_glowing_emissive_that_differs_from_the_base_color_errors() {
         let main = emissive_main(color_floats("#808080FF"), [1.0; 3], 2.0);
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &options(VMaxColorFormat::All),
         )
@@ -2173,6 +2201,7 @@ mod tests {
         );
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2202,6 +2231,7 @@ mod tests {
         );
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2267,6 +2297,7 @@ mod tests {
         );
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2343,6 +2374,7 @@ mod tests {
         let placed = world_voxels(&main);
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2375,7 +2407,10 @@ mod tests {
                 .all(|(a, b)| (a - b).abs() < 1e-6);
             assert!(close, "{name}: {written:?}");
         }
-        assert_eq!(world_voxels(&from_vmax_file(&file).unwrap()), placed);
+        assert_eq!(
+            world_voxels(&from_vmax_file(&DependenciesImpl, &file).unwrap()),
+            placed
+        );
     }
 
     /// An object without a live voxel on a crowded shared palette takes an
@@ -2386,12 +2421,16 @@ mod tests {
         let placed = world_voxels(&main);
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
 
-        assert_eq!(world_voxels(&from_vmax_file(&file).unwrap()), placed);
+        assert_eq!(
+            world_voxels(&from_vmax_file(&DependenciesImpl, &file).unwrap()),
+            placed
+        );
     }
 
     /// Splitting a palette holding a material no voxel samples would drop the
@@ -2401,6 +2440,7 @@ mod tests {
         let main = crowded_main(&[&[0, 1, 2, 3, 4], &[5, 6, 7, 8]]);
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2423,6 +2463,7 @@ mod tests {
             .unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2471,6 +2512,7 @@ mod tests {
             .collect();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2518,6 +2560,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2526,7 +2569,7 @@ mod tests {
             file.palette_png_files["palette1.png"].0[0],
             [0x33, 0x66, 0xCC, 0xFF]
         );
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(
             world_voxels(&reloaded),
             BTreeSet::from([([0, 0, 0], [0x33, 0x66, 0xCC, 0xFF])])
@@ -2553,12 +2596,14 @@ mod tests {
         main.validate().unwrap();
 
         let file1 = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file1).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file1).unwrap();
         let file2 = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(reloaded.take_ext().main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2599,11 +2644,12 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         assert_eq!(
@@ -2642,6 +2688,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2680,6 +2727,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2696,7 +2744,7 @@ mod tests {
         );
         // Reloading keeps the [3, 4, 5] build volume as the object's grid; with
         // no live voxels its derived runtime extent is empty.
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(
             reloaded.object(object_id).unwrap().bounds(),
@@ -2724,6 +2772,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2739,7 +2788,7 @@ mod tests {
                 .iter()
                 .all(|v| v.color_idx == 1)
         );
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(
             world_voxels(&reloaded),
             BTreeSet::from([([0, 0, 0], [0x11, 0x22, 0x33, 0])])
@@ -2769,6 +2818,7 @@ mod tests {
         main.validate().unwrap();
 
         let error = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &VMaxWriteOptions::default(),
         )
@@ -2796,6 +2846,7 @@ mod tests {
         main.validate().unwrap();
 
         let file = to_vmax_file(
+            &DependenciesImpl,
             &to_vmax_vox_main(main).unwrap(),
             &options(VMaxColorFormat::Plist),
         )
@@ -2804,7 +2855,7 @@ mod tests {
         // sidecar.
         assert!(file.palette_png_files.is_empty());
         assert!(!file.palette_settings_files.is_empty());
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         assert_eq!(
@@ -2844,7 +2895,12 @@ mod tests {
             scene_camera: SceneCameraSource::Camera(camera),
             ..Default::default()
         };
-        let file = to_vmax_file(&to_vmax_vox_main(main).unwrap(), &options).unwrap();
+        let file = to_vmax_file(
+            &DependenciesImpl,
+            &to_vmax_vox_main(main).unwrap(),
+            &options,
+        )
+        .unwrap();
         assert_eq!(file.scene_json_file.cam, Some(camera));
     }
 
@@ -2861,7 +2917,7 @@ mod tests {
             ..Default::default()
         };
 
-        let file = to_vmax_file(&main, &options).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &options).unwrap();
 
         assert_eq!(file.scene_json_file.cam, Some(SYNTH_CAMERA));
     }
@@ -2916,7 +2972,7 @@ mod tests {
 
         // The parent rides in the hierarchy, so the written objects link to
         // the group through it.
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         assert_eq!(file.scene_json_file.groups[0].parent_id, None);
 
@@ -2973,7 +3029,7 @@ mod tests {
 
         assert_eq!(main.object_count(), 1);
 
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         let clone_id = main.ext().hierarchy_nodes[&U32Id::from_u32(3)].id.as_str();
 
@@ -3024,7 +3080,7 @@ mod tests {
             [U32Id::from_u32(0), U32Id::from_u32(2)]
         );
 
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         let clone_id = main.ext().hierarchy_nodes[&U32Id::from_u32(2)].id.as_str();
 

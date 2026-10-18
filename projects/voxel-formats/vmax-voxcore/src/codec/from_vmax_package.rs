@@ -1,4 +1,5 @@
 use crate::{Result, VMaxVoxMain, from_vmax_file};
+use vmax::EncodeBase64;
 use vmax_codec::{
     DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse, Result as CodecResult,
     from_vmax_package as read_vmax_package,
@@ -14,11 +15,11 @@ use vmax_codec::{
 ///   since vanished.
 pub fn from_vmax_package<D, L, R>(dependencies: &D, list: L, resolve: R) -> Result<VMaxVoxMain>
 where
-    D: DecompressLzfse + DecodeVMaxPlist + DecodePng + DecodeVMaxSceneJson,
+    D: DecompressLzfse + DecodeVMaxPlist + DecodePng + DecodeVMaxSceneJson + EncodeBase64,
     L: FnOnce() -> CodecResult<Vec<String>>,
     R: FnMut(&str) -> CodecResult<Option<Vec<u8>>>,
 {
     let file = read_vmax_package(dependencies, list, resolve)?;
 
-    from_vmax_file(&file)
+    from_vmax_file(dependencies, &file)
 }

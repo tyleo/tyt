@@ -26,4 +26,4 @@ vmax-codec = { version = "0.4.0", features = ["impl"] }
 default = ["codec", "serde"]
 codec = ["dep:vmax-codec"]
 serde = ["dep:serde", "branded-id/serde", "vmax/serde"]
-impl = ["vmax-codec?/impl"]
+impl = ["vmax/impl", "vmax-codec?/impl"]

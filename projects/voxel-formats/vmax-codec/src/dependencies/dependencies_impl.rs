@@ -9,8 +9,9 @@ use png::{
 use serde::{Serialize, de::DeserializeOwned};
 use std::io::Cursor;
 use vmax::{
-    VMaxContentsVmaxbFile, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile, VMaxHistoryVmaxhvscFile,
-    VMaxImage, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
+    DecodeBase64, DependenciesImpl as VMaxDependenciesImpl, EncodeBase64, VMaxContentsVmaxbFile,
+    VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile, VMaxHistoryVmaxhvscFile, VMaxImage,
+    VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
 };
 
 /// Static Exif block Voxel Max embeds in every `palette*.png`: a big-endian
@@ -25,7 +26,9 @@ const EXIF: [u8; 68] = [
     0x00, 0x00, 0x00, 0x00,
 ];
 
-/// The dependencies over `lzfse`, `plist`, `png`, and `serde_json`.
+/// The dependencies over `lzfse`, `plist`, `png`, and `serde_json`. It also
+/// implements the `vmax` crate's traits over [`vmax::DependenciesImpl`], so
+/// one value serves the whole family.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
@@ -325,6 +328,18 @@ impl EncodePng for DependenciesImpl {
             .map_err(|error| error.to_string())?;
         writer.finish().map_err(|error| error.to_string())?;
         Ok(out)
+    }
+}
+
+impl EncodeBase64 for DependenciesImpl {
+    fn encode_base64(&self, bytes: &[u8]) -> String {
+        VMaxDependenciesImpl.encode_base64(bytes)
+    }
+}
+
+impl DecodeBase64 for DependenciesImpl {
+    fn decode_base64(&self, text: &str) -> Result<Vec<u8>, String> {
+        VMaxDependenciesImpl.decode_base64(text)
     }
 }
 

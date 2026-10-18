@@ -18,7 +18,9 @@ state with no native voxcore home as its ext.
   holds its grid. The writer reads palettes in the layout the loader builds.
   `baseColor` and `emissiveColor` hold one value per color cell, and every
   other property holds one value per material slot. A second layer, a palette
-  off that layout, or a grid wider than 512 errors.
+  off that layout, or a grid wider than 512 errors. Both take the `vmax`
+  crate's base64 dependencies because the ext keeps every unmodeled file as
+  base64 text. A kept file that is not base64 errors on write.
 - `to_vmax_vox_main`: gives a bare `VoxMain<()>` a synthesized ext and
   reshapes its scene to fit Voxel Max:
   1. The hierarchy becomes a tree. A node placed along several paths is
@@ -47,7 +49,8 @@ from a package's files over `vmax-codec`:
 
 Each takes the codec's dependencies: `DecompressLzfse`, `DecodeVMaxPlist`,
 `DecodePng`, and `DecodeVMaxSceneJson` to load, and their encode
-counterparts to write. `vmax_codec::DependenciesImpl` supplies them all.
+counterparts to write, plus `vmax`'s `EncodeBase64` to load and
+`DecodeBase64` to write. `vmax_codec::DependenciesImpl` supplies them all.
 This crate's `impl` feature turns it on.
 
 ## The ext

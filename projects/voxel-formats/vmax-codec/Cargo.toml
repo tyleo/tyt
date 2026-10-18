@@ -30,5 +30,6 @@ impl = [
     "dep:png",
     "dep:serde",
     "dep:serde_json",
+    "vmax/impl",
     "vmax/serde",
 ]

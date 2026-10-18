@@ -1,10 +1,12 @@
 use crate::ForwardDependencies;
+use vmax::{DecodeBase64, EncodeBase64};
 use vmax_voxcore::codec::dependencies::{
     CompressLzfse, DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse, EncodePng,
     EncodeVMaxPlist, EncodeVMaxSceneJson,
 };
 
-/// The Voxel Max codec's dependencies a caller supplies.
+/// The Voxel Max codec's dependencies a caller supplies. The codec's
+/// dependencies cover vmax's too.
 pub trait VMaxDependencies {
     /// The Voxel Max codec's dependencies.
     type VMax: CompressLzfse
@@ -14,7 +16,9 @@ pub trait VMaxDependencies {
         + DecodePng
         + EncodePng
         + DecodeVMaxSceneJson
-        + EncodeVMaxSceneJson;
+        + EncodeVMaxSceneJson
+        + DecodeBase64
+        + EncodeBase64;
 
     /// The Voxel Max codec's dependencies.
     fn vmax(&self) -> &Self::VMax;

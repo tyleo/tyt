@@ -12,9 +12,11 @@ categories = ["data-structures", "game-development", "graphics"]
 independent = true
 
 [dependencies]
+base64 = { version = "0.22", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_bytes = { version = "0.11", optional = true }
 
 [features]
-default = ["serde"]
+default = ["impl", "serde"]
+impl = ["dep:base64"]
 serde = ["dep:serde", "dep:serde_bytes"]

@@ -1,4 +1,5 @@
 use crate::{Result, VMaxVoxMain, VMaxWriteOptions, to_vmax_file};
+use vmax::DecodeBase64;
 use vmax_codec::{
     CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result as CodecResult,
     to_vmax_package as write_vmax_package,
@@ -19,10 +20,10 @@ pub fn to_vmax_package<D, W>(
     write: W,
 ) -> Result<()>
 where
-    D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
+    D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson + DecodeBase64,
     W: FnMut(&str, &[u8]) -> CodecResult<()>,
 {
-    let file = to_vmax_file(main, options)?;
+    let file = to_vmax_file(dependencies, main, options)?;
 
     Ok(write_vmax_package(dependencies, &file, write)?)
 }

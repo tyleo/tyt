@@ -26,3 +26,5 @@ The `snapshots` module decodes and encodes an object's voxel snapshots, the bake
 The `palette` module's `decode_palette_colors` unpacks the color table a `*.vmaxpsb` embeds when a palette ships no sibling `palette*.png`.
 
 Both modules are pure and always compiled.
+
+The `dependencies` module's `EncodeBase64` and `DecodeBase64` give a `VMaxOpaqueFile` its base64 text form outside a package. They are injected so the model carries no base64 library. `DependenciesImpl`, behind the default `impl` feature, binds them over `base64`.

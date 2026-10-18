@@ -11,7 +11,7 @@ use std::{
     mem,
 };
 use ty_math::TyVector3U32;
-use vmax::{VMaxOpaqueFile, VMaxSceneJsonFile};
+use vmax::VMaxSceneJsonFile;
 use voxcore::{
     BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxVoxel, Error as VoxError, Result as VoxResult,
     VoxExt, VoxGcRemap, VoxObject, VoxState,
@@ -46,9 +46,10 @@ pub struct VMaxExt {
     #[cfg_attr(feature = "serde", serde(rename = "object-states"))]
     pub object_states: BTreeMap<U32Id<BVoxObject>, VMaxExtObjectState>,
 
-    /// Every package file the scene does not model, by package path, as
-    /// stored: external meshes and their textures, animations, and any file a
-    /// later Voxel Max adds. The write puts each back.
+    /// Every package file the scene does not model, by package path:
+    /// external meshes and their textures, animations, and any file a later
+    /// Voxel Max adds. Each entry holds the standard base64 of the file's
+    /// bytes, which the write decodes and puts back.
     #[cfg_attr(
         feature = "serde",
         serde(
@@ -57,7 +58,7 @@ pub struct VMaxExt {
             skip_serializing_if = "BTreeMap::is_empty"
         )
     )]
-    pub other_files: BTreeMap<String, VMaxOpaqueFile>,
+    pub other_files: BTreeMap<String, String>,
 }
 
 fn refuse(reason: impl Display) -> VoxError {

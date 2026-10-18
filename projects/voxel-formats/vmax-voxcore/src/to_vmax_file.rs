@@ -12,9 +12,9 @@ use std::{
 };
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
 use vmax::{
-    VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
-    VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools,
-    VMaxViewBox,
+    DecodeBase64, VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial,
+    VMaxMaterialDispersion, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
+    VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
     snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
@@ -53,11 +53,32 @@ const ROTATION_TOLERANCE: f64 = 1e-9;
 /// so, as Voxel Max's documents do. Every object and node transform turns back
 /// onto Voxel Max's Z-up axes. Each object's one palette is read unconverted in
 /// Voxel Max's layout, the one the loader builds. A node keeping an external
-/// mesh writes as that mesh's object, and the files the ext keeps write back
-/// as stored. Errors when an entity has no ext entry, when an object has other
-/// than one layer, when a palette departs from the layout, or when an external
-/// mesh's node also places objects or child nodes.
-pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VMaxFile> {
+/// mesh writes as that mesh's object. `dependencies` decodes each file the ext
+/// keeps from base64 to write it back.
+///
+/// Errors when:
+/// 1. an entity has no ext entry
+/// 2. an object has other than one layer
+/// 3. a palette departs from the layout
+/// 4. an external mesh's node also places objects or child nodes
+/// 5. a kept file is not base64
+pub fn to_vmax_file<D: DecodeBase64>(
+    dependencies: &D,
+    main: &VMaxVoxMain,
+    options: &VMaxWriteOptions,
+) -> Result<VMaxFile> {
+    let other_files = main
+        .ext()
+        .other_files
+        .iter()
+        .map(|(path, text)| {
+            let bytes = dependencies.decode_base64(text).map_err(|reason| {
+                Error::invalid(format!("vmax ext file `{path}` is not base64: {reason}"))
+            })?;
+            Ok((path.clone(), VMaxOpaqueFile(bytes)))
+        })
+        .collect::<Result<_>>()?;
+
     let placements = ext_placements(main)?;
     let suffixes = object_file_suffixes(main, &placements);
 
@@ -237,7 +258,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
         thumbnail_png: None,
         contents_vmax_pngs: BTreeMap::new(),
         group_pngs: BTreeMap::new(),
-        other_files: main.ext().other_files.clone(),
+        other_files,
     })
 }
 
@@ -1614,6 +1635,7 @@ mod tests {
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet, HashMap};
     use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32};
+    use vmax::DependenciesImpl;
     use vmax::{
         VMaxCamera, VMaxContentsVmaxbFile, VMaxDiscarded, VMaxFile, VMaxGroup, VMaxMaterial,
         VMaxMaterialDispersion, VMaxObject, VMaxOpaqueFile, VMaxPalettePngFile,
@@ -1888,7 +1910,7 @@ mod tests {
     #[test]
     fn released_entities_leave_the_survivors_provenance_rekeyed() {
         let file = three_object_sample();
-        let mut main = from_vmax_file(&file).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &file).unwrap();
         let original = main.ext().clone();
 
         // The group, node 0, places nodes 1..=3. Node 2 places object 1, which
@@ -1922,7 +1944,7 @@ mod tests {
         expected.palettes.insert(doomed_palette_id, last_palette);
         assert_eq!(main.ext(), &expected);
 
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let ids: Vec<&str> = rebuilt
             .scene_json_file
             .objects
@@ -1937,7 +1959,7 @@ mod tests {
             .collect();
         assert_eq!(uuids, BTreeSet::from(["u", "u3"]));
 
-        let reloaded = from_vmax_file(&rebuilt).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &rebuilt).unwrap();
         assert_eq!(reloaded.ext(), &expected);
     }
 
@@ -1946,7 +1968,7 @@ mod tests {
     /// parent for a root.
     #[test]
     fn a_node_retained_after_the_load_takes_a_synthesized_entry() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let mut object = VoxObject::new(String::new(), TyVector3U32::splat(1)).unwrap();
         object.retain_layer(palette_id).unwrap();
@@ -1985,7 +2007,7 @@ mod tests {
         assert_eq!(object_state.v, 4);
         assert_eq!(object_state.cam, None);
 
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let added = file
             .scene_json_file
             .objects
@@ -2013,7 +2035,7 @@ mod tests {
         assert_eq!(contents.cam.o, added.center);
         assert_eq!(contents.cam.z, 64.0);
 
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
     }
 
@@ -2036,7 +2058,7 @@ mod tests {
     /// content center moved, and keeps its uuid.
     #[test]
     fn a_voxel_remap_moves_the_camera_target_with_the_content() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let mut object = VoxObject::new(String::new(), TyVector3U32::splat(1)).unwrap();
         object.retain_layer(palette_id).unwrap();
@@ -2066,7 +2088,7 @@ mod tests {
     /// the content center moved, as a remap does.
     #[test]
     fn a_voxel_resample_moves_the_camera_target_with_the_content() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let mut object = VoxObject::new(String::new(), TyVector3U32::splat(1)).unwrap();
         object.retain_layer(palette_id).unwrap();
@@ -2170,9 +2192,9 @@ mod tests {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
         };
-        let main = from_vmax_file(&original).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
         assert_eq!(main.iter_objects().count(), 1);
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let contents = &rebuilt.contents_files["contents.vmaxb"];
         assert_eq!(contents.eo, Some(9));
         assert_eq!(
@@ -2221,8 +2243,8 @@ mod tests {
             o: [16.0, 16.0, 1.0],
             ..Default::default()
         };
-        let main = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
@@ -2242,8 +2264,8 @@ mod tests {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
         };
-        let main = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt.contents_files["contents.vmaxb"].eo, Some(8));
         assert_eq!(
             rebuilt.scene_json_file.objects[0].center,
@@ -2275,9 +2297,9 @@ mod tests {
             max: [135, 131, 7],
             flat: None,
         }));
-        let main = from_vmax_file(&original).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
 
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         let contents = &rebuilt.contents_files["contents.vmaxb"];
         assert_eq!(contents.eo, Some(5));
@@ -2291,7 +2313,7 @@ mod tests {
         );
         assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
 
-        let reloaded = from_vmax_file(&rebuilt).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &rebuilt).unwrap();
         let object = reloaded.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
         // The Z-up work area reloads onto voxcore's Y-up axes.
         assert_eq!(object.bounds(), TyVector3U32::new(16, 8, 12));
@@ -2313,7 +2335,8 @@ mod tests {
         }));
 
         let rebuilt = to_vmax_file(
-            &from_vmax_file(&original).unwrap(),
+            &DependenciesImpl,
+            &from_vmax_file(&DependenciesImpl, &original).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
@@ -2343,7 +2366,8 @@ mod tests {
             .tools = None;
 
         let rebuilt = to_vmax_file(
-            &from_vmax_file(&original).unwrap(),
+            &DependenciesImpl,
+            &from_vmax_file(&DependenciesImpl, &original).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
@@ -2364,7 +2388,7 @@ mod tests {
     /// work area to write, so the write errors until it takes edit bounds.
     #[test]
     fn an_edit_grid_with_no_volume_errors() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let object_id = main
             .retain_object(VoxObject::new("point".to_owned(), TyVector3U32::ZERO).unwrap())
             .unwrap();
@@ -2377,7 +2401,8 @@ mod tests {
             .unwrap();
         main.push_root_hierarchy_node_id(node_id).unwrap();
 
-        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+        let error =
+            to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap_err();
 
         assert!(
             error
@@ -2404,10 +2429,10 @@ mod tests {
     #[test]
     fn writes_a_work_area_hiding_voxels_back() {
         let original = sample_hiding_voxels();
-        let main = from_vmax_file(&original).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
         let object_id = U32Id::<BVoxObject>::from_u32(0);
 
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         let contents = &rebuilt.contents_files["contents.vmaxb"];
         assert_eq!(contents.eo, Some(5));
@@ -2420,7 +2445,7 @@ mod tests {
             })
         );
         assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
-        let reloaded = from_vmax_file(&rebuilt).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &rebuilt).unwrap();
         assert_eq!(
             reloaded.ext().object_states[&object_id].work_area,
             main.ext().object_states[&object_id].work_area
@@ -2429,7 +2454,7 @@ mod tests {
 
     #[test]
     fn a_kept_work_area_leaving_the_edit_grid_errors() {
-        let mut main = from_vmax_file(&sample_hiding_voxels()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample_hiding_voxels()).unwrap();
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         main.ext_mut()
             .object_states
@@ -2440,7 +2465,8 @@ mod tests {
             .unwrap()
             .max[0] += 2;
 
-        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+        let error =
+            to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap_err();
 
         assert!(error.to_string().contains("keeps work area"), "{error}");
     }
@@ -2469,7 +2495,8 @@ mod tests {
             ..Default::default()
         };
         let rebuilt = to_vmax_file(
-            &from_vmax_file(&original).unwrap(),
+            &DependenciesImpl,
+            &from_vmax_file(&DependenciesImpl, &original).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
@@ -2492,13 +2519,14 @@ mod tests {
             vp.max[0] = max_x;
             contents.eo = Some(9);
 
-            let mut main = from_vmax_file(&original).unwrap();
+            let mut main = from_vmax_file(&DependenciesImpl, &original).unwrap();
 
             for object_state in main.ext_mut().object_states.values_mut() {
                 object_state.cam = None;
             }
 
-            let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+            let rebuilt =
+                to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
             let cam = &rebuilt.contents_files["contents.vmaxb"].cam;
 
@@ -2511,7 +2539,7 @@ mod tests {
     /// Large source grids take 512, and data past 512 errors.
     #[test]
     fn selects_512_when_needed_and_refuses_past_it() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let mut object = VoxObject::new("wide".to_owned(), TyVector3U32::new(300, 1, 1)).unwrap();
         object.retain_layer(palette_id).unwrap();
@@ -2530,7 +2558,7 @@ mod tests {
             })
             .unwrap();
         main.push_root_hierarchy_node_id(node_id).unwrap();
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let wide = file
             .scene_json_file
             .objects
@@ -2558,7 +2586,7 @@ mod tests {
             .unwrap();
         main.push_root_hierarchy_node_id(node_id).unwrap();
         assert!(
-            to_vmax_file(&main, &VMaxWriteOptions::default())
+            to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default())
                 .unwrap_err()
                 .to_string()
                 .contains("512x512x512")
@@ -2570,14 +2598,14 @@ mod tests {
     /// node keeps the preserved spelling.
     #[test]
     fn a_node_rotated_after_the_load_writes_its_live_rotation() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
         let mut group = main.hierarchy_node(group_id).unwrap().clone();
         group.transform.rotation = TyQuaternionF64::from_axis_angle(TyVector3F64::Y, 0.5);
         main.set_hierarchy_node_transform(group_id, group.transform)
             .unwrap();
 
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let [x, y, z, angle] = file.scene_json_file.groups[0].rotation;
         assert!(x.abs() < 1e-12 && y.abs() < 1e-12);
         assert!((z - 1.0).abs() < 1e-12);
@@ -2592,7 +2620,7 @@ mod tests {
     /// that is also a child, refuses to write instead of picking a parent.
     #[test]
     fn a_node_with_two_parents_or_a_root_child_errors() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
         let object_node_id = U32Id::<BVoxHierarchyNode>::from_u32(1);
         let other_id = main
@@ -2603,19 +2631,19 @@ mod tests {
             })
             .unwrap();
         main.push_root_hierarchy_node_id(other_id).unwrap();
-        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+        assert!(to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).is_err());
 
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         main.push_root_hierarchy_node_id(object_node_id).unwrap();
         assert!(main.root_hierarchy_node_ids().contains(&group_id));
-        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+        assert!(to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).is_err());
     }
 
     /// A material retained after the load draws the slot its material-axis
     /// value ids share, and the writer puts its voxels there.
     #[test]
     fn a_retained_material_draws_the_slot_its_values_share() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         // Color cell 0 in slot 1: every material-axis property takes value 1.
@@ -2640,7 +2668,7 @@ mod tests {
         main.retain_voxel(object_id, voxel_id, &[material_id])
             .unwrap();
 
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let voxels =
             decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
         assert!(
@@ -2657,7 +2685,7 @@ mod tests {
     /// draws it.
     #[test]
     fn a_material_drawing_two_slots_errors() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         let value_ids: Vec<U32Id<BVoxValuePoolValue>> = main
             .palette(palette_id)
@@ -2673,7 +2701,8 @@ mod tests {
             .collect();
         main.retain_material(palette_id, value_ids).unwrap();
 
-        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+        let error =
+            to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap_err();
         assert!(error.to_string().contains("single"), "{error}");
     }
 
@@ -2709,7 +2738,7 @@ mod tests {
         file.scene_json_file.objects[0].parent_id =
             Some("233A8A71-7B3C-48D0-B0A8-D774275FA80E".to_owned());
 
-        let main = from_vmax_file(&file).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(main.root_hierarchy_node_ids(), [U32Id::from_u32(2)]);
         assert_eq!(
             main.hierarchy_node(U32Id::from_u32(2))
@@ -2718,7 +2747,7 @@ mod tests {
             [U32Id::from_u32(1)]
         );
 
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt.scene_json_file.groups, file.scene_json_file.groups);
         assert_eq!(
             rebuilt.scene_json_file.objects[0].parent_id,
@@ -2732,7 +2761,7 @@ mod tests {
     /// and the reload records the list padded back out.
     #[test]
     fn a_reduction_keeps_the_survivors_exact_material_through_prune_and_gc() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         // The palette's materials sort by color cell then slot: material 0 draws
         // cell 2 in slot 1 and material 1 draws cell 4 in slot 0. Keep material
@@ -2748,14 +2777,14 @@ mod tests {
         assert_eq!(exact.len(), 1);
         assert_eq!(exact[0].emissive, 2.0);
 
-        let file = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let voxels =
             decode_vmax_snapshots(&file.contents_files["contents.vmaxb"].snapshots).unwrap();
         assert!(voxels.iter().all(|voxel| voxel.material_idx == 0));
         let settings = &file.palette_settings_files["palette1.settings.vmaxpsb"];
         assert_eq!(settings.materials[0], material("1", 0.5, 0.25, 2.0, false));
 
-        let reloaded = from_vmax_file(&file).unwrap();
+        let reloaded = from_vmax_file(&DependenciesImpl, &file).unwrap();
         assert_eq!(reloaded.ext().palettes[&palette_id].materials.len(), 8);
     }
 
@@ -2763,27 +2792,27 @@ mod tests {
     /// instead of synthesizing one.
     #[test]
     fn an_ext_missing_an_entry_errors() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let ext = main.ext_mut();
         ext.hierarchy_nodes.remove(&U32Id::from_u32(1));
-        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+        assert!(to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).is_err());
 
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let ext = main.ext_mut();
         ext.object_states.remove(&U32Id::from_u32(0));
-        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+        assert!(to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).is_err());
 
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let ext = main.ext_mut();
         ext.palettes.remove(&U32Id::from_u32(0));
-        assert!(to_vmax_file(&main, &VMaxWriteOptions::default()).is_err());
+        assert!(to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).is_err());
     }
 
     #[test]
     fn round_trips_through_vox_state() {
         let original = sample();
-        let main = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
@@ -2796,7 +2825,8 @@ mod tests {
         original.scene_json_file.groups[0].hidden = Some(true);
 
         let rebuilt = to_vmax_file(
-            &from_vmax_file(&original).unwrap(),
+            &DependenciesImpl,
+            &from_vmax_file(&DependenciesImpl, &original).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
@@ -2817,7 +2847,8 @@ mod tests {
         original.scene_json_file.objects[0].s = Some(VMaxDiscarded);
 
         let rebuilt = to_vmax_file(
-            &from_vmax_file(&original).unwrap(),
+            &DependenciesImpl,
+            &from_vmax_file(&DependenciesImpl, &original).unwrap(),
             &VMaxWriteOptions::default(),
         )
         .unwrap();
@@ -2866,11 +2897,38 @@ mod tests {
     fn keeps_an_external_mesh_and_the_other_files() {
         let original = sample_with_mesh();
 
-        let main = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         assert_eq!(main.iter_objects().count(), 1);
         assert_eq!(rebuilt, original);
+    }
+
+    /// The ext keeps each other file as the base64 of its bytes.
+    #[test]
+    fn keeps_the_other_files_as_base64() {
+        let main = from_vmax_file(&DependenciesImpl, &sample_with_mesh()).unwrap();
+
+        assert_eq!(main.ext().other_files["animations.vmaxa"], "e30=");
+    }
+
+    /// A kept file whose text is not base64 errors with its path.
+    #[test]
+    fn an_other_file_that_is_not_base64_errors() {
+        let mut main = from_vmax_file(&DependenciesImpl, &sample_with_mesh()).unwrap();
+        main.ext_mut()
+            .other_files
+            .insert("animations.vmaxa".to_owned(), "w_==".to_owned());
+
+        let error =
+            to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("vmax ext file `animations.vmaxa` is not base64"),
+            "{error}"
+        );
     }
 
     /// An external mesh keeps its stored names while objects renumber, so an
@@ -2895,8 +2953,8 @@ mod tests {
         file.contents_files
             .insert("contents2.vmaxb".to_owned(), contents);
 
-        let main = from_vmax_file(&file).unwrap();
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &file).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         let names: Vec<(&str, &str)> = rebuilt
             .scene_json_file
@@ -2921,7 +2979,7 @@ mod tests {
         let mut file = sample_with_mesh();
         file.other_files.remove("contents2.scndata");
 
-        let error = from_vmax_file(&file).unwrap_err();
+        let error = from_vmax_file(&DependenciesImpl, &file).unwrap_err();
 
         assert!(error.to_string().contains("contents2.scndata"), "{error}");
     }
@@ -2930,7 +2988,7 @@ mod tests {
     /// node also places a child node.
     #[test]
     fn an_external_mesh_placing_a_child_errors() {
-        let mut main = from_vmax_file(&sample_with_mesh()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample_with_mesh()).unwrap();
         let mesh_id = main
             .ext()
             .hierarchy_nodes
@@ -2944,7 +3002,8 @@ mod tests {
         main.set_hierarchy_node_children(mesh_id, vec![child_id], Vec::new())
             .unwrap();
 
-        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+        let error =
+            to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap_err();
 
         assert!(error.to_string().contains("external mesh"), "{error}");
     }
@@ -2968,9 +3027,9 @@ mod tests {
             .get_mut("contents.vmaxb")
             .unwrap()
             .snapshots = encode_vmax_snapshots(&voxels);
-        let main = from_vmax_file(&original).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
         let bare = to_vmax_vox_main(main.take_ext().main).unwrap();
-        let rebuilt = to_vmax_file(&bare, &VMaxWriteOptions::default()).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &bare, &VMaxWriteOptions::default()).unwrap();
 
         assert_eq!(rebuilt.palette_settings_files.len(), 1);
         let settings = rebuilt.palette_settings_files.values().next().unwrap();
@@ -3024,8 +3083,8 @@ mod tests {
             .get_mut("palette1.settings.vmaxpsb")
             .unwrap()
             .materials = materials;
-        let main = from_vmax_file(&original).unwrap();
-        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &original).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(rebuilt, original);
     }
 
@@ -3041,7 +3100,7 @@ mod tests {
             .get_mut("palette1.settings.vmaxpsb")
             .unwrap()
             .materials = materials;
-        assert!(from_vmax_file(&original).is_err());
+        assert!(from_vmax_file(&DependenciesImpl, &original).is_err());
     }
 
     /// Puts a scene camera in the state's ext for the typed path to keep or
@@ -3053,7 +3112,7 @@ mod tests {
 
     #[test]
     fn scene_camera_ext_keeps_the_ext_camera() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let cam = VMaxSceneCamera {
             z: 321.0,
             ..Default::default()
@@ -3063,7 +3122,7 @@ mod tests {
             scene_camera: SceneCameraSource::Ext,
             ..Default::default()
         };
-        let file = to_vmax_file(&main, &options).unwrap();
+        let file = to_vmax_file(&DependenciesImpl, &main, &options).unwrap();
         assert_eq!(file.scene_json_file.cam, Some(cam));
     }
 
@@ -3071,21 +3130,21 @@ mod tests {
     /// default, while leaving the camera unset keeps it.
     #[test]
     fn scene_camera_empty_replaces_the_ext_camera() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
         let cam = VMaxSceneCamera {
             z: 999.0,
             ..Default::default()
         };
         with_ext_scene_camera(&mut main, cam);
 
-        let kept = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let kept = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         assert_eq!(kept.scene_json_file.cam, Some(cam));
 
         let options = VMaxWriteOptions {
             scene_camera: SceneCameraSource::Empty,
             ..Default::default()
         };
-        let empty = to_vmax_file(&main, &options).unwrap();
+        let empty = to_vmax_file(&DependenciesImpl, &main, &options).unwrap();
         assert_ne!(empty.scene_json_file.cam, Some(cam));
     }
 }

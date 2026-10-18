@@ -4,6 +4,7 @@
 
 // Public API
 
+pub mod dependencies;
 pub mod palette;
 pub mod snapshots;
 
@@ -20,6 +21,7 @@ mod vmax_file;
 
 pub use common::*;
 pub use contents_vmaxb::*;
+pub use dependencies::*;
 pub use history_vmaxhb::*;
 pub use history_vmaxhvsb::*;
 pub use history_vmaxhvsc::*;

@@ -10,8 +10,8 @@ use std::{
 };
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
-    VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
-    VMaxSceneJsonFile,
+    EncodeBase64, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
+    VMaxObject, VMaxOpaqueFile, VMaxSceneJsonFile,
     snapshots::{
         SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, decode_vmax_legacy_chunks, decode_vmax_snapshots,
     },
@@ -34,12 +34,13 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// [`to_vmax_file`](crate::to_vmax_file()). Geometry, palettes, and hierarchy
 /// become voxcore entities on Y-up axes. The rest of the state goes to the ext,
 /// including external meshes and unmodeled files, which the write puts back.
+/// `dependencies` encodes each unmodeled file as base64.
 /// Voxels the work area hides stay, in a grown edit grid. Contents files and
 /// palettes no object references are skipped.
 ///
 /// Errors on malformed geometry, a missing contents file, a storage cube, work
 /// area, or voxel Voxel Max cannot hold, or a rejected cross-reference.
-pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
+pub fn from_vmax_file<D: EncodeBase64>(dependencies: &D, serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut main = VoxMain::default();
 
@@ -93,7 +94,13 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let node_ids = main.retain_hierarchy_nodes(nodes)?;
     main.set_root_hierarchy_node_ids(roots)?;
 
-    let ext = vmax_ext_from_file(serde, &node_ids, palette_provenance, object_data);
+    let ext = vmax_ext_from_file(
+        dependencies,
+        serde,
+        &node_ids,
+        palette_provenance,
+        object_data,
+    );
     Ok(main.put_ext(ext))
 }
 
@@ -771,7 +778,8 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 /// 2. `palettes`: each object palette's provenance by palette id
 /// 3. `object_data`: each object's contents filename and read capture, by
 ///    object id. No filename takes a synthesized state
-fn vmax_ext_from_file(
+fn vmax_ext_from_file<D: EncodeBase64>(
+    dependencies: &D,
     serde: &VMaxFile,
     node_ids: &[U32Id<BVoxHierarchyNode>],
     palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
@@ -794,7 +802,11 @@ fn vmax_ext_from_file(
         hierarchy_nodes,
         palettes,
         object_states: BTreeMap::new(),
-        other_files: serde.other_files.clone(),
+        other_files: serde
+            .other_files
+            .iter()
+            .map(|(path, VMaxOpaqueFile(bytes))| (path.clone(), dependencies.encode_base64(bytes)))
+            .collect(),
     };
 
     for (object_id, data, capture) in object_data {
@@ -860,6 +872,7 @@ mod tests {
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
+    use vmax::DependenciesImpl;
     use vmax::{
         VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxLegacyChunkVoxels, VMaxMaterial,
         VMaxObject, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools, VMaxViewBox,
@@ -969,7 +982,7 @@ mod tests {
     /// area.
     #[test]
     fn keeps_voxels_the_work_area_hides() {
-        let main = from_vmax_file(&file_hiding_a_voxel()).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &file_hiding_a_voxel()).unwrap();
 
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         let object = main.object(object_id).unwrap();
@@ -998,7 +1011,7 @@ mod tests {
             &[voxel_at(0), voxel_at(2)],
         );
 
-        let main = from_vmax_file(&file).unwrap();
+        let main = from_vmax_file(&DependenciesImpl, &file).unwrap();
 
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(main.ext().object_states[&object_id].work_area, None);
@@ -1010,7 +1023,7 @@ mod tests {
             let mut file = file_hiding_a_voxel();
             file.contents_files.get_mut("contents1.vmaxb").unwrap().eo = Some(eo);
 
-            let error = from_vmax_file(&file).unwrap_err();
+            let error = from_vmax_file(&DependenciesImpl, &file).unwrap_err();
 
             assert!(
                 error
@@ -1034,7 +1047,7 @@ mod tests {
                 &[voxel_at(0)],
             );
 
-            let error = from_vmax_file(&file).unwrap_err();
+            let error = from_vmax_file(&DependenciesImpl, &file).unwrap_err();
 
             assert!(error.to_string().contains("has work area"), "{error}");
         }
@@ -1049,7 +1062,7 @@ mod tests {
             .unwrap()
             .snapshots = encode_vmax_snapshots(&[voxel_at(0), voxel_at(40)]);
 
-        let error = from_vmax_file(&file).unwrap_err();
+        let error = from_vmax_file(&DependenciesImpl, &file).unwrap_err();
 
         assert!(
             error
@@ -1061,7 +1074,7 @@ mod tests {
 
     #[test]
     fn empty_object_without_content_box_loads_from_its_view_box() {
-        let main = from_vmax_file(&empty_object_with_view_box_only())
+        let main = from_vmax_file(&DependenciesImpl, &empty_object_with_view_box_only())
             .expect("an empty object with only a build volume must load");
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         let object = main.object(object_id).expect("the one object");
@@ -1089,7 +1102,7 @@ mod tests {
             },
             &[voxel(0, 0, 0), voxel(1, 2, 3)],
         );
-        let main = from_vmax_file(&file).expect("a placed object loads");
+        let main = from_vmax_file(&DependenciesImpl, &file).expect("a placed object loads");
 
         let object = main
             .object(U32Id::<BVoxObject>::from_u32(0))
@@ -1150,7 +1163,7 @@ mod tests {
             })
             .collect();
 
-        let main = from_vmax_file(&file).expect("a rotated object loads");
+        let main = from_vmax_file(&DependenciesImpl, &file).expect("a rotated object loads");
 
         let node = main
             .hierarchy_node(U32Id::<BVoxHierarchyNode>::from_u32(0))
@@ -1201,7 +1214,8 @@ mod tests {
         );
         file.contents_files.clear();
 
-        let error = from_vmax_file(&file).expect_err("a missing contents file errors");
+        let error =
+            from_vmax_file(&DependenciesImpl, &file).expect_err("a missing contents file errors");
 
         assert!(error.to_string().contains("contents1.vmaxb"), "{error}");
     }
@@ -1243,7 +1257,7 @@ mod tests {
             },
         );
 
-        let main = from_vmax_file(&file).expect("a selected voxel loads");
+        let main = from_vmax_file(&DependenciesImpl, &file).expect("a selected voxel loads");
 
         let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
         let palette = main.effective_palette(object).unwrap();
@@ -1287,11 +1301,11 @@ mod tests {
         data[3] = 1;
         contents.voxels = vec![VMaxLegacyChunkVoxels(data)];
 
-        let main = from_vmax_file(&file).expect("a legacy object loads");
+        let main = from_vmax_file(&DependenciesImpl, &file).expect("a legacy object loads");
 
         let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
         assert_eq!(object.live_count(), 1);
-        let written = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let written = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
         let contents = written.contents_files.values().next().unwrap();
         assert_eq!(contents.v, SNAPSHOT_CONTENTS_VERSION);
         assert!(contents.chunks.is_empty() && !contents.snapshots.is_empty());
@@ -1319,7 +1333,8 @@ mod tests {
         child.parent_id = Some("o".to_owned());
         file.scene_json_file.objects.push(child);
 
-        let main = from_vmax_file(&file).expect("an object-parented object loads");
+        let main =
+            from_vmax_file(&DependenciesImpl, &file).expect("an object-parented object loads");
 
         assert_eq!(main.root_hierarchy_node_ids().len(), 2);
     }
@@ -1353,9 +1368,9 @@ mod tests {
             VMaxPaletteSettingsVmaxpsbFile::default(),
         );
 
-        let main = from_vmax_file(&file).expect("leftover files load");
+        let main = from_vmax_file(&DependenciesImpl, &file).expect("leftover files load");
 
-        let written = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+        let written = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
 
         assert_eq!(written.contents_files.len(), 1);
 
