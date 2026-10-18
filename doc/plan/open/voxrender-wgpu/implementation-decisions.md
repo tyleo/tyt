@@ -86,3 +86,26 @@ they land.
   default features hold both.
 - The goldens and `test_utilities` moved with the renderer. The
   `VOXRENDER_UPDATE_GOLDENS` variable kept its name.
+
+## S4. Shadow bits and B1 on this Mac
+
+- A shadow bit records whether a corner's shadow ray meets any surface or
+  starts inside a live cell. Glass clears the bit, so B1 checks which cells
+  the ray visits and leaves the throughput to shading.
+- Every light but the hemisphere casts the bits, at every corner, whatever
+  its granularity. Bit 1 of a corner picks the face's far edge on `u` and
+  bit 2 on `v`, the same on every face.
+- `voxrender-cpu` exports `shadow_rays` and `ShadowTarget`, so the bench
+  builds the reference's shadow rays from the reference's code.
+- The shader carries a start into another grid through the placements'
+  positions, rotations, and scales in f32, as the reference does in f64.
+- The GPU's `toward` wraps an offset past 2^31, about 1.3 km at 1 cm
+  voxels. Its end cell takes the entry's f32 guess and wrapping remainder.
+  No B1 scene needs the correction there: disabling it changes nothing.
+- The float walk runs over the integer walk's quantized inputs, which a
+  Quest fallback would share. Only the traversal differs, so its flips are
+  what Quest's goldens would tolerate.
+- `precision_lights` holds the simulation's eight suns and two point
+  lights. The S1 corner test and `precision_shadow_scene` share them. The
+  scene's floor is a second placement, so its shadow rays also walk the
+  cells' grid.

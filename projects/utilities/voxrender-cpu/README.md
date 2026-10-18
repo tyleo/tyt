@@ -25,7 +25,8 @@ that starts inside a cell leaves that cell's material without an exit.
 6. Whether the ray left the cell through the face
 
 A shadow ray is the same walk from a fixed point on the face toward a
-light. `RenderGridRay::toward` ends it at the light.
+light. `shadow_rays` builds one per placement, and `RenderGridRay::toward`
+ends it at the light.
 
 ```rust
 let ray = RenderViewRays::new(&view, 1024, 1024).ray(512, 512);

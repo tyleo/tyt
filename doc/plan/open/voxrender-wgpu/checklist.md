@@ -53,7 +53,7 @@ code-level choices in
          inputs and a dense cell buffer. It enters a grid as
          [entry32.py](reference/precision-sim/entry32.py) does. It writes a
          placement, cell, and face id per pixel
-- [ ] **S3. The CPU renderer gets its own crate.** A consumer injects the
+- [x] **S3. The CPU renderer gets its own crate.** A consumer injects the
       render tech through the repo's dependency pattern.
       1. `voxrender` keeps the contract types, the shared quantization, and
          the fixtures, and drops its `cpu` feature
@@ -64,7 +64,7 @@ code-level choices in
       4. `voxsmith` renders through `D: Render`. Its `DependenciesImpl`
          implements `Render` with `voxrender-cpu` behind `impl`
       5. The contract and `voxrender`'s docs say where the reference lives
-- [ ] **S4. Shadow bits and B1 on this Mac.**
+- [x] **S4. Shadow bits and B1 on this Mac.**
       1. The WGSL writes per-corner shadow bits. The entry's correction also
          finds a point light's end cell. A shadow's start in another
          placement's grid comes from f32

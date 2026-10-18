@@ -10,11 +10,15 @@ mod cast_ray;
 mod render;
 mod render_hit;
 mod render_ray_walk;
+mod shadow_rays;
+mod shadow_target;
 
 pub use cast_ray::*;
 pub use render::*;
 pub use render_hit::*;
 pub use render_ray_walk::*;
+pub use shadow_rays::*;
+pub use shadow_target::*;
 
 // Internal API
 
@@ -24,7 +28,7 @@ mod material_pass;
 mod normal_reflectance;
 mod placement_bounds;
 mod render_grid;
-mod shadow_target;
+mod shadow_origin;
 mod transmitted_reflectance;
 
 pub(crate) use bloom::*;
@@ -33,7 +37,7 @@ pub(crate) use material_pass::*;
 pub(crate) use normal_reflectance::*;
 pub(crate) use placement_bounds::*;
 pub(crate) use render_grid::*;
-pub(crate) use shadow_target::*;
+pub(crate) use shadow_origin::*;
 pub(crate) use transmitted_reflectance::*;
 
 // Test support

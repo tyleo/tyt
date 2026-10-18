@@ -555,13 +555,16 @@ fn position_of(cell: [i64; 3], flip: [bool; 3], bounds: [i64; 3]) -> TyVector3U3
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderRayWalk, is_opaque, test_utilities::bar_scene};
+    use crate::{RenderRayWalk, ShadowTarget, is_opaque, test_utilities::bar_scene};
     use std::array;
-    use ty_math::{TyLinSrgbaF64, TyTransformF64, TyVector3Ext, TyVector3F64, TyVector3U32};
+    use ty_math::{TyLinSrgbaF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxrender::{
-        GRID_FRACTION_BITS, RenderGridRay, RenderRay, RenderScene, RenderViewRays,
+        GRID_FRACTION_BITS, RenderGridRay, RenderLight, RenderRay, RenderScene, RenderViewRays,
         SHADOW_INSET_BITS,
-        fixtures::{cells_scene, glass, matte, precision_view_scene, random_scene, stairs_scene},
+        fixtures::{
+            cells_scene, glass, matte, precision_lights, precision_view_scene, random_scene,
+            stairs_scene,
+        },
         quantize_direction, quantize_point,
     };
 
@@ -903,24 +906,20 @@ mod tests {
         let inset = ONE >> SHADOW_INSET_BITS;
         let mut ties = 0;
 
-        let lights = [
-            (45.0, 30.0),
-            (45.0, 45.0),
-            (-30.0, 30.0),
-            (30.0, 30.0),
-            (120.0, 10.0),
-            (0.0, 90.0),
-            (90.0, 0.0),
-            (45.0, 35.264_389_68),
-        ];
+        let bounds = TyVector3U32::new(24, 10, 24);
 
-        let points = [[12.3, 15.7, 8.1], [12.5, 4.5, 12.5]].map(|point| {
-            quantize_point(
-                TyVector3F64::from_array(point),
-                TyVector3U32::new(24, 10, 24),
-            )
-            .unwrap()
-        });
+        let targets: Vec<_> = precision_lights()
+            .into_iter()
+            .map(|light| match light {
+                RenderLight::Directional { rotation, .. } => {
+                    ShadowTarget::Direction(rotation * TyVector3F64::Z)
+                }
+
+                RenderLight::Point { position, .. } => ShadowTarget::Position(position),
+
+                _ => unreachable!("the precision lights are suns and points"),
+            })
+            .collect();
 
         for scene in [
             random_scene(1, 0.15, 1),
@@ -937,21 +936,20 @@ mod tests {
                             z * ONE + if corner & 2 == 0 { inset } else { ONE - inset },
                         ];
 
-                        let directional =
-                            lights.map(|(azimuth, elevation): (f64, f64)| RenderGridRay {
-                                origin,
-                                direction: quantize_direction(
-                                    TyVector3F64::from_azimuth_elevation(
-                                        azimuth.to_radians(),
-                                        elevation.to_radians(),
-                                    ),
+                        for target in &targets {
+                            let ray = match *target {
+                                ShadowTarget::Direction(direction) => RenderGridRay {
+                                    origin,
+                                    direction: quantize_direction(direction),
+                                    end: None,
+                                },
+
+                                ShadowTarget::Position(position) => RenderGridRay::toward(
+                                    origin,
+                                    quantize_point(position, bounds).unwrap(),
                                 ),
-                                end: None,
-                            });
+                            };
 
-                        let toward = points.map(|point| RenderGridRay::toward(origin, point));
-
-                        for ray in directional.into_iter().chain(toward) {
                             assert_eq!(
                                 walk_hits(&scene, ray),
                                 exact_hits(&scene, ray, &mut ties),

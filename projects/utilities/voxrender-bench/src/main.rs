@@ -6,22 +6,28 @@ use std::process;
 
 // Internal API
 
+mod corner_across;
 mod error;
 mod gpu;
 mod gpu_hits;
+mod gpu_walk;
 mod pixel_hit;
 mod reference_hits;
 mod result;
 mod run_b1;
+mod shadow_targets;
 mod view_grid_rays;
 
+pub(crate) use corner_across::*;
 pub(crate) use error::*;
 pub(crate) use gpu::*;
 pub(crate) use gpu_hits::*;
+pub(crate) use gpu_walk::*;
 pub(crate) use pixel_hit::*;
 pub(crate) use reference_hits::*;
 pub(crate) use result::*;
 pub(crate) use run_b1::*;
+pub(crate) use shadow_targets::*;
 pub(crate) use view_grid_rays::*;
 
 /// Runs voxrender's GPU benchmarks.
@@ -34,7 +40,8 @@ struct Cli {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
-    /// B1: checks the integer walk's ids on this GPU against the reference.
+    /// B1: checks the integer walk's ids and corner shadows on this GPU
+    /// against the reference.
     #[command(name = "b1")]
     B1 {
         /// The side of each view's square image.

@@ -1,11 +1,15 @@
-use crate::{Error, Gpu, PixelHit, Result, view_grid_rays};
+use crate::{Error, Gpu, GpuWalk, PixelHit, Result, shadow_targets, view_grid_rays};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
-use voxrender::{BRenderView, GRID_GUARD_BITS, RenderScene};
+use voxrender::{
+    BRenderView, Error as RenderError, GRID_GUARD_BITS, RenderScene, grid_point, grid_vector,
+    quantize_direction, quantize_point,
+};
+use voxrender_cpu::ShadowTarget;
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
-    ComputePassDescriptor, ComputePipelineDescriptor, MapMode, PipelineCompilationOptions,
-    PollType, ShaderModuleDescriptor, ShaderSource,
+    BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages,
+    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device, MapMode,
+    PipelineCompilationOptions, PollType, ShaderModuleDescriptor, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -16,14 +20,16 @@ const NO_HIT: u32 = u32::MAX;
 const HIT_BYTES: u64 = 16;
 
 /// The GPU's first hit through each pixel of `view_id` over a `size` square
-/// image, row by row, from `first_hit.wgsl`.
+/// image, row by row, from `first_hit.wgsl` under `walk`.
 pub fn gpu_hits(
     gpu: &Gpu,
     scene: &RenderScene,
     view_id: U32Id<BRenderView>,
     size: u32,
+    walk: GpuWalk,
 ) -> Result<Vec<Option<PixelHit>>> {
     let grid_rays = view_grid_rays(scene, view_id, size)?;
+    let targets = shadow_targets(scene);
 
     // Each object's cells in raster order: 0 when empty, else its material
     // id plus one.
@@ -61,9 +67,23 @@ pub fn gpu_hits(
             .to_array()
             .map(|scale| scale as f32);
 
+        let rotation = placement.transform.rotation;
+
         push_i32s(&mut placements, bounds);
         push_u32s(&mut placements, [offsets[&placement.object_id], 0, 0]);
         push_f32s(&mut placements, scale);
+        push_f32s(
+            &mut placements,
+            placement
+                .transform
+                .position
+                .to_array()
+                .map(|coordinate| coordinate as f32),
+        );
+
+        for value in [rotation.x, rotation.y, rotation.z, rotation.w] {
+            placements.extend((value as f32).to_le_bytes());
+        }
 
         for steps in [
             [rays.origin, rays.origin_x, rays.origin_y],
@@ -78,10 +98,45 @@ pub fn gpu_hits(
         }
     }
 
+    let mut lights = Vec::new();
+
+    for target in &targets {
+        for (placement_id, placement) in scene.iter_placements() {
+            let transform = &placement.transform;
+
+            match *target {
+                ShadowTarget::Direction(direction) => {
+                    push_i32s(
+                        &mut lights,
+                        quantize_direction(grid_vector(transform, direction)),
+                    );
+                }
+
+                ShadowTarget::Position(position) => {
+                    let bounds = scene
+                        .object(placement.object_id)
+                        .expect("a placement's object is one of the scene's")
+                        .bounds();
+
+                    let point = quantize_point(grid_point(transform, position), bounds)
+                        .ok_or(Error::Render(RenderError::GridRange { placement_id }))?;
+
+                    for value in point.into_iter().chain([1]) {
+                        lights.extend(value.to_le_bytes());
+                    }
+                }
+            }
+        }
+    }
+
     let placement_count = u32::try_from(grid_rays.len()).expect("placements number under 2^32");
+    let light_count = u32::try_from(targets.len()).expect("lights number under 2^32");
 
     let mut frame = Vec::new();
-    push_u32s(&mut frame, [size, size, placement_count]);
+
+    for value in [size, size, placement_count, light_count] {
+        frame.extend(value.to_le_bytes());
+    }
 
     let device = &gpu.device;
 
@@ -104,21 +159,21 @@ pub fn gpu_hits(
         BufferUsages::STORAGE,
     );
 
-    let bytes = u64::from(size) * u64::from(size) * HIT_BYTES;
+    // A binding cannot be empty.
+    let lights = init(
+        "lights",
+        if lights.is_empty() { &[0; 16] } else { &lights },
+        BufferUsages::STORAGE,
+    );
 
-    let hits = device.create_buffer(&BufferDescriptor {
-        label: Some("hits"),
-        size: bytes,
-        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
+    let pixels = u64::from(size) * u64::from(size);
+    let hit_bytes = pixels * HIT_BYTES;
+    let shadow_bytes = (pixels * u64::from(light_count)).max(1) * 4;
 
-    let readback = device.create_buffer(&BufferDescriptor {
-        label: Some("readback"),
-        size: bytes,
-        usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
+    let hits = output(device, "hits", hit_bytes);
+    let shadows = output(device, "shadows", shadow_bytes);
+    let hit_readback = readback(device, "hit readback", hit_bytes);
+    let shadow_readback = readback(device, "shadow readback", shadow_bytes);
 
     let module = device.create_shader_module(ShaderModuleDescriptor {
         label: Some("first_hit"),
@@ -130,7 +185,10 @@ pub fn gpu_hits(
         layout: None,
         module: &module,
         entry_point: Some("main"),
-        compilation_options: PipelineCompilationOptions::default(),
+        compilation_options: PipelineCompilationOptions {
+            constants: &[("FLOAT_WALK", f64::from(u8::from(walk == GpuWalk::Float)))],
+            ..PipelineCompilationOptions::default()
+        },
         cache: None,
     });
 
@@ -152,7 +210,15 @@ pub fn gpu_hits(
             },
             BindGroupEntry {
                 binding: 3,
+                resource: lights.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 4,
                 resource: hits.as_entire_binding(),
+            },
+            BindGroupEntry {
+                binding: 5,
+                resource: shadows.as_entire_binding(),
             },
         ],
     });
@@ -172,12 +238,56 @@ pub fn gpu_hits(
         pass.dispatch_workgroups(size.div_ceil(8), size.div_ceil(8), 1);
     }
 
-    encoder.copy_buffer_to_buffer(&hits, 0, &readback, 0, bytes);
+    encoder.copy_buffer_to_buffer(&hits, 0, &hit_readback, 0, hit_bytes);
+    encoder.copy_buffer_to_buffer(&shadows, 0, &shadow_readback, 0, shadow_bytes);
     gpu.queue.submit([encoder.finish()]);
 
+    let hits = read_words(device, &hit_readback)?;
+    let shadows = read_words(device, &shadow_readback)?;
+    let lights = targets.len();
+
+    Ok(hits
+        .chunks_exact(4)
+        .enumerate()
+        .map(|(pixel, hit)| {
+            (hit[0] != NO_HIT).then(|| PixelHit {
+                placement: hit[0],
+                voxel: hit[1],
+                face: hit[2],
+                lit: shadows[pixel * lights..(pixel + 1) * lights]
+                    .iter()
+                    .map(|&bits| u8::try_from(bits).expect("a light has four corner bits"))
+                    .collect(),
+            })
+        })
+        .collect())
+}
+
+/// A storage buffer of `size` bytes the shader writes.
+fn output(device: &Device, label: &str, size: u64) -> Buffer {
+    device.create_buffer(&BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    })
+}
+
+/// A buffer of `size` bytes to copy an output into and map.
+fn readback(device: &Device, label: &str, size: u64) -> Buffer {
+    device.create_buffer(&BufferDescriptor {
+        label: Some(label),
+        size,
+        usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+/// The words of `buffer` once the GPU has written it.
+fn read_words(device: &Device, buffer: &Buffer) -> Result<Vec<u32>> {
     let (sender, receiver) = mpsc::channel();
 
-    readback.map_async(MapMode::Read, .., move |result| {
+    buffer.map_async(MapMode::Read, .., move |result| {
         sender.send(result).expect("the receiver outlives the wait");
     });
 
@@ -190,22 +300,11 @@ pub fn gpu_hits(
         .expect("the map callback runs during the wait")
         .map_err(Error::Map)?;
 
-    let view = readback.get_mapped_range(..).map_err(Error::MapRange)?;
+    let view = buffer.get_mapped_range(..).map_err(Error::MapRange)?;
 
-    let words: Vec<u32> = view
+    Ok(view
         .chunks_exact(4)
         .map(|word| u32::from_le_bytes(word.try_into().expect("a chunk holds four bytes")))
-        .collect();
-
-    Ok(words
-        .chunks_exact(4)
-        .map(|hit| {
-            (hit[0] != NO_HIT).then_some(PixelHit {
-                placement: hit[0],
-                voxel: hit[1],
-                face: hit[2],
-            })
-        })
         .collect())
 }
 

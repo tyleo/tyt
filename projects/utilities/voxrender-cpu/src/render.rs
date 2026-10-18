@@ -1,6 +1,6 @@
 use crate::{
     RenderGrid, RenderHit, RenderRayWalk, ShadowTarget, apply_bloom, material_pass,
-    normal_reflectance, placement_bounds, transmitted_reflectance,
+    normal_reflectance, placement_bounds, shadow_origin, shadow_rays, transmitted_reflectance,
 };
 use branded_id::U32Id;
 use std::{
@@ -9,10 +9,9 @@ use std::{
 };
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyTransformF64, TyVector3F64};
 use voxrender::{
-    BRenderPlacement, BRenderView, Error, GRID_FRACTION_BITS, RenderBloom, RenderGridRay,
-    RenderImage, RenderLight, RenderMaterial, RenderOcclusion, RenderPixel, RenderRay, RenderScene,
-    RenderShadow, RenderViewRays, Result, SHADOW_INSET_BITS, grid_point, grid_vector,
-    quantize_direction, quantize_point,
+    BRenderView, Error, GRID_FRACTION_BITS, RenderBloom, RenderImage, RenderLight, RenderMaterial,
+    RenderOcclusion, RenderPixel, RenderRay, RenderScene, RenderShadow, RenderViewRays, Result,
+    SHADOW_INSET_BITS,
 };
 use voxsurface::{SurfaceSpan, corner_occlusion, inner_corner_occlusion};
 
@@ -469,28 +468,15 @@ fn shadow_factor(
     shadow: RenderShadow,
     target: &ShadowTarget,
 ) -> Result<TyLinSrgbF64> {
-    let placement = scene
-        .placement(hit.placement_id)
-        .expect("a hit lands on one of the scene's placements");
-
     let sample = |across: [i64; 2]| {
-        let origin = face_origin(&hit.face, across);
-
-        let world = placement
-            .transform
-            .transform_point(TyVector3F64::from_array(
-                origin.map(|coordinate| coordinate as f64 / ONE as f64),
-            ));
+        let (_, world) = shadow_origin(scene, hit, across);
 
         let direction = match *target {
             ShadowTarget::Direction(direction) => direction,
             ShadowTarget::Position(position) => (position - world).normalize(),
         };
 
-        let walk = RenderRayWalk::new(
-            scene,
-            shadow_rays(scene, hit.placement_id, origin, world, target)?,
-        );
+        let walk = RenderRayWalk::new(scene, shadow_rays(scene, hit, across, target)?);
         let mut throughput = entry_pass(scene, &walk);
 
         if throughput == BLACK {
@@ -543,50 +529,6 @@ fn shadow_factor(
     }
 }
 
-/// One ray per placement toward `target` from `origin`, a fixed point in
-/// `placement_id`'s grid. Other grids get the origin from `world`, the same
-/// point in world space.
-fn shadow_rays(
-    scene: &RenderScene,
-    placement_id: U32Id<BRenderPlacement>,
-    origin: [i32; 3],
-    world: TyVector3F64,
-    target: &ShadowTarget,
-) -> Result<Vec<RenderGridRay>> {
-    scene
-        .iter_placements()
-        .map(|(other_id, other)| {
-            let bounds = placement_bounds(scene, other);
-
-            let quantize = |point| {
-                quantize_point(grid_point(&other.transform, point), bounds).ok_or(
-                    Error::GridRange {
-                        placement_id: other_id,
-                    },
-                )
-            };
-
-            let start = if other_id == placement_id {
-                origin
-            } else {
-                quantize(world)?
-            };
-
-            Ok(match *target {
-                ShadowTarget::Direction(direction) => RenderGridRay {
-                    origin: start,
-                    direction: quantize_direction(grid_vector(&other.transform, direction)),
-                    end: None,
-                },
-
-                ShadowTarget::Position(position) => {
-                    RenderGridRay::toward(start, quantize(position)?)
-                }
-            })
-        })
-        .collect()
-}
-
 /// What the light paid to enter the materials `walk` starts inside. The light
 /// pays each pass at normal incidence because the faces it entered by are
 /// unknown.
@@ -600,18 +542,6 @@ fn entry_pass(scene: &RenderScene, walk: &RenderRayWalk) -> TyLinSrgbF64 {
 
             pass * material_pass(material, 1.0)
         })
-}
-
-/// The fixed point on `face`'s plane `across` units from its min corner
-/// along its `u` and `v`.
-fn face_origin(face: &SurfaceSpan, across: [i64; 2]) -> [i32; 3] {
-    let mut point = [0; 3];
-
-    point[face.d] = (i64::from(face.s) + i64::from(face.sign > 0)) * ONE;
-    point[face.u()] = face.u0 as i64 * ONE + across[0];
-    point[face.v()] = face.v0 as i64 * ONE + across[1];
-
-    point.map(|coordinate| i32::try_from(coordinate).expect("a grid's sides are within range"))
 }
 
 /// `values` blended bilinearly across `face` at `along`.
