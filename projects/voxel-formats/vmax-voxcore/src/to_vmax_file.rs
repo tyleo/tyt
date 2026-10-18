@@ -1261,7 +1261,7 @@ fn contents_editor_state(
 ) -> VMaxContentsVmaxbFile {
     let cam = match &object_state.cam {
         Some(cam) => moved_camera(object, object_state, cam, center),
-        None => framed_camera(center),
+        None => framed_camera(center, extent_order),
     };
     VMaxContentsVmaxbFile {
         snapshots: Vec::new(),
@@ -1296,11 +1296,11 @@ fn moved_camera(
     cam
 }
 
-/// The camera an object keeping none takes: a neutral framed-view rig
-/// orbiting the content `center` in the written grid, the rig Voxel Max
-/// writes when it frames an object, so the object opens framed on its content
-/// rather than on its grid's corner.
-fn framed_camera(center: [f64; 3]) -> VMaxCamera {
+/// The camera for an object that keeps none. It orbits the content `center`
+/// in the written grid with the angles Voxel Max writes when it frames an
+/// object. It stands back twice the width of the `2^extent_order` grid, which
+/// gives 512 for the default 256 grid.
+fn framed_camera(center: [f64; 3], extent_order: i64) -> VMaxCamera {
     VMaxCamera {
         wa: 0.0,
         ha: 0.1959133446216583,
@@ -1310,7 +1310,7 @@ fn framed_camera(center: [f64; 3]) -> VMaxCamera {
         lda: 0.0,
         px: 0.0,
         py: 0.0,
-        z: 512.0,
+        z: 2.0 * (1_i64 << extent_order) as f64,
         o: center,
         ..Default::default()
     }
@@ -1972,6 +1972,7 @@ mod tests {
         assert_eq!(contents.tools, None);
         assert_eq!(contents.eo, Some(8));
         assert_eq!(contents.cam.o, added.center);
+        assert_eq!(contents.cam.z, 512.0);
 
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
@@ -2301,6 +2302,38 @@ mod tests {
             assert_eq!(rebuilt.scene_json_file.objects[0].center, center);
             assert_eq!(rebuilt.contents_files["contents.vmaxb"].cam.o, center);
             assert_eq!(placed_voxels(&rebuilt), before);
+        }
+    }
+
+    /// A framed camera aims at the content center and stands back twice the
+    /// grid width.
+    #[test]
+    fn a_framed_camera_stands_back_with_the_grid_width() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+
+        for object_state in main.ext_mut().object_states.values_mut() {
+            object_state.cam = None;
+        }
+
+        for (size, width) in [
+            (VMaxObjectSize::Size32, 32),
+            (VMaxObjectSize::Size256, 256),
+            (VMaxObjectSize::Size512, 512),
+        ] {
+            let rebuilt = to_vmax_file(
+                &main,
+                &VMaxWriteOptions {
+                    object_size: size,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+            let cam = &rebuilt.contents_files["contents.vmaxb"].cam;
+
+            assert_eq!(cam.o, rebuilt.scene_json_file.objects[0].center);
+
+            assert_eq!(cam.z, 2.0 * width as f64);
         }
     }
 
