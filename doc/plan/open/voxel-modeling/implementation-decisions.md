@@ -346,3 +346,10 @@ land.
    test models posed by hand
 6. An axis rotation takes one axis letter and degrees, as a shape's `rotate`
    does. A list of them composes on the parent's fixed axes in order
+
+## S18. Library colors
+
+1. `shades` defaults to a spread of 0.05. Side-by-side slabs under the review
+   rig showed 0.08 staining steel and gold, and 0.04 flattening ebony
+2. `glow` drops to strength 2.75 because at 3 a 0.05 step left its lightest
+   shade at the tonemap's ceiling. The review renders show no difference

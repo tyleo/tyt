@@ -24,7 +24,7 @@
                 { "kind": "material", "properties": { "baseColor": "#8C3A20", "emissiveColor": "#FF5A1A", "emissiveStrength": 1, "roughness": 0.9 } }, // ember
                 { "kind": "material", "properties": { "baseColor": "#3A9A64", "ior": 1.57, "roughness": 0.05, "transmission": 0.6 } }, // emerald
                 { "kind": "material", "properties": { "baseColor": "#9A5A1E", "emissiveColor": "#FF9A30", "emissiveStrength": 1.5, "roughness": 1 } }, // flame
-                { "kind": "material", "properties": { "baseColor": "#C8D2E0", "emissiveColor": "#CFE0FF", "emissiveStrength": 3, "roughness": 0.5 } }, // glow
+                { "kind": "material", "properties": { "baseColor": "#C8D2E0", "emissiveColor": "#CFE0FF", "emissiveStrength": 2.75, "roughness": 0.5 } }, // glow
                 { "kind": "material", "properties": { "baseColor": "#D9B04E", "metallic": 1, "roughness": 0.25 } }, // gold
                 { "kind": "material", "properties": { "baseColor": "#8A8580", "roughness": 0.75 } }, // granite
                 { "kind": "material", "properties": { "baseColor": "#6A8547", "roughness": 0.8 } }, // grass

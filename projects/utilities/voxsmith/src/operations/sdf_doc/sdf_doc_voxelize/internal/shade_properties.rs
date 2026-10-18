@@ -4,7 +4,7 @@ use std::result::Result as StdResult;
 use ty_math::TyLinSrgbaF64;
 
 /// The lightness step between neighboring shades when the model leaves it out.
-const DEFAULT_SPREAD: f64 = 0.08;
+const DEFAULT_SPREAD: f64 = 0.05;
 
 /// The shade at `index` of `shades`, whose base material holds `base`. A
 /// darker shade mixes the base color with black in linear light, and a lighter
@@ -164,8 +164,8 @@ mod tests {
         let call = shades(3.0, None);
         let middle = lightness("#8A5A2B", &call, 1);
 
-        assert!((lightness("#8A5A2B", &call, 0) - (middle - 0.08)).abs() < 1e-6);
-        assert!((lightness("#8A5A2B", &call, 2) - (middle + 0.08)).abs() < 1e-6);
+        assert!((lightness("#8A5A2B", &call, 0) - (middle - 0.05)).abs() < 1e-6);
+        assert!((lightness("#8A5A2B", &call, 2) - (middle + 0.05)).abs() < 1e-6);
 
         let even = shades(2.0, Some(0.1));
         assert!((lightness("#8A5A2B", &even, 1) - (middle + 0.05)).abs() < 1e-6);
@@ -202,7 +202,7 @@ mod tests {
             let middle = lightness(color, &call, 1);
 
             for index in 0..3 {
-                let expected = middle + (f64::from(index) - 1.0) * 0.08;
+                let expected = middle + (f64::from(index) - 1.0) * 0.05;
                 assert!((lightness(color, &call, index) - expected).abs() < 1e-6);
 
                 let shade = shade_properties(&base(color), &call, index)
