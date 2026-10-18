@@ -359,3 +359,9 @@ land.
 4. Both shade errors end with the largest spread at which every shade fits. The
    error rounds the spread down, which keeps the given spread passing. The
    chroma check stays exact because the error states the fix
+5. `oak` takes #9D7D51, `walnut` #563F31, `rope` #AE946D, and `grass` #5E8445.
+   Oak loses chroma to stop reading orange. Walnut turns from pink toward brown,
+   rope from khaki toward tan, and grass away from `moss`
+6. The metals wait for the rendering follow-ups' reflections. A metal face
+   toward the camera reflects the review rig's half-gray horizon, and neither a
+   brighter base color nor a lighter ground brought gold back from olive

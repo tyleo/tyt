@@ -32,6 +32,22 @@ Several views tiled into one image. Built in step S17 of the
 [voxel modeling checklist](../voxel-modeling/checklist.md) as the `sheet` image
 kind.
 
+## Reflections
+
+Mirror reflections, for
+[finding 20](../voxel-modeling/trials-round-6.md#findings) of the voxel
+modeling trials. A flat metal face misses the key light's highlight and takes
+the hemisphere light at its normal. A face toward the camera sits on the
+horizon between the white sky and the #404040 ground, where gold reads olive at
+half brightness.
+
+A reflective face can trace a ray along the mirror direction and show what the
+ray hits, or the hemisphere where the ray leaves the scene. A face toward the
+camera still reflects the horizon, so `studio` also needs a backdrop that stays
+bright down to it. Area lights could instead give a flat metal face a broad
+highlight. The plan weighs the two answers and settles how a rough surface blurs
+a reflection.
+
 ## Waiting for a reason
 
 1. Traced occlusion as a third `occlusion` value
