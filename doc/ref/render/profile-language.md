@@ -5,13 +5,15 @@ _Part of the
 
 A profile is a named piece of configuration whose elements stand for
 [`vxl object render`](render.md) flags. `--profile` applies a profile whole,
-`--views-from` applies only a profile's views, and `--lights-from` only its
-light rig. Repeated `--profile` flags [stack](#stacking) their profiles.
+`--views-from` applies only a profile's views, `--images-from` only its
+images, and `--lights-from` only its light rig. Repeated `--profile` flags
+[stack](#stacking) their profiles.
 [Built-in profiles](#built-in-profiles) ship in the binary, so
 `--profile turnaround` works before any `.vxlconfig` exists. The rest are
 user-defined under `.vxlconfig`'s `object.render.profiles` key. A config
 profile sharing a built-in's name replaces it wholesale. A profile can import
-another profile's views with `viewsFrom` and its rig with `lightsFrom`.
+another profile's views with `viewsFrom`, its images with `imagesFrom`, and its
+rig with `lightsFrom`.
 
 ## Schema
 
@@ -66,8 +68,14 @@ interface Profile {
   /** Mirrors `--views-from` per entry; only the views travel. */
   viewsFrom?: string[];
 
-  /** Mirrors the `--view-*` flags, keyed by the name that suffixes the file. */
+  /** Mirrors the `--view-*` flags, keyed by name. */
   views?: Record<string, ViewEntry>;
+
+  /** Mirrors `--images-from` per entry; only the images travel. */
+  imagesFrom?: string[];
+
+  /** Mirrors the `--image*` flags, keyed by the name that suffixes the file. */
+  images?: Record<string, ImageEntry>;
 
   /** Mirrors `--lights-from` per entry; only the rig travels. */
   lightsFrom?: string[];
@@ -99,6 +107,27 @@ interface ViewEntry {
   /** Mirrors `--view-select`, hierarchy-path globs; omitted, the rendered
    *  objects. The subject that `subject` and `orbit` are about. */
   select?: string[];
+}
+
+/** An image the run writes. Mirrors `--image <image>`. */
+interface ImageEntry {
+  /** Mirrors `--image-kind`; omitted, `view`. */
+  kind?: "view" | "sheet";
+
+  /** Mirrors `--image-view`; omitted, the image's name. Errors on a
+   *  `sheet`. */
+  view?: string;
+
+  /** Mirrors `--image-views` per entry. Errors on a `view` image. */
+  views?: string[];
+
+  /** Mirrors `--image-border-width` in pixels; omitted, `8`. Errors on a
+   *  `view` image. */
+  borderWidth?: number;
+
+  /** Mirrors `--image-border-color`; omitted, `#808080`. Errors on a `view`
+   *  image. */
+  borderColor?: string;
 }
 
 /** A light. Mirrors `--light <light-index> <kind>`. */
@@ -260,6 +289,18 @@ a profile writes its names and values.
             },
           },
 
+          "imagesFrom": ["<profile>"],
+          "images": {
+            "<orbit-view>": {},
+            "<one-view-image>": { "kind": "view", "view": "<posed-view>" },
+            "<sheet-image>": {
+              "kind": "sheet",
+              "views": ["<orbit-view>", "<posed-view>", "<node-view>"],
+              "borderWidth": 8,
+              "borderColor": "#808080",
+            },
+          },
+
           "lightsFrom": ["<profile>"],
           "lights": [
             {
@@ -317,28 +358,37 @@ A rotation takes any of its four forms wherever one appears above:
 { "kind": "angles", "azimuth": 45, "elevation": 30 }
 ```
 
-## Views and lights
+## Views, images, and lights
 
-Views and lights are independent halves. A profile can set either. A run
-whose stack and flags set no view renders the built-in `hero` view, and one
-that sets no light uses the built-in `studio` rig, the way `object mesh` falls
-back to its implicit primitive. `--profile turnaround --profile dusk` composes
-a view set with a light rig.
+A profile holds three independent parts: views, images, and a rig. A view
+places a camera. An image is a file the run writes, drawing one view or tiling
+several into a sheet. A view no image draws never renders, so a profile can
+hold views for others to import.
 
-A profile can import one half of another profile, the way a mesh profile's
-`valuesFrom` imports values. `viewsFrom` imports views and `lightsFrom`
-imports a rig:
+A run with no view and no image renders the built-in `hero` profile. A run
+with views and no image errors, and one with no light uses the built-in
+`studio` rig. `--profile turnaround --profile dusk` composes views and images
+with a light rig.
 
-1. Imports land depth-first in list order, ahead of the profile's views or
-   rig
-2. Only the imported half travels. The image elements and the other half
-   stay behind
-3. A profile's views and its rig each land once, however many imports and
+A `--view-*` flag that creates a view also gives the view an image of its
+name, so `--view-orbit close 30 20 fit` adds a close-up. Once a run gives an
+`--image*` flag, the flags declare every image. A view a flag creates or
+changes that no image draws errors.
+
+A profile can import one part of another profile, the way a mesh profile's
+`valuesFrom` imports values. `viewsFrom` imports views, `imagesFrom` imports
+images, and `lightsFrom` imports a rig:
+
+1. Imports land depth-first in list order, ahead of the profile's views,
+   images, or rig
+2. Only the imported part travels. The image settings and the other parts stay
+   behind
+3. A profile's views, images, and rig each land once, however many imports and
    `--profile` flags bring them
-4. Imports resolve after the cascade merges, so a config that overrides
-   `hero` changes `turnaround`
-5. An imported element collides like a stack member's. A rig is one
-   element, so a profile's rig comes from its `lights` or from one import
+4. Imports resolve after the cascade merges, so a config that overrides `hero`
+   changes `turnaround`
+5. An imported element collides like a stack member's. A rig is one element,
+   so a profile's rig comes from its `lights` or from one import
 6. An import cycle errors
 
 ## Loading
@@ -348,9 +398,9 @@ the order the [mesh implementation notes](../mesh/implementation.md#ty-preferenc
 lay out, the user's `~/.vxlconfig` first and then every directory from the
 git root down to the working directory. Each profile name is read from the
 last layer that supplies it, wholesale. The layers merge into one namespace
-before `viewsFrom` and `lightsFrom` resolve. `vxl profile object render list`
-prints the merged namespace grouped by the file supplying each name, each
-name beside its `description`.
+before `viewsFrom`, `imagesFrom`, and `lightsFrom` resolve.
+`vxl profile object render list` prints the merged namespace grouped by the
+file supplying each name, each name beside its `description`.
 
 The checks split by when they run:
 
@@ -362,14 +412,14 @@ The checks split by when they run:
       cone angle, `bloomStrength`, and `bloomThreshold` of zero or more, and
       a `#RRGGBB` color
 2. the profile stack applied whole
-   1. every `--profile`, `--views-from`, and `--lights-from` name resolving,
-      listed once per flag
+   1. every `--profile`, `--views-from`, `--images-from`, and `--lights-from`
+      name resolving, listed once per flag
    2. the imports resolving without a cycle
    3. the stack merging, an element two members set erroring
 3. the record
    1. every view holding a transform, from the stack or the flags, and every
       directional, point, or spot light likewise
-   2. each view's name non-empty and free of path separators
+   2. each image's name non-empty and free of path separators
    3. a view's frame `world`, `subject`, or `node`, a directional light's
       `world`, `camera`, or `node`, and a node path only under the `node`
       frame, which needs one
@@ -377,6 +427,9 @@ The checks split by when they run:
       `orthographic`
    5. a spot light's inner cone angle below its outer, which is at most 90
       degrees
+   6. each image holding only its kind's elements and drawing views the run
+      sets
+   7. at least one image, and an image drawing every view a flag touches
 4. the render
    1. the selection matching objects, in a document holding some
    2. each view's `select` matching a rendered object
@@ -396,6 +449,7 @@ when a profile loads, so the built-ins take the same schema by construction:
     "views": {
       "hero": { "transform": { "kind": "orbit", "azimuth": 45, "elevation": 30 } },
     },
+    "images": { "hero": {} },
   },
 
   "front": {
@@ -403,49 +457,60 @@ when a profile loads, so the built-ins take the same schema by construction:
     "views": {
       "front": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 } },
     },
+    "images": { "front": {} },
   },
   "back": {
     "description": "One view of the back",
     "views": {
       "back": { "transform": { "kind": "orbit", "azimuth": 180, "elevation": 0 } },
     },
+    "images": { "back": {} },
   },
   "left": {
     "description": "One view of the left side",
     "views": {
       "left": { "transform": { "kind": "orbit", "azimuth": -90, "elevation": 0 } },
     },
+    "images": { "left": {} },
   },
   "right": {
     "description": "One view of the right side",
     "views": {
       "right": { "transform": { "kind": "orbit", "azimuth": 90, "elevation": 0 } },
     },
+    "images": { "right": {} },
   },
   "top": {
     "description": "One view from above with the front at the bottom of the image",
     "views": {
       "top": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 90 } },
     },
+    "images": { "top": {} },
   },
   "bottom": {
     "description": "One view from below",
     "views": {
       "bottom": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": -90 } },
     },
+    "images": { "bottom": {} },
   },
 
   "turnaround": {
     "description": "The hero view and the four sides",
     "viewsFrom": ["hero", "front", "right", "back", "left"],
+    "imagesFrom": ["hero", "front", "right", "back", "left"],
   },
   "review": {
-    "description": "The hero view and orthographic front, right, and top views with a bloom",
-    "viewsFrom": ["hero", "front", "right", "top"],
+    "description": "The hero view and orthographic front, right, back, and top views on one sheet with a bloom",
+    "viewsFrom": ["hero", "front", "right", "back", "top"],
     "views": {
       "front": { "projection": "orthographic" },
       "right": { "projection": "orthographic" },
+      "back": { "projection": "orthographic" },
       "top": { "projection": "orthographic" },
+    },
+    "images": {
+      "review": { "kind": "sheet", "views": ["hero", "front", "right", "back", "top"] },
     },
     "bloomStrength": 1,
     "bloomRadius": 0.03,
@@ -502,13 +567,13 @@ when a profile loads, so the built-ins take the same schema by construction:
 }
 ```
 
-The seven view profiles each hold one orbit view at `fit`, named for the
-profile, so `--profile front --profile top` renders `front` and `top` in one
-run. `top` and `bottom` look along the up axis, where -Z is up, so the front
-sits at the bottom of the image. `turnaround` imports five of them and holds
-nothing else. `review` imports `hero`, `front`, `right`, and `top` and makes
-the three sides orthographic for checking proportions. `review` also takes
-`glow`'s bloom to show how each emissive material glows.
+The seven view profiles each hold one orbit view at `fit` and an image of it,
+both named for the profile, so `--profile front --profile top` renders `front`
+and `top` in one run. `top` and `bottom` look along the up axis, where -Z is
+up, and the front sits at the bottom of the image. `turnaround` imports five of
+them and holds nothing else. `review` imports five views, makes the four sides
+orthographic for checking proportions, and tiles all five into one sheet.
+`review` also takes `glow`'s bloom to show how each emissive material glows.
 
 `studio` is one key light in the `camera` frame, from the upper left of
 whoever is looking, over a hemisphere light. A light in the `camera` frame
@@ -571,13 +636,14 @@ in the same schema, and may build on the built-ins. Three examples follow:
           },
         },
 
-        // Both halves imported; the profile adds the image elements alone.
-        "sheet": {
+        // Every part imported; the profile adds the image settings alone.
+        "small": {
           "description": "The turnaround under dusk at half size on a dark background",
           "width": 512,
           "height": 512,
           "background": "#202020",
           "viewsFrom": ["turnaround"],
+          "imagesFrom": ["turnaround"],
           "lightsFrom": ["dusk"],
         },
       },
@@ -586,7 +652,7 @@ in the same schema, and may build on the built-ins. Three examples follow:
 }
 ```
 
-With the input `turret.voxj`, `--profile sheet` expands to
+With the input `turret.voxj`, `--profile small` expands to
 
 ```sh
 --width 512
@@ -597,6 +663,11 @@ With the input `turret.voxj`, `--profile sheet` expands to
 --view-orbit right 90 0 fit
 --view-orbit back 180 0 fit
 --view-orbit left -90 0 fit
+--image hero                     # imagesFrom: turnaround, then hero
+--image front
+--image right
+--image back
+--image left
 --light 0 directional            # lightsFrom: dusk
 --light-frame 0 world
 --light-angles 0 120 10
@@ -633,8 +704,9 @@ vxl object render turret.voxj
 ```
 
 renders `front` and `top` under the `flat` headlight without a profile for
-that combination. The views merge by name, element by element, and the lights
-as one rig. When two members set the same image element, the same element of
-one view, or the rig, the run errors and reports both. `--views-from` and
-`--lights-from` join the stack with one half each. The hand flags replace the
+that combination. The views and the images merge by name, element by element,
+and the lights as one rig. When two members set the same image setting, the
+same element of one view or image, or the rig, the run errors and reports both.
+`--views-from`, `--images-from`, and `--lights-from` join the stack with one
+part each. The hand flags replace the
 stack's elements as they replace one profile's.

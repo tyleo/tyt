@@ -1,14 +1,15 @@
 use crate::{
     Error, ProfileSet, Result,
-    commands::{RenderProfile, ViewEntry},
+    commands::{ImageEntry, RenderProfile, ViewEntry},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Profiles stacked into one profile to apply whole. Views merge by name,
-/// element by element. The lights merge as one element, the rig. A
-/// profile's `viewsFrom` and `lightsFrom` imports land depth-first ahead of
-/// its views and rig. Each profile's views and rig land once, however many
-/// members and imports bring them. An element two profiles set errors.
+/// Profiles stacked into one profile to apply whole. Views and images merge
+/// by name, element by element. The lights merge as one element, the rig. A
+/// profile's `viewsFrom`, `imagesFrom`, and `lightsFrom` imports land
+/// depth-first ahead of its views, images, and rig. Each profile's views,
+/// images, and rig land once, however many members and imports bring them. An
+/// element two profiles set errors.
 pub struct RenderProfileStack<'a> {
     profiles: &'a ProfileSet<RenderProfile>,
 
@@ -18,6 +19,8 @@ pub struct RenderProfileStack<'a> {
     claims: BTreeMap<String, String>,
 
     landed_views: BTreeSet<String>,
+
+    landed_images: BTreeSet<String>,
 
     landed_lights: BTreeSet<String>,
 }
@@ -30,6 +33,7 @@ impl<'a> RenderProfileStack<'a> {
             profile: RenderProfile::default(),
             claims: BTreeMap::new(),
             landed_views: BTreeSet::new(),
+            landed_images: BTreeSet::new(),
             landed_lights: BTreeSet::new(),
         }
     }
@@ -81,6 +85,7 @@ impl<'a> RenderProfileStack<'a> {
             }
 
             self.land_views(origin, name, &mut Vec::new())?;
+            self.land_images(origin, name, &mut Vec::new())?;
             self.land_lights(origin, name, &mut Vec::new())?;
         }
 
@@ -92,6 +97,16 @@ impl<'a> RenderProfileStack<'a> {
     pub(crate) fn land_view_sets(&mut self, origin: &str, names: &[String]) -> Result<()> {
         for name in check_unique(origin, names)? {
             self.land_views(origin, name, &mut Vec::new())?;
+        }
+
+        Ok(())
+    }
+
+    /// Lands the images alone of each profile of `names`, which `origin`
+    /// lists. A name listed twice errors.
+    pub(crate) fn land_image_sets(&mut self, origin: &str, names: &[String]) -> Result<()> {
+        for name in check_unique(origin, names)? {
+            self.land_images(origin, name, &mut Vec::new())?;
         }
 
         Ok(())
@@ -110,6 +125,11 @@ impl<'a> RenderProfileStack<'a> {
     /// Whether any landed profile set a view.
     pub(crate) fn has_views(&self) -> bool {
         !self.profile.views.is_empty()
+    }
+
+    /// Whether any landed profile set an image.
+    pub(crate) fn has_images(&self) -> bool {
+        !self.profile.images.is_empty()
     }
 
     /// Whether any landed profile set the rig.
@@ -179,6 +199,66 @@ impl<'a> RenderProfileStack<'a> {
         Ok(())
     }
 
+    /// Lands the images of the profile `name`, which `origin` asks for, after
+    /// its `imagesFrom` imports.
+    fn land_images(&mut self, origin: &str, name: &str, visiting: &mut Vec<String>) -> Result<()> {
+        check_cycle(visiting, name, "imagesFrom")?;
+
+        if self.landed_images.contains(name) {
+            return Ok(());
+        }
+
+        let profile = self.profiles.get(origin, name)?;
+
+        visiting.push(name.to_owned());
+
+        for import in &profile.images_from {
+            self.land_images(
+                &format!("the profile `{name}`'s imagesFrom"),
+                import,
+                visiting,
+            )?;
+        }
+
+        visiting.pop();
+
+        for (image_name, entry) in &profile.images {
+            let entry_origin = format!("image `{image_name}`");
+
+            // An empty entry still declares the image.
+            self.image(image_name);
+
+            if let Some(kind) = entry.kind {
+                self.claim(name, format!("{entry_origin}'s kind"))?;
+                self.image(image_name).kind = Some(kind);
+            }
+
+            if let Some(view) = &entry.view {
+                self.claim(name, format!("{entry_origin}'s view"))?;
+                self.image(image_name).view = Some(view.clone());
+            }
+
+            if let Some(views) = &entry.views {
+                self.claim(name, format!("{entry_origin}'s views"))?;
+                self.image(image_name).views = Some(views.clone());
+            }
+
+            if let Some(width) = entry.border_width {
+                self.claim(name, format!("{entry_origin}'s border width"))?;
+                self.image(image_name).border_width = Some(width);
+            }
+
+            if let Some(color) = entry.border_color {
+                self.claim(name, format!("{entry_origin}'s border color"))?;
+                self.image(image_name).border_color = Some(color);
+            }
+        }
+
+        self.landed_images.insert(name.to_owned());
+
+        Ok(())
+    }
+
     /// Lands the rig of the profile `name`, which `origin` asks for, after its
     /// `lightsFrom` imports.
     fn land_lights(&mut self, origin: &str, name: &str, visiting: &mut Vec<String>) -> Result<()> {
@@ -214,6 +294,10 @@ impl<'a> RenderProfileStack<'a> {
 
     fn view(&mut self, name: &str) -> &mut ViewEntry {
         self.profile.views.entry(name.to_owned()).or_default()
+    }
+
+    fn image(&mut self, name: &str) -> &mut ImageEntry {
+        self.profile.images.entry(name.to_owned()).or_default()
     }
 
     fn claim(&mut self, name: &str, element: String) -> Result<()> {
@@ -321,6 +405,14 @@ mod tests {
             ("b", r#"{ "views": { "hero": { "fov": 50 } } }"#),
             ("wide", r#"{ "width": 1 }"#),
             ("wider", r#"{ "width": 2 }"#),
+            (
+                "pair",
+                r#"{ "images": { "sides": { "kind": "sheet", "views": ["front", "top"] } } }"#,
+            ),
+            (
+                "trio",
+                r#"{ "images": { "sides": { "views": ["front", "right", "top"] } } }"#,
+            ),
         ]);
 
         let error = stack(&profiles, &["a", "b"]).unwrap_err().to_string();
@@ -335,6 +427,12 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("`wider` sets width"), "{error}");
+
+        let error = stack(&profiles, &["pair", "trio"]).unwrap_err().to_string();
+        assert!(
+            error.contains("`trio` sets image `sides`'s views"),
+            "{error}"
+        );
     }
 
     #[test]

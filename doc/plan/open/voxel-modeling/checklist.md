@@ -142,7 +142,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   6. The API doc points to `vxl palette show` for a custom property's values
      for finding 39. `vxl node list --show-transforms` already prints the nodes
 - [ ] **S17. Review sheet.** The contact sheet moves out of the
-      [rendering follow-ups](../voxel-rendering-followups/README.md#waiting-for-a-reason)
+      [rendering follow-ups](../voxel-rendering-followups/README.md#contact-sheet)
       for findings 8, 17, and 19:
   1. `review` tiles its four views and a view from behind into one PNG
   2. `--pose` turns a part's node about an axis for one render for finding 35

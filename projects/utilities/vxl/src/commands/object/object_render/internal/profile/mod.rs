@@ -2,6 +2,7 @@
 
 mod built_in_render_profiles;
 mod distance_entry;
+mod image_entry;
 mod light_entry;
 mod load_render_profile_set;
 mod pose_transform_entry;
@@ -16,6 +17,7 @@ mod view_entry;
 
 pub(crate) use built_in_render_profiles::*;
 pub(crate) use distance_entry::*;
+pub(crate) use image_entry::*;
 pub(crate) use light_entry::*;
 pub(crate) use load_render_profile_set::*;
 pub(crate) use pose_transform_entry::*;

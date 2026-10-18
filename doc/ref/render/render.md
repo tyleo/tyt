@@ -7,11 +7,12 @@ _Part of the
 vxl object render <input> [options]
 ```
 
-`vxl object render` draws the selected objects into one image per view. The
-image follows [the contract](contract.md). The views and lights come from
+`vxl object render` draws the selected objects into images. An image draws
+one view or tiles several into a sheet, and each view follows
+[the contract](contract.md). The views, images, and lights come from
 [profiles](profile-language.md) and the flags that mirror them. A run that
-sets no view renders the built-in `hero` view, and one that sets no light uses
-the built-in `studio` rig.
+sets no view and no image renders the built-in `hero` view, and one that sets
+no light uses the built-in `studio` rig.
 
 ```sh
 # the hero view under the studio rig, inline in the terminal
@@ -21,6 +22,11 @@ vxl object render turret.voxj
 # turret-left.png beside the input
 vxl object render turret.voxj
   --profile turnaround
+  --to png
+
+# turret.png, the review sheet of the hero view and four orthographic sides
+vxl object render turret.voxj
+  --profile review
   --to png
 
 # an orthographic view from the front-left-top, its camera flags printed
@@ -33,14 +39,15 @@ vxl object render turret.voxj
 vxl object render turret.voxj --profile glow
 ```
 
-The views show inline in the terminal one below another, each scaled to fit,
+The images show inline in the terminal one below another, each scaled to fit,
 through the Kitty or iTerm2 graphics protocol or as ANSI half blocks where
 neither is supported. `--to png` writes them beside the input instead: one
-view as the input's stem with `.png`, and several as the stem, a hyphen, and
-the view's name, as `object mesh` joins object names under `--split-files`.
+image as the input's stem with `.png`, and several as the stem, a hyphen, and
+the image's name, as `object mesh` joins object names under `--split-files`.
 `--file-stem` replaces the stem, and each PNG's path prints on its own line.
-`--print-camera` prints each view's resolved pose after its image as the flags
-that reproduce it, ready to paste back as a `world` view or a profile entry.
+`--print-camera` prints each drawn view's resolved pose after its image as the
+flags that reproduce it, ready to paste back as a `world` view or a profile
+entry.
 
 `--select` and `--select-index` choose the objects, and the default takes
 every object. The selected objects render together, placed by the hierarchy
@@ -62,7 +69,7 @@ mesh. A document with no objects errors. See
 
    Where the views go.
    1. `terminal`: inline in the terminal, one view below another.
-   2. `png`: a PNG per view beside the input, each path printed on its own
+   2. `png`: a PNG per image beside the input, each path printed on its own
       line.
 
 3. `--file-stem <file-stem>`
@@ -141,27 +148,33 @@ mesh. A document with no objects errors. See
 13. `--views-from <profile>`
     - Repeatable: yes
 
-    Applies a profile's views alone, its `viewsFrom` imports first. The rig
-    and the image elements stay behind.
+    Applies a profile's views alone, its `viewsFrom` imports first. The
+    images, the rig, and the image settings stay behind.
 
-14. `--lights-from <profile>`
+14. `--images-from <profile>`
+    - Repeatable: yes
+
+    Applies a profile's images alone, its `imagesFrom` imports first. The
+    views, the rig, and the image settings stay behind.
+
+15. `--lights-from <profile>`
     - Repeatable: yes
 
     Applies a profile's light rig alone, its `lightsFrom` imports first. The
-    views and the image elements stay behind.
+    views, the images, and the image settings stay behind.
 
-15. `--view-frame <view> <world | subject | node>`
+16. `--view-frame <view> <world | subject | node>`
     - Repeatable: yes
 
     The frame the named view's `--view-position` and rotation are read in.
     Every `--view-*` flag names its view, and the first mention creates the
-    view. The name suffixes the file, so an empty name or one holding a path
-    separator errors. A posed view takes `--view-frame`, `--view-position`,
-    and one rotation flag, plus `--view-node` under `node`, and a view whose
+    view. A created view takes an image of its name until the run gives an
+    `--image*` flag. A posed view takes `--view-frame`, `--view-position`, and
+    one rotation flag, plus `--view-node` under `node`, and a view whose
     transform neither the flags nor a profile sets errors. A flag setting an
     element set already errors.
 
-16. `--view-node <view> <path>`
+17. `--view-node <view> <path>`
     - Repeatable: yes
 
     The node path the named view's `node` frame reads its position and
@@ -171,25 +184,25 @@ mesh. A document with no objects errors. See
     Zero or several matches error, listing the paths that matched. The flag
     errors under another frame, and a `node` frame without it errors.
 
-17. `--view-position <view> <x> <y> <z>`
+18. `--view-position <view> <x> <y> <z>`
     - Repeatable: yes
 
     The named view's position in its frame, in meters.
 
-18. `--view-quaternion <view> <x> <y> <z> <w>`
+19. `--view-quaternion <view> <x> <y> <z> <w>`
     - Repeatable: yes
 
     The named view's rotation as a unit quaternion, the form `--print-camera`
     prints. A quaternion off unit length errors. The four rotation flags share
     a view's one rotation, so two on one view error.
 
-19. `--view-euler <view> <x> <y> <z>`
+20. `--view-euler <view> <x> <y> <z>`
     - Repeatable: yes
 
     The named view's rotation as Euler angles in degrees about the fixed x,
     y, then z axes, as `node set rotation` takes them.
 
-20. `--view-look-at <view> <x> <y> <z>`
+21. `--view-look-at <view> <x> <y> <z>`
     - Repeatable: yes
 
     Aims the named view's -Z at a point in its frame, with the frame's +Y up.
@@ -197,14 +210,14 @@ mesh. A document with no objects errors. See
     sets the orbit's center in world space, and the orbit takes its distance
     in meters.
 
-21. `--view-angles <view> <azimuth> <elevation>`
+22. `--view-angles <view> <azimuth> <elevation>`
     - Repeatable: yes
 
     The named view's rotation as the one facing its frame's origin from the
     direction at an azimuth from +Z toward +X and an elevation toward +Y, in
     degrees.
 
-22. `--view-orbit <view> <azimuth> <elevation> <distance | fit>`
+23. `--view-orbit <view> <azimuth> <elevation> <distance | fit>`
     - Repeatable: yes
 
     Places the named view on a sphere about the subject's center or the
@@ -213,27 +226,27 @@ mesh. A document with no objects errors. See
     [Views](contract.md#views). It sets the whole transform, so it errors
     beside `--view-frame`, `--view-position`, or any other rotation flag.
 
-23. `--view-projection <view> <perspective | orthographic>`
+24. `--view-projection <view> <perspective | orthographic>`
     - Default: `perspective`
     - Repeatable: yes
 
     The named view's projection.
 
-24. `--view-fov <view> <degrees>`
+25. `--view-fov <view> <degrees>`
     - Default: `35`
     - Repeatable: yes
 
     The named view's vertical field of view under `perspective`. It errors
     under `orthographic`, and at 180 degrees or more.
 
-25. `--view-scale <view> <units | fit>`
+26. `--view-scale <view> <units | fit>`
     - Default: `fit`
     - Repeatable: yes
 
     The world units across the shorter image side under `orthographic`. It
     errors under `perspective`.
 
-26. `--view-select <view> <glob>`
+27. `--view-select <view> <glob>`
     - Default: the rendered objects
     - Repeatable: yes
 
@@ -242,7 +255,46 @@ mesh. A document with no objects errors. See
     on one view, the globs union. Every placement of a matched object joins
     the subject, and a glob matching nothing errors.
 
-27. `--light <light-index> <directional | point | spot | hemisphere>`
+28. `--image <image>`
+    - Repeatable: yes
+
+    Declares the named image. Every `--image*` flag names its image, and the
+    first mention creates the image. The name suffixes the file and holds no
+    path separator.
+
+29. `--image-kind <image> <view | sheet>`
+    - Default: `view`
+    - Repeatable: yes
+
+    The named image's kind. A `view` image draws one view, and a `sheet` tiles
+    several row by row in a near-square grid.
+
+30. `--image-view <image> <view>`
+    - Default: the image's name
+    - Repeatable: yes
+
+    The view the named `view` image draws.
+
+31. `--image-views <image> <view>`
+    - Repeatable: yes
+
+    Adds a view to the named sheet's tiles in order. The flags replace a
+    profile's list whole.
+
+32. `--image-border-width <image> <pixels>`
+    - Default: `8`
+    - Repeatable: yes
+
+    The width of the border between the named sheet's tiles. `0` sets the
+    tiles edge to edge.
+
+33. `--image-border-color <image> <#RRGGBB>`
+    - Default: `#808080`
+    - Repeatable: yes
+
+    The color of the border between the named sheet's tiles.
+
+34. `--light <light-index> <directional | point | spot | hemisphere>`
     - Default: the profile stack's rig
     - Repeatable: yes
 
@@ -259,52 +311,52 @@ mesh. A document with no objects errors. See
     transform. A directional, point, or spot light whose transform neither
     the flags nor the rig sets errors.
 
-28. `--light-frame <light-index> <frame>`
+35. `--light-frame <light-index> <frame>`
     - Repeatable: yes
 
     The frame the indexed light's transform is read in: `world`, `camera`,
     or `node` for a directional light, and `world`, `subject`, `camera`, or
     `node` for a point or spot light.
 
-29. `--light-node <light-index> <path>`
+36. `--light-node <light-index> <path>`
     - Repeatable: yes
 
     The node path the indexed light's `node` frame reads its transform in, a
     glob as `--view-node` takes. The flag errors under another frame, and a
     `node` frame without it errors.
 
-30. `--light-position <light-index> <x> <y> <z>`
+37. `--light-position <light-index> <x> <y> <z>`
     - Repeatable: yes
 
     The indexed point or spot light's position in its frame, in meters.
 
-31. `--light-quaternion <light-index> <x> <y> <z> <w>`
+38. `--light-quaternion <light-index> <x> <y> <z> <w>`
     - Repeatable: yes
 
     The indexed directional or spot light's rotation as a unit quaternion.
     The four rotation flags share a light's one rotation, so two on one
     light error.
 
-32. `--light-euler <light-index> <x> <y> <z>`
+39. `--light-euler <light-index> <x> <y> <z>`
     - Repeatable: yes
 
     The indexed directional or spot light's rotation as Euler angles in
     degrees about the fixed x, y, then z axes.
 
-33. `--light-look-at <light-index> <x> <y> <z>`
+40. `--light-look-at <light-index> <x> <y> <z>`
     - Repeatable: yes
 
     Aims the indexed directional or spot light's -Z at a point in its frame,
     a directional light from the frame's origin. A target at the light
     errors.
 
-34. `--light-angles <light-index> <azimuth> <elevation>`
+41. `--light-angles <light-index> <azimuth> <elevation>`
     - Repeatable: yes
 
     The direction the indexed directional or spot light shines from, as an
     azimuth from +Z toward +X and an elevation toward +Y, in degrees.
 
-35. `--light-orbit <light-index> <azimuth> <elevation> <distance>`
+42. `--light-orbit <light-index> <azimuth> <elevation> <distance>`
     - Repeatable: yes
 
     Places the indexed point or spot light on a sphere about the subject's
@@ -312,33 +364,33 @@ mesh. A document with no objects errors. See
     a spot facing the center. It sets the whole transform, so it errors
     beside `--light-frame`, `--light-position`, or a rotation flag.
 
-36. `--light-shadow <light-index> <none | per-pixel | per-face | per-corner>`
+43. `--light-shadow <light-index> <none | per-pixel | per-face | per-corner>`
     - Default: `per-corner`
     - Repeatable: yes
 
     The indexed directional, point, or spot light's shadow granularity; see
     [Lights](contract.md#lights).
 
-37. `--light-color <light-index> <#RRGGBB>`
+44. `--light-color <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed directional, point, or spot light's color, an sRGB hex.
 
-38. `--light-strength <light-index> <strength>`
+45. `--light-strength <light-index> <strength>`
     - Default: `1`
     - Repeatable: yes
 
     The factor scaling the indexed light's color, zero or more. A headlight
     at pi renders a white base color as white.
 
-39. `--light-range <light-index> <meters>`
+46. `--light-range <light-index> <meters>`
     - Repeatable: yes
 
     The distance the indexed point or spot light reaches. Without it, the
     light has no cutoff.
 
-40. `--light-cone <light-index> <inner> <outer>`
+47. `--light-cone <light-index> <inner> <outer>`
     - Default: `0 45`
     - Repeatable: yes
 
@@ -348,19 +400,19 @@ mesh. A document with no objects errors. See
     outer, which is at most `90`. Any other pair errors, as does the flag
     on another kind.
 
-41. `--light-sky <light-index> <#RRGGBB>`
+48. `--light-sky <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed hemisphere light's color from above.
 
-42. `--light-ground <light-index> <#RRGGBB>`
+49. `--light-ground <light-index> <#RRGGBB>`
     - Default: `#FFFFFF`
     - Repeatable: yes
 
     The indexed hemisphere light's color from below.
 
-43. `--select <glob>`
+50. `--select <glob>`
     - Default: `*`, selecting every object
     - Repeatable: yes
 
@@ -369,16 +421,16 @@ mesh. A document with no objects errors. See
     default, so `--select-index` alone never unions with `*`. See
     [Object selectors](../../plan/open/vxl-commands/reference/conventions.md#object-selectors).
 
-44. `--select-index <index>`
+51. `--select-index <index>`
     - Repeatable: yes
 
     Chooses objects by id: an integer, an `a-b` range, or `*` for every
     object. An id the document lacks errors. Unions with `--select`.
 
-45. `--print-camera`
+52. `--print-camera`
     - Default: off
     - Repeatable: no
 
-    Prints each rendered view's resolved pose as its `--view-frame <view>
+    Prints each drawn view's resolved pose as its `--view-frame <view>
     world`, `--view-position`, and `--view-quaternion` flags on one line,
-    after the view's image in the terminal.
+    after the image in the terminal.

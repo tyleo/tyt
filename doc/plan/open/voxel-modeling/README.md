@@ -17,8 +17,8 @@ person can run the same loop by hand.
 1. **Author.** Claude writes a model file against the modeling API.
 2. **Voxelize.** `vxl sdf-doc build` records the model as an `.sdfj` document.
    `vxl sdf-doc voxelize` samples the document into voxj and prints a report.
-3. **Review.** `vxl object render` draws the review views as PNGs. Claude reads
-   the PNGs beside the report.
+3. **Review.** `vxl object render` draws the review views onto one sheet.
+   Claude reads the sheet beside the report.
 4. **Revise.** Claude edits the model file and runs the loop again.
 
 ```sh
@@ -116,12 +116,12 @@ face-connected pieces. A buried jewel, a floating leg, and a hand detached from
 its arm all show up in the report before any render.
 
 The renders come from a built-in `review` render profile: orthographic `front`,
-`right`, and `top` views for checking proportions, and the perspective `hero`
-view for the look. Phase 2 tiles the views and a view from behind into one
-contact sheet. One image read then covers every side.
+`right`, `back`, and `top` views for checking proportions, and the perspective
+`hero` view for the look. The profile tiles the five views into one contact
+sheet. One image read then covers every side.
 
 ```sh
-# chair-front.png, chair-right.png, chair-top.png, and chair-hero.png
+# chair.png, the sheet of the five views
 vxl object render chair.voxj
   --profile review
   --to png

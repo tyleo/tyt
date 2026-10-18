@@ -2,15 +2,17 @@ use crate::{
     Dependencies, Error, ObjectSelection, PositiveF64, ProfileSet, Result, VoxelInput, WriteFile,
     cli_value_parser,
     commands::{
-        Background, LightKind, LightTable, NonNegativeF64, OutputKind, ProjectionKind,
-        RenderProfile, RenderProfileStack, SrgbColor, TransformFrame, ViewTable,
-        load_render_profile_set,
+        Background, ImageKind, ImageRecord, ImageTable, LightKind, LightTable, NonNegativeF64,
+        OutputKind, ProjectionKind, RenderProfile, RenderProfileStack, SrgbColor, TransformFrame,
+        ViewTable, load_render_profile_set,
     },
     flag_occurrences, parse_flag_index, parse_flag_value,
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::{IdVec, IteratorExt, U32Id};
 use clap::{ArgAction, Parser};
 use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
     fmt::Display,
     num::NonZeroU32,
     path::{Path, PathBuf},
@@ -20,29 +22,31 @@ use ty_math::{TyAngleUnit, TyQuaternionF64, TySrgbU8, TyVector3F64};
 use voxconv::load;
 use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::{
+    Error as VoxsmithError,
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::object::{
-        BRenderView, FitOrFixed, PoseTransform, RenderBloom, RenderOcclusion, RenderRecord,
-        RenderShadow, RenderView, Rotation, ViewRecord, encode_render_png, render,
+        BRenderView, FitOrFixed, PoseTransform, RenderBloom, RenderOcclusion, RenderOutput,
+        RenderRecord, RenderShadow, RenderView, Rotation, ViewRecord, encode_render_png, render,
     },
 };
 
 /// Renders the selected objects, placed by the hierarchy reaching them, under
-/// the views and lights the profiles and flags set, to the terminal or to a
-/// PNG per view. A run that sets no view renders the built-in `hero` view,
-/// and one that sets no light uses the built-in `studio` rig.
+/// the views and lights the profiles and flags set, into the images they set,
+/// to the terminal or to a PNG per image. A run that sets no view and no image
+/// renders the built-in `hero` view, and one that sets no light uses the
+/// built-in `studio` rig.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "render")]
 pub struct ObjectRender {
     #[command(flatten)]
     input: VoxelInput,
 
-    /// Where the views go. In the terminal the views show one below another,
-    /// each scaled to fit, through the Kitty or iTerm2 graphics protocol or as
-    /// ANSI half blocks where neither is supported. As PNG, one view writes the
-    /// stem with `.png` beside the input, and several write the stem, a
-    /// hyphen, and the view's name. Each PNG's path prints on its own line.
-    /// Defaults to `terminal`.
+    /// Where the images go. In the terminal the images show one below
+    /// another, each scaled to fit, through the Kitty or iTerm2 graphics
+    /// protocol or as ANSI half blocks where neither is supported. As PNG, one
+    /// image writes the stem with `.png` beside the input, and several write
+    /// the stem, a hyphen, and the image's name. Each PNG's path prints on its
+    /// own line. Defaults to `terminal`.
     #[arg(value_name = "to", long, value_parser = cli_value_parser::<OutputKind>())]
     to: Option<OutputKind>,
 
@@ -106,6 +110,11 @@ pub struct ObjectRender {
     /// Repeatable.
     #[arg(value_name = "profile", long, action = ArgAction::Append)]
     views_from: Vec<String>,
+
+    /// Applies a profile's images alone, its `imagesFrom` imports first.
+    /// Repeatable.
+    #[arg(value_name = "profile", long, action = ArgAction::Append)]
+    images_from: Vec<String>,
 
     /// Applies a profile's light rig alone, its `lightsFrom` imports first.
     /// Repeatable.
@@ -241,6 +250,62 @@ pub struct ObjectRender {
         action = ArgAction::Append,
     )]
     view_select: Vec<String>,
+
+    /// Declares the named image. Every `--image*` flag names its image, and
+    /// the first mention creates the image. The name suffixes the file.
+    /// Repeatable.
+    #[arg(value_name = "image", long, action = ArgAction::Append)]
+    image: Vec<String>,
+
+    /// The named image's kind, `view` or `sheet`. Defaults to `view`.
+    /// Repeatable.
+    #[arg(
+        value_names = ["image", "kind"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    image_kind: Vec<String>,
+
+    /// The view the named `view` image draws. Defaults to the image's name.
+    /// Repeatable.
+    #[arg(
+        value_names = ["image", "view"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    image_view: Vec<String>,
+
+    /// Adds a view to the named sheet's tiles in order. Repeatable; the flags
+    /// replace a profile's list whole.
+    #[arg(
+        value_names = ["image", "view"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    image_views: Vec<String>,
+
+    /// The width in pixels of the border between the named sheet's tiles.
+    /// Defaults to `8`. Repeatable.
+    #[arg(
+        value_names = ["image", "pixels"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    image_border_width: Vec<String>,
+
+    /// The color of the border between the named sheet's tiles as a
+    /// `#RRGGBB` hex color. Defaults to `#808080`. Repeatable.
+    #[arg(
+        value_names = ["image", "color"],
+        long,
+        num_args = 2,
+        action = ArgAction::Append,
+    )]
+    image_border_color: Vec<String>,
 
     /// Declares the indexed light's kind, `directional`, `point`, `spot`, or
     /// `hemisphere`. Lights number from `0` with no gaps. Any `--light`
@@ -418,9 +483,9 @@ pub struct ObjectRender {
     #[command(flatten)]
     selection: ObjectSelection,
 
-    /// Prints each rendered view's resolved pose as its `--view-frame <view>
-    /// world`, `--view-position`, and `--view-quaternion` flags on one line,
-    /// ready to paste back.
+    /// Prints the resolved pose of each view an image draws as its
+    /// `--view-frame <view> world`, `--view-position`, and `--view-quaternion`
+    /// flags on one line after the image, ready to paste back.
     #[arg(value_name = "print-camera", long = "print-camera")]
     print_camera: bool,
 }
@@ -430,11 +495,9 @@ impl ObjectRender {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let profiles = load_render_profile_set(&dependencies)?;
 
-        let record = self.record(&profiles)?;
+        let (record, images) = self.record(&profiles)?;
 
-        let outputs = self
-            .png_output()?
-            .map(|output| view_outputs(&output, &record.views));
+        let output = self.png_output()?;
 
         let input = &self.input;
 
@@ -446,13 +509,55 @@ impl ObjectRender {
 
         let rendered = render(&VoxsmithDependenciesImpl, &main, &object_ids, &record)?;
 
-        let mut paths = outputs.as_ref().map(|outputs| outputs.iter());
+        let view_ids: HashMap<&str, U32Id<BRenderView>> = record
+            .views
+            .iter()
+            .enumerate_ids()
+            .map(|(view_id, view)| (view.name.as_str(), view_id))
+            .collect();
 
-        for (index, (view, rendered)) in record.views.iter().zip(rendered.iter()).enumerate() {
-            match paths.as_mut() {
+        let paths = output.map(|output| {
+            let names: Vec<_> = images.iter().map(ImageRecord::name).collect();
+
+            image_outputs(&output, &names)
+        });
+
+        for (index, image) in images.iter().enumerate() {
+            let drawn: Vec<_> = image
+                .views()
+                .iter()
+                .map(|name| view_ids[name.as_str()].to_usize_id())
+                .collect();
+
+            let output = match image {
+                ImageRecord::Sheet {
+                    border_width,
+                    border_color,
+                    ..
+                } => {
+                    let tiles: Vec<_> = drawn
+                        .iter()
+                        .map(|&view_id| &rendered[view_id].image)
+                        .collect();
+
+                    Cow::Owned(
+                        RenderOutput::tiled(
+                            &tiles,
+                            *border_width,
+                            *border_color,
+                            record.background,
+                        )
+                        .map_err(VoxsmithError::from)?,
+                    )
+                }
+
+                ImageRecord::View { .. } => Cow::Borrowed(&rendered[drawn[0]].image),
+            };
+
+            match &paths {
                 Some(paths) => {
-                    let path = paths.next().expect("each view has an output path");
-                    let png = encode_render_png(&VoxsmithDependenciesImpl, &rendered.image)?;
+                    let path = &paths[index];
+                    let png = encode_render_png(&VoxsmithDependenciesImpl, &output)?;
 
                     WriteFile::write_file(&dependencies, path, &png)?;
                     dependencies.write_stdout(format!("{}\n", path.display()).as_bytes())?;
@@ -463,14 +568,20 @@ impl ObjectRender {
                         dependencies.write_stdout(b"\n")?;
                     }
 
-                    let image = &rendered.image;
-
-                    dependencies.display_image(image.width(), image.height(), &image.to_bytes())?;
+                    dependencies.display_image(
+                        output.width(),
+                        output.height(),
+                        &output.to_bytes(),
+                    )?;
                 }
             }
 
             if self.print_camera {
-                dependencies.write_stdout(camera_line(&view.name, &rendered.view).as_bytes())?;
+                for view_id in drawn {
+                    let line = camera_line(&record.views[view_id].name, &rendered[view_id].view);
+
+                    dependencies.write_stdout(line.as_bytes())?;
+                }
             }
         }
 
@@ -504,22 +615,35 @@ impl ObjectRender {
         }
     }
 
-    /// The record the flags and the profile stack lower into. A flag's
-    /// element stands, and the stack fills the rest. A run with no view takes
-    /// `hero`'s, and one with no rig takes `studio`'s.
-    fn record(&self, profiles: &ProfileSet<RenderProfile>) -> Result<RenderRecord> {
+    /// The record the flags and the profile stack lower into, beside the
+    /// images the run writes in name order. A flag's element stands, and the
+    /// stack fills the rest. A run with no view and no image takes `hero`'s,
+    /// and one with no rig takes `studio`'s. The record holds the views the
+    /// images draw.
+    fn record(
+        &self,
+        profiles: &ProfileSet<RenderProfile>,
+    ) -> Result<(RenderRecord, Vec<ImageRecord>)> {
         let mut stack = RenderProfileStack::new(profiles);
 
         stack.land_profiles("--profile", &self.profile)?;
         stack.land_view_sets("--views-from", &self.views_from)?;
+        stack.land_image_sets("--images-from", &self.images_from)?;
         stack.land_rigs("--lights-from", &self.lights_from)?;
 
         let mut views = ViewTable::default();
 
         self.lower_views(&mut views)?;
 
-        if views.is_empty() && !stack.has_views() {
-            stack.land_view_sets("the default view", &["hero".to_owned()])?;
+        let mut images = ImageTable::default();
+
+        self.lower_images(&mut images)?;
+
+        if views.is_empty() && !stack.has_views() && images.is_empty() && !stack.has_images() {
+            let hero = ["hero".to_owned()];
+
+            stack.land_view_sets("the default view", &hero)?;
+            stack.land_image_sets("the default view", &hero)?;
         }
 
         let declared = self.declared_lights()?;
@@ -540,7 +664,34 @@ impl ObjectRender {
 
         let bloom = RenderBloom::default();
 
-        Ok(RenderRecord {
+        let first_flags = views.first_flags().clone();
+
+        // Until a flag declares an image, each view a flag creates takes an
+        // image of its name.
+        if images.is_empty() {
+            for (name, flag) in &first_flags {
+                if !stack.views.contains_key(name) {
+                    images.image(flag, name)?;
+                }
+            }
+        }
+
+        let views = views.finish(&stack.views)?;
+        let images = images.finish(&stack.images)?;
+
+        check_images(&views, &images, &first_flags)?;
+
+        let views = views
+            .into_vec()
+            .into_iter()
+            .filter(|view| {
+                images
+                    .iter()
+                    .any(|image| image.views().contains(&view.name))
+            })
+            .collect();
+
+        let record = RenderRecord {
             width: self.width.or(stack.width).map_or(1024, u32::from),
             height: self.height.or(stack.height).map_or(1024, u32::from),
             background: self
@@ -569,9 +720,11 @@ impl ObjectRender {
                     .or(stack.bloom_threshold)
                     .map_or(bloom.threshold, |threshold| threshold.0),
             },
-            views: views.finish(&stack.views)?,
+            views,
             lights: lights.finish()?,
-        })
+        };
+
+        Ok((record, images))
     }
 
     /// Fills `views` from every flag that takes a view name.
@@ -669,6 +822,46 @@ impl ObjectRender {
 
         for [name, glob] in flag_occurrences::<2>(&self.view_select) {
             views.view("--view-select", name)?.push_select(glob.clone());
+        }
+
+        Ok(())
+    }
+
+    /// Fills `images` from every flag that takes an image name.
+    fn lower_images(&self, images: &mut ImageTable) -> Result<()> {
+        for name in &self.image {
+            images.image("--image", name)?;
+        }
+
+        for [name, kind] in flag_occurrences::<2>(&self.image_kind) {
+            let flag = "--image-kind";
+            let kind = parse_flag_value::<ImageKind>(flag, kind)?;
+
+            images.image(flag, name)?.set_kind(flag, kind)?;
+        }
+
+        for [name, view] in flag_occurrences::<2>(&self.image_view) {
+            let flag = "--image-view";
+
+            images.image(flag, name)?.set_view(flag, view.clone())?;
+        }
+
+        for [name, view] in flag_occurrences::<2>(&self.image_views) {
+            images.image("--image-views", name)?.push_view(view.clone());
+        }
+
+        for [name, width] in flag_occurrences::<2>(&self.image_border_width) {
+            let flag = "--image-border-width";
+            let width = parse_flag_from_str::<u32>(flag, width)?;
+
+            images.image(flag, name)?.set_border_width(flag, width)?;
+        }
+
+        for [name, color] in flag_occurrences::<2>(&self.image_border_color) {
+            let flag = "--image-border-color";
+            let color = parse_flag_from_str::<SrgbColor>(flag, color)?.0;
+
+            images.image(flag, name)?.set_border_color(flag, color)?;
         }
 
         Ok(())
@@ -828,15 +1021,49 @@ impl ObjectRender {
     }
 }
 
-/// The file each view of `views` writes: `output` alone for one view, else
-/// `output`'s stem, a hyphen, and the view's name under `output`'s extension
-/// beside it.
-fn view_outputs(
-    output: &Path,
+/// Errors unless each image of `images` draws views of `views` and each view
+/// a flag of `first_flags` mentions shows in an image.
+fn check_images(
     views: &IdVec<BRenderView, ViewRecord>,
-) -> IdVec<BRenderView, PathBuf> {
-    if views.len() == 1 {
-        return IdVec::from(vec![output.to_path_buf()]);
+    images: &[ImageRecord],
+    first_flags: &BTreeMap<String, String>,
+) -> Result<()> {
+    if images.is_empty() {
+        return Err(Error::usage(
+            "the run sets views and no image; give --image or a profile with images",
+        ));
+    }
+
+    for image in images {
+        if let Some(view) = image
+            .views()
+            .iter()
+            .find(|view| !views.iter().any(|record| record.name == **view))
+        {
+            return Err(Error::usage(format!(
+                "image `{}` draws the view `{view}`, which the run does not set",
+                image.name()
+            )));
+        }
+    }
+
+    for (name, flag) in first_flags {
+        if !images.iter().any(|image| image.views().contains(name)) {
+            return Err(Error::usage(format!(
+                "{flag} sets the view `{name}`, which no image draws; give --image {name}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// The file each image of `names` writes: `output` alone for one image, else
+/// `output`'s stem, a hyphen, and the image's name under `output`'s extension
+/// beside it.
+fn image_outputs(output: &Path, names: &[&str]) -> Vec<PathBuf> {
+    if let [_] = names {
+        return vec![output.to_path_buf()];
     }
 
     let stem = output
@@ -844,10 +1071,10 @@ fn view_outputs(
         .expect("the output path carries a file name")
         .to_string_lossy();
 
-    views
+    names
         .iter()
-        .map(|view| {
-            let mut file_name = format!("{stem}-{}", view.name);
+        .map(|name| {
+            let mut file_name = format!("{stem}-{name}");
 
             if let Some(extension) = output.extension() {
                 file_name = format!("{file_name}.{}", extension.to_string_lossy());
@@ -956,11 +1183,12 @@ mod tests {
     use crate::{
         ProfileSet, Result,
         commands::{
-            ObjectRender, RenderProfile, built_in_render_profiles, built_in_sdf_doc_config,
-            object::object_render::object_render::{camera_line, view_outputs},
+            ImageRecord, ObjectRender, RenderProfile, built_in_render_profiles,
+            built_in_sdf_doc_config,
+            object::object_render::object_render::{camera_line, image_outputs},
         },
+        owned_names,
     };
-    use branded_id::IdVec;
     use clap::Parser;
     use sdfj::SdfjFile;
     use sdfj_sdfcore::from_sdfj_file;
@@ -997,7 +1225,38 @@ mod tests {
         profiles: &ProfileSet<RenderProfile>,
         args: &[&str],
     ) -> Result<RenderRecord> {
-        parse(args).record(profiles)
+        parse(args).record(profiles).map(|(record, _)| record)
+    }
+
+    /// The images `args` write over the built-ins beside the names of the
+    /// views the record holds, or the error they raise.
+    fn try_images(args: &[&str]) -> Result<(Vec<ImageRecord>, Vec<String>)> {
+        let (record, images) =
+            parse(args).record(&ProfileSet::layered(built_in_render_profiles(), []))?;
+
+        let names = record.views.iter().map(|view| view.name.clone()).collect();
+
+        Ok((images, names))
+    }
+
+    /// The names of the images `args` write over the built-ins.
+    fn image_names(args: &[&str]) -> Vec<String> {
+        let (images, _) = try_images(args).unwrap();
+
+        images.iter().map(|image| image.name().to_owned()).collect()
+    }
+
+    /// The error `args` raise over the built-ins.
+    fn image_error(args: &[&str]) -> String {
+        try_images(args).unwrap_err().to_string()
+    }
+
+    /// A `view` image of `view` named `name`.
+    fn view_image(name: &str, view: &str) -> ImageRecord {
+        ImageRecord::View {
+            name: name.to_owned(),
+            view: view.to_owned(),
+        }
     }
 
     /// The record `args` lower into over the built-ins, or the error they
@@ -1193,7 +1452,14 @@ mod tests {
             }
         ));
 
-        let halves = record(&["--views-from", "turnaround", "--lights-from", "studio"]);
+        let halves = record(&[
+            "--views-from",
+            "turnaround",
+            "--images-from",
+            "turnaround",
+            "--lights-from",
+            "studio",
+        ]);
         let names: Vec<_> = halves.views.iter().map(|view| view.name.as_str()).collect();
         assert_eq!(names, ["back", "front", "hero", "left", "right"]);
         assert_eq!(halves.lights.len(), 2);
@@ -1207,7 +1473,7 @@ mod tests {
     }
 
     #[test]
-    fn review_renders_hero_and_three_orthographic_sides_under_studio_and_a_bloom() {
+    fn review_tiles_hero_and_four_orthographic_sides_under_studio_and_a_bloom() {
         let review = record(&["--profile", "review"]);
 
         let projections: Vec<_> = review
@@ -1221,6 +1487,7 @@ mod tests {
         assert_eq!(
             projections,
             [
+                ("back", orthographic),
                 ("front", orthographic),
                 ("hero", ViewProjection::Perspective { fov: 35.0 }),
                 ("right", orthographic),
@@ -1229,6 +1496,167 @@ mod tests {
         );
         assert_eq!(review.lights, record(&["--lights-from", "studio"]).lights);
         assert_eq!(review.bloom, record(&["--profile", "glow"]).bloom);
+        assert_eq!(
+            try_images(&["--profile", "review"]).unwrap().0,
+            [ImageRecord::Sheet {
+                name: "review".to_owned(),
+                views: owned_names(&["hero", "front", "right", "back", "top"]),
+                border_width: 8,
+                border_color: TySrgbU8::new(128, 128, 128),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_view_a_flag_creates_takes_an_image_until_an_image_flag_takes_over() {
+        let close = ["--view-orbit", "close", "0", "0", "fit"];
+
+        assert_eq!(
+            try_images(&[]).unwrap(),
+            (vec![view_image("hero", "hero")], owned_names(&["hero"]))
+        );
+        assert_eq!(
+            try_images(&close).unwrap(),
+            (vec![view_image("close", "close")], owned_names(&["close"]))
+        );
+        assert_eq!(
+            image_names(&[&["--profile", "review"][..], &close].concat()),
+            ["close", "review"]
+        );
+        assert_eq!(
+            image_names(&[
+                "--profile",
+                "review",
+                "--view-orbit",
+                "hero",
+                "225",
+                "20",
+                "fit"
+            ]),
+            ["review"]
+        );
+
+        let (images, views) = try_images(
+            &[
+                &["--views-from", "review"][..],
+                &close,
+                &[
+                    "--image",
+                    "overview",
+                    "--image-kind",
+                    "overview",
+                    "sheet",
+                    "--image-views",
+                    "overview",
+                    "hero",
+                    "--image-views",
+                    "overview",
+                    "close",
+                ],
+            ]
+            .concat(),
+        )
+        .unwrap();
+        assert_eq!(
+            images,
+            [ImageRecord::Sheet {
+                name: "overview".to_owned(),
+                views: owned_names(&["hero", "close"]),
+                border_width: 8,
+                border_color: TySrgbU8::new(128, 128, 128),
+            }]
+        );
+        assert_eq!(views, ["close", "hero"]);
+
+        let error = image_error(
+            &[
+                &["--views-from", "hero"][..],
+                &["--view-orbit", "far", "0", "0", "fit", "--image", "hero"],
+            ]
+            .concat(),
+        );
+        assert!(
+            error.contains("--view-orbit sets the view `far`, which no image draws"),
+            "{error}"
+        );
+
+        let error = image_error(&[
+            "--views-from",
+            "turnaround",
+            "--profile",
+            "review",
+            "--view-fov",
+            "left",
+            "50",
+        ]);
+        assert!(
+            error.contains("--view-fov sets the view `left`, which no image draws"),
+            "{error}"
+        );
+
+        let error = image_error(&["--views-from", "turnaround"]);
+        assert!(error.contains("sets views and no image"), "{error}");
+    }
+
+    #[test]
+    fn an_image_takes_the_elements_its_kind_reads() {
+        assert_eq!(
+            try_images(&[
+                "--profile",
+                "review",
+                "--image-border-width",
+                "review",
+                "0",
+                "--image-border-color",
+                "review",
+                "#102030",
+            ])
+            .unwrap()
+            .0,
+            [ImageRecord::Sheet {
+                name: "review".to_owned(),
+                views: owned_names(&["hero", "front", "right", "back", "top"]),
+                border_width: 0,
+                border_color: TySrgbU8::new(16, 32, 48),
+            }]
+        );
+        assert_eq!(
+            try_images(&[
+                "--profile",
+                "front",
+                "--image",
+                "shot",
+                "--image-view",
+                "shot",
+                "front"
+            ])
+            .unwrap()
+            .0,
+            [view_image("front", "front"), view_image("shot", "front")]
+        );
+
+        let error = image_error(&["--profile", "hero", "--image-border-width", "hero", "2"]);
+        assert!(
+            error.contains("image `hero` sets a border width, which a sheet takes"),
+            "{error}"
+        );
+
+        let sheet = ["--profile", "hero", "--image-kind", "s", "sheet"];
+        assert!(image_error(&sheet).contains("sheet `s` lists no view"));
+
+        let twice = [
+            &sheet[..],
+            &["--image-views", "s", "hero", "--image-views", "s", "hero"],
+        ];
+        assert!(image_error(&twice.concat()).contains("lists the view `hero` twice"));
+
+        let error = image_error(&["--profile", "hero", "--image", "side"]);
+        assert!(
+            error.contains("image `side` draws the view `side`, which the run does not set"),
+            "{error}"
+        );
+
+        assert!(image_error(&["--profile", "hero", "--image", "a/b"]).contains("path separator"));
     }
 
     #[test]
@@ -1812,7 +2240,7 @@ mod tests {
     fn a_select_unions_its_globs_and_a_flag_stands_over_the_profile_s() {
         let profiles = built_ins_under(&[(
             "house",
-            r#"{ "views": { "cam": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 }, "select": ["house/**"] } } }"#,
+            r#"{ "views": { "cam": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 }, "select": ["house/**"] } }, "images": { "cam": {} } }"#,
         )]);
 
         let from_profile = try_record_over(&profiles, &["--profile", "house"]).unwrap();
@@ -1836,25 +2264,23 @@ mod tests {
     }
 
     #[test]
-    fn a_view_needs_a_transform_and_a_file_safe_name() {
+    fn a_view_needs_a_transform_and_its_image_a_file_safe_name() {
         let error = error_of(&["--view-fov", "cam", "50"]);
         assert!(error.contains("view `cam` has no transform"), "{error}");
 
         let error = error_of(&["--view-orbit", "", "0", "0", "fit"]);
-        assert!(error.contains("empty name"), "{error}");
+        assert!(error.contains("gives an image an empty name"), "{error}");
 
         let error = error_of(&["--view-orbit", "a/b", "0", "0", "fit"]);
         assert!(error.contains("path separator"), "{error}");
 
-        let profiles = built_ins_under(&[(
-            "bad",
-            r#"{ "views": { "a/b": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 } } } }"#,
-        )]);
+        let profiles =
+            built_ins_under(&[("bad", r#"{ "images": { "a/b": { "view": "hero" } } }"#)]);
         let error = try_record_over(&profiles, &["--profile", "bad"])
             .unwrap_err()
             .to_string();
         assert!(
-            error.contains("the profile stack names the view `a/b`"),
+            error.contains("the profile stack names the image `a/b`"),
             "{error}"
         );
     }
@@ -2315,33 +2741,18 @@ mod tests {
     }
 
     #[test]
-    fn several_views_write_beside_the_output_under_their_names() {
-        let views = |names: &[&str]| -> IdVec<_, _> {
-            names
-                .iter()
-                .map(|name| ViewRecord {
-                    name: (*name).to_owned(),
-                    transform: PoseTransform::Orbit {
-                        azimuth: 0.0,
-                        elevation: 0.0,
-                        distance: FitOrFixed::Fit,
-                        center: None,
-                    },
-                    projection: ViewProjection::Perspective { fov: 35.0 },
-                    select: Vec::new(),
-                })
-                .collect()
-        };
+    fn one_image_takes_the_stem_and_several_write_under_their_names() {
+        let output = Path::new("out/model.png");
 
-        let one = view_outputs(Path::new("out/model.png"), &views(&["hero"]));
-        assert_eq!(one.as_slice(), [PathBuf::from("out/model.png")]);
-
-        let two = view_outputs(Path::new("out/model.png"), &views(&["front", "hero"]));
         assert_eq!(
-            two.as_slice(),
+            image_outputs(output, &["review"]),
+            [PathBuf::from("out/model.png")]
+        );
+        assert_eq!(
+            image_outputs(output, &["close", "review"]),
             [
-                PathBuf::from("out/model-front.png"),
-                PathBuf::from("out/model-hero.png")
+                PathBuf::from("out/model-close.png"),
+                PathBuf::from("out/model-review.png")
             ]
         );
     }

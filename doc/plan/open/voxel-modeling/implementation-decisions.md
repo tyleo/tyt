@@ -327,3 +327,16 @@ land.
    its blue
 9. The library's `grass` takes #6A8547. The more saturated #5A8F3A read as a toy
    green beside the other library colors
+
+## S17. Review sheet
+
+1. A profile holds views, images, and a rig. Each image draws one view or
+   tiles several into a sheet. A view no image draws never renders, so a
+   profile can hold views only for import
+2. An empty image entry draws the view of its name, so
+   `"images": { "hero": {} }` and `--image close` each declare a whole image
+3. A view a `--view-*` flag creates takes an image of its name until the run
+   gives an `--image*` flag. A view a flag creates or changes that no image
+   draws errors, so no hand flag drops silently
+4. A sheet's tiles take an 8 pixel #808080 border by default because the gray
+   stands out on light and dark backgrounds

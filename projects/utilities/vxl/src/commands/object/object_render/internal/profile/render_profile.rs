@@ -1,6 +1,6 @@
 use crate::{
     NamedCliValue, PositiveF64, Profile, ProfileDescription,
-    commands::{Background, LightEntry, NonNegativeF64, ViewEntry},
+    commands::{Background, ImageEntry, LightEntry, NonNegativeF64, ViewEntry},
 };
 use serde::Deserialize;
 use std::{collections::BTreeMap, num::NonZeroU32};
@@ -41,8 +41,14 @@ pub struct RenderProfile {
     /// Mirrors `--views-from` per entry. Only the views travel.
     pub(crate) views_from: Vec<String>,
 
-    /// Mirrors the `--view-*` flags, keyed by the name that suffixes the file.
+    /// Mirrors the `--view-*` flags, keyed by name.
     pub(crate) views: BTreeMap<String, ViewEntry>,
+
+    /// Mirrors `--images-from` per entry. Only the images travel.
+    pub(crate) images_from: Vec<String>,
+
+    /// Mirrors the `--image*` flags, keyed by the name that suffixes the file.
+    pub(crate) images: BTreeMap<String, ImageEntry>,
 
     /// Mirrors `--lights-from` per entry. Only the rig travels.
     pub(crate) lights_from: Vec<String>,
@@ -62,9 +68,9 @@ mod tests {
     use crate::{
         NamedCliValue, PositiveF64, ProfileDescription,
         commands::{
-            Background, DistanceEntry, LightEntry, NonNegativeF64, PoseTransformEntry,
-            PositionTransformEntry, ProjectionKind, RenderProfile, RotationEntry,
-            RotationTransformEntry, SpotTransformEntry, SrgbColor,
+            Background, DistanceEntry, ImageEntry, ImageKind, LightEntry, NonNegativeF64,
+            PoseTransformEntry, PositionTransformEntry, ProjectionKind, RenderProfile,
+            RotationEntry, RotationTransformEntry, SpotTransformEntry, SrgbColor,
         },
     };
     use ty_math::{TyAngleUnit, TySrgbU8};
@@ -84,6 +90,17 @@ mod tests {
                 "bloomRadius": 0.05,
                 "bloomThreshold": 0.8,
                 "viewsFrom": ["front", "top"],
+                "imagesFrom": ["front"],
+                "images": {
+                    "hero": {},
+                    "plan": { "view": "plan" },
+                    "overview": {
+                        "kind": "sheet",
+                        "views": ["hero", "plan"],
+                        "borderWidth": 2,
+                        "borderColor": "#102030"
+                    }
+                },
                 "lightsFrom": ["studio"],
                 "views": {
                     "hero": {
@@ -149,6 +166,19 @@ mod tests {
         assert_eq!(profile.bloom_radius, Some(PositiveF64(0.05)));
         assert_eq!(profile.bloom_threshold, Some(NonNegativeF64(0.8)));
         assert_eq!(profile.views_from, ["front", "top"]);
+        assert_eq!(profile.images_from, ["front"]);
+        assert_eq!(profile.images["hero"], ImageEntry::default());
+        assert_eq!(profile.images["plan"].view.as_deref(), Some("plan"));
+        assert_eq!(
+            profile.images["overview"],
+            ImageEntry {
+                kind: Some(NamedCliValue(ImageKind::Sheet)),
+                view: None,
+                views: Some(vec!["hero".to_owned(), "plan".to_owned()]),
+                border_width: Some(2),
+                border_color: Some(SrgbColor(TySrgbU8::new(16, 32, 48))),
+            }
+        );
         assert_eq!(profile.lights_from, ["studio"]);
 
         let hero = &profile.views["hero"];

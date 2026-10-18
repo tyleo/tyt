@@ -1,4 +1,4 @@
-use crate::{RenderImage, tonemap};
+use crate::{Error, RenderImage, Result, tonemap};
 use ty_math::{TyLinSrgbF32, TySrgbF32, TySrgbU8, TySrgbaF32, TySrgbaU8};
 
 /// An 8-bit sRGB image with straight alpha that a PNG can store. Rows run top
@@ -60,6 +60,66 @@ impl RenderOutput {
             height: image.height(),
             pixels,
         }
+    }
+
+    /// Tiles `tiles` row by row into a near-square sheet with a border
+    /// between them. A slot past the last tile takes `background`, or stays
+    /// transparent without one.
+    pub fn tiled(
+        tiles: &[&RenderOutput],
+        border_width: u32,
+        border_color: TySrgbU8,
+        background: Option<TySrgbU8>,
+    ) -> Result<Self> {
+        let first = tiles.first().ok_or(Error::EmptySheet)?;
+        let (width, height) = (first.width, first.height);
+
+        if let Some(tile) = tiles
+            .iter()
+            .find(|tile| (tile.width, tile.height) != (width, height))
+        {
+            return Err(Error::SheetTileSize {
+                width: tile.width,
+                height: tile.height,
+                first_width: width,
+                first_height: height,
+            });
+        }
+
+        let count = tiles.len() as u32;
+        let columns = count.isqrt() + u32::from(count.isqrt().pow(2) < count);
+        let rows = count.div_ceil(columns);
+        let sheet_width = columns * width + (columns - 1) * border_width;
+        let sheet_height = rows * height + (rows - 1) * border_width;
+
+        let opaque = |color: TySrgbU8| TySrgbaU8::new(color.red, color.green, color.blue, 255);
+        let empty = background.map_or(TySrgbaU8::new(0, 0, 0, 0), opaque);
+
+        let mut pixels = vec![opaque(border_color); (sheet_width * sheet_height) as usize];
+
+        for slot in 0..columns * rows {
+            let left = slot % columns * (width + border_width);
+            let top = slot / columns * (height + border_width);
+
+            for y in 0..height {
+                let start = ((top + y) * sheet_width + left) as usize;
+                let row = &mut pixels[start..start + width as usize];
+
+                match tiles.get(slot as usize) {
+                    Some(tile) => row.copy_from_slice(
+                        &tile.pixels[(y * width) as usize..((y + 1) * width) as usize],
+                    ),
+
+                    None => row.fill(empty),
+                }
+            }
+        }
+
+        Ok(RenderOutput {
+            width: sheet_width,
+            height: sheet_height,
+            pixels,
+        })
     }
 
     /// The width in pixels.
@@ -128,7 +188,7 @@ fn over_white(layer: TyLinSrgbF32, transmittance: TyLinSrgbF32) -> TySrgbaU8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderImage, RenderOutput, RenderPixel, tonemap};
+    use crate::{Error, RenderImage, RenderOutput, RenderPixel, tonemap};
     use ty_math::{TyLinSrgbF32, TyLinSrgbaF32, TySrgbU8, TySrgbaF32, TySrgbaU8};
 
     const BLACK: TyLinSrgbF32 = TyLinSrgbF32::new(0.0, 0.0, 0.0);
@@ -338,5 +398,67 @@ mod tests {
         );
 
         assert_eq!(output.pixels()[2], TySrgbaU8::new(255, 255, 255, 255));
+    }
+
+    /// A `size` by `size` tile filled with `color`.
+    fn tile(size: u32, color: TySrgbU8) -> RenderOutput {
+        RenderOutput::from_image(&RenderImage::new(size, size), Some(color))
+    }
+
+    #[test]
+    fn five_tiles_fill_three_columns_and_two_rows_between_borders() {
+        let colors = [1, 2, 3, 4, 5].map(|value| TySrgbU8::new(value, 0, 0));
+        let tiles = colors.map(|color| tile(2, color));
+
+        let sheet = RenderOutput::tiled(
+            &tiles.each_ref(),
+            1,
+            TySrgbU8::new(128, 128, 128),
+            Some(TySrgbU8::new(9, 9, 9)),
+        )
+        .unwrap();
+
+        assert_eq!((sheet.width(), sheet.height()), (8, 5));
+
+        let pixel = |x: u32, y: u32| <[u8; 4]>::from(sheet.pixels()[(y * 8 + x) as usize]);
+        assert_eq!(pixel(0, 0), [1, 0, 0, 255]);
+        assert_eq!(pixel(2, 0), [128, 128, 128, 255]);
+        assert_eq!(pixel(3, 1), [2, 0, 0, 255]);
+        assert_eq!(pixel(6, 1), [3, 0, 0, 255]);
+        assert_eq!(pixel(0, 2), [128, 128, 128, 255]);
+        assert_eq!(pixel(1, 3), [4, 0, 0, 255]);
+        assert_eq!(pixel(4, 4), [5, 0, 0, 255]);
+        assert_eq!(pixel(7, 4), [9, 9, 9, 255]);
+    }
+
+    #[test]
+    fn a_square_count_tiles_a_square_and_a_zero_border_abuts_the_tiles() {
+        let black = TySrgbU8::new(0, 0, 0);
+        let tiles = [0, 1, 2, 3].map(|_| tile(4, black));
+
+        let bordered = RenderOutput::tiled(&tiles.each_ref(), 3, black, None).unwrap();
+        assert_eq!((bordered.width(), bordered.height()), (11, 11));
+
+        let abutting = RenderOutput::tiled(&tiles.each_ref(), 0, black, None).unwrap();
+        assert_eq!((abutting.width(), abutting.height()), (8, 8));
+    }
+
+    #[test]
+    fn a_sheet_needs_tiles_of_one_size() {
+        let black = TySrgbU8::new(0, 0, 0);
+
+        assert_eq!(
+            RenderOutput::tiled(&[], 1, black, None),
+            Err(Error::EmptySheet)
+        );
+        assert_eq!(
+            RenderOutput::tiled(&[&tile(2, black), &tile(3, black)], 1, black, None),
+            Err(Error::SheetTileSize {
+                width: 3,
+                height: 3,
+                first_width: 2,
+                first_height: 2,
+            })
+        );
     }
 }

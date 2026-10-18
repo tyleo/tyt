@@ -24,6 +24,7 @@ mod tests {
     use crate::{
         PositiveF64, Profile,
         commands::{LightEntry, NonNegativeF64, PoseTransformEntry, built_in_render_profiles},
+        owned_names,
     };
 
     #[test]
@@ -66,12 +67,28 @@ mod tests {
 
         assert_eq!(
             profiles["review"].views_from,
-            ["hero", "front", "right", "top"]
+            ["hero", "front", "right", "back", "top"]
         );
         assert_eq!(
             profiles["review"].views.keys().collect::<Vec<_>>(),
-            ["front", "right", "top"]
+            ["back", "front", "right", "top"]
         );
+        assert_eq!(
+            profiles["review"].images["review"].views.as_deref(),
+            Some(&owned_names(&["hero", "front", "right", "back", "top"])[..])
+        );
+        assert_eq!(
+            profiles["turnaround"].images_from,
+            profiles["turnaround"].views_from
+        );
+
+        for name in ["hero", "front", "back", "left", "right", "top", "bottom"] {
+            assert_eq!(
+                profiles[name].images.keys().collect::<Vec<_>>(),
+                [name],
+                "{name}"
+            );
+        }
 
         for name in ["studio", "flat"] {
             assert!(profiles[name].views.is_empty(), "{name}");

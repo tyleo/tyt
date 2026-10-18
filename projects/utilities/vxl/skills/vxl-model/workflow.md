@@ -2,7 +2,7 @@
 
 A voxel model starts as a TypeScript model file of shapes and materials in
 meters. Each pass builds the model file, voxelizes it with a report, and renders
-four PNGs. The modeling API below lists every call a model file can make.
+a review sheet. The modeling API below lists every call a model file can make.
 
 ## A pass
 
@@ -11,9 +11,9 @@ vxl sdf-doc build table.ts --library materials && vxl sdf-doc voxelize table.sdf
 ```
 
 The pass writes `table.sdfj`, `table.voxj`, `table-report.txt`, and the review
-views `table-front.png`, `table-right.png`, `table-top.png`, and
-`table-hero.png` beside the model file. A voxelize without the build reads a
-stale `.sdfj` document.
+sheet `table.png` beside the model file. The sheet holds the `hero`, `front`,
+and `right` views in its top row and the `back` and `top` views below them. A
+voxelize without the build reads a stale `.sdfj` document.
 
 ## Building a model
 
@@ -59,9 +59,9 @@ The report reads more reliably than the PNGs:
 5. A second piece means a shape floats, and a part reading `detached` has a gap
    at its joint
 
-`front`, `right`, and `top` draw without perspective and show heights, widths,
-symmetry, and alignment true to scale. `hero` shows whether the model reads as
-the prompt. Color goes wrong in a few known ways:
+`front`, `right`, `back`, and `top` draw without perspective and show heights,
+widths, symmetry, and alignment true to scale. `hero` shows whether the model
+reads as the prompt. Color goes wrong in a few known ways:
 
 1. A large face of one flat color reads unfinished. `shades`, `noise`, or a
    pattern breaks the face up, and `bands` or `gradient` give a terrain's cut
@@ -82,7 +82,7 @@ A close-up, another angle, or a view inside a room comes from flags on the
 render command:
 
 ```sh
-# table-hero.png from behind and to the left, beside the other review views
+# table.png with its hero view from behind and to the left
 vxl object render table.voxj
   --profile review
   --view-orbit hero 225 20 fit
@@ -108,8 +108,8 @@ vxl object render room.voxj
 1. `--view-orbit` places a view by an azimuth and an elevation in degrees and a
    distance in meters or `fit`. `--view-look-at` beside it sets a point to
    circle at a distance in meters
-2. A new view name adds a PNG beside the profile's views. A close-up alone
-   leaves `--profile review` off
+2. A new view such as `close` adds `table-close.png` and renames the sheet
+   `table-review.png`. A close-up alone leaves `--profile review` off
 3. A view placed by position takes `--view-frame`, `--view-position`, and a
    rotation flag such as `--view-look-at`
 4. `--select` renders the matched parts alone. `--view-select <view> <select>`

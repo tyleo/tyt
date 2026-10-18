@@ -29,6 +29,17 @@ pub enum Error {
     /// A render asked for an image with a zero side.
     ImageSide { width: u32, height: u32 },
 
+    /// A sheet was asked to tile no image.
+    EmptySheet,
+
+    /// A sheet's tile differs in size from its first tile.
+    SheetTileSize {
+        width: u32,
+        height: u32,
+        first_width: u32,
+        first_height: u32,
+    },
+
     /// A mutation named a material that is not one of the scene's.
     UnknownMaterial { material_id: U32Id<BRenderMaterial> },
 
@@ -162,6 +173,19 @@ impl Display for Error {
             Error::ImageSide { width, height } => {
                 write!(f, "a {width} by {height} image has a zero side")
             }
+
+            Error::EmptySheet => write!(f, "a sheet tiles at least one image"),
+
+            Error::SheetTileSize {
+                width,
+                height,
+                first_width,
+                first_height,
+            } => write!(
+                f,
+                "a {width} by {height} tile differs from the sheet's first tile, which is \
+                 {first_width} by {first_height}"
+            ),
 
             Error::UnknownMaterial { material_id } => {
                 write!(f, "material {material_id} is not one of the scene's")
