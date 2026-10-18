@@ -365,3 +365,6 @@ land.
 6. The metals wait for the rendering follow-ups' reflections. A metal face
    toward the camera reflects the review rig's half-gray horizon, and neither a
    brighter base color nor a lighter ground brought gold back from olive
+7. The dark woods, stone, and bark keep their colors because their patterns
+   show on every lit face under the review rig at the default spread. Most of
+   round 6's near-black cases came from iron. Iron waits with the other metals

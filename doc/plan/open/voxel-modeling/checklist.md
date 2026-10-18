@@ -147,12 +147,13 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   1. `review` tiles its four views and a view from behind into one PNG
   2. A part's `rotation` poses its node for finding 35. The render's `--rotate`
      rotates a part for one render
-- [ ] **S18. Library colors.** Retune the `materials` library and `shades` under
+- [x] **S18. Library colors.** Retune the `materials` library and `shades` under
       the review rig:
-  1. Dark woods, iron, stone, and bark keep their pattern visible for finding 5
+  1. Dark woods, stone, and bark keep their pattern visible for finding 5
   2. Oak, walnut, rope, and grass read the hue their names give for findings 31
-     and 69. The metals for finding 20 wait for the rendering follow-ups'
-     [reflections](../voxel-rendering-followups/README.md#reflections)
+     and 69. The metals wait for the rendering follow-ups'
+     [reflections](../voxel-rendering-followups/README.md#reflections) for
+     findings 5 and 20
   3. Every shade stays in the sRGB gamut and near the base's hue for findings
      15 and 68
   4. The default `spread` stops short of the swings that read as camouflage for
