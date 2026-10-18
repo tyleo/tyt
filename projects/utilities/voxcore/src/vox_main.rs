@@ -1313,8 +1313,173 @@ impl<T: VoxExt> VoxMain<T> {
             .retain_vec_4_int_value(value)
     }
 
-    /// Value pool `id`, for an append. Errors if `id` is not one of this state's
-    /// value pools.
+    /// Sets value `value_id` of `bool` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_boolean_value`] rules.
+    pub fn set_boolean_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: bool,
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_boolean_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `float` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_float_value`] rules.
+    pub fn set_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: f64,
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_float_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `int` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_int_value`] rules.
+    pub fn set_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: i64,
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_int_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `json` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_json_value`] rules.
+    pub fn set_json_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: VoxValue,
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_json_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `string` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_string_value`] rules.
+    pub fn set_string_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: String,
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_string_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `vec-2-float` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_vec_2_float_value`] rules.
+    pub fn set_vec_2_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: [f64; 2],
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_vec_2_float_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `vec-2-int` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_vec_2_int_value`] rules.
+    pub fn set_vec_2_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: [i64; 2],
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_vec_2_int_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `vec-3-float` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_vec_3_float_value`] rules.
+    pub fn set_vec_3_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: [f64; 3],
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_vec_3_float_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `vec-3-int` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_vec_3_int_value`] rules.
+    pub fn set_vec_3_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: [i64; 3],
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_vec_3_int_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `vec-4-float` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_vec_4_float_value`] rules.
+    pub fn set_vec_4_float_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: [f64; 4],
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_vec_4_float_value(value_id, value)
+    }
+
+    /// Sets value `value_id` of `vec-4-int` value pool `value_pool_id` to
+    /// `value`, keeping its id, so every palette cell drawing it draws
+    /// `value`. Errors, changing nothing, if `value_pool_id` is not one of
+    /// this state's value pools or under the
+    /// [`VoxValuePool::set_vec_4_int_value`] rules.
+    pub fn set_vec_4_int_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        value: [i64; 4],
+    ) -> Result<()> {
+        self.value_pool_mut(value_pool_id)?
+            .set_vec_4_int_value(value_id, value)
+    }
+
+    /// Value pool `id`, for an append or a set. Errors if `id` is not one of
+    /// this state's value pools.
     fn value_pool_mut(&mut self, id: U32Id<BVoxValuePool>) -> Result<&mut VoxValuePool> {
         let Some(value_pool) = self.state.value_pools.get_mut(id) else {
             return Err(Error::UnknownValuePool { value_pool_id: id });

@@ -4,7 +4,10 @@ use crate::{
 };
 use branded_id::U32Id;
 use meshdoc::material::{COLOR_RANGE, MaterialPropertyKind, scalar_range};
-use std::result::Result as StdResult;
+use std::{
+    collections::{HashMap, HashSet, hash_map::Entry},
+    result::Result as StdResult,
+};
 use vox_value_language::{Components, Dimension, Domain, Value};
 use voxcore::{
     BVoxValuePool, BVoxValuePoolValue, Result as VoxResult, VoxExt, VoxMain, VoxValueColumn,
@@ -14,6 +17,10 @@ use voxcore::{
 /// A `VoxMain::retain_*_value` appending one value to a value pool.
 type RetainValue<T, V> =
     fn(&mut VoxMain<T>, U32Id<BVoxValuePool>, V) -> VoxResult<U32Id<BVoxValuePoolValue>>;
+
+/// A `VoxMain::set_*_value` overwriting one value of a value pool.
+type SetValue<T, V> =
+    fn(&mut VoxMain<T>, U32Id<BVoxValuePool>, U32Id<BVoxValuePoolValue>, V) -> VoxResult<()>;
 
 /// A write's value for each material of a palette, typed by the value pool
 /// kind that holds it.
@@ -307,6 +314,135 @@ impl WrittenValues {
             ),
         }
     }
+
+    /// Lands each value over the value its material draws, `drawn_value_ids`
+    /// in material order, and returns the value ids in material order:
+    ///
+    /// 1. A drawn value every material drawing it writes alike changes in
+    ///    place and keeps its id, unless `shared_value_ids` holds it
+    /// 2. A material writing the value it draws keeps it
+    /// 3. Any other value lands as [`land`](Self::land) lands it
+    ///
+    /// Expects `value_pool_id` to hold the values' kind.
+    pub fn land_over<T: VoxExt>(
+        self,
+        main: &mut VoxMain<T>,
+        value_pool_id: U32Id<BVoxValuePool>,
+        drawn_value_ids: &[U32Id<BVoxValuePoolValue>],
+        shared_value_ids: &HashSet<U32Id<BVoxValuePoolValue>>,
+    ) -> Vec<U32Id<BVoxValuePoolValue>> {
+        match self {
+            WrittenValues::Bool(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::boolean_values,
+                VoxMain::retain_boolean_value,
+                VoxMain::set_boolean_value,
+            ),
+
+            WrittenValues::Float(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::float_values,
+                VoxMain::retain_float_value,
+                VoxMain::set_float_value,
+            ),
+
+            WrittenValues::Int(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::int_values,
+                VoxMain::retain_int_value,
+                VoxMain::set_int_value,
+            ),
+
+            WrittenValues::String(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::string_values,
+                VoxMain::retain_string_value,
+                VoxMain::set_string_value,
+            ),
+
+            WrittenValues::Vec2Float(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::vec_2_float_values,
+                VoxMain::retain_vec_2_float_value,
+                VoxMain::set_vec_2_float_value,
+            ),
+
+            WrittenValues::Vec2Int(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::vec_2_int_values,
+                VoxMain::retain_vec_2_int_value,
+                VoxMain::set_vec_2_int_value,
+            ),
+
+            WrittenValues::Vec3Float(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::vec_3_float_values,
+                VoxMain::retain_vec_3_float_value,
+                VoxMain::set_vec_3_float_value,
+            ),
+
+            WrittenValues::Vec3Int(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::vec_3_int_values,
+                VoxMain::retain_vec_3_int_value,
+                VoxMain::set_vec_3_int_value,
+            ),
+
+            WrittenValues::Vec4Float(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::vec_4_float_values,
+                VoxMain::retain_vec_4_float_value,
+                VoxMain::set_vec_4_float_value,
+            ),
+
+            WrittenValues::Vec4Int(values) => land_over_each(
+                main,
+                value_pool_id,
+                values,
+                drawn_value_ids,
+                shared_value_ids,
+                VoxValuePool::vec_4_int_values,
+                VoxMain::retain_vec_4_int_value,
+                VoxMain::set_vec_4_int_value,
+            ),
+        }
+    }
 }
 
 /// `components` repeated until it holds `count`. A plain value repeats once
@@ -349,8 +485,7 @@ fn check_colors<const N: usize>(property: &str, colors: &[[f64; N]]) -> Result<(
     Ok(())
 }
 
-/// Lands each of `values` in `value_pool_id`, reusing an equal value `column`
-/// reads and appending any other through `retain`.
+/// [`WrittenValues::land`] for one kind.
 fn land_each<T: VoxExt, V: PartialEq>(
     main: &mut VoxMain<T>,
     value_pool_id: U32Id<BVoxValuePool>,
@@ -358,31 +493,97 @@ fn land_each<T: VoxExt, V: PartialEq>(
     column: for<'a> fn(&'a VoxValuePool) -> Option<VoxValueColumn<'a, V>>,
     retain: RetainValue<T, V>,
 ) -> Vec<U32Id<BVoxValuePoolValue>> {
-    let mut value_ids = Vec::with_capacity(values.len());
+    values
+        .into_iter()
+        .map(|value| land_one(main, value_pool_id, value, column, retain))
+        .collect()
+}
 
-    for value in values {
-        let value_pool = main
-            .value_pool(value_pool_id)
-            .expect("a written property draws from a live value pool");
+/// [`WrittenValues::land_over`] for one kind. The in-place sets land first,
+/// so a value landing anew can reuse one.
+#[allow(clippy::too_many_arguments)]
+fn land_over_each<T: VoxExt, V: PartialEq>(
+    main: &mut VoxMain<T>,
+    value_pool_id: U32Id<BVoxValuePool>,
+    values: Vec<V>,
+    drawn_value_ids: &[U32Id<BVoxValuePoolValue>],
+    shared_value_ids: &HashSet<U32Id<BVoxValuePoolValue>>,
+    column: for<'a> fn(&'a VoxValuePool) -> Option<VoxValueColumn<'a, V>>,
+    retain: RetainValue<T, V>,
+    set: SetValue<T, V>,
+) -> Vec<U32Id<BVoxValuePoolValue>> {
+    let mut first_writers = HashMap::new();
+    let mut split_value_ids = HashSet::new();
 
-        let held_values = column(value_pool).expect("a written value fits its value pool");
+    for (index, &drawn_id) in drawn_value_ids.iter().enumerate() {
+        match first_writers.entry(drawn_id) {
+            Entry::Occupied(first) => {
+                if values[*first.get()] != values[index] {
+                    split_value_ids.insert(drawn_id);
+                }
+            }
 
-        let held_id = held_values
-            .iter()
-            .find(|&(_, held)| *held == value)
-            .map(|(value_id, _)| value_id);
+            Entry::Vacant(first) => {
+                first.insert(index);
+            }
+        }
+    }
 
-        let value_id = match held_id {
-            Some(value_id) => value_id,
+    let mut value_ids = drawn_value_ids.to_vec();
+    let mut landing_anew = Vec::new();
 
-            None => retain(main, value_pool_id, value)
-                .expect("an evaluated value is finite and within the u32 range"),
-        };
+    for (index, value) in values.into_iter().enumerate() {
+        let drawn_id = drawn_value_ids[index];
 
-        value_ids.push(value_id);
+        if shared_value_ids.contains(&drawn_id) || split_value_ids.contains(&drawn_id) {
+            let value_pool = main
+                .value_pool(value_pool_id)
+                .expect("a written property draws from a live value pool");
+
+            let held_values = column(value_pool).expect("a written value fits its value pool");
+
+            if held_values.get(drawn_id) != Some(&value) {
+                landing_anew.push((index, value));
+            }
+        } else if first_writers[&drawn_id] == index {
+            set(main, value_pool_id, drawn_id, value)
+                .expect("an evaluated value fits the value it overwrites");
+        }
+    }
+
+    for (index, value) in landing_anew {
+        value_ids[index] = land_one(main, value_pool_id, value, column, retain);
     }
 
     value_ids
+}
+
+/// Lands `value` in `value_pool_id`, reusing an equal value `column` reads and
+/// appending any other through `retain`.
+fn land_one<T: VoxExt, V: PartialEq>(
+    main: &mut VoxMain<T>,
+    value_pool_id: U32Id<BVoxValuePool>,
+    value: V,
+    column: for<'a> fn(&'a VoxValuePool) -> Option<VoxValueColumn<'a, V>>,
+    retain: RetainValue<T, V>,
+) -> U32Id<BVoxValuePoolValue> {
+    let value_pool = main
+        .value_pool(value_pool_id)
+        .expect("a written property draws from a live value pool");
+
+    let held_values = column(value_pool).expect("a written value fits its value pool");
+
+    let held_id = held_values
+        .iter()
+        .find(|&(_, held)| *held == value)
+        .map(|(value_id, _)| value_id);
+
+    match held_id {
+        Some(value_id) => value_id,
+
+        None => retain(main, value_pool_id, value)
+            .expect("an evaluated value is finite and within the u32 range"),
+    }
 }
 
 #[cfg(test)]

@@ -53,7 +53,8 @@ pub struct PaletteEdit {
 
     /// Evaluates the expression at the program's end and writes it to the
     /// property. A plain value lands on every material, and a swatch array
-    /// lands one entry per material. A property the palette lacks is added on
+    /// lands one entry per material. Materials sharing a value that are
+    /// written alike keep sharing it. A property the palette lacks is added on
     /// a new value pool. A property written twice errors. Repeatable.
     #[arg(
         value_names = ["dst-property", "src-expr"],

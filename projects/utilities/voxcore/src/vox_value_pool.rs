@@ -281,6 +281,148 @@ impl VoxValuePool {
         Ok(values.retain(value))
     }
 
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind or `id` is not one of its values.
+    pub fn set_boolean_value(&mut self, id: U32Id<BVoxValuePoolValue>, value: bool) -> Result<()> {
+        let VoxValuePoolKind::Bool(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, any_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or `value` is NaN.
+    pub fn set_float_value(&mut self, id: U32Id<BVoxValuePoolValue>, value: f64) -> Result<()> {
+        let VoxValuePoolKind::Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, float_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or `value`'s magnitude exceeds `2^53 - 1`.
+    pub fn set_int_value(&mut self, id: U32Id<BVoxValuePoolValue>, value: i64) -> Result<()> {
+        let VoxValuePoolKind::Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, int_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind or `id` is not one of its values.
+    pub fn set_json_value(&mut self, id: U32Id<BVoxValuePoolValue>, value: VoxValue) -> Result<()> {
+        let VoxValuePoolKind::Json(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, any_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind or `id` is not one of its values.
+    pub fn set_string_value(&mut self, id: U32Id<BVoxValuePoolValue>, value: String) -> Result<()> {
+        let VoxValuePoolKind::String(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, any_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or a component is NaN.
+    pub fn set_vec_2_float_value(
+        &mut self,
+        id: U32Id<BVoxValuePoolValue>,
+        value: [f64; 2],
+    ) -> Result<()> {
+        let VoxValuePoolKind::Vec2Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, floats_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or a component's magnitude exceeds `2^53 - 1`.
+    pub fn set_vec_2_int_value(
+        &mut self,
+        id: U32Id<BVoxValuePoolValue>,
+        value: [i64; 2],
+    ) -> Result<()> {
+        let VoxValuePoolKind::Vec2Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, ints_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or a component is NaN.
+    pub fn set_vec_3_float_value(
+        &mut self,
+        id: U32Id<BVoxValuePoolValue>,
+        value: [f64; 3],
+    ) -> Result<()> {
+        let VoxValuePoolKind::Vec3Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, floats_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or a component's magnitude exceeds `2^53 - 1`.
+    pub fn set_vec_3_int_value(
+        &mut self,
+        id: U32Id<BVoxValuePoolValue>,
+        value: [i64; 3],
+    ) -> Result<()> {
+        let VoxValuePoolKind::Vec3Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, ints_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or a component is NaN.
+    pub fn set_vec_4_float_value(
+        &mut self,
+        id: U32Id<BVoxValuePoolValue>,
+        value: [f64; 4],
+    ) -> Result<()> {
+        let VoxValuePoolKind::Vec4Float(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, floats_in_domain)
+    }
+
+    /// Sets value `id` to `value`, keeping its id. Errors, changing nothing,
+    /// if the value pool holds another kind, `id` is not one of its values,
+    /// or a component's magnitude exceeds `2^53 - 1`.
+    pub fn set_vec_4_int_value(
+        &mut self,
+        id: U32Id<BVoxValuePoolValue>,
+        value: [i64; 4],
+    ) -> Result<()> {
+        let VoxValuePoolKind::Vec4Int(values) = &mut self.kind else {
+            return Err(Error::RetainedValueKind);
+        };
+
+        set_checked(values, id, value, ints_in_domain)
+    }
+
     /// Releases value `id`, keeping the surviving values' listing order.
     /// Returns `None`, changing nothing, if `id` is not one of this value
     /// pool's values. The caller repoints any palette cell drawing it first.
@@ -621,6 +763,32 @@ fn ints_in_domain<const N: usize>(components: &[i64; N]) -> bool {
     components.iter().all(int_in_domain)
 }
 
+/// Accepts every value, for a kind whose domain holds them all.
+fn any_in_domain<T>(_: &T) -> bool {
+    true
+}
+
+/// Sets value `id` of `values` to `value`. Errors, changing nothing, if `value`
+/// lies outside the domain or `id` is not one of `values`.
+fn set_checked<T>(
+    values: &mut IdList<BVoxValuePoolValue, T>,
+    id: U32Id<BVoxValuePoolValue>,
+    value: T,
+    in_domain: fn(&T) -> bool,
+) -> Result<()> {
+    if !in_domain(&value) {
+        return Err(Error::MalformedRetainedValue);
+    }
+
+    let Some(held) = values.get_mut(id) else {
+        return Err(Error::UnknownValuePoolValue { value_id: id });
+    };
+
+    *held = value;
+
+    Ok(())
+}
+
 /// Lists `values`, retaining ids in order, so a value's index is the id it
 /// takes. Errors, building nothing, on the first value outside the domain.
 fn checked_values<T>(
@@ -895,6 +1063,33 @@ mod tests {
         );
         assert_eq!(value_pool, VoxValuePool::float(vec![0.5]).unwrap());
         assert_eq!(value_pool.retain_float_value(1.0), Ok(value_id(1)));
+    }
+
+    #[test]
+    fn a_set_keeps_the_id_and_rejects_a_bad_value_changing_nothing() {
+        let mut value_pool = VoxValuePool::float(vec![0.5, 0.25]).unwrap();
+
+        value_pool.set_float_value(value_id(0), 0.75).unwrap();
+
+        assert_eq!(
+            value_pool.float_values().unwrap().get(value_id(0)),
+            Some(&0.75)
+        );
+        assert_eq!(
+            value_pool.set_int_value(value_id(0), 1),
+            Err(Error::RetainedValueKind)
+        );
+        assert_eq!(
+            value_pool.set_float_value(value_id(0), f64::NAN),
+            Err(Error::MalformedRetainedValue)
+        );
+        assert_eq!(
+            value_pool.set_float_value(value_id(2), 1.0),
+            Err(Error::UnknownValuePoolValue {
+                value_id: value_id(2)
+            })
+        );
+        assert_eq!(value_pool, VoxValuePool::float(vec![0.75, 0.25]).unwrap());
     }
 
     #[test]

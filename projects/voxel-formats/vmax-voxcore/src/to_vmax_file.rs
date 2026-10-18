@@ -611,14 +611,17 @@ fn new_palette_plan(
         None => FALLBACK_PALETTE.to_owned(),
     };
 
-    let materials = slot_materials(&layout, provenance)?;
+    // Slots check before pool sizes, so the error for a material an edit
+    // moved off its slot reports that material.
     let mut indices = BTreeMap::new();
     for material_id in layout.palette.iter_materials() {
-        let entry = voxel_indices(&layout, material_id)?;
+        indices.insert(material_id, voxel_indices(&layout, material_id)?);
+    }
+    let materials = slot_materials(&layout, provenance)?;
+    for (&material_id, entry) in &indices {
         if let Some(material) = materials.get(usize::from(entry.material_idx)) {
             check_emissive(&layout, material_id, material.sic)?;
         }
-        indices.insert(material_id, entry);
     }
 
     Ok(PalettePlan {
@@ -638,6 +641,8 @@ fn new_palette_plan(
 /// material-axis properties share another. The writer converts nothing: a
 /// palette off the layout errors where it departs.
 struct PaletteLayout<'a> {
+    palette_id: U32Id<BVoxPalette>,
+
     palette: &'a VoxPalette,
 
     /// `baseColor`.
@@ -684,6 +689,7 @@ impl<'a> PaletteLayout<'a> {
         }
 
         Ok(PaletteLayout {
+            palette_id,
             palette,
             color,
             emissive_color,
@@ -999,9 +1005,9 @@ fn material_slot(layout: &PaletteLayout, material_id: U32Id<BVoxMaterial>) -> Re
 
             Some((slot, first)) => {
                 return Err(Error::invalid(format!(
-                    "material {} draws `{}` value {value_id} but `{first}` value {slot}, so it \
-                     is no single Voxel Max material slot",
-                    material_id, property.name
+                    "palette {} material {material_id} draws `{first}` value {slot} but `{}` value \
+                     {value_id}, so it sits in no single Voxel Max material slot",
+                    layout.palette_id, property.name
                 )));
             }
         }
@@ -1011,8 +1017,9 @@ fn material_slot(layout: &PaletteLayout, material_id: U32Id<BVoxMaterial>) -> Re
     };
     if slot as usize >= MATERIAL_SLOTS {
         return Err(Error::invalid(format!(
-            "material {material_id} draws slot {slot}, but a Voxel Max palette holds only \
-             {MATERIAL_SLOTS} material slots"
+            "palette {} material {material_id} draws slot {slot}, but a Voxel Max palette holds \
+             only {MATERIAL_SLOTS} material slots",
+            layout.palette_id
         )));
     }
     Ok(slot as u8)
@@ -1623,7 +1630,7 @@ mod tests {
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue,
         Result as VoxResult, VoxHierarchyNode, VoxObject,
-        material::{BASE_COLOR, EMISSIVE_COLOR, IOR, ROUGHNESS},
+        material::{BASE_COLOR, EMISSIVE_COLOR, IOR, METALLIC, ROUGHNESS},
     };
 
     fn material(
@@ -3257,26 +3264,42 @@ mod tests {
     }
 
     /// Sets slot `slot` of palette 0's float property `name` to `value` in
-    /// place: the new value takes the old one's position and id.
+    /// place.
     fn set_slot_value(main: &mut VMaxVoxMain, name: &str, slot: u32, value: f64) {
         let palette = main.palette(U32Id::from_u32(0)).unwrap();
         let property_id = palette.property_id_by_name(name).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        let old_id = U32Id::from_u32(slot);
-        let new_id = main.retain_float_value(value_pool_id, value).unwrap();
-        let mut order: Vec<_> = main
-            .value_pool(value_pool_id)
-            .unwrap()
-            .iter_value_ids()
-            .filter(|&value_id| value_id != new_id)
-            .collect();
-        order.insert(order.iter().position(|&id| id == old_id).unwrap(), new_id);
-        main.reorder_value_pool(value_pool_id, &order).unwrap();
-        main.repoint_value_pool_value(value_pool_id, old_id, new_id)
+        main.set_float_value(value_pool_id, U32Id::from_u32(slot), value)
             .unwrap();
-        main.release_value_pool_value(value_pool_id, old_id)
+    }
+
+    /// A material drawing a new value on one material property sits in no
+    /// slot, and the error reports the material.
+    #[test]
+    fn a_material_off_its_slot_errors_naming_it() {
+        let mut main = from_vmax_file(&DependenciesImpl, &sample()).unwrap();
+        let palette_id = U32Id::from_u32(0);
+        let palette = main.palette(palette_id).unwrap();
+        let material_id = palette.iter_materials().next().unwrap();
+        let metallic_id = palette.property_id_by_name(METALLIC).unwrap();
+        let slot = palette.value_id(material_id, metallic_id).unwrap();
+        let property_id = palette.property_id_by_name(ROUGHNESS).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
+        let value_id = main.retain_float_value(value_pool_id, 0.5).unwrap();
+        main.set_material_value(palette_id, material_id, property_id, value_id)
             .unwrap();
-        main.gc().unwrap();
+
+        let error = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default())
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            error.contains(&format!(
+                "palette {palette_id} material {material_id} draws `{METALLIC}` value {slot} but \
+                 `{ROUGHNESS}` value {value_id}, so it sits in no single Voxel Max material slot"
+            )),
+            "{error}"
+        );
     }
 
     /// A slot's edited pool value writes, whatever the read stored.

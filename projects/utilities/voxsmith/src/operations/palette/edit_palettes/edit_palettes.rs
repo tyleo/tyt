@@ -4,7 +4,7 @@ use crate::{
     utilities::{WrittenValues, property_value, release_undrawn_values},
 };
 use branded_id::U32Id;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use vox_value_language::{
     Expression, Groupings, Program, Scalar, TypeEnvironment, ValueEnvironment, check,
     check_expression, check_expression_in_context, eval, eval_expression, parse, parse_expression,
@@ -28,8 +28,11 @@ struct PlannedWrite {
 /// `writes` in its property. Each property the program or a write reads
 /// enters as a swatch array holding one entry per material. A property the
 /// palette lacks is added on a new value pool. Every palette evaluates
-/// against the unchanged main before any write lands. A value no palette
-/// draws afterward is released. Errors, changing nothing, if:
+/// against the unchanged main before any write lands. When every material
+/// drawing a value writes the same result and no other cell draws it, the
+/// value changes in place and keeps its id. Materials sharing a value then
+/// still share it. A value no palette draws afterward is released. Errors,
+/// changing nothing, if:
 ///
 /// 1. an id is not one of the main's palettes
 /// 2. two writes write one property
@@ -258,8 +261,8 @@ fn bind_properties<T: VoxExt>(
     ))
 }
 
-/// Lands `values` in palette `palette_id`'s property `property_id`, returning
-/// the values its materials drew before.
+/// Lands `values` in palette `palette_id`'s property `property_id` over the
+/// values its materials drew, returning those values.
 fn overwrite_property<T: VoxExt>(
     main: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
@@ -277,25 +280,59 @@ fn overwrite_property<T: VoxExt>(
 
     let material_ids: Vec<_> = palette.iter_materials().collect();
 
-    let replaced_value_ids = material_ids
+    let drawn_value_ids: Vec<_> = material_ids
         .iter()
         .map(|&material_id| {
-            let value_id = palette
+            palette
                 .value_id(material_id, property_id)
-                .expect("a live material holds a value for every property");
-
-            (value_pool_id, value_id)
+                .expect("a live material holds a value for every property")
         })
         .collect();
 
-    let value_ids = values.land(main, value_pool_id);
+    let shared_value_ids = shared_value_ids(main, palette_id, property_id, value_pool_id);
+
+    let value_ids = values.land_over(main, value_pool_id, &drawn_value_ids, &shared_value_ids);
 
     for (material_id, value_id) in material_ids.into_iter().zip(value_ids) {
         main.set_material_value(palette_id, material_id, property_id, value_id)
             .expect("a landed value is one of its property's value pool's");
     }
 
-    replaced_value_ids
+    drawn_value_ids
+        .into_iter()
+        .map(|value_id| (value_pool_id, value_id))
+        .collect()
+}
+
+/// The values of `value_pool_id` that a cell outside palette `palette_id`'s
+/// property `property_id` draws.
+fn shared_value_ids<T: VoxExt>(
+    main: &VoxMain<T>,
+    palette_id: U32Id<BVoxPalette>,
+    property_id: U32Id<BVoxProperty>,
+    value_pool_id: U32Id<BVoxValuePool>,
+) -> HashSet<U32Id<BVoxValuePoolValue>> {
+    let mut shared = HashSet::new();
+
+    for (other_palette_id, palette) in main.iter_palettes() {
+        for (other_property_id, property) in palette.iter_properties() {
+            if property.value_pool_id != value_pool_id
+                || (other_palette_id, other_property_id) == (palette_id, property_id)
+            {
+                continue;
+            }
+
+            for material_id in palette.iter_materials() {
+                shared.insert(
+                    palette
+                        .value_id(material_id, other_property_id)
+                        .expect("a live material holds a value for every property"),
+                );
+            }
+        }
+    }
+
+    shared
 }
 
 /// Adds `property` to palette `palette_id` on a new value pool holding
@@ -411,6 +448,18 @@ mod tests {
             .collect()
     }
 
+    /// The value ids the materials of `palette_id` draw for `name`, in
+    /// material order.
+    fn drawn_ids(main: &VoxMain, palette_id: U32Id<BVoxPalette>, name: &str) -> Vec<u32> {
+        let palette = main.palette(palette_id).unwrap();
+        let property_id = palette.property_id_by_name(name).unwrap();
+
+        palette
+            .iter_materials()
+            .map(|material_id| palette.value_id(material_id, property_id).unwrap().to_u32())
+            .collect()
+    }
+
     /// The number of values in the value pool `name` draws from in
     /// `palette_id`.
     fn value_count(main: &VoxMain, palette_id: U32Id<BVoxPalette>, name: &str) -> usize {
@@ -465,13 +514,13 @@ mod tests {
             drawn(&main, palette_id, ROUGHNESS, VoxValuePool::float_values),
             [0.9, 0.4]
         );
-        // 0.2 is released because no material draws it anymore.
+        // 0.2 becomes 0.9 in place, so no value is added.
         assert_eq!(value_count(&main, palette_id, ROUGHNESS), 2);
         assert_eq!(main.validate(), Ok(()));
     }
 
     #[test]
-    fn a_plain_value_lands_on_every_material_reusing_an_equal_value() {
+    fn a_plain_value_lands_on_every_material_in_place() {
         let mut main = VoxMain::default();
         let palette_id = retain_tagged(&mut main, &["rust", "steel"], &[0.2, 0.4]);
 
@@ -481,7 +530,67 @@ mod tests {
             drawn(&main, palette_id, ROUGHNESS, VoxValuePool::float_values),
             [0.4, 0.4]
         );
-        assert_eq!(value_count(&main, palette_id, ROUGHNESS), 1);
+        // Each material's value changes in place, so the equal values stay
+        // apart.
+        assert_eq!(value_count(&main, palette_id, ROUGHNESS), 2);
+    }
+
+    #[test]
+    fn materials_sharing_a_value_written_alike_keep_its_id() {
+        let mut main = VoxMain::default();
+        let palette_id = retain_palette(
+            &mut main,
+            vec![(ROUGHNESS, VoxValuePool::float(vec![0.6, 0.3, 1.0]).unwrap())],
+            &[vec![0], vec![0], vec![1]],
+        );
+
+        edit_palettes(&mut main, &[palette_id], "", &[write(ROUGHNESS, "0.5")]).unwrap();
+
+        assert_eq!(drawn_ids(&main, palette_id, ROUGHNESS), [0, 0, 1]);
+        assert_eq!(
+            main.value_pool(U32Id::from_u32(0))
+                .unwrap()
+                .float_values()
+                .unwrap()
+                .iter()
+                .map(|(_, &value)| value)
+                .collect::<Vec<_>>(),
+            [0.5, 0.5, 1.0]
+        );
+        assert_eq!(main.validate(), Ok(()));
+    }
+
+    #[test]
+    fn materials_sharing_a_value_written_apart_land_anew() {
+        let mut main = VoxMain::default();
+        let palette_id = retain_palette(
+            &mut main,
+            vec![
+                (
+                    "tag",
+                    VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]),
+                ),
+                (ROUGHNESS, VoxValuePool::float(vec![0.6, 0.3, 0.6]).unwrap()),
+            ],
+            &[vec![0, 2], vec![1, 2], vec![2, 1]],
+        );
+
+        edit_palettes(
+            &mut main,
+            &[palette_id],
+            "",
+            &[write(ROUGHNESS, "mix(roughness, 0.9, tag == \"b\")")],
+        )
+        .unwrap();
+
+        // `a` keeps value 2 though value 0 holds an equal 0.6, `b` takes a new
+        // 0.9, and `c` rewrites its 0.3 in place.
+        assert_eq!(drawn_ids(&main, palette_id, ROUGHNESS), [2, 3, 1]);
+        assert_eq!(
+            drawn(&main, palette_id, ROUGHNESS, VoxValuePool::float_values),
+            [0.6, 0.9, 0.3]
+        );
+        assert_eq!(main.validate(), Ok(()));
     }
 
     #[test]
@@ -551,7 +660,8 @@ mod tests {
             drawn(&main, kept_id, ROUGHNESS, VoxValuePool::float_values),
             [0.2]
         );
-        // 0.2 stays for the kept palette, 0.4 is released, and 0.9 is new.
+        // 0.2 stays for the kept palette, and 0.4 becomes 0.9 in place for
+        // both edited materials.
         assert_eq!(main.value_pool(value_pool_id).unwrap().len(), 2);
         assert_eq!(main.validate(), Ok(()));
     }
