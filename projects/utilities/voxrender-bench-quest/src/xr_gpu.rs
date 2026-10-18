@@ -11,7 +11,7 @@ use openxr::{
 };
 use std::mem;
 use wgpu::{
-    Device, DeviceDescriptor, Features, Instance, InstanceFlags, MemoryBudgetThresholds,
+    Adapter, Device, DeviceDescriptor, Features, Instance, InstanceFlags, MemoryBudgetThresholds,
     MemoryHints, Queue,
     hal::{api::Vulkan, vulkan::Instance as HalInstance},
 };
@@ -21,6 +21,9 @@ const VULKAN_VERSION: Version = Version::new(1, 1, 0);
 
 /// A wgpu device on the Vulkan instance and device the OpenXR runtime made.
 pub struct XrGpu {
+    /// The adapter the device runs on.
+    pub adapter: Adapter,
+
     /// The device.
     pub device: Device,
 
@@ -233,6 +236,7 @@ impl XrGpu {
         .map_err(Error::Device)?;
 
         Ok(XrGpu {
+            adapter,
             device,
             queue,
             session_info: SessionCreateInfo {

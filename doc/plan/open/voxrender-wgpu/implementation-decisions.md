@@ -144,3 +144,25 @@ they land.
   AAR holds no Java.
 - The manifest declares hand tracking as optional, so the headset launches
   the app without controllers. The bench takes no input.
+- B0's probe logs one `b0` line per result. The startup results come before
+  the session runs. The visibility mask and the frame times need the
+  headset worn.
+- The app asks for 90 Hz through `XR_FB_display_refresh_rate`, the rate the
+  frame budget assumes. The runtime starts at 72 Hz.
+- The compositor and app GPU times come from `XR_META_performance_metrics`,
+  sampled after each rendered frame. Sampling skips 300 frames and reports
+  p50 and p99 over the next 600.
+- Each indirect draw runs beside a direct draw of the same triangle, so a
+  blank target points at the indirect call instead of the harness.
+- Each swapchain format is tried three ways: attachment usage alone,
+  OpenXR's storage and mutable-format usage, and Vulkan's flags through
+  `XR_META_vulkan_swapchain_create_info`.
+- The visibility mask is probed once the session gains focus and again
+  whenever the runtime says it changed.
+- A Vulkan feature struct joins the query chain only when the device lists
+  its extension.
+- Timed runs pin the GPU with `adb shell setprop debug.oculus.gpuLevel 4`.
+  VrApi held level 4 at 545 MHz through B0's measured frames.
+  `XR_EXT_performance_settings` offers only hints that the runtime's clock
+  throttling treats as a baseline. The app logs the property's value with
+  its frame times.

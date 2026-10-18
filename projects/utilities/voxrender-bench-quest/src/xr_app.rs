@@ -1,4 +1,6 @@
-use crate::{Error, EyeSwapchain, Result, XrGpu, XrSystem};
+use crate::{
+    Error, EyeSwapchain, FrameTimes, Result, XrGpu, XrSystem, probe_session, probe_visibility_mask,
+};
 use openxr::{
     CompositionLayerProjection, CompositionLayerProjectionView, Duration as XrDuration,
     EnvironmentBlendMode, Event, EventDataBuffer, FrameStream, FrameWaiter, Offset2Di, Posef,
@@ -14,6 +16,9 @@ use wgpu::{
 /// The views the app draws.
 const VIEW_TYPE: ViewConfigurationType = ViewConfigurationType::PRIMARY_STEREO;
 
+/// The display rate the app asks for, the rate the frame budget assumes.
+const REFRESH_RATE: f32 = 90.0;
+
 /// The color the pass clears both eyes to.
 const CLEAR: Color = Color {
     r: 0.02,
@@ -22,11 +27,14 @@ const CLEAR: Color = Color {
     a: 1.0,
 };
 
-/// An OpenXR session that clears both eyes each frame.
+/// An OpenXR session that clears both eyes each frame and runs B0's session
+/// probes.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
     swapchain: EyeSwapchain,
+
+    frame_times: Option<FrameTimes>,
 
     space: Space,
 
@@ -37,6 +45,8 @@ pub struct XrApp {
     session: Session<XrVulkan>,
 
     running: bool,
+
+    mask_pending: bool,
 
     events: EventDataBuffer,
 
@@ -69,15 +79,34 @@ impl XrApp {
             .create_reference_space(ReferenceSpaceType::LOCAL, Posef::IDENTITY)
             .map_err(Error::Xr)?;
 
+        probe_session(&xr, &session)?;
+
+        if xr.instance.exts().fb_display_refresh_rate.is_some() {
+            let rates = session
+                .enumerate_display_refresh_rates()
+                .map_err(Error::Xr)?;
+
+            if rates.contains(&REFRESH_RATE) {
+                session
+                    .request_display_refresh_rate(REFRESH_RATE)
+                    .map_err(Error::Xr)?;
+            } else {
+                log::info!("b0 refresh rate {REFRESH_RATE} unavailable");
+            }
+        }
+
+        let frame_times = FrameTimes::new(&xr, &session)?;
         let swapchain = EyeSwapchain::new(&xr, &gpu, &session)?;
 
         Ok(XrApp {
             swapchain,
+            frame_times,
             space,
             frame_stream,
             frame_waiter,
             session,
             running: false,
+            mask_pending: false,
             events: EventDataBuffer::new(),
             xr,
             gpu,
@@ -110,6 +139,8 @@ impl XrApp {
                             self.running = true;
                         }
 
+                        SessionState::FOCUSED => self.mask_pending = true,
+
                         SessionState::STOPPING => {
                             self.session.end().map_err(Error::Xr)?;
                             self.running = false;
@@ -119,6 +150,16 @@ impl XrApp {
 
                         _ => {}
                     }
+                }
+
+                Event::VisibilityMaskChangedKHR(_) => self.mask_pending = true,
+
+                Event::DisplayRefreshRateChangedFB(changed) => {
+                    log::info!(
+                        "b0 refresh rate: {} to {}",
+                        changed.from_display_refresh_rate(),
+                        changed.to_display_refresh_rate()
+                    );
                 }
 
                 Event::InstanceLossPending(_) => return Ok(false),
@@ -153,6 +194,11 @@ impl XrApp {
                     &[],
                 )
                 .map_err(Error::Xr);
+        }
+
+        if self.mask_pending {
+            probe_visibility_mask(&self.xr, &self.session, &eyes)?;
+            self.mask_pending = false;
         }
 
         let image = self.swapchain.handle.acquire_image().map_err(Error::Xr)?;
@@ -218,6 +264,11 @@ impl XrApp {
                     .space(&self.space)
                     .views(&projection_views)],
             )
-            .map_err(Error::Xr)
+            .map_err(Error::Xr)?;
+
+        match &mut self.frame_times {
+            Some(frame_times) => frame_times.sample(&self.session),
+            None => Ok(()),
+        }
     }
 }

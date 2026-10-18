@@ -4,6 +4,11 @@ voxrender's GPU benchmarks as a Meta Quest 3 OpenXR app. The app opens an
 OpenXR session on Vulkan and builds wgpu from the session's instance and
 device. Each frame, one multiview pass clears both eyes.
 
+The app runs B0's device probe and logs each result on a line that starts
+with `b0`. The voxrender-wgpu
+[research](../../../doc/plan/open/voxrender-wgpu/reference/research.md#7-next-phase-benchmarks-and-prototypes-in-order)
+sets what B0 asks.
+
 The crate builds only for Android. The repo README's Quest builds section
 installs the tools.
 
@@ -26,12 +31,18 @@ With the headset connected over USB:
 
 ```sh
 ./gradlew installDebug
+adb shell setprop debug.oculus.gpuLevel 4
 adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
 adb logcat -s voxrender-bench
 ```
 
+The property pins the GPU at level 4, the level the benchmarks' thresholds
+assume, until the headset reboots. `adb logcat -s VrApi` shows the level as
+the second number after `GPU=`.
+
 The headset's library also lists the app under Unknown Sources. The session
-starts only while someone wears the headset.
+starts only while someone wears the headset. B0's visibility mask and frame
+times log once it has run about ten seconds.
 
 ## Lint
 

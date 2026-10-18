@@ -3,9 +3,10 @@ use openxr::{EntryError, Version, sys::Result as XrResult};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
+    io::Error as IOError,
 };
 use wgpu::{
-    RequestDeviceError,
+    BufferAsyncError, MapRangeError, PollError, RequestDeviceError,
     hal::{DeviceError, InstanceError},
 };
 
@@ -68,6 +69,24 @@ pub enum Error {
 
     /// An image size is past what OpenXR's rectangles hold.
     ImageSize(u32),
+
+    /// A visibility mask's indices do not form triangles over its vertices.
+    VisibilityMask,
+
+    /// A performance counter changed its unit between samples.
+    CounterUnit(&'static str),
+
+    /// Waiting on the GPU failed.
+    Poll(PollError),
+
+    /// A readback buffer would not map.
+    Map(BufferAsyncError),
+
+    /// A mapped readback range was unavailable.
+    MapRange(MapRangeError),
+
+    /// `getprop` would not run.
+    Getprop(IOError),
 }
 
 impl Display for Error {
@@ -92,6 +111,12 @@ impl Display for Error {
             Error::UnequalViews => write!(f, "the eyes recommend different image sizes"),
             Error::NoSwapchainFormat => write!(f, "no swapchain format maps to wgpu"),
             Error::ImageSize(size) => write!(f, "an image side of {size} is too large"),
+            Error::VisibilityMask => write!(f, "a visibility mask's indices are malformed"),
+            Error::CounterUnit(label) => write!(f, "the {label} counter changed its unit"),
+            Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
+            Error::Map(error) => write!(f, "a readback buffer would not map: {error}"),
+            Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
+            Error::Getprop(error) => write!(f, "getprop would not run: {error}"),
         }
     }
 }

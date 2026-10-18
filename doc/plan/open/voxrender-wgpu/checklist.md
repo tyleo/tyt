@@ -81,7 +81,8 @@ code-level choices in
          session's instance and device. Swapchain images are wrapped as wgpu
          textures. One multiview pass clears both eyes
       3. B0's probe runs at startup and logs its report for adb to pull
-      4. The report lands in benchmarks.md. B0's outcomes prune the later
+      4. Timed runs pin the GPU at level 4, and VrApi confirms the level
+      5. The report lands in benchmarks.md. B0's outcomes prune the later
          steps
 - [ ] **S6. B1 on Quest.** S2's and S4's kernels run in the headset. The
       run counts id mismatches and measures the int32 cost and the integer
