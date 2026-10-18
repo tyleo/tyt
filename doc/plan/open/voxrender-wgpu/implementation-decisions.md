@@ -151,7 +151,9 @@ they land.
   frame budget assumes. The runtime starts at 72 Hz.
 - The compositor and app GPU times come from `XR_META_performance_metrics`,
   sampled after each rendered frame. Sampling skips 300 frames and reports
-  p50 and p99 over the next 600.
+  p50 and p99 over each window of 600 after them. For about six seconds
+  after launch the compositor draws extra layers. The first window can
+  overlap them.
 - Each indirect draw runs beside a direct draw of the same triangle, so a
   blank target points at the indirect call instead of the harness.
 - Each swapchain format is tried three ways: attachment usage alone,

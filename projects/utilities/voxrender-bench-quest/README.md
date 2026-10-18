@@ -41,8 +41,9 @@ assume, until the headset reboots. `adb logcat -s VrApi` shows the level as
 the second number after `GPU=`.
 
 The headset's library also lists the app under Unknown Sources. The session
-starts only while someone wears the headset. B0's visibility mask and frame
-times log once it has run about ten seconds.
+starts only while someone wears the headset. The app logs B0's visibility
+mask once the session has focus. The app logs the first window of frame
+times about ten seconds in, then another every seven seconds.
 
 ## Lint
 

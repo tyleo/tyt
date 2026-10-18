@@ -12,7 +12,7 @@ use std::{process::Command, ptr, result::Result as StdResult};
 /// The rendered frames before sampling starts.
 const WARM_UP: u32 = 300;
 
-/// The samples each counter reports over.
+/// The samples in each window a counter reports.
 const MEASURED: usize = 600;
 
 /// The system property that pins the GPU level, which the README's run
@@ -46,6 +46,8 @@ struct Counter {
     unit: Option<PerformanceMetricsCounterUnitMETA>,
 
     samples: Vec<f64>,
+
+    windows: u32,
 }
 
 impl FrameTimes {
@@ -122,6 +124,7 @@ impl FrameTimes {
                     path: xr.instance.string_to_path(path).map_err(Error::Xr)?,
                     unit: None,
                     samples: Vec::with_capacity(MEASURED),
+                    windows: 0,
                 })
             })
             .collect::<Result<_>>()?;
@@ -134,7 +137,7 @@ impl FrameTimes {
     }
 
     /// Samples the counters once a rendered frame ends. A counter logs its
-    /// p50 and p99 once its samples are in.
+    /// p50 and p99 for each window of samples.
     pub fn sample(&mut self, session: &Session<XrVulkan>) -> Result<()> {
         self.frames += 1;
 
@@ -143,10 +146,6 @@ impl FrameTimes {
         }
 
         for counter in &mut self.counters {
-            if counter.samples.len() == MEASURED {
-                continue;
-            }
-
             let mut value = PerformanceMetricsCounterMETA {
                 ty: PerformanceMetricsCounterMETA::TYPE,
                 next: ptr::null(),
@@ -196,12 +195,16 @@ impl FrameTimes {
                 counter.samples.sort_by(f64::total_cmp);
 
                 log::info!(
-                    "b0 {} frame time over {MEASURED} frames: p50 {:.3}, p99 {:.3}, {:?}",
+                    "b0 {} frame time, window {} of {MEASURED} frames: p50 {:.3}, p99 {:.3}, {:?}",
                     counter.label,
+                    counter.windows,
                     percentile(&counter.samples, 50),
                     percentile(&counter.samples, 99),
                     value.counter_unit
                 );
+
+                counter.samples.clear();
+                counter.windows += 1;
             }
         }
 

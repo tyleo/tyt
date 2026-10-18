@@ -167,9 +167,9 @@ Three things stand out:
 
 **Inputs.**
 
-1. The frame is 11.1 ms at 90 Hz. A 1.3 ms compositor placeholder, taken from
-   an older-headset log sample [48], and 13% headroom leave about 8.5 ms of app
-   GPU time. B0 replaces the placeholder with a measurement.
+1. The frame is 11.1 ms at 90 Hz. [B0](benchmarks.md#b0-quest-3-2026-10-18)
+   measured the compositor at up to 0.69 ms of GPU time at p99. The
+   compositor time and 13% headroom leave about 9.1 ms of app GPU time.
 2. The default eye buffer is 1680x1760 per eye, 5.91 Mpx for both eyes [1].
    Panel resolution is 9.11 Mpx.
 3. Thresholds are set at GPU level 4, 545 MHz. Levels 0 to 6 run at 285, 350,
@@ -190,15 +190,15 @@ Three things stand out:
 | AA extra rays or samples | 1.0 | B6 |
 | Shadow memo: dedup, fill, steady-state misses | 1.0 | B5 |
 | Transparency surcharge | 1.0 | B7 |
-| Contingency (S3 may spend it on transparency) | 0.9 | B10 |
-| Total | 8.5 | B10 |
+| Contingency (S3 may spend it on transparency) | 1.5 | B10 |
+| Total | 9.1 | B10 |
 
 **Rules.**
 
 1. Fused post is a requirement, not an optimization. A conventional composite
    plus bloom chain costs 2 to 4 ms at default resolution (3.10). With it,
    primaries get about 0.1 to 2 ms.
-2. At 120 Hz the app budget is about 6.1 ms. Every line scales by about 0.7, or
+2. At 120 Hz the app budget is about 6.6 ms. Every line scales by about 0.7, or
    the render scale drops.
 3. At panel resolution every transfer costs 1.54x.
 4. Under passthrough, fixed work takes 1.20x longer at 456 MHz. An MR mode runs
@@ -1427,11 +1427,11 @@ such as per-face shadows.
 
 **B10. Integrated sustained run (Quest 3).**
 
-- **Question.** Does the full frame fit 8.5 ms, and does it hold thermally?
+- **Question.** Does the full frame fit 9.1 ms, and does it hold thermally?
 - **Setup.** The chosen configuration on S1 to S5 with every line active, then
   30 minutes on S1 and S2 in VR only, plus passthrough at level 2 if MR is a
   goal.
-- **Threshold.** The sum at 8.5 ms or less at p99, fewer than 1 stale frame per
+- **Threshold.** The sum at 9.1 ms or less at p99, fewer than 1 stale frame per
   minute, and no level drop.
 - **Outcomes.** Set the shipping GPU level, the adaptive ladder, and the engine
   reserve.
