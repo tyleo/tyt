@@ -1,12 +1,13 @@
 use crate::{
     ABSORPTION, Error, PALETTE_COLORS, Result, SHADOWS, VMaxExt, VMaxExtMaterial,
     VMaxExtMaterialDispersion, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, VMaxExtWorkArea,
-    VMaxVoxMain, decode_axis_angle, synthesized_object_state, vm_coefficient_to_pbr_factor,
+    VMaxVoxMain, decode_axis_angle, mesh_texture_file, synthesized_object_state,
+    vm_coefficient_to_pbr_factor,
 };
 use branded_id::{IteratorExt, U32Id};
 use std::{
     array::from_fn,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
 };
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
@@ -35,13 +36,14 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// become voxcore entities on Y-up axes. The rest of the state goes to the ext,
 /// including external meshes and unmodeled files, which the write puts back.
 /// `dependencies` encodes each unmodeled file as base64.
-/// Voxels the work area hides stay, in a grown edit grid. Contents files and
-/// palettes no object references are skipped.
+/// Voxels the work area hides stay, in a grown edit grid. Package files no
+/// object references are skipped.
 ///
 /// Errors on malformed geometry, a missing contents file, a storage cube, work
 /// area, or voxel Voxel Max cannot hold, or a rejected cross-reference.
 pub fn from_vmax_file<D: EncodeBase64>(dependencies: &D, serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
+    let other_files = kept_other_files(dependencies, serde)?;
     let mut main = VoxMain::default();
 
     // One palette per distinct object, by palette id.
@@ -95,8 +97,8 @@ pub fn from_vmax_file<D: EncodeBase64>(dependencies: &D, serde: &VMaxFile) -> Re
     main.set_root_hierarchy_node_ids(roots)?;
 
     let ext = vmax_ext_from_file(
-        dependencies,
         serde,
+        other_files,
         &node_ids,
         palette_provenance,
         object_data,
@@ -753,6 +755,53 @@ fn is_external_mesh(object: &VMaxObject) -> bool {
     object.data.ends_with(".scndata")
 }
 
+/// The base64 of each package file the ext keeps. It skips each mesh archive
+/// or texture no mesh references. Only Voxel Max's undo history needs those.
+///
+/// Errors on a `trsc` entry naming no mesh or a texture the package lacks.
+fn kept_other_files<D: EncodeBase64>(
+    dependencies: &D,
+    serde: &VMaxFile,
+) -> Result<BTreeMap<String, String>> {
+    let scene = &serde.scene_json_file;
+    let meshes: HashSet<&str> = scene
+        .objects
+        .iter()
+        .filter(|object| is_external_mesh(object))
+        .map(|object| object.data.as_str())
+        .collect();
+
+    let mut textures = HashSet::new();
+    for (mesh, uuids) in scene.trsc.iter().flatten() {
+        if !meshes.contains(mesh.as_str()) {
+            return Err(Error::invalid(format!(
+                "`trsc` names `{mesh}`, which no external mesh object holds"
+            )));
+        }
+        for uuid in uuids {
+            let texture = mesh_texture_file(uuid);
+            if !serde.other_files.contains_key(&texture) {
+                return Err(Error::invalid(format!(
+                    "external mesh `{mesh}` references texture `{texture}`, which the \
+                     package does not hold"
+                )));
+            }
+            textures.insert(texture);
+        }
+    }
+
+    Ok(serde
+        .other_files
+        .iter()
+        .filter(|(path, _)| {
+            let leftover_mesh = path.ends_with(".scndata") && !meshes.contains(path.as_str());
+            let leftover_texture = path.ends_with(".vxtex") && !textures.contains(*path);
+            !leftover_mesh && !leftover_texture
+        })
+        .map(|(path, VMaxOpaqueFile(bytes))| (path.clone(), dependencies.encode_base64(bytes)))
+        .collect())
+}
+
 /// The transform for an external mesh's node: its `T(t_p) * R * S`, under
 /// which Voxel Max renders each vertex offset by the content center `e_c`.
 fn mesh_transform(object: &VMaxObject) -> TyTransformF64 {
@@ -774,13 +823,14 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 
 /// The ext of a read of `serde` into `main`.
 ///
-/// 1. `node_ids`: the hierarchy node ids in scene order, groups then objects
-/// 2. `palettes`: each object palette's provenance by palette id
-/// 3. `object_data`: each object's contents filename and read capture, by
+/// 1. `other_files`: the base64 of each package file the ext keeps
+/// 2. `node_ids`: the hierarchy node ids in scene order, groups then objects
+/// 3. `palettes`: each object palette's provenance by palette id
+/// 4. `object_data`: each object's contents filename and read capture, by
 ///    object id. No filename takes a synthesized state
-fn vmax_ext_from_file<D: EncodeBase64>(
-    dependencies: &D,
+fn vmax_ext_from_file(
     serde: &VMaxFile,
+    other_files: BTreeMap<String, String>,
     node_ids: &[U32Id<BVoxHierarchyNode>],
     palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
     object_data: Vec<(U32Id<BVoxObject>, Option<String>, ObjectCapture)>,
@@ -802,11 +852,7 @@ fn vmax_ext_from_file<D: EncodeBase64>(
         hierarchy_nodes,
         palettes,
         object_states: BTreeMap::new(),
-        other_files: serde
-            .other_files
-            .iter()
-            .map(|(path, VMaxOpaqueFile(bytes))| (path.clone(), dependencies.encode_base64(bytes)))
-            .collect(),
+        other_files,
     };
 
     for (object_id, data, capture) in object_data {

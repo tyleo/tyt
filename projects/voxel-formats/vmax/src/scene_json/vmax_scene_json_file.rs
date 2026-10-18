@@ -1,6 +1,7 @@
-use crate::{VMaxDiscarded, VMaxGroup, VMaxObject, VMaxSceneCamera, VMaxValue};
+use crate::{VMaxDiscarded, VMaxGroup, VMaxObject, VMaxSceneCamera};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// A complete Voxel Max scene parsed from `scene.json`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -141,9 +142,10 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing))]
     pub vl: Option<VMaxDiscarded>,
 
-    /// The textures each external mesh's contents file references, as stored.
+    /// The texture UUIDs each external mesh references, by the mesh's
+    /// contents file. A mesh with no texture has no entry.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub trsc: Option<VMaxValue>,
+    pub trsc: Option<BTreeMap<String, Vec<String>>>,
 
     /// Outline intensity.
     #[cfg_attr(

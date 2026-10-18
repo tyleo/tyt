@@ -1,12 +1,12 @@
 use crate::{
-    VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, place_object,
-    synthesized_node, synthesized_object_state,
+    VMaxExtMaterial, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, mesh_texture_file,
+    place_object, synthesized_node, synthesized_object_state,
 };
 use branded_id::{IdRange, IdVec, IteratorExt, U32Id};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::Display,
     mem,
 };
@@ -86,6 +86,14 @@ fn remove<K: Copy + Display + Ord, V>(map: &mut BTreeMap<K, V>, id: K, what: &st
         .ok_or_else(|| refuse(format!("vmax ext holds no entry for {what} {id}")))
 }
 
+fn release_file(other_files: &mut BTreeMap<String, String>, path: &str) -> VoxResult<()> {
+    other_files.remove(path).map(|_| ()).ok_or_else(|| {
+        refuse(format!(
+            "vmax ext holds no file `{path}` for a released external mesh"
+        ))
+    })
+}
+
 fn rekey<K: Copy + Display + Ord, V>(
     map: BTreeMap<K, V>,
     new_id: impl Fn(K) -> Option<K>,
@@ -103,7 +111,8 @@ fn rekey<K: Copy + Display + Ord, V>(
         .collect()
 }
 
-/// A retained node, object, or palette takes the entry
+/// An external mesh's files go with the last node placing it. A retained node,
+/// object, or palette takes the entry
 /// [`to_vmax_vox_main`](crate::to_vmax_vox_main()) would synthesize for it. A
 /// voxel remap or resample moves an object's kept camera target by as much as
 /// its content center moved, which keeps the author's framing. A gc rekeys every
@@ -126,7 +135,11 @@ impl VoxExt for VMaxExt {
         _state: &VoxState,
         node_id: U32Id<BVoxHierarchyNode>,
     ) -> VoxResult<()> {
-        remove(&mut self.hierarchy_nodes, node_id, "node").map(|_| ())
+        let entry = remove(&mut self.hierarchy_nodes, node_id, "node")?;
+        let Some(mesh) = entry.external_mesh else {
+            return Ok(());
+        };
+        self.release_mesh_files(&mesh.data)
     }
 
     fn object_did_retain(
@@ -216,6 +229,32 @@ impl VoxExt for VMaxExt {
 }
 
 impl VMaxExt {
+    /// Drops the files of the external mesh `data` once no node places it.
+    fn release_mesh_files(&mut self, data: &str) -> VoxResult<()> {
+        let placed = self
+            .hierarchy_nodes
+            .values()
+            .filter_map(|entry| entry.external_mesh.as_ref())
+            .any(|mesh| mesh.data == data);
+        if placed {
+            return Ok(());
+        }
+        release_file(&mut self.other_files, data)?;
+
+        let Some(trsc) = &mut self.scene.trsc else {
+            return Ok(());
+        };
+        let Some(uuids) = trsc.remove(data) else {
+            return Ok(());
+        };
+        for uuid in uuids.into_iter().collect::<BTreeSet<_>>() {
+            if !trsc.values().flatten().any(|other| *other == uuid) {
+                release_file(&mut self.other_files, &mesh_texture_file(&uuid))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Moves the camera target of object `object_id` by as much as its content
     /// center moved off a grid of `old_bounds` live at `old_voxel_ids`.
     fn follow_content_center(

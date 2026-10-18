@@ -1644,7 +1644,7 @@ mod tests {
     };
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue,
-        VoxHierarchyNode, VoxObject,
+        Result as VoxResult, VoxHierarchyNode, VoxObject,
         material::{BASE_COLOR, EMISSIVE_COLOR, ROUGHNESS},
     };
 
@@ -2859,8 +2859,11 @@ mod tests {
         assert_eq!(scene.objects[0].s, None);
     }
 
+    /// The texture [`sample_with_mesh`] references.
+    const TEXTURE: &str = "5A230798-EE6E-4F5E-AD20-46554C42E60E";
+
     /// The sample with an external mesh beside its object under the group,
-    /// and the mesh's archive, a texture, and an animation file the package
+    /// and the mesh's archive, its texture, and an animation file the package
     /// also holds. The mesh's content box reaches past the object's, so the
     /// group's derived box spans both.
     fn sample_with_mesh() -> VMaxFile {
@@ -2879,15 +2882,162 @@ mod tests {
         group.center = [1.25, 1.0, 2.0];
         group.bounds_min = Some([-1.25, -1.0, -2.0]);
         group.bounds_max = Some([1.25, 1.0, 2.0]);
+        file.scene_json_file.trsc = Some(BTreeMap::from([(
+            "contents2.scndata".to_owned(),
+            vec![TEXTURE.to_owned()],
+        )]));
         for (name, bytes) in [
             ("contents2.scndata", &b"bvx2 mesh archive"[..]),
-            ("5A230798-EE6E-4F5E-AD20-46554C42E60E.vxtex", b"texture"),
+            (&format!("{TEXTURE}.vxtex"), b"texture"),
             ("animations.vmaxa", b"{}"),
         ] {
             file.other_files
                 .insert(name.to_owned(), VMaxOpaqueFile(bytes.to_vec()));
         }
         file
+    }
+
+    /// [`sample_with_mesh`] with a second mesh, `contents3.scndata`, sharing
+    /// its texture and holding one of its own, `B.vxtex`.
+    fn sample_with_two_meshes() -> VMaxFile {
+        let mut file = sample_with_mesh();
+        let mut mesh = file.scene_json_file.objects[1].clone();
+        mesh.id = "m3".to_owned();
+        mesh.ind = [0, 0, 3];
+        mesh.data = "contents3.scndata".to_owned();
+        mesh.history = "history3.vmaxhb".to_owned();
+        file.scene_json_file.objects.push(mesh);
+        file.scene_json_file.trsc.as_mut().unwrap().insert(
+            "contents3.scndata".to_owned(),
+            vec![TEXTURE.to_owned(), "B".to_owned()],
+        );
+        for name in ["contents3.scndata", "B.vxtex"] {
+            file.other_files
+                .insert(name.to_owned(), VMaxOpaqueFile(b"mesh".to_vec()));
+        }
+        file
+    }
+
+    /// Unlinks and releases the node placing the external mesh `data`.
+    fn release_mesh_node(main: &mut VMaxVoxMain, data: &str) -> VoxResult<()> {
+        let mesh_id = main
+            .ext()
+            .hierarchy_nodes
+            .iter()
+            .find(|(_, entry)| {
+                entry
+                    .external_mesh
+                    .as_ref()
+                    .is_some_and(|mesh| mesh.data == data)
+            })
+            .map(|(&node_id, _)| node_id)
+            .unwrap();
+        let (parent_id, mut parent) = main
+            .iter_hierarchy_nodes()
+            .find(|(_, node)| node.child_node_ids.contains(&mesh_id))
+            .map(|(node_id, node)| (node_id, node.clone()))
+            .unwrap();
+        parent.child_node_ids.retain(|&node_id| node_id != mesh_id);
+        main.set_hierarchy_node_children(parent_id, parent.child_node_ids, parent.child_object_ids)
+            .unwrap();
+        main.release_hierarchy_node(mesh_id)
+    }
+
+    /// Releasing an external mesh's node drops its archive, its `trsc` entry,
+    /// and its unshared texture. The shared texture stays.
+    #[test]
+    fn releasing_an_external_mesh_drops_its_files() {
+        let mut main = from_vmax_file(&DependenciesImpl, &sample_with_two_meshes()).unwrap();
+
+        release_mesh_node(&mut main, "contents3.scndata").unwrap();
+
+        let ext = main.ext();
+        let files: Vec<&str> = ext.other_files.keys().map(String::as_str).collect();
+        assert_eq!(
+            files,
+            [
+                &format!("{TEXTURE}.vxtex"),
+                "animations.vmaxa",
+                "contents2.scndata"
+            ]
+        );
+        let trsc: Vec<&str> = ext
+            .scene
+            .trsc
+            .as_ref()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(trsc, ["contents2.scndata"]);
+    }
+
+    /// Releasing the last external mesh drops the texture it shared.
+    #[test]
+    fn releasing_both_external_meshes_drops_the_shared_texture() {
+        let mut main = from_vmax_file(&DependenciesImpl, &sample_with_two_meshes()).unwrap();
+
+        release_mesh_node(&mut main, "contents3.scndata").unwrap();
+        release_mesh_node(&mut main, "contents2.scndata").unwrap();
+
+        let ext = main.ext();
+        let files: Vec<&str> = ext.other_files.keys().map(String::as_str).collect();
+        assert_eq!(files, ["animations.vmaxa"]);
+        assert_eq!(ext.scene.trsc, Some(BTreeMap::new()));
+    }
+
+    /// Releasing an external mesh whose archive the ext lacks errors with the
+    /// archive.
+    #[test]
+    fn releasing_an_external_mesh_without_its_archive_errors() {
+        let mut main = from_vmax_file(&DependenciesImpl, &sample_with_mesh()).unwrap();
+        main.ext_mut().other_files.remove("contents2.scndata");
+
+        let error = release_mesh_node(&mut main, "contents2.scndata").unwrap_err();
+
+        assert!(error.to_string().contains("contents2.scndata"), "{error}");
+    }
+
+    /// A read skips the archive and texture of a mesh Voxel Max deleted. Only
+    /// Voxel Max's undo history needs them.
+    #[test]
+    fn a_read_skips_a_deleted_mesh_s_files() {
+        let mut file = sample_with_mesh();
+        for name in ["contents9.scndata", "C.vxtex"] {
+            file.other_files
+                .insert(name.to_owned(), VMaxOpaqueFile(b"left".to_vec()));
+        }
+
+        let main = from_vmax_file(&DependenciesImpl, &file).unwrap();
+        let rebuilt = to_vmax_file(&DependenciesImpl, &main, &VMaxWriteOptions::default()).unwrap();
+
+        assert_eq!(rebuilt, sample_with_mesh());
+    }
+
+    /// A `trsc` entry naming no external mesh errors with the entry.
+    #[test]
+    fn a_trsc_entry_naming_no_mesh_errors() {
+        let mut file = sample_with_mesh();
+        file.scene_json_file
+            .trsc
+            .as_mut()
+            .unwrap()
+            .insert("contents9.scndata".to_owned(), Vec::new());
+
+        let error = from_vmax_file(&DependenciesImpl, &file).unwrap_err();
+
+        assert!(error.to_string().contains("contents9.scndata"), "{error}");
+    }
+
+    /// A missing texture that `trsc` references errors with the texture.
+    #[test]
+    fn a_missing_mesh_texture_errors() {
+        let mut file = sample_with_mesh();
+        file.other_files.remove(&format!("{TEXTURE}.vxtex"));
+
+        let error = from_vmax_file(&DependenciesImpl, &file).unwrap_err();
+
+        assert!(error.to_string().contains(TEXTURE), "{error}");
     }
 
     /// An external mesh loads as a node placing nothing, since voxcore models
@@ -2940,6 +3090,9 @@ mod tests {
         let archive = file.other_files.remove("contents2.scndata").unwrap();
         file.other_files
             .insert("contents1.scndata".to_owned(), archive);
+        let trsc = file.scene_json_file.trsc.as_mut().unwrap();
+        let textures = trsc.remove("contents2.scndata").unwrap();
+        trsc.insert("contents1.scndata".to_owned(), textures);
         let mesh = &mut file.scene_json_file.objects[1];
         mesh.data = "contents1.scndata".to_owned();
         mesh.history = "history1.vmaxhb".to_owned();

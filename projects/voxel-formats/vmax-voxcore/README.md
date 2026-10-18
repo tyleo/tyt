@@ -20,7 +20,7 @@ state with no native voxcore home as its ext.
   other property holds one value per material slot. A second layer, a palette
   off that layout, or a grid wider than 512 errors. Both take the `vmax`
   crate's base64 dependencies because the ext keeps every unmodeled file as
-  base64 text. A kept file that is not base64 errors on write.
+  base64 text.
 - `to_vmax_vox_main`: gives a bare `VoxMain<()>` a synthesized ext and
   reshapes its scene to fit Voxel Max:
   1. The hierarchy becomes a tree. A node placed along several paths is
@@ -70,12 +70,13 @@ takes the entry `to_vmax_vox_main` would synthesize for it as it is retained:
 a fresh UUID, a fresh index triplet, and the default anchors or editor
 session.
 
-A release drops the entry. `gc` rekeys every entry to its compacted id. An
-exact material list follows its material pools' surviving values, so a pruned
-palette keeps the exact materials its slots still draw. The writer errors on
-an entity with no entry, on a node with two parents, and on a root that is
-also a child, because Voxel Max holds a tree. voxconv carries the ext through
-a Voxel Json document's `ext` block.
+A release drops the entry. An external mesh's files go with the last node
+placing it. `gc` rekeys every entry to its compacted id. An exact material
+list follows its material pools' surviving values, so a pruned palette keeps
+the exact materials its slots still draw. The writer errors on an entity with
+no entry, on a node with two parents, and on a root that is also a child,
+because Voxel Max holds a tree. voxconv carries the ext through a Voxel Json
+document's `ext` block.
 
 The `serde` feature, on by default, derives serde for the ext types. A map
 keyed by id serializes under the bare ids.
