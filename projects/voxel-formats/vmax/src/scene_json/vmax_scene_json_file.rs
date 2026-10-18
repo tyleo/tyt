@@ -30,10 +30,9 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub af: Option<String>,
 
-    /// The active group, an index into `groups`. Voxel Max reads it unchecked,
-    /// so it must name a listed group.
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub ag: Option<i64>,
+    /// The active group: editor state, never written.
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    pub ag: Option<VMaxDiscarded>,
 
     /// Ambient-light intensity.
     #[cfg_attr(
@@ -46,7 +45,7 @@ pub struct VMaxSceneJsonFile {
     pub aint: Option<f64>,
 
     /// The active object, which a scene opens inside: editor state, never
-    /// written, so a written scene opens on the scene.
+    /// written.
     #[cfg_attr(feature = "serde", serde(skip_serializing))]
     pub ao: Option<VMaxDiscarded>,
 
@@ -137,10 +136,10 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub oie: Option<bool>,
 
-    /// The level the scene opens on: `-1` for the scene, else an index into
-    /// `groups`.
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub vl: Option<i64>,
+    /// The level the scene opens on: editor state, never written, so a
+    /// written scene opens on the scene.
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    pub vl: Option<VMaxDiscarded>,
 
     /// The textures each external mesh's contents file references, as stored.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]

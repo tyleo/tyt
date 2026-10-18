@@ -38,13 +38,6 @@ pub struct VMaxExtNode {
     #[cfg_attr(feature = "serde", serde(rename = "t_pa"))]
     pub pivot_align: String,
 
-    /// Selected UI flag (`s`).
-    #[cfg_attr(
-        feature = "serde",
-        serde(rename = "s", default, skip_serializing_if = "Option::is_none")
-    )]
-    pub selected: Option<bool>,
-
     /// Whether Voxel Max hides the node (`h`), so neither it nor anything it
     /// places renders.
     #[cfg_attr(

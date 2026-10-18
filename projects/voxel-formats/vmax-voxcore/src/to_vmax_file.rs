@@ -214,9 +214,11 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
     let mut scene = main.ext().scene.clone();
     scene.groups = groups;
     scene.objects = objects;
-    // The active object is editor state: a written scene opens on the scene.
+    // The active object, active group, and opening level are editor state, so
+    // a written scene opens on the scene.
     scene.ao = None;
-    keep_listed_selections(&mut scene);
+    scene.ag = None;
+    scene.vl = None;
     apply_scene_camera(&mut scene, options.scene_camera);
 
     Ok(VMaxFile {
@@ -462,7 +464,7 @@ fn group_from_node(
         rotation,
         scale: transform.scale.to_array(),
         ind: ext_node.index,
-        s: ext_node.selected,
+        s: None,
         t_al: ext_node.alignment.clone(),
         t_pa: ext_node.pivot_align.clone(),
         t_pf: ext_node.pivot_face.clone(),
@@ -497,7 +499,7 @@ fn mesh_from_node(
         rotation,
         scale: transform.scale.to_array(),
         ind: ext_node.index,
-        s: ext_node.selected,
+        s: None,
         t_al: ext_node.alignment.clone(),
         t_pa: ext_node.pivot_align.clone(),
         t_pf: ext_node.pivot_face.clone(),
@@ -1342,7 +1344,7 @@ fn object_from_node(
         rotation,
         scale: transform.scale.to_array(),
         ind: ext_node.index,
-        s: ext_node.selected,
+        s: None,
         t_al: ext_node.alignment.clone(),
         t_pa: ext_node.pivot_align.clone(),
         t_pf: ext_node.pivot_face.clone(),
@@ -1383,18 +1385,6 @@ fn unbake_position(
         transform.position.y - rotated.y,
         transform.position.z - rotated.z,
     ]
-}
-
-/// Drops a kept active group (`ag`) or opening level (`vl`) that no longer
-/// names a listed group. Voxel Max indexes `groups` with the first unchecked,
-/// so a stale index would stop it.
-fn keep_listed_selections(scene: &mut VMaxSceneJsonFile) {
-    let listed = |index: i64, count: usize| usize::try_from(index).is_ok_and(|index| index < count);
-    let groups = scene.groups.len();
-    scene.ag = scene.ag.filter(|&index| listed(index, groups));
-    scene.vl = scene
-        .vl
-        .filter(|&level| level == -1 || listed(level, groups));
 }
 
 /// Writes each colored plan's color image and material sidecar.
@@ -1705,7 +1695,7 @@ mod tests {
             rotation: [0.0, 0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
             ind: [0, 0, 0],
-            s: Some(false),
+            s: None,
             t_al: String::new(),
             t_pa: String::new(),
             t_pf: String::new(),
@@ -1737,7 +1727,7 @@ mod tests {
             rotation: [0.0, 0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
             ind: [0, 0, 0],
-            s: Some(false),
+            s: None,
             t_al: String::new(),
             t_pa: String::new(),
             t_pf: String::new(),
@@ -1943,7 +1933,6 @@ mod tests {
                 alignment: "f".to_owned(),
                 pivot_face: "8".to_owned(),
                 pivot_align: "4".to_owned(),
-                selected: None,
                 hidden: None,
                 external_mesh: None,
             }
@@ -2643,14 +2632,17 @@ mod tests {
         assert_eq!(rebuilt, original);
     }
 
-    /// A kept active group or opening level writes while it names a listed
-    /// group, and drops once it does not, since Voxel Max indexes with it
-    /// unchecked.
+    /// A read active object, active group, opening level, or node selection
+    /// is editor state the write leaves out, so the written scene opens on the
+    /// scene with nothing selected.
     #[test]
-    fn drops_selections_that_name_no_listed_entry() {
+    fn leaves_out_the_selection_and_opening_level() {
         let mut original = sample();
-        original.scene_json_file.ag = Some(0);
-        original.scene_json_file.vl = Some(7);
+        original.scene_json_file.ao = Some(VMaxDiscarded);
+        original.scene_json_file.ag = Some(VMaxDiscarded);
+        original.scene_json_file.vl = Some(VMaxDiscarded);
+        original.scene_json_file.groups[0].s = Some(VMaxDiscarded);
+        original.scene_json_file.objects[0].s = Some(VMaxDiscarded);
 
         let rebuilt = to_vmax_file(
             &from_vmax_file(&original).unwrap(),
@@ -2659,23 +2651,9 @@ mod tests {
         .unwrap();
 
         let scene = &rebuilt.scene_json_file;
-        assert_eq!((scene.ag, scene.vl), (Some(0), None));
-    }
-
-    /// A read active object is editor state the write leaves out, so the
-    /// written scene opens on the scene.
-    #[test]
-    fn leaves_out_the_active_object() {
-        let mut original = sample();
-        original.scene_json_file.ao = Some(VMaxDiscarded);
-
-        let rebuilt = to_vmax_file(
-            &from_vmax_file(&original).unwrap(),
-            &VMaxWriteOptions::default(),
-        )
-        .unwrap();
-
-        assert_eq!(rebuilt.scene_json_file.ao, None);
+        assert_eq!((scene.ao, scene.ag, scene.vl), (None, None, None));
+        assert_eq!(scene.groups[0].s, None);
+        assert_eq!(scene.objects[0].s, None);
     }
 
     /// The sample with an external mesh beside its object under the group,

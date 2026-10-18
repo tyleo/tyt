@@ -1,4 +1,4 @@
-use crate::VMaxValue;
+use crate::{VMaxDiscarded, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -66,12 +66,9 @@ pub struct VMaxObject {
     #[cfg_attr(feature = "serde", serde(default))]
     pub ind: [i64; 3],
 
-    /// Selection/visibility flag.
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_serializing_if = "Option::is_none", default)
-    )]
-    pub s: Option<bool>,
+    /// Whether the node is selected: editor state, never written.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
+    pub s: Option<VMaxDiscarded>,
 
     /// Transform-anchor token.
     #[cfg_attr(feature = "serde", serde(default))]

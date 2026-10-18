@@ -841,7 +841,6 @@ fn node_from_object(object: &VMaxObject) -> VMaxExtNode {
         alignment: object.t_al.clone(),
         pivot_face: object.t_pf.clone(),
         pivot_align: object.t_pa.clone(),
-        selected: object.s,
         hidden: object.hidden,
         external_mesh: is_external_mesh(object).then(|| object.clone()),
     }
@@ -857,7 +856,6 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
         alignment: group.t_al.clone(),
         pivot_face: group.t_pf.clone(),
         pivot_align: group.t_pa.clone(),
-        selected: group.s,
         hidden: group.hidden,
         external_mesh: None,
     }
