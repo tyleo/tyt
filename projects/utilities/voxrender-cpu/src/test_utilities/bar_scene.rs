@@ -1,6 +1,8 @@
-use crate::{RenderLight, RenderMaterial, RenderObject, RenderPlacement, RenderRay, RenderScene};
 use branded_id::U32Id;
 use ty_math::{TyLinSrgbF64, TyTransformF64, TyVector3F64, TyVector3U32};
+use voxrender::{
+    RenderLight, RenderMaterial, RenderObject, RenderPlacement, RenderRay, RenderScene,
+};
 
 /// A bar of one voxel per material along +X under a white hemisphere
 /// light, and the ray that enters it from -X through the center of its

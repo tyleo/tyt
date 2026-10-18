@@ -1,5 +1,5 @@
-use crate::{RenderBloom, RenderImage, RenderPixel};
 use ty_math::TyLinSrgbF32;
+use voxrender::{RenderBloom, RenderImage, RenderPixel};
 
 /// How many standard deviations out a blur's taps reach.
 const TAP_REACH: f64 = 3.0;
@@ -161,11 +161,9 @@ fn gaussian_kernel(sigma: f64) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        RenderBloom, RenderImage, RenderPixel,
-        bloom::{BLACK, apply_bloom, gaussian_blur, gaussian_kernel, over_threshold},
-    };
+    use crate::bloom::{BLACK, apply_bloom, gaussian_blur, gaussian_kernel, over_threshold};
     use ty_math::TyLinSrgbF32;
+    use voxrender::{RenderBloom, RenderImage, RenderPixel};
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-5

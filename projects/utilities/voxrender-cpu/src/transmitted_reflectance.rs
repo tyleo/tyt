@@ -1,5 +1,6 @@
-use crate::{RenderMaterial, normal_reflectance};
+use crate::normal_reflectance;
 use ty_math::TyLinSrgbF64;
+use voxrender::RenderMaterial;
 
 /// The share of the light that `material`'s transmitted share reflects for a
 /// ray at `cosine` to the face normal: Schlick's Fresnel.
@@ -17,8 +18,9 @@ pub fn transmitted_reflectance(material: &RenderMaterial, cosine: f64) -> TyLinS
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderMaterial, fixtures::glass, normal_reflectance, transmitted_reflectance};
+    use crate::{normal_reflectance, transmitted_reflectance};
     use ty_math::{TyLinSrgbF64, TyLinSrgbaF64};
+    use voxrender::{RenderMaterial, fixtures::glass};
 
     #[test]
     fn the_reflectance_rises_from_f0_toward_the_roughness_cap() {

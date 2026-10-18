@@ -1,5 +1,6 @@
-use crate::{RenderMaterial, material_pass};
+use crate::material_pass;
 use ty_math::TyLinSrgbF64;
+use voxrender::RenderMaterial;
 
 /// Whether `material` passes no light at normal incidence.
 pub fn is_opaque(material: &RenderMaterial) -> bool {

@@ -1,6 +1,6 @@
-use crate::BRenderPlacement;
 use branded_id::U32Id;
 use voxcore::BVoxVoxel;
+use voxrender::BRenderPlacement;
 use voxsurface::SurfaceSpan;
 
 /// One surface hit of a ray: the face through which it entered a live cell

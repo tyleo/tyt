@@ -1,7 +1,4 @@
-use crate::{
-    BRenderMaterial, BRenderPlacement, Error, GRID_FRACTION_BITS, RenderGridRay, RenderHit,
-    RenderObject, RenderPlacement, RenderRay, RenderScene, Result, is_opaque, placement_bounds,
-};
+use crate::{RenderHit, is_opaque, placement_bounds};
 use branded_id::U32Id;
 use std::{
     array,
@@ -9,6 +6,10 @@ use std::{
     fmt::{Debug, Formatter, Result as FmtResult},
 };
 use ty_math::TyVector3U32;
+use voxrender::{
+    BRenderMaterial, BRenderPlacement, Error, GRID_FRACTION_BITS, RenderGridRay, RenderObject,
+    RenderPlacement, RenderRay, RenderScene, Result,
+};
 use voxsurface::SurfaceSpan;
 
 /// One cell's side in fixed point.
@@ -554,15 +555,15 @@ fn position_of(cell: [i64; 3], flip: [bool; 3], bounds: [i64; 3]) -> TyVector3U3
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        GRID_FRACTION_BITS, RenderGridRay, RenderRay, RenderRayWalk, RenderScene, RenderViewRays,
-        SHADOW_INSET_BITS,
-        fixtures::{cells_scene, glass, matte, precision_view_scene, random_scene, stairs_scene},
-        is_opaque, quantize_direction, quantize_point,
-        test_utilities::bar_scene,
-    };
+    use crate::{RenderRayWalk, is_opaque, test_utilities::bar_scene};
     use std::array;
     use ty_math::{TyLinSrgbaF64, TyTransformF64, TyVector3Ext, TyVector3F64, TyVector3U32};
+    use voxrender::{
+        GRID_FRACTION_BITS, RenderGridRay, RenderRay, RenderScene, RenderViewRays,
+        SHADOW_INSET_BITS,
+        fixtures::{cells_scene, glass, matte, precision_view_scene, random_scene, stairs_scene},
+        quantize_direction, quantize_point,
+    };
 
     const ONE: i32 = 1 << GRID_FRACTION_BITS;
 

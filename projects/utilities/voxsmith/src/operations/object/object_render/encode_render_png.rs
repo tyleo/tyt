@@ -138,7 +138,7 @@ mod tests {
             lights: IdVec::from(studio),
         };
 
-        let outputs = render(&main, &[U32Id::from_u32(0)], &record).unwrap();
+        let outputs = render(&DependenciesImpl, &main, &[U32Id::from_u32(0)], &record).unwrap();
         let png = encode_render_png(&DependenciesImpl, &outputs.as_slice()[0].image).unwrap();
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))

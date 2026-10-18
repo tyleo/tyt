@@ -444,7 +444,7 @@ impl ObjectRender {
 
         let object_ids = select_render_objects(&main, &self.selection)?;
 
-        let rendered = render(&main, &object_ids, &record)?;
+        let rendered = render(&VoxsmithDependenciesImpl, &main, &object_ids, &record)?;
 
         let mut paths = outputs.as_ref().map(|outputs| outputs.iter());
 
@@ -973,6 +973,7 @@ mod tests {
         TyAngleUnit, TyLinSrgbF64, TyPoseF64, TyQuaternionF64, TySrgbU8, TySrgbaU8, TyVector3F64,
     };
     use voxsmith::{
+        dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
         operations::{
             object::{
                 FitOrFixed, LightRecord, PoseTransform, PositionTransform, RenderBloom,
@@ -1311,7 +1312,7 @@ mod tests {
                 .iter_objects()
                 .find(|(_, object)| object.name() == name)
                 .unwrap();
-            render(&main, &[object_id], &review)
+            render(&VoxsmithDependenciesImpl, &main, &[object_id], &review)
                 .unwrap()
                 .iter()
                 .map(|rendered| rendered.image.pixels().to_vec())

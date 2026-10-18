@@ -1,5 +1,6 @@
-use crate::{RenderMaterial, transmitted_reflectance};
+use crate::transmitted_reflectance;
 use ty_math::TyLinSrgbF64;
+use voxrender::RenderMaterial;
 
 const WHITE: TyLinSrgbF64 = TyLinSrgbF64::new(1.0, 1.0, 1.0);
 
@@ -16,13 +17,13 @@ pub fn material_pass(material: &RenderMaterial, cosine: f64) -> TyLinSrgbF64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        RenderMaterial,
-        fixtures::{glass, matte},
-        material_pass,
-    };
+    use crate::material_pass;
     use ty_math::{TyLinSrgbF64, TyLinSrgbaF64};
     use voxcore::material;
+    use voxrender::{
+        RenderMaterial,
+        fixtures::{glass, matte},
+    };
 
     #[test]
     fn the_pass_at_normal_incidence_matches_voxcores_and_a_grazing_ray_passes_less() {

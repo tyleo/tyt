@@ -3,11 +3,11 @@
 _Part of the
 [voxel rendering plan](../../plan/closed/voxel-rendering/README.md)._
 
-The contract says what the image of a scene is. Every renderer implements it.
-The CPU reference in `voxrender` follows it literally and makes the review
-images and the golden images. [`vxl object render`](render.md) runs the
-reference, and its [profiles](profile-language.md) and flags mirror the views
-and lights below.
+The contract says what the image of a scene is. Every renderer implements it
+through `voxrender`'s `Render` trait. The CPU reference in `voxrender-cpu`
+follows it literally and makes the review images and the golden images.
+[`vxl object render`](render.md) runs the reference, and its
+[profiles](profile-language.md) and flags mirror the views and lights below.
 
 ## Frame
 

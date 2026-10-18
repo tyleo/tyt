@@ -1,4 +1,5 @@
-use crate::{RenderHit, RenderRay, RenderRayWalk, RenderScene, Result};
+use crate::{RenderHit, RenderRayWalk};
+use voxrender::{RenderRay, RenderScene, Result};
 
 /// The nearest surface hit of `ray` within `max_distance` across every
 /// placement of `scene`: the first hit of its [`RenderRayWalk`]. Errors if
@@ -15,9 +16,10 @@ pub fn cast_ray(
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderRay, cast_ray, fixtures::cells_scene};
+    use crate::cast_ray;
     use std::f64::consts::PI;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
+    use voxrender::{RenderRay, fixtures::cells_scene};
 
     fn ray(origin: [f64; 3], direction: [f64; 3]) -> RenderRay {
         RenderRay {

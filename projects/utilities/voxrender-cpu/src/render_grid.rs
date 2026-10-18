@@ -1,7 +1,8 @@
-use crate::{RenderMaterial, RenderObject, RenderScene, is_opaque};
+use crate::is_opaque;
 use branded_id::U32Id;
 use ty_math::TyVector3U32;
 use voxcore::BVoxVoxel;
+use voxrender::{RenderMaterial, RenderObject, RenderScene};
 use voxsurface::SurfaceGrid;
 
 /// A render object's grid read with its scene's materials: a cell is opaque
@@ -54,9 +55,10 @@ impl SurfaceGrid for RenderGrid<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderGrid, RenderMaterial, RenderObject, RenderScene};
+    use crate::RenderGrid;
     use branded_id::U32Id;
     use ty_math::{TyLinSrgbaF64, TyVector3U32};
+    use voxrender::{RenderMaterial, RenderObject, RenderScene};
     use voxsurface::SurfaceGrid;
 
     #[test]

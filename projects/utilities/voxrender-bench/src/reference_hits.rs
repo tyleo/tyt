@@ -1,6 +1,7 @@
 use crate::{PixelHit, Result, view_grid_rays};
 use branded_id::U32Id;
-use voxrender::{BRenderView, RenderRayWalk, RenderScene};
+use voxrender::{BRenderView, RenderScene};
+use voxrender_cpu::RenderRayWalk;
 
 /// The reference's first hit through each pixel of `view_id` over a `size`
 /// square image, row by row.

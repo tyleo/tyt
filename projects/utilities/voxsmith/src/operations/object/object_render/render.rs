@@ -11,12 +11,12 @@ use std::collections::HashSet;
 use ty_math::{TyAngleUnit, TyBoundsF64, TyPoseF64};
 use voxcore::{BVoxObject, Error as VoxError, VoxExt, VoxMain};
 use voxrender::{
-    BRenderLight, BRenderPlacement, BRenderView, RenderBloom, RenderLight, RenderOutput,
-    RenderScene, render as render_image,
+    BRenderLight, BRenderPlacement, BRenderView, Render, RenderBloom, RenderLight, RenderOutput,
+    RenderScene,
 };
 
-/// Renders the objects `object_ids` of `main` under `record`, one image per
-/// view, placed by the hierarchy nodes reaching them. The transforms resolve
+/// Renders the objects `object_ids` of `main` under `record` through
+/// `dependencies`, one image per view, placed by the hierarchy nodes reaching them. The transforms resolve
 /// against the flattened scene in the order subject bounds, view, then
 /// lights, so a `camera`-frame light follows each view. Errors if:
 ///
@@ -27,7 +27,8 @@ use voxrender::{
 /// 3. the record holds no view
 /// 4. a view's `select` matches none of the rendered objects
 /// 5. a transform cannot resolve
-pub fn render<T: VoxExt>(
+pub fn render<D: Render, T: VoxExt>(
+    dependencies: &D,
     main: &VoxMain<T>,
     object_ids: &[U32Id<BVoxObject>],
     record: &RenderRecord,
@@ -77,7 +78,7 @@ pub fn render<T: VoxExt>(
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let image = render_image(
+        let image = dependencies.render(
             &scene,
             view_id,
             record.occlusion,
@@ -318,6 +319,7 @@ fn resolve_light(
 mod tests {
     use crate::{
         Error, Result,
+        dependencies::DependenciesImpl,
         operations::object::{
             FitOrFixed, LightRecord, PoseTransform, RenderElement, RenderRecord, RenderedView,
             Rotation, RotationTransform, SpotTransform, ViewProjection, ViewRecord, render,
@@ -414,6 +416,7 @@ mod tests {
         let main = bar();
 
         let outputs = render(
+            &DependenciesImpl,
             &main,
             &[U32Id::from_u32(0)],
             &record(vec![orbit("front", 0.0)]),
@@ -448,6 +451,7 @@ mod tests {
         let main = bar();
 
         let outputs = render(
+            &DependenciesImpl,
             &main,
             &[U32Id::from_u32(0)],
             &record(vec![orbit("front", 0.0), orbit("back", 180.0)]),
@@ -487,18 +491,18 @@ mod tests {
 
         let mut wide = record(vec![orbit("front", 0.0)]);
         wide.lights = IdVec::from(vec![spot(30.0, 60.0)]);
-        let outputs = render(&main, &[U32Id::from_u32(0)], &wide).unwrap();
+        let outputs = render(&DependenciesImpl, &main, &[U32Id::from_u32(0)], &wide).unwrap();
         let [red, green, blue, _] = leftmost_hit(&output(&outputs, 0).image);
         assert!(red > 100 && green < 20 && blue < 20, "{red} {green} {blue}");
 
         let mut narrow = record(vec![orbit("front", 0.0)]);
         narrow.lights = IdVec::from(vec![spot(1.0, 2.0)]);
-        let outputs = render(&main, &[U32Id::from_u32(0)], &narrow).unwrap();
+        let outputs = render(&DependenciesImpl, &main, &[U32Id::from_u32(0)], &narrow).unwrap();
         assert_eq!(leftmost_hit(&output(&outputs, 0).image), [0, 0, 0, 255]);
 
         let mut reversed = record(vec![orbit("front", 0.0)]);
         reversed.lights = IdVec::from(vec![spot(60.0, 30.0)]);
-        assert!(render(&main, &[U32Id::from_u32(0)], &reversed).is_err());
+        assert!(render(&DependenciesImpl, &main, &[U32Id::from_u32(0)], &reversed).is_err());
     }
 
     #[test]
@@ -508,7 +512,7 @@ mod tests {
         let mut record = record(vec![orbit("front", 0.0)]);
         record.background = Some(TySrgbU8::new(1, 2, 3));
 
-        let outputs = render(&main, &[U32Id::from_u32(0)], &record).unwrap();
+        let outputs = render(&DependenciesImpl, &main, &[U32Id::from_u32(0)], &record).unwrap();
 
         assert_eq!(pixel(&output(&outputs, 0).image, 0, 0), [1, 2, 3, 255]);
     }
@@ -525,13 +529,25 @@ mod tests {
 
         let object_ids = [U32Id::from_u32(0), far_id];
 
-        let both = render(&main, &object_ids, &record(vec![orbit("front", 0.0)])).unwrap();
+        let both = render(
+            &DependenciesImpl,
+            &main,
+            &object_ids,
+            &record(vec![orbit("front", 0.0)]),
+        )
+        .unwrap();
         assert!((output(&both, 0).view.pose.position.x - 5.5).abs() < 1e-9);
 
         let mut narrowed = orbit("front", 0.0);
         narrowed.select = vec!["far".to_owned()];
 
-        let far_alone = render(&main, &object_ids, &record(vec![narrowed])).unwrap();
+        let far_alone = render(
+            &DependenciesImpl,
+            &main,
+            &object_ids,
+            &record(vec![narrowed]),
+        )
+        .unwrap();
         assert!((output(&far_alone, 0).view.pose.position.x - 10.5).abs() < 1e-9);
     }
 
@@ -563,7 +579,13 @@ mod tests {
             },
         };
 
-        let outputs = render(&main, &[U32Id::from_u32(0)], &record(vec![riding])).unwrap();
+        let outputs = render(
+            &DependenciesImpl,
+            &main,
+            &[U32Id::from_u32(0)],
+            &record(vec![riding]),
+        )
+        .unwrap();
         let RenderedView { view, image } = output(&outputs, 0);
 
         // The offset doubles and turns with the node: 5 along its +Z lands 10
@@ -585,12 +607,12 @@ mod tests {
         let main = bar();
         let record = record(vec![orbit("front", 0.0)]);
 
-        assert!(render(&main, &[], &record).is_err());
+        assert!(render(&DependenciesImpl, &main, &[], &record).is_err());
 
         let twice = U32Id::<BVoxObject>::from_u32(0);
-        assert!(render(&main, &[twice, twice], &record).is_err());
+        assert!(render(&DependenciesImpl, &main, &[twice, twice], &record).is_err());
 
-        assert!(render(&main, &[U32Id::from_u32(7)], &record).is_err());
+        assert!(render(&DependenciesImpl, &main, &[U32Id::from_u32(7)], &record).is_err());
     }
 
     #[test]
@@ -606,14 +628,14 @@ mod tests {
         let mut zero = record(vec![orbit("front", 0.0)]);
         zero.height = 0;
         assert_eq!(
-            element(render(&main, &object_ids, &zero)),
+            element(render(&DependenciesImpl, &main, &object_ids, &zero)),
             RenderElement::Image
         );
 
         let mut sized = record(vec![orbit("front", 0.0)]);
         sized.scene_scale = 0.0;
         assert_eq!(
-            element(render(&main, &object_ids, &sized)),
+            element(render(&DependenciesImpl, &main, &object_ids, &sized)),
             RenderElement::SceneScale
         );
 
@@ -634,21 +656,31 @@ mod tests {
             let mut glowing = record(vec![orbit("front", 0.0)]);
             glowing.bloom = bloom;
             assert_eq!(
-                element(render(&main, &object_ids, &glowing)),
+                element(render(&DependenciesImpl, &main, &object_ids, &glowing)),
                 RenderElement::Bloom,
                 "{bloom:?}"
             );
         }
 
         assert_eq!(
-            element(render(&main, &object_ids, &record(Vec::new()))),
+            element(render(
+                &DependenciesImpl,
+                &main,
+                &object_ids,
+                &record(Vec::new())
+            )),
             RenderElement::Views
         );
 
         let mut lost = orbit("front", 0.0);
         lost.select = vec!["nowhere".to_owned()];
         assert_eq!(
-            element(render(&main, &object_ids, &record(vec![lost]))),
+            element(render(
+                &DependenciesImpl,
+                &main,
+                &object_ids,
+                &record(vec![lost])
+            )),
             RenderElement::ViewSelect {
                 name: "front".to_owned()
             }
@@ -660,7 +692,12 @@ mod tests {
             rotation: Rotation::LookAt { target: None },
         };
         assert_eq!(
-            element(render(&main, &object_ids, &record(vec![looking_inward]))),
+            element(render(
+                &DependenciesImpl,
+                &main,
+                &object_ids,
+                &record(vec![looking_inward])
+            )),
             RenderElement::ViewTransform {
                 name: "front".to_owned()
             }
@@ -673,7 +710,12 @@ mod tests {
             rotation: Rotation::LookAt { target: None },
         };
         assert_eq!(
-            element(render(&main, &object_ids, &record(vec![unmounted]))),
+            element(render(
+                &DependenciesImpl,
+                &main,
+                &object_ids,
+                &record(vec![unmounted])
+            )),
             RenderElement::ViewTransform {
                 name: "front".to_owned()
             }

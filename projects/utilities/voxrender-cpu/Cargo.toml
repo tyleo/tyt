@@ -1,0 +1,24 @@
+[package]
+name = "voxrender-cpu"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "The CPU reference renderer for voxrender's render contract."
+
+[package.metadata.workspaces]
+independent = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+branded-id = "0.2.0"
+ty-math = { version = "0.4.0", default-features = false, features = ["color"] }
+voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
+voxrender = "0.4.0"
+voxsurface = "0.3.0"
+
+[dev-dependencies]
+png = "0.18"
+voxrender = { version = "0.4.0", features = ["fixtures"] }

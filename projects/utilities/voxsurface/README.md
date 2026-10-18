@@ -1,9 +1,9 @@
 # voxsurface
 
 The boundary of a voxel grid: its faces meshed into quads and the occlusion
-at their corners. voxsmith meshes objects through it and voxrender shades
-through it. Everything stays in grid units on the grid's axes. The caller
-applies the voxel size and the placement.
+at their corners. voxsmith meshes objects through it, and voxrender-cpu
+shades through it. Everything stays in grid units on the grid's axes. The
+caller applies the voxel size and the placement.
 
 ## The grid
 

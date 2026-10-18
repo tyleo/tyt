@@ -149,7 +149,7 @@ cargo build -p tyt --features bin   # Build the binary
 
 ## Development
 
-Images and other binaries live in [Git LFS](https://git-lfs.com), and the voxrender golden tests compile the real PNGs in, so install `git-lfs` before cloning. A clone made without it holds pointer files; run `git lfs pull` to fetch them.
+Images and other binaries live in [Git LFS](https://git-lfs.com). The voxrender-cpu golden tests compile the real PNGs in, so install `git-lfs` before cloning. A clone made without it holds pointer files, and `git lfs pull` fetches them.
 
 After cloning, run setup once:
 

@@ -31,6 +31,7 @@ members = [
     "projects/utilities/voxcore",
     "projects/utilities/voxrender",
     "projects/utilities/voxrender-bench",
+    "projects/utilities/voxrender-cpu",
     "projects/utilities/vox-value-language",
     "projects/utilities/voxsmith",
     "projects/utilities/voxsurface",
@@ -93,6 +94,7 @@ ty-preferences = { path = "projects/utilities/ty-preferences" }
 voxconv = { path = "projects/utilities/voxconv" }
 voxcore = { path = "projects/utilities/voxcore" }
 voxrender = { path = "projects/utilities/voxrender" }
+voxrender-cpu = { path = "projects/utilities/voxrender-cpu" }
 vox-value-language = { path = "projects/utilities/vox-value-language" }
 voxsmith = { path = "projects/utilities/voxsmith" }
 voxsurface = { path = "projects/utilities/voxsurface" }

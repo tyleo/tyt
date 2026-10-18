@@ -1,6 +1,7 @@
-use crate::{RenderBloom, RenderOcclusion, RenderOutput, RenderScene, RenderShadow, render};
+use crate::render;
 use png::{BitDepth, ColorType, Decoder, Encoder};
 use std::{env, fs, io::Cursor, path::Path};
+use voxrender::{RenderBloom, RenderOcclusion, RenderOutput, RenderScene, RenderShadow};
 
 /// The environment variable that rewrites the goldens instead of checking
 /// them.

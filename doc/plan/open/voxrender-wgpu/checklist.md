@@ -41,9 +41,8 @@ code-level choices in
          moved
       6. The contract's Surface and Lights sections state the integer walk.
          Its Transforms section says floats stay f64 until the quantization
-- [ ] **S2. Desktop harness and B1 on this Mac.** `voxrender-bench` renders
-      headless through wgpu. Items 1 to 4 are staged for review before 5 to
-      7.
+- [x] **S2. Desktop harness and primary ids.** `voxrender-bench` renders
+      headless through wgpu.
       1. `voxrender`'s golden and precision-sim scenes move behind a
          `fixtures` feature, which its tests and the bench share
       2. `GRID_RANGE_BITS` drops to 18, and the range check keeps each
@@ -54,14 +53,26 @@ code-level choices in
          inputs and a dense cell buffer. It enters a grid as
          [entry32.py](reference/precision-sim/entry32.py) does. It writes a
          placement, cell, and face id per pixel
-      5. The WGSL writes per-corner shadow bits. The entry's correction also
+- [ ] **S3. The CPU renderer gets its own crate.** A consumer injects the
+      render tech through the repo's dependency pattern.
+      1. `voxrender` keeps the contract types, the shared quantization, and
+         the fixtures, and drops its `cpu` feature
+      2. `voxrender` defines the `Render` capability trait over today's
+         `render` inputs
+      3. `voxrender-cpu` holds the reference renderer, the walk, and the
+         goldens
+      4. `voxsmith` renders through `D: Render`. Its `DependenciesImpl`
+         implements `Render` with `voxrender-cpu` behind `impl`
+      5. The contract and `voxrender`'s docs say where the reference lives
+- [ ] **S4. Shadow bits and B1 on this Mac.**
+      1. The WGSL writes per-corner shadow bits. The entry's correction also
          finds a point light's end cell. A shadow's start in another
          placement's grid comes from f32
-      6. B1's desktop half passes B1's line against the reference on the
+      2. B1's desktop half passes B1's line against the reference on the
          golden and precision-sim scenes. The report counts each scene's
          mismatches
-      7. A float DDA on the same scenes records its flip count
-- [ ] **S3. Quest harness and B0.** `voxrender-bench` runs as an OpenXR app on
+      3. A float DDA on the same scenes records its flip count
+- [ ] **S5. Quest harness and B0.** `voxrender-bench` runs as an OpenXR app on
       Quest 3 and reports what the device exposes.
       1. The repo README's Development section documents the Android setup:
          the SDK, NDK, and adb, the Rust Android target, the APK build tool,
@@ -72,22 +83,22 @@ code-level choices in
       3. B0's probe runs at startup and logs its report for adb to pull
       4. The report lands in benchmarks.md. B0's outcomes prune the later
          steps
-- [ ] **S4. B1 on Quest.** S2's kernels run in the headset. The run counts
-      id mismatches and measures the int32 cost and the integer step against
-      a float step. Decision 1 applies the 1.25x line.
-- [ ] **S5. Bench scenes and the per-object structure.**
+- [ ] **S6. B1 on Quest.** S2's and S4's kernels run in the headset. The
+      run counts id mismatches and measures the int32 cost and the integer
+      step against a float step. Decision 1 applies the 1.25x line.
+- [ ] **S7. Bench scenes and the per-object structure.**
       1. `voxrender-bench` builds the research's five scenes from fixtures
          and generators
       2. The 64-tree of research section 3.4 is built on the CPU from a
          dense grid
       3. Tests: a walk over the tree finds the reference's first hits on
          every scene
-- [ ] **S6. B2 on Quest.** The run measures ray rate and step cost with B2's
+- [ ] **S8. B2 on Quest.** The run measures ray rate and step cost with B2's
       setup. The rate decides which B3 arms get built.
 
 ## Later
 
-The steps after S6 get their detail when S6 lands. They run in this order:
+The steps after S8 get their detail when S8 lands. They run in this order:
 
 1. The stereo view in the reference: two off-axis frusta and a head pose
 2. B3, one step per arm the B2 rate allows, then the shootout

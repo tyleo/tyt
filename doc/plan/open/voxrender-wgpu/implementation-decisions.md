@@ -44,7 +44,7 @@ they land.
   4. spot-room, all four
   5. two-placements per-corner
 
-## S2. Desktop harness and B1
+## S2. Desktop harness and primary ids
 
 - The scene builders live in `voxrender::fixtures`, compiled under
   `any(test, feature = "fixtures")`. `bar_scene` and `check_goldens` stay
@@ -72,3 +72,17 @@ they land.
   material change alone and needs no opacity.
 - naga's Metal backend casts signed adds and multiplies through unsigned
   types, so the wrapping the entry relies on holds there.
+
+## S3. The CPU renderer gets its own crate
+
+- `voxrender` keeps every quantization type and function public and
+  ungated because `voxrender-cpu` and every GPU tier share them.
+  It no longer depends on `voxsurface`.
+- `Render`'s default implementation cannot live beside the trait because
+  `voxrender-cpu` depends on `voxrender`. voxsmith's `DependenciesImpl`
+  implements it over `voxrender-cpu`, as it does `EncodePng` over `png`.
+- voxsmith's `impl` feature pulls in `voxrender-cpu` even without `render`.
+  Cargo cannot enable a dependency only when two features are both on. The
+  default features hold both.
+- The goldens and `test_utilities` moved with the renderer. The
+  `VOXRENDER_UPDATE_GOLDENS` variable kept its name.

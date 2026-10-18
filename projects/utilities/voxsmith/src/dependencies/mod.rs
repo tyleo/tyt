@@ -1,6 +1,6 @@
 //! The dependencies the operations take from the caller, in a module per
 //! operations module that has any. [`DependenciesImpl`], behind the `impl`
-//! feature, binds them over `png` and `zune-jpeg`.
+//! feature, binds them over `png`, `zune-jpeg`, and `voxrender-cpu`.
 
 // Optional API
 

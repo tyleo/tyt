@@ -1,4 +1,4 @@
-//! The mesh bake's encoder.
+//! The mesh bake's encoder and the render's renderer.
 
 // Public API
 
@@ -14,3 +14,6 @@ pub use png_image::*;
 
 #[cfg(feature = "impl")]
 mod dependencies_impl;
+
+#[cfg(all(feature = "impl", feature = "render"))]
+mod render_dependencies_impl;
