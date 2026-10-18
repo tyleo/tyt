@@ -19,7 +19,6 @@ pub fn synthesized_object_state(ext: &VMaxExt) -> VMaxExtObjectState {
         uuid,
         v: FALLBACK_CONTENT_VERSION,
         cam: None,
-        extent_order: None,
         camera_reference_center: None,
     }
 }

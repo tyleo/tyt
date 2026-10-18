@@ -44,9 +44,9 @@ state with no native voxcore home as its ext.
 - `VMaxWriteOptions`: the writer's options. `Default` stores palette colors
   as PNG and keeps the ext's camera. `VMaxColorFormat` picks where each
   palette's colors are stored. `SceneCameraSource` picks the scene camera the
-  document opens with. Each object writes in the smallest supported editor
-  cube from 32 to 512 holding its grid, starting from a loaded object's
-  extent, and a grid wider than 512 errors. Editor camera targets move with
+  document opens with. Each object's grid writes as its work area, with
+  fresh tool settings, in the smallest supported editor cube from 32 to 512
+  holding it. A grid wider than 512 or with no volume errors. Editor camera targets move with
   the grid,
   and an object with no kept camera takes one framed on its content; scene
   positions, rotations, scales and parent transforms stay equivalent.

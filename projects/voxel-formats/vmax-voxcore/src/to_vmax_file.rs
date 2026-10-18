@@ -6,11 +6,15 @@ use crate::{
     tighten,
 };
 use branded_id::{IdRange, U32Id};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::{
+    array::from_fn,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+};
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyTransformF64, TyVector3F64};
 use vmax::{
     VMaxCamera, VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
-    VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
+    VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxTools,
+    VMaxViewBox,
     snapshots::{SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, encode_vmax_snapshots},
 };
 use voxcore::{
@@ -156,8 +160,9 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
             )?;
 
             let object = object.yup_to_zup();
-            let extent_order = object_extent_order(&object, object_state)?;
+            let extent_order = object_extent_order(&object)?;
             let (tight, object_placement) = place_object_in_workspace(&object, 1 << extent_order);
+            let tools = VMaxTools::fresh(work_area(object_id, &object, &object_placement)?);
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
@@ -176,6 +181,7 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
                             object_state,
                             extent_order,
                             object_placement.center,
+                            tools,
                         )
                     };
                     contents_files.insert(data.clone(), contents);
@@ -1203,16 +1209,12 @@ fn reconstruct_voxels(
 }
 
 /// Chooses the smallest supported editor extent containing the object's
-/// canvas, starting from a loaded object's extent. Oversized data is refused
-/// before encoding, so Voxel Max cannot silently hide it.
-fn object_extent_order(object: &VoxObject, object_state: &VMaxExtObjectState) -> Result<i64> {
+/// grid. Oversized data is refused before encoding, so Voxel Max cannot
+/// silently hide it.
+fn object_extent_order(object: &VoxObject) -> Result<i64> {
     let bounds = object.bounds();
     let required = bounds.x.max(bounds.y).max(bounds.z);
-    let preferred = object_state
-        .extent_order
-        .filter(|order| (5..=9).contains(order))
-        .unwrap_or(8);
-    (preferred..=9)
+    (5..=9)
         .find(|&order| required <= (1 << order))
         .ok_or_else(|| {
             Error::invalid(format!(
@@ -1226,14 +1228,15 @@ fn object_extent_order(object: &VoxObject, object_state: &VMaxExtObjectState) ->
 }
 
 /// The contents file an object writes from its kept version and camera, with
-/// the chosen extent and the content `center` in the written grid. An object
-/// keeping no camera takes one framed on its content. No editor tool state is
-/// written.
+/// the chosen extent, the content `center` in the written grid, and `tools`
+/// holding the work area. An object keeping no camera takes one framed on its
+/// content.
 fn contents_editor_state(
     object: &VoxObject,
     object_state: &VMaxExtObjectState,
     extent_order: i64,
     center: [f64; 3],
+    tools: VMaxTools,
 ) -> VMaxContentsVmaxbFile {
     let cam = match &object_state.cam {
         Some(cam) => moved_camera(object, object_state, cam, center),
@@ -1243,7 +1246,7 @@ fn contents_editor_state(
         snapshots: Vec::new(),
         uuid: object_state.uuid.clone(),
         v: object_state.v.max(SNAPSHOT_CONTENTS_VERSION),
-        tools: None,
+        tools: Some(tools),
         brush: None,
         cam,
         pal: None,
@@ -1251,6 +1254,33 @@ fn contents_editor_state(
         chunks: Vec::new(),
         voxels: Vec::new(),
     }
+}
+
+/// The work area `vp` of an object: its edit grid in the written cube. Errors
+/// on an edit grid with no volume, such as an empty object's point, which no
+/// work area can hold.
+fn work_area(
+    object_id: U32Id<BVoxObject>,
+    object: &VoxObject,
+    placement: &ObjectPlacement,
+) -> Result<VMaxViewBox> {
+    let bounds = object.bounds();
+    if bounds.x == 0 || bounds.y == 0 || bounds.z == 0 {
+        return Err(Error::invalid(format!(
+            "object {object_id} \"{}\" has an edit grid with no volume, which no Voxel Max \
+             work area can hold; set its edit bounds first",
+            object.name()
+        )));
+    }
+    let origin = object.origin();
+    let min: [i64; 3] =
+        from_fn(|axis| i64::from(placement.box_min[axis] - placement.origin[axis] + origin[axis]));
+    let size = bounds.to_array();
+    Ok(VMaxViewBox {
+        min,
+        max: from_fn(|axis| min[axis] + i64::from(size[axis]) - 1),
+        flat: None,
+    })
 }
 
 /// A kept camera with its target moved as far as the write moved the content
@@ -1275,7 +1305,7 @@ fn moved_camera(
 /// The camera for an object that keeps none. It orbits the content `center`
 /// in the written grid with the angles Voxel Max writes when it frames an
 /// object. It stands back twice the width of the `2^extent_order` grid, which
-/// gives 512 for the default 256 grid.
+/// gives 512 for a 256 grid.
 fn framed_camera(center: [f64; 3], extent_order: i64) -> VMaxCamera {
     VMaxCamera {
         wa: 0.0,
@@ -1743,7 +1773,13 @@ mod tests {
             ]),
             uuid: "u".to_owned(),
             v: 4,
-            tools: None,
+            // A work area 129 wide needs the 256 extent, so the object keeps
+            // its 256 placement through a round trip.
+            tools: Some(VMaxTools::fresh(VMaxViewBox {
+                min: [63, 127, 0],
+                max: [191, 128, 1],
+                flat: None,
+            })),
             brush: None,
             cam: VMaxCamera::default(),
             pal: None,
@@ -1930,12 +1966,20 @@ mod tests {
         assert_eq!(added.t_al, "f");
         let contents = &file.contents_files[&added.data];
         assert_eq!(contents.uuid, "00000000-0000-0001-0000-000000000001");
-        // A newly generated one-voxel object takes a 256-wide workspace and a
-        // camera framed on its content.
-        assert_eq!(contents.tools, None);
-        assert_eq!(contents.eo, Some(8));
+        // A newly generated one-voxel object takes the 32-wide workspace, its
+        // one-voxel edit grid as the work area, and a camera framed on its
+        // content.
+        assert_eq!(
+            contents.tools.as_ref().map(|tools| tools.vp.clone()),
+            Some(VMaxViewBox {
+                min: [15, 15, 0],
+                max: [15, 15, 0],
+                flat: None,
+            })
+        );
+        assert_eq!(contents.eo, Some(5));
         assert_eq!(contents.cam.o, added.center);
-        assert_eq!(contents.cam.z, 512.0);
+        assert_eq!(contents.cam.z, 64.0);
 
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(reloaded.ext().hierarchy_nodes.len(), 3);
@@ -2083,7 +2127,12 @@ mod tests {
         instance.ind = [0, 0, 3];
         original.scene_json_file.objects.push(instance);
         let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
-        contents.eo = Some(9);
+        // A work area 257 wide needs the 512 extent.
+        contents.tools = Some(VMaxTools::fresh(VMaxViewBox {
+            min: [0, 127, 0],
+            max: [256, 128, 1],
+            flat: None,
+        }));
         contents.cam = VMaxCamera {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
@@ -2095,9 +2144,9 @@ mod tests {
         assert_eq!(contents.eo, Some(9));
         assert_eq!(
             rebuilt.scene_json_file.objects[0].center,
-            [256.0, 256.0, 1.0]
+            [255.0, 256.0, 1.0]
         );
-        assert_eq!(contents.cam.o, [256.0, 256.0, 1.0]);
+        assert_eq!(contents.cam.o, [255.0, 256.0, 1.0]);
         assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
         for (before, after) in original
             .scene_json_file
@@ -2129,6 +2178,11 @@ mod tests {
             })
             .collect();
         contents.snapshots = encode_vmax_snapshots(&voxels);
+        contents.tools = Some(VMaxTools::fresh(VMaxViewBox {
+            min: [15, 15, 0],
+            max: [16, 16, 1],
+            flat: None,
+        }));
         contents.eo = Some(5);
         contents.cam = VMaxCamera {
             o: [16.0, 16.0, 1.0],
@@ -2146,13 +2200,11 @@ mod tests {
         let mut original = sample();
         let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
         contents.eo = Some(9);
-        contents.tools = Some(VMaxTools {
-            vp: Some(VMaxViewBox {
-                min: [0; 3],
-                max: [255; 3],
-                flat: None,
-            }),
-        });
+        contents.tools = Some(VMaxTools::fresh(VMaxViewBox {
+            min: [0; 3],
+            max: [255; 3],
+            flat: None,
+        }));
         contents.cam = VMaxCamera {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
@@ -2168,7 +2220,138 @@ mod tests {
             rebuilt.contents_files["contents.vmaxb"].cam.o,
             [128.0, 128.0, 1.0]
         );
+        assert_eq!(
+            rebuilt.contents_files["contents.vmaxb"].tools,
+            Some(VMaxTools::fresh(VMaxViewBox {
+                min: [0; 3],
+                max: [255; 3],
+                flat: None,
+            }))
+        );
         assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+    }
+
+    /// A work area writes as fresh tool settings around that area, centered in
+    /// the smallest cube containing it, and reloads to the same build volume.
+    #[test]
+    fn writes_the_work_area_as_fresh_tool_settings() {
+        let mut original = sample();
+        let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
+        contents.tools = Some(VMaxTools::fresh(VMaxViewBox {
+            min: [120, 120, 0],
+            max: [135, 131, 7],
+            flat: None,
+        }));
+        let main = from_vmax_file(&original).unwrap();
+
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+
+        let contents = &rebuilt.contents_files["contents.vmaxb"];
+        assert_eq!(contents.eo, Some(5));
+        assert_eq!(
+            contents.tools,
+            Some(VMaxTools::fresh(VMaxViewBox {
+                min: [8, 10, 0],
+                max: [23, 21, 7],
+                flat: None,
+            }))
+        );
+        assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+
+        let reloaded = from_vmax_file(&rebuilt).unwrap();
+        let object = reloaded.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        // The Z-up work area reloads onto voxcore's Y-up axes.
+        assert_eq!(object.bounds(), TyVector3U32::new(16, 8, 12));
+    }
+
+    /// A work area the voxels fill exactly keeps its size, in the smallest
+    /// cube holding it.
+    #[test]
+    fn keeps_a_work_area_the_voxels_fill() {
+        let mut original = sample();
+        original
+            .contents_files
+            .get_mut("contents.vmaxb")
+            .unwrap()
+            .tools = Some(VMaxTools::fresh(VMaxViewBox {
+            min: [127, 127, 0],
+            max: [128, 128, 1],
+            flat: None,
+        }));
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let contents = &rebuilt.contents_files["contents.vmaxb"];
+        assert_eq!(contents.eo, Some(5));
+        assert_eq!(
+            contents.tools.as_ref().map(|tools| tools.vp.clone()),
+            Some(VMaxViewBox {
+                min: [15, 15, 0],
+                max: [16, 16, 1],
+                flat: None,
+            })
+        );
+        assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+    }
+
+    /// An object read without a work area loads shrinkwrapped, so it writes a
+    /// work area that fits its voxels, in the smallest cube holding it.
+    #[test]
+    fn writes_a_work_area_fitting_an_object_read_without_one() {
+        let mut original = sample();
+        original
+            .contents_files
+            .get_mut("contents.vmaxb")
+            .unwrap()
+            .tools = None;
+
+        let rebuilt = to_vmax_file(
+            &from_vmax_file(&original).unwrap(),
+            &VMaxWriteOptions::default(),
+        )
+        .unwrap();
+
+        let contents = &rebuilt.contents_files["contents.vmaxb"];
+        assert_eq!(contents.eo, Some(5));
+        assert_eq!(
+            contents.tools.as_ref().map(|tools| tools.vp.clone()),
+            Some(VMaxViewBox {
+                min: [15, 15, 0],
+                max: [16, 16, 1],
+                flat: None,
+            })
+        );
+    }
+
+    /// An edit grid with no volume, such as an empty object's point, has no
+    /// work area to write, so the write errors until it takes edit bounds.
+    #[test]
+    fn an_edit_grid_with_no_volume_errors() {
+        let mut main = from_vmax_file(&sample()).unwrap();
+        let object_id = main
+            .retain_object(VoxObject::new("point".to_owned(), TyVector3U32::ZERO).unwrap())
+            .unwrap();
+        let node_id = main
+            .retain_hierarchy_node(VoxHierarchyNode {
+                name: "point".to_owned(),
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        main.push_root_hierarchy_node_id(node_id).unwrap();
+
+        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("\"point\" has an edit grid with no volume"),
+            "{error}"
+        );
     }
 
     /// Current scene and object camera keys survive a read/write cycle,
@@ -2210,12 +2393,17 @@ mod tests {
     /// grid width.
     #[test]
     fn a_framed_camera_stands_back_with_the_grid_width() {
-        let mut main = from_vmax_file(&sample()).unwrap();
+        for (max_x, width) in [(128, 32), (255, 256), (383, 512)] {
+            let mut original = sample();
+            let contents = original.contents_files.get_mut("contents.vmaxb").unwrap();
+            let vp = &mut contents.tools.as_mut().unwrap().vp;
+            vp.min[0] = 127;
+            vp.max[0] = max_x;
 
-        for (order, width) in [(5, 32), (8, 256), (9, 512)] {
+            let mut main = from_vmax_file(&original).unwrap();
+
             for object_state in main.ext_mut().object_states.values_mut() {
                 object_state.cam = None;
-                object_state.extent_order = Some(order);
             }
 
             let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();

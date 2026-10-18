@@ -346,7 +346,8 @@ fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
 /// order 9, where every voxel shows. Voxel Max keeps a voxel outside the region
 /// but hides it, so the render a read gives leaves it out.
 fn work_area(contents: &VMaxContentsVmaxbFile) -> Option<([i32; 3], [i32; 3])> {
-    if let Some(vp) = contents.tools.as_ref().and_then(|tools| tools.vp.as_ref()) {
+    if let Some(tools) = &contents.tools {
+        let vp = &tools.vp;
         return Some((vp.min.map(|v| v as i32), vp.max.map(|v| v as i32)));
     }
     let order = contents
@@ -364,9 +365,8 @@ fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxView
         .contents_files
         .get(&object.data)?
         .tools
-        .as_ref()?
-        .vp
         .as_ref()
+        .map(|tools| &tools.vp)
 }
 
 /// The object's build volume (the author's `tools.vp`) as `(bounds, origin)` in
@@ -796,8 +796,7 @@ fn vmax_ext_from_file(
 }
 
 /// Captures the state of a contents file the ext keeps: its version and its
-/// camera frame and supported extent. Editor tool state is skipped, and the
-/// work area's margins are held natively as the object's grid.
+/// camera frame. The work area is held natively as the object's grid.
 fn object_state_from_contents(
     data: &VMaxContentsVmaxbFile,
     camera_reference_center: [f64; 3],
@@ -806,28 +805,8 @@ fn object_state_from_contents(
         uuid: data.uuid.clone(),
         v: data.v,
         cam: Some(data.cam.clone()),
-        extent_order: Some(contents_workspace_order(data)),
         camera_reference_center: Some(camera_reference_center),
     }
-}
-
-/// The editor viewport takes precedence over the storage extent. Voxel Max
-/// normalizes saved storage to 512 even when the viewport is 256 or smaller.
-/// Only cube widths are written without editor tool state, so an arbitrary
-/// viewport takes the smallest supported cube containing its dimensions.
-fn contents_workspace_order(data: &VMaxContentsVmaxbFile) -> i64 {
-    if let Some(viewport) = data.tools.as_ref().and_then(|tools| tools.vp.as_ref()) {
-        let required = (0..3)
-            .map(|axis| {
-                viewport.max[axis]
-                    .saturating_sub(viewport.min[axis])
-                    .saturating_add(1)
-            })
-            .max()
-            .unwrap_or(0);
-        return (5..=9).find(|&order| required <= (1 << order)).unwrap_or(9);
-    }
-    data.eo.filter(|order| (5..=9).contains(order)).unwrap_or(8)
 }
 
 /// The per-node provenance for a scene object. The hierarchy carries the
@@ -923,7 +902,7 @@ mod tests {
             snapshots: encode_vmax_snapshots(voxels),
             uuid: "u".to_owned(),
             v: 4,
-            tools: Some(VMaxTools { vp: Some(vp) }),
+            tools: Some(VMaxTools::fresh(vp)),
             brush: None,
             cam: VMaxCamera::default(),
             pal: None,

@@ -16,7 +16,7 @@ pub fn from_contents_vmaxb_file_bytes<D: DecompressLzfse + DecodeVMaxPlist>(
 #[cfg(test)]
 mod tests {
     use plist::{self, Dictionary, Value, from_bytes};
-    use vmax::{VMaxContentsVmaxbFile, VMaxDiscarded, VMaxStats};
+    use vmax::{VMaxContentsVmaxbFile, VMaxDiscarded, VMaxStats, VMaxTools, VMaxViewBox};
 
     fn integers(values: &[i64]) -> Value {
         Value::Array(values.iter().map(|&v| Value::Integer(v.into())).collect())
@@ -115,6 +115,60 @@ mod tests {
         let error = from_bytes::<VMaxContentsVmaxbFile>(&binary(Dictionary::new())).unwrap_err();
 
         assert!(error.to_string().contains("cam"), "{error}");
+    }
+
+    /// Fresh tool settings as a plist dictionary, around a small work area.
+    fn fresh_tools() -> Dictionary {
+        let tools = VMaxTools::fresh(VMaxViewBox {
+            min: [8, 10, 0],
+            max: [23, 21, 7],
+            flat: None,
+        });
+
+        let mut bytes = Vec::new();
+
+        plist::to_writer_binary(&mut bytes, &tools).unwrap();
+
+        from_bytes::<Dictionary>(&bytes).unwrap()
+    }
+
+    /// The tool settings read back exactly as written, work area included.
+    #[test]
+    fn reads_the_tool_settings_it_writes() {
+        let dictionary = fresh_tools();
+
+        assert_eq!(dictionary.len(), 22);
+
+        let tools = from_bytes::<VMaxTools>(&binary(dictionary)).unwrap();
+
+        assert_eq!(tools.vp.max, [23, 21, 7]);
+
+        assert_eq!(tools.mi, 35);
+    }
+
+    /// Voxel Max opens no object whose tool settings lack part of the tool
+    /// context, so a missing setting is an error.
+    #[test]
+    fn rejects_tool_settings_missing_a_setting() {
+        let mut dictionary = fresh_tools();
+
+        dictionary.remove("mi");
+
+        let error = from_bytes::<VMaxTools>(&binary(dictionary)).unwrap_err();
+
+        assert!(error.to_string().contains("mi"), "{error}");
+    }
+
+    /// A tool setting the model does not name is an error.
+    #[test]
+    fn rejects_an_unknown_tool_setting() {
+        let mut dictionary = fresh_tools();
+
+        dictionary.insert("zz".to_owned(), Value::Integer(1.into()));
+
+        let error = from_bytes::<VMaxTools>(&binary(dictionary)).unwrap_err();
+
+        assert!(error.to_string().contains("zz"), "{error}");
     }
 
     /// A contents key the model does not name is an error.

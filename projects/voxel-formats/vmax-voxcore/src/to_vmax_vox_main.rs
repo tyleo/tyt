@@ -1463,15 +1463,15 @@ mod tests {
     fn synthesizes_a_colorless_object_sharing_the_default_palette() {
         let mut main = VoxMain::default();
         let palette_id = retain_rgba_palette(&mut main, &["#FF0000FF"]);
-        // Object 0: a single red voxel. Object 1: an empty, colorless object,
-        // whose tight grid is [0, 0, 0].
+        // Object 0: a single red voxel. Object 1: an empty, colorless object
+        // with a one-voxel edit grid.
         main.retain_object(color_object(
             palette_id,
             TyVector3U32::new(1, 1, 1),
             &[([0, 0, 0], 0)],
         ))
         .unwrap();
-        main.retain_object(VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap())
+        main.retain_object(VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap())
             .unwrap();
         main.retain_hierarchy_nodes(vec![
             object_node("colored", 0, at(0.0, 0.0, 0.0)),
@@ -2687,9 +2687,9 @@ mod tests {
         assert_eq!(file.scene_json_file.objects.len(), 1);
         assert!(contents_voxels(&file, "contents.vmaxb").is_empty());
         // The content box frames the [3, 4, 5] build volume, [3, 5, 4] on
-        // Voxel Max's Z-up axes, centered in the 256 workspace: e_c at its
+        // Voxel Max's Z-up axes, centered in the 32 workspace: e_c at its
         // center, e_ma the half-extents.
-        assert_eq!(file.scene_json_file.objects[0].center, [127.5, 127.5, 2.0]);
+        assert_eq!(file.scene_json_file.objects[0].center, [15.5, 15.5, 2.0]);
         assert_eq!(
             file.scene_json_file.objects[0].bounds_max,
             Some([1.5, 2.5, 2.0])

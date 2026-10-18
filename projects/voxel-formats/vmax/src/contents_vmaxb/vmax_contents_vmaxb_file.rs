@@ -3,10 +3,9 @@ use crate::{VMaxCamera, VMaxDiscarded, VMaxLegacyChunkVoxels, VMaxSnapshot, VMax
 use serde::{Deserialize, Serialize};
 
 /// Voxel object payload of a `contents*.vmaxb` binary plist: the geometry,
-/// camera, and extent Voxel Max renders the object from. The editor state a
-/// contents file also carries, such as the tool settings and the brush
-/// palette, is named, read, and never written, since Voxel Max opens an
-/// object without it. An unknown key is an error.
+/// camera, extent, and work area Voxel Max renders the object from. The brush
+/// palette, editor state, is named, read, and never written, since Voxel Max
+/// opens an object without it. An unknown key is an error.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -23,10 +22,12 @@ pub struct VMaxContentsVmaxbFile {
     #[cfg_attr(feature = "serde", serde(default))]
     pub v: i64,
 
-    /// The object's work area from its tool settings, read for the region
-    /// Voxel Max shows and never written, since Voxel Max requires the whole
-    /// tool context wherever a contents file carries one.
-    #[cfg_attr(feature = "serde", serde(default, skip_serializing))]
+    /// The tool settings, holding the object's work area. Absent, the work
+    /// area spans the whole `eo` extent.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub tools: Option<VMaxTools>,
 
     /// The brush palette, editor state.
