@@ -562,9 +562,10 @@ type Value = boolean | number | string | number[] | IntValue | JsonValue;
 5. `shades` returns `count` versions of `base` that run from darkest to lightest
    with the original in the middle. Neighboring shades differ in perceived
    lightness by `spread`, and the other properties carry over. Darker shades mix
-   the base with black. Lighter shades keep the base's hue and saturation where
-   sRGB can hold them. `count` defaults to 3 and `spread` to 0.05. A shade past
-   black or white errors.
+   the base with black. Lighter shades keep the base's hue and saturation.
+   `count` defaults to 3 and `spread` to 0.05. A shade past black or white
+   errors, and so does a lighter shade that sRGB cannot hold at the base's
+   saturation. The error gives the largest `spread` that fits.
 
 ```ts
 const glass = material({

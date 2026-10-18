@@ -353,3 +353,9 @@ land.
    rig showed 0.08 staining steel and gold, and 0.04 flattening ebony
 2. `glow` drops to strength 2.75 because at 3 a 0.05 step left its lightest
    shade at the tonemap's ceiling. The review renders show no difference
+3. A lighter shade errors when sRGB holds it only with less of the base's
+   chroma, because the faded shade read cream on gold. A loss under 1e-6 passes
+   because a gray's chroma comes from float error
+4. Both shade errors end with the largest spread at which every shade fits. The
+   error rounds the spread down, which keeps the given spread passing. The
+   chroma check stays exact because the error states the fix

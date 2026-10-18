@@ -8,7 +8,7 @@ const DEFAULT_SPREAD: f64 = 0.05;
 
 /// The shade at `index` of `shades`, whose base material holds `base`. A
 /// darker shade mixes the base color with black in linear light, and a lighter
-/// one keeps the color's Oklab hue and chroma.
+/// one keeps the color's Oklab hue and chroma or errors.
 pub fn shade_properties(
     base: &SdfMaterialProperties,
     shades: &SdfShades,
@@ -26,24 +26,79 @@ pub fn shade_properties(
     let lightness = oklab(rgb)[0];
     let target = lightness + step;
 
+    let check = ArgumentCheck::new("shades");
+    let argument = format!("shade {index}");
+
     if !(0.0..=1.0).contains(&target) {
-        return Err(ArgumentCheck::new("shades").fail(
-            &format!("shade {index}"),
-            "between black and white",
-            format!("a lightness of {target}"),
+        return Err(format!(
+            "{}. {}",
+            check.fail(
+                &argument,
+                "between black and white",
+                format!("a lightness of {target}"),
+            ),
+            spread_room(rgb, shades.count)
         ));
     }
 
     let [red, green, blue] = if step < 0.0 {
         toward_black(rgb, lightness, target)
     } else {
-        lightened(rgb, target)
+        lightened(rgb, target).map_err(|share| {
+            format!(
+                "{}. {}",
+                check.fail(
+                    &argument,
+                    "at the base's chroma",
+                    format!(
+                        "{}% of it at a lightness of {target}",
+                        (share * 100.0).floor()
+                    ),
+                ),
+                spread_room(rgb, shades.count)
+            )
+        })?
     };
 
     Ok(SdfMaterialProperties {
         base_color: TyLinSrgbaF64::new(red, green, blue, color.alpha),
         ..base.clone()
     })
+}
+
+/// The sentence giving the largest spread at which all `count` shades of `rgb`
+/// take a color, rounded down to three decimals.
+fn spread_room(rgb: [f64; 3], count: f64) -> String {
+    let lightness = oklab(rgb)[0];
+    let fits = |spread: f64| {
+        (0..count as u32).all(|index| {
+            let step = (f64::from(index) - (count - 1.0) / 2.0) * spread;
+            let target = lightness + step;
+            (0.0..=1.0).contains(&target) && (step <= 0.0 || lightened(rgb, target).is_ok())
+        })
+    };
+
+    // The outermost of two or more shades sits at least half the spread from
+    // the base, so a spread past 2 never fits.
+    let (mut low, mut high) = (0.0, 2.0);
+
+    for _ in 0..64 {
+        let middle = (low + high) / 2.0;
+
+        if fits(middle) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+
+    let largest = (low * 1000.0).floor() / 1000.0;
+
+    if largest == 0.0 {
+        format!("This base leaves no room for {count} shades")
+    } else {
+        format!("This base takes a spread of at most {largest} at count {count}")
+    }
 }
 
 /// The linear sRGB color `rgb` of Oklab lightness `lightness` scaled toward
@@ -54,9 +109,10 @@ fn toward_black(rgb: [f64; 3], lightness: f64, target: f64) -> [f64; 3] {
     rgb.map(|component| component * scale)
 }
 
-/// The linear sRGB color at the Oklab lightness `target` with the hue of `rgb`
-/// and as much of its chroma as linear sRGB holds there.
-fn lightened(rgb: [f64; 3], target: f64) -> [f64; 3] {
+/// The linear sRGB color at the Oklab lightness `target` with the hue and
+/// chroma of `rgb`, or else the largest share of the chroma linear sRGB holds
+/// there.
+fn lightened(rgb: [f64; 3], target: f64) -> StdResult<[f64; 3], f64> {
     let [_, a, b] = oklab(rgb);
     let at = |share: f64| lin_srgb([target, a * share, b * share]);
     let fits = |color: [f64; 3]| {
@@ -66,7 +122,7 @@ fn lightened(rgb: [f64; 3], target: f64) -> [f64; 3] {
     };
 
     if fits(at(1.0)) {
-        return at(1.0);
+        return Ok(at(1.0));
     }
 
     let (mut low, mut high) = (0.0, 1.0);
@@ -81,8 +137,12 @@ fn lightened(rgb: [f64; 3], target: f64) -> [f64; 3] {
         }
     }
 
-    // The gray at a share of 0 can stray past 1 by float error.
-    at(low).map(|component| component.clamp(0.0, 1.0))
+    // A gray's chroma and its color's stray past 1 come from float error.
+    if (1.0 - low) * a.hypot(b) < 1e-6 {
+        return Ok(at(low).map(|component| component.clamp(0.0, 1.0)));
+    }
+
+    Err(low)
 }
 
 /// The linear sRGB color `rgb` in Oklab, by Bjorn Ottosson's matrices.
@@ -216,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lighter_shade_keeps_the_hue_and_the_chroma_srgb_holds() {
+    fn a_lighter_shade_keeps_the_hue_and_the_chroma() {
         let chroma_and_hue = |[_, a, b]: [f64; 3]| (a.hypot(b), b.atan2(a));
         let call = shades(3.0, None);
 
@@ -232,17 +292,59 @@ mod tests {
             assert!((shade_hue - hue).abs() < 1e-6, "{color}");
             assert!((shade_chroma - chroma).abs() < 1e-6, "{color}");
         }
+    }
 
-        // A lighter yellow fits sRGB only with less chroma.
-        let yellow = base("#FFFF00").base_color;
-        let (chroma, hue) = chroma_and_hue(oklab([yellow.red, yellow.green, yellow.blue]));
-        let shade = shade_properties(&base("#FFFF00"), &shades(3.0, Some(0.02)), 2)
-            .unwrap()
-            .base_color;
-        let (shade_chroma, shade_hue) = chroma_and_hue(oklab([shade.red, shade.green, shade.blue]));
+    #[test]
+    fn a_lighter_shade_srgb_holds_only_with_less_chroma_errors() {
+        let error = shade_properties(&base("#D9B04E"), &shades(5.0, Some(0.08)), 4).unwrap_err();
+        assert!(
+            error.starts_with(
+                "shades shade 4 must be at the base's chroma, not 57% of it at a lightness of 0.93"
+            ),
+            "{error}"
+        );
+        assert!(shade_properties(&base("#D9B04E"), &shades(5.0, Some(0.08)), 3).is_ok());
 
-        assert!((shade_hue - hue).abs() < 1e-6);
-        assert!(shade_chroma > 0.0 && shade_chroma < chroma);
+        // A gray takes no chroma to lose.
+        assert!(shade_properties(&base("#E0E0E0"), &shades(3.0, None), 2).is_ok());
+        assert!(shade_properties(&base("#F0F0F0"), &shades(3.0, Some(0.0448)), 2).is_ok());
+    }
+
+    #[test]
+    fn a_shade_error_gives_the_largest_spread_that_fits() {
+        let cases = [
+            (
+                "#D9B04E",
+                5.0,
+                0.08,
+                "takes a spread of at most 0.057 at count 5",
+            ),
+            (
+                "#F2F6FB",
+                3.0,
+                0.05,
+                "takes a spread of at most 0.011 at count 3",
+            ),
+            ("#FFFF00", 3.0, 0.05, "leaves no room for 3 shades"),
+        ];
+
+        for (color, count, spread, room) in cases {
+            let error = (0..count as u32)
+                .find_map(|index| {
+                    shade_properties(&base(color), &shades(count, Some(spread)), index).err()
+                })
+                .unwrap();
+            assert!(error.ends_with(&format!(". This base {room}")), "{error}");
+        }
+
+        for (color, count, spread) in [("#D9B04E", 5.0, 0.057), ("#F2F6FB", 3.0, 0.011)] {
+            for index in 0..count as u32 {
+                assert!(
+                    shade_properties(&base(color), &shades(count, Some(spread)), index).is_ok(),
+                    "{color} shade {index}"
+                );
+            }
+        }
     }
 
     #[test]

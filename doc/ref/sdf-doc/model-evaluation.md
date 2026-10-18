@@ -527,9 +527,11 @@ A pattern length left out takes its default count of cells times `g`.
    `count` steps the lightness by `(i - (count - 1) / 2) * spread`. A step of 0
    keeps the base color. A step down scales the color in linear light toward
    black by the amount that reaches the stepped lightness. A step up keeps the
-   color's Oklab hue and chroma at the stepped lightness. Where linear sRGB
-   cannot hold that chroma, the shade takes the most it can. A stepped lightness
-   outside [0, 1] errors. Every other property and the alpha carry over.
+   color's Oklab hue and chroma at the stepped lightness. A stepped lightness
+   outside [0, 1] errors, and so does a step up that linear sRGB cannot hold at
+   the color's chroma. The error gives the largest spread at which all `count`
+   shades fit and rounds that spread down to three decimals. Every other
+   property and the alpha carry over.
 5. Two materials with identical properties merge into one palette material.
 
 ## The voxj document
