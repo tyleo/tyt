@@ -179,9 +179,9 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   4. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
   5. `random` gives the model a seeded generator for placements and sizes for
      findings 26 and 91
-- [ ] **S22. Rotation.** Turned shapes for finding 22:
-  1. A part's `rotate` option turns the part's shapes at any angle before
-     sampling
+- [ ] **S22. Rotation.** Rotated shapes for finding 22:
+  1. Under `--flatten`, vxl samples a rotated part at its angle on the root
+     part's grid
   2. `flip` reflects a shape across axes without keeping the original
 - [ ] **S23. Round 8.** Run the prompts after S20 to S22 and log the round
       beside round 7.
