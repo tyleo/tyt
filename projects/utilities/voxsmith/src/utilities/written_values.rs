@@ -5,7 +5,7 @@ use crate::{
 use branded_id::U32Id;
 use meshdoc::material::{COLOR_RANGE, MaterialPropertyKind, scalar_range};
 use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
+    collections::{HashMap, HashSet},
     result::Result as StdResult,
 };
 use vox_value_language::{Components, Dimension, Domain, Value};
@@ -316,14 +316,17 @@ impl WrittenValues {
     }
 
     /// Lands each value over the value its material draws, `drawn_value_ids`
-    /// in material order, and returns the value ids in material order:
+    /// in material order, and returns the value ids in material order. The
+    /// materials drawing one value split by the result each writes:
     ///
-    /// 1. A drawn value every material drawing it writes alike changes in
-    ///    place and keeps its id, unless `shared_value_ids` holds it
-    /// 2. A material writing the value it draws keeps it
-    /// 3. Any other value lands as [`land`](Self::land) lands it
+    /// 1. The materials writing the value they draw keep it
+    /// 2. When none do, the first material's result overwrites the value in
+    ///    place for the materials writing it. A value in `shared_value_ids`
+    ///    is never overwritten because other cells draw it
+    /// 3. Each other result is appended once, for the materials writing it
     ///
-    /// Expects `value_pool_id` to hold the values' kind.
+    /// No value is left undrawn. Equal values never merge. Expects
+    /// `value_pool_id` to hold the values' kind.
     pub fn land_over<T: VoxExt>(
         self,
         main: &mut VoxMain<T>,
@@ -499,8 +502,23 @@ fn land_each<T: VoxExt, V: PartialEq>(
         .collect()
 }
 
-/// [`WrittenValues::land_over`] for one kind. The in-place sets land first,
-/// so a value landing anew can reuse one.
+/// The materials drawing one value, grouped by the result each writes.
+struct Split<V> {
+    drawn_id: U32Id<BVoxValuePoolValue>,
+
+    /// The distinct results, in material order.
+    results: Vec<SplitResult<V>>,
+}
+
+/// One result of a [`Split`].
+struct SplitResult<V> {
+    value: V,
+
+    /// The materials writing `value`, by index in material order.
+    indices: Vec<usize>,
+}
+
+/// [`WrittenValues::land_over`] for one kind.
 #[allow(clippy::too_many_arguments)]
 fn land_over_each<T: VoxExt, V: PartialEq>(
     main: &mut VoxMain<T>,
@@ -512,47 +530,70 @@ fn land_over_each<T: VoxExt, V: PartialEq>(
     retain: RetainValue<T, V>,
     set: SetValue<T, V>,
 ) -> Vec<U32Id<BVoxValuePoolValue>> {
-    let mut first_writers = HashMap::new();
-    let mut split_value_ids = HashSet::new();
+    let mut splits: Vec<Split<V>> = Vec::new();
+    let mut split_indices = HashMap::new();
 
-    for (index, &drawn_id) in drawn_value_ids.iter().enumerate() {
-        match first_writers.entry(drawn_id) {
-            Entry::Occupied(first) => {
-                if values[*first.get()] != values[index] {
-                    split_value_ids.insert(drawn_id);
-                }
-            }
+    for (index, (value, &drawn_id)) in values.into_iter().zip(drawn_value_ids).enumerate() {
+        let split_index = *split_indices.entry(drawn_id).or_insert_with(|| {
+            splits.push(Split {
+                drawn_id,
+                results: Vec::new(),
+            });
 
-            Entry::Vacant(first) => {
-                first.insert(index);
-            }
+            splits.len() - 1
+        });
+
+        let results = &mut splits[split_index].results;
+
+        match results.iter_mut().find(|result| result.value == value) {
+            Some(result) => result.indices.push(index),
+
+            None => results.push(SplitResult {
+                value,
+                indices: vec![index],
+            }),
         }
     }
 
     let mut value_ids = drawn_value_ids.to_vec();
-    let mut landing_anew = Vec::new();
 
-    for (index, value) in values.into_iter().enumerate() {
-        let drawn_id = drawn_value_ids[index];
+    for Split { drawn_id, results } in splits {
+        let value_pool = main
+            .value_pool(value_pool_id)
+            .expect("a written property draws from a live value pool");
 
-        if shared_value_ids.contains(&drawn_id) || split_value_ids.contains(&drawn_id) {
-            let value_pool = main
-                .value_pool(value_pool_id)
-                .expect("a written property draws from a live value pool");
+        let held = column(value_pool)
+            .expect("a written value fits its value pool")
+            .get(drawn_id)
+            .expect("a material draws one of its value pool's values");
 
-            let held_values = column(value_pool).expect("a written value fits its value pool");
+        let unchanged = results.iter().position(|result| result.value == *held);
 
-            if held_values.get(drawn_id) != Some(&value) {
-                landing_anew.push((index, value));
+        let keeper = match unchanged {
+            Some(position) => Some(position),
+
+            None if shared_value_ids.contains(&drawn_id) => None,
+
+            None => Some(0),
+        };
+
+        for (position, SplitResult { value, indices }) in results.into_iter().enumerate() {
+            let value_id = if Some(position) == keeper {
+                if unchanged.is_none() {
+                    set(main, value_pool_id, drawn_id, value)
+                        .expect("an evaluated value fits the value it overwrites");
+                }
+
+                drawn_id
+            } else {
+                retain(main, value_pool_id, value)
+                    .expect("an evaluated value is finite and within the u32 range")
+            };
+
+            for index in indices {
+                value_ids[index] = value_id;
             }
-        } else if first_writers[&drawn_id] == index {
-            set(main, value_pool_id, drawn_id, value)
-                .expect("an evaluated value fits the value it overwrites");
         }
-    }
-
-    for (index, value) in landing_anew {
-        value_ids[index] = land_one(main, value_pool_id, value, column, retain);
     }
 
     value_ids

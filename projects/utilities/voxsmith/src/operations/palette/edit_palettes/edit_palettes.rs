@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     operations::palette::{PaletteEditElement, PropertyWrite},
-    utilities::{WrittenValues, property_value, release_undrawn_values},
+    utilities::{WrittenValues, property_value},
 };
 use branded_id::U32Id;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -28,11 +28,11 @@ struct PlannedWrite {
 /// `writes` in its property. Each property the program or a write reads
 /// enters as a swatch array holding one entry per material. A property the
 /// palette lacks is added on a new value pool. Every palette evaluates
-/// against the unchanged main before any write lands. When every material
-/// drawing a value writes the same result and no other cell draws it, the
-/// value changes in place and keeps its id. Materials sharing a value then
-/// still share it. A value no palette draws afterward is released. Errors,
-/// changing nothing, if:
+/// against the unchanged main before any write lands. A write changes the
+/// values its materials draw in place. A value splits only where the materials
+/// drawing it write different results, and a value another palette draws keeps
+/// its content. A write never removes or merges values. Errors, changing
+/// nothing, if:
 ///
 /// 1. an id is not one of the main's palettes
 /// 2. two writes write one property
@@ -84,18 +84,11 @@ pub fn edit_palettes<T: VoxExt>(
         planned.push((palette_id, palette_writes));
     }
 
-    let mut replaced_value_ids = Vec::new();
-
     for (palette_id, palette_writes) in planned {
         for write in palette_writes {
             match write.property_id {
                 Some(property_id) => {
-                    replaced_value_ids.extend(overwrite_property(
-                        main,
-                        palette_id,
-                        property_id,
-                        write.values,
-                    ));
+                    overwrite_property(main, palette_id, property_id, write.values)
                 }
 
                 None => add_property(main, palette_id, write.property, write.values),
@@ -103,7 +96,7 @@ pub fn edit_palettes<T: VoxExt>(
         }
     }
 
-    release_undrawn_values(main, replaced_value_ids)
+    Ok(())
 }
 
 fn write_element(write: &PropertyWrite) -> PaletteEditElement {
@@ -262,13 +255,13 @@ fn bind_properties<T: VoxExt>(
 }
 
 /// Lands `values` in palette `palette_id`'s property `property_id` over the
-/// values its materials drew, returning those values.
+/// values its materials draw.
 fn overwrite_property<T: VoxExt>(
     main: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     property_id: U32Id<BVoxProperty>,
     values: WrittenValues,
-) -> Vec<(U32Id<BVoxValuePool>, U32Id<BVoxValuePoolValue>)> {
+) {
     let palette = main
         .palette(palette_id)
         .expect("a planned palette is one of the main's");
@@ -297,11 +290,6 @@ fn overwrite_property<T: VoxExt>(
         main.set_material_value(palette_id, material_id, property_id, value_id)
             .expect("a landed value is one of its property's value pool's");
     }
-
-    drawn_value_ids
-        .into_iter()
-        .map(|value_id| (value_pool_id, value_id))
-        .collect()
 }
 
 /// The values of `value_pool_id` that a cell outside palette `palette_id`'s
@@ -561,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn materials_sharing_a_value_written_apart_land_anew() {
+    fn materials_sharing_a_value_written_apart_split_it() {
         let mut main = VoxMain::default();
         let palette_id = retain_palette(
             &mut main,
@@ -570,9 +558,9 @@ mod tests {
                     "tag",
                     VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]),
                 ),
-                (ROUGHNESS, VoxValuePool::float(vec![0.6, 0.3, 0.6]).unwrap()),
+                (ROUGHNESS, VoxValuePool::float(vec![0.6, 0.3]).unwrap()),
             ],
-            &[vec![0, 2], vec![1, 2], vec![2, 1]],
+            &[vec![0, 0], vec![1, 0], vec![2, 1]],
         );
 
         edit_palettes(
@@ -583,14 +571,45 @@ mod tests {
         )
         .unwrap();
 
-        // `a` keeps value 2 though value 0 holds an equal 0.6, `b` takes a new
-        // 0.9, and `c` rewrites its 0.3 in place.
-        assert_eq!(drawn_ids(&main, palette_id, ROUGHNESS), [2, 3, 1]);
+        // `a` writes the 0.6 it draws and keeps it, and `b` splits off onto a
+        // new 0.9.
+        assert_eq!(drawn_ids(&main, palette_id, ROUGHNESS), [0, 2, 1]);
         assert_eq!(
             drawn(&main, palette_id, ROUGHNESS, VoxValuePool::float_values),
             [0.6, 0.9, 0.3]
         );
         assert_eq!(main.validate(), Ok(()));
+    }
+
+    #[test]
+    fn a_split_with_no_unchanged_material_overwrites_for_the_first() {
+        let mut main = VoxMain::default();
+        let palette_id = retain_palette(
+            &mut main,
+            vec![
+                (
+                    "tag",
+                    VoxValuePool::string(vec!["a".to_owned(), "b".to_owned()]),
+                ),
+                (ROUGHNESS, VoxValuePool::float(vec![0.6]).unwrap()),
+            ],
+            &[vec![0, 0], vec![1, 0]],
+        );
+
+        edit_palettes(
+            &mut main,
+            &[palette_id],
+            "",
+            &[write(ROUGHNESS, "mix(0.7, 0.9, tag == \"b\")")],
+        )
+        .unwrap();
+
+        assert_eq!(drawn_ids(&main, palette_id, ROUGHNESS), [0, 1]);
+        assert_eq!(
+            drawn(&main, palette_id, ROUGHNESS, VoxValuePool::float_values),
+            [0.7, 0.9]
+        );
+        assert_eq!(value_count(&main, palette_id, ROUGHNESS), 2);
     }
 
     #[test]
@@ -660,9 +679,9 @@ mod tests {
             drawn(&main, kept_id, ROUGHNESS, VoxValuePool::float_values),
             [0.2]
         );
-        // 0.2 stays for the kept palette, and 0.4 becomes 0.9 in place for
-        // both edited materials.
-        assert_eq!(main.value_pool(value_pool_id).unwrap().len(), 2);
+        // 0.2 keeps its content for the kept palette, so the edited material
+        // drawing it takes a new 0.9. 0.4 becomes 0.9 in place.
+        assert_eq!(main.value_pool(value_pool_id).unwrap().len(), 3);
         assert_eq!(main.validate(), Ok(()));
     }
 
