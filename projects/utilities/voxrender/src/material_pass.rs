@@ -17,8 +17,9 @@ pub fn material_pass(material: &RenderMaterial, cosine: f64) -> TyLinSrgbF64 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        RenderMaterial, material_pass,
-        test_utilities::{glass, matte},
+        RenderMaterial,
+        fixtures::{glass, matte},
+        material_pass,
     };
     use ty_math::{TyLinSrgbF64, TyLinSrgbaF64};
     use voxcore::material;

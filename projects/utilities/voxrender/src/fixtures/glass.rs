@@ -1,4 +1,4 @@
-use crate::{RenderMaterial, test_utilities::matte};
+use crate::{RenderMaterial, fixtures::matte};
 use ty_math::TyLinSrgbaF64;
 
 /// A smooth dielectric of `base_color` at full transmission.

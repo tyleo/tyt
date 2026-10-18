@@ -1,6 +1,6 @@
 use crate::{
     BRenderMaterial, BRenderPlacement, Error, GRID_FRACTION_BITS, RenderGridRay, RenderHit,
-    RenderObject, RenderPlacement, RenderRay, RenderScene, Result, is_opaque,
+    RenderObject, RenderPlacement, RenderRay, RenderScene, Result, is_opaque, placement_bounds,
 };
 use branded_id::U32Id;
 use std::{
@@ -39,7 +39,7 @@ pub struct RenderRayWalk<'a> {
 impl<'a> RenderRayWalk<'a> {
     /// The walk through `scene` of `rays`, one per placement in the order of
     /// [`RenderScene::iter_placements`]. Panics unless `rays` holds one ray
-    /// per placement.
+    /// per placement, each [in range](RenderGridRay::in_range) of its grid.
     pub fn new(scene: &'a RenderScene, rays: impl IntoIterator<Item = RenderGridRay>) -> Self {
         let mut rays = rays.into_iter();
 
@@ -51,6 +51,8 @@ impl<'a> RenderRayWalk<'a> {
                 let object = scene
                     .object(placement.object_id)
                     .expect("a placement's object is one of the scene's");
+
+                assert!(ray.in_range(object.bounds()), "each ray is within range");
 
                 PlacementWalk::new(scene, placement_id, placement, object, &ray)
             })
@@ -70,8 +72,12 @@ impl<'a> RenderRayWalk<'a> {
         let rays = scene
             .iter_placements()
             .map(|(placement_id, placement)| {
-                RenderGridRay::from_ray(&placement.transform, ray)
-                    .ok_or(Error::GridRange { placement_id })
+                RenderGridRay::from_ray(
+                    &placement.transform,
+                    placement_bounds(scene, placement),
+                    ray,
+                )
+                .ok_or(Error::GridRange { placement_id })
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -129,7 +135,7 @@ struct PlacementWalk<'a> {
     /// Which axes are mirrored.
     flip: [bool; 3],
 
-    origin: [i128; 3],
+    origin: [i64; 3],
 
     /// The direction's magnitudes.
     direction: [i64; 3],
@@ -138,7 +144,7 @@ struct PlacementWalk<'a> {
     meters: f64,
 
     /// The last cell on each axis the walk visits.
-    last: [i128; 3],
+    last: [i64; 3],
 
     /// Whether the step past `last` on each axis leaves the grid rather than
     /// passing the ray's end.
@@ -181,11 +187,11 @@ impl<'a> PlacementWalk<'a> {
         let bounds = object.bounds().to_array().map(i64::from);
         let flip = ray.direction.map(|component| component < 0);
 
-        let origin: [i128; 3] = array::from_fn(|a| {
-            let origin = i128::from(ray.origin[a]);
+        let origin: [i64; 3] = array::from_fn(|a| {
+            let origin = i64::from(ray.origin[a]);
 
             if flip[a] {
-                i128::from(bounds[a] * ONE) - origin
+                bounds[a] * ONE - origin
             } else {
                 origin
             }
@@ -193,15 +199,15 @@ impl<'a> PlacementWalk<'a> {
 
         let direction = ray.direction.map(|component| i64::from(component).abs());
 
-        let edge = |a: usize| i128::from(bounds[a] - 1);
+        let edge = |a: usize| bounds[a] - 1;
 
         // A ray without an end runs out past the grid's edge.
-        let end: [i128; 3] = array::from_fn(|a| {
+        let end: [i64; 3] = array::from_fn(|a| {
             let Some(end) = ray.end else {
                 return edge(a) + 1;
             };
 
-            let end = i128::from(end[a]);
+            let end = i64::from(end[a]);
 
             if flip[a] { edge(a) - end } else { end }
         });
@@ -212,7 +218,7 @@ impl<'a> PlacementWalk<'a> {
         // On an axis the ray does not move along, the origin must lie within
         // the grid.
         for a in 0..3 {
-            if direction[a] == 0 && !(0..i128::from(bounds[a] * ONE)).contains(&origin[a]) {
+            if direction[a] == 0 && !(0..bounds[a] * ONE).contains(&origin[a]) {
                 return None;
             }
         }
@@ -222,12 +228,7 @@ impl<'a> PlacementWalk<'a> {
         let entry = (0..3).filter(|&a| direction[a] > 0 && origin[a] < 0).fold(
             None,
             |entry: Option<usize>, a| match entry {
-                Some(e)
-                    if -origin[e] * i128::from(direction[a])
-                        > -origin[a] * i128::from(direction[e]) =>
-                {
-                    Some(e)
-                }
+                Some(e) if -origin[e] * direction[a] > -origin[a] * direction[e] => Some(e),
 
                 _ => Some(a),
             },
@@ -241,22 +242,19 @@ impl<'a> PlacementWalk<'a> {
             // grid's face on `e`. A crossing there on a later axis comes after
             // the entry.
             Some(e) if direction[a] > 0 => {
-                let run = i128::from(direction[e]);
-                let scaled = origin[a] * run - origin[e] * i128::from(direction[a]);
-                let span = run * i128::from(ONE);
+                let run = direction[e];
+                let scaled = origin[a] * run - origin[e] * direction[a];
+                let span = run * ONE;
                 let cell = scaled.div_euclid(span);
 
-                let cell = if a > e && scaled.rem_euclid(span) == 0 {
+                if a > e && scaled.rem_euclid(span) == 0 {
                     cell - 1
                 } else {
                     cell
-                };
-
-                i64::try_from(cell).expect("a cell of an i64 coordinate fits i64")
+                }
             }
 
-            _ => i64::try_from(origin[a].div_euclid(i128::from(ONE)))
-                .expect("a cell of an i64 coordinate fits i64"),
+            _ => origin[a].div_euclid(ONE),
         });
 
         let within = |a: usize| (0..bounds[a]).contains(&cell[a]);
@@ -276,17 +274,13 @@ impl<'a> PlacementWalk<'a> {
         };
 
         // A ray that goes nowhere only starts inside its cell.
-        let done = direction == [0; 3]
-            || (0..3).any(|a| entry != Some(a) && i128::from(cell[a]) > last[a]);
+        let done = direction == [0; 3] || (0..3).any(|a| entry != Some(a) && cell[a] > last[a]);
 
         // The fixed-point distance from the origin to each axis' next
         // boundary.
-        let next = |a: usize| (i128::from(cell[a]) + 1) * i128::from(ONE) - origin[a];
+        let next = |a: usize| (cell[a] + 1) * ONE - origin[a];
 
-        let error_of = |a: usize, b: usize| {
-            i64::try_from(next(a) * i128::from(direction[b]) - next(b) * i128::from(direction[a]))
-                .expect("an error term stays within one cell's step")
-        };
+        let error_of = |a: usize, b: usize| next(a) * direction[b] - next(b) * direction[a];
 
         let scale = placement.transform.scale;
         let meters = (0..3)
@@ -332,7 +326,7 @@ impl<'a> PlacementWalk<'a> {
         loop {
             let axis = self.next_axis();
 
-            let ahead = (i128::from(self.cell[axis]) + 1) * i128::from(ONE) - self.origin[axis];
+            let ahead = (self.cell[axis] + 1) * ONE - self.origin[axis];
             let distance = ahead as f64 / self.direction[axis] as f64 * self.meters;
 
             if distance > limit {
@@ -343,7 +337,7 @@ impl<'a> PlacementWalk<'a> {
 
             self.cell[axis] += 1;
 
-            if i128::from(self.cell[axis]) > self.last[axis] {
+            if self.cell[axis] > self.last[axis] {
                 self.done = true;
 
                 return if self.leaves[axis] {
@@ -504,11 +498,13 @@ impl<'a> PlacementWalk<'a> {
         let point = array::from_fn(|a| {
             let corner = i64::from(position[a]) * ONE;
 
-            if a == axis {
+            let point = if a == axis {
                 corner + if upper { ONE } else { 0 }
             } else {
                 corner + (2 * across[a] + run) / (2 * run)
-            }
+            };
+
+            i32::try_from(point).expect("a grid's sides are within range")
         });
 
         RenderHit {
@@ -559,16 +555,16 @@ fn position_of(cell: [i64; 3], flip: [bool; 3], bounds: [i64; 3]) -> TyVector3U3
 #[cfg(test)]
 mod tests {
     use crate::{
-        RenderGridRay, RenderProjection, RenderRay, RenderRayWalk, RenderScene, RenderView,
-        RenderViewRays, SHADOW_INSET_BITS, is_opaque, quantize_direction, quantize_point,
-        render_ray_walk::ONE,
-        test_utilities::{bar_scene, cells_scene, glass, matte},
+        GRID_FRACTION_BITS, RenderGridRay, RenderRay, RenderRayWalk, RenderScene, RenderViewRays,
+        SHADOW_INSET_BITS,
+        fixtures::{cells_scene, glass, matte, precision_view_scene, random_scene, stairs_scene},
+        is_opaque, quantize_direction, quantize_point,
+        test_utilities::bar_scene,
     };
     use std::array;
-    use ty_math::{
-        TyLinSrgbaF64, TyPoseF64, TyQuaternionExt, TyQuaternionF64, TyTransformF64, TyVector3Ext,
-        TyVector3F64, TyVector3U32,
-    };
+    use ty_math::{TyLinSrgbaF64, TyTransformF64, TyVector3Ext, TyVector3F64, TyVector3U32};
+
+    const ONE: i32 = 1 << GRID_FRACTION_BITS;
 
     fn ray(origin: [f64; 3], direction: [f64; 3]) -> RenderRay {
         RenderRay {
@@ -825,8 +821,10 @@ mod tests {
             object.voxel_material(object.voxel_id(position).unwrap())
         };
 
-        let past_end =
-            |cell: [i64; 3], a: usize| ray.end.is_some_and(|end| sign[a] * (cell[a] - end[a]) > 0);
+        let past_end = |cell: [i64; 3], a: usize| {
+            ray.end
+                .is_some_and(|end| sign[a] * (cell[a] - i64::from(end[a])) > 0)
+        };
 
         if (0..3).any(|a| past_end(cell, a)) {
             return Vec::new();
@@ -899,45 +897,6 @@ mod tests {
         }
     }
 
-    /// A 24 by 10 by 24 grid of one material, live where a hash of `seed`
-    /// and the cell falls under `density`, from layer `floor` up.
-    fn random_scene(seed: u64, density: f64, floor: u32) -> RenderScene {
-        let mut cells = Vec::new();
-
-        for x in 0..24 {
-            for y in floor..10 {
-                for z in 0..24 {
-                    let mut hash = seed
-                        .wrapping_add((x * 240 + y * 24 + z) as u64)
-                        .wrapping_mul(0x9e37_79b9_7f4a_7c15);
-                    hash = (hash ^ (hash >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-                    hash = (hash ^ (hash >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-                    hash ^= hash >> 31;
-
-                    if (hash as f64) < density * u64::MAX as f64 {
-                        cells.push(([x, y, z], 0));
-                    }
-                }
-            }
-        }
-
-        cells_scene([24, 10, 24], &cells, &[TyTransformF64::IDENTITY])
-    }
-
-    /// Diagonal staircases along x = z, common in voxel art.
-    fn stairs_scene() -> RenderScene {
-        let mut cells = Vec::new();
-
-        for k in 0..24 {
-            for y in 1..4 {
-                cells.push(([k, y, (k + 7) % 24], 0));
-                cells.push(([(k + 13) % 24, y, k], 0));
-            }
-        }
-
-        cells_scene([24, 10, 24], &cells, &[TyTransformF64::IDENTITY])
-    }
-
     #[test]
     fn corner_shadow_rays_over_the_precision_scenes_match_an_exact_walk() {
         let inset = ONE >> SHADOW_INSET_BITS;
@@ -954,8 +913,13 @@ mod tests {
             (45.0, 35.264_389_68),
         ];
 
-        let points = [[12.3, 15.7, 8.1], [12.5, 4.5, 12.5]]
-            .map(|point| quantize_point(TyVector3F64::from_array(point)).unwrap());
+        let points = [[12.3, 15.7, 8.1], [12.5, 4.5, 12.5]].map(|point| {
+            quantize_point(
+                TyVector3F64::from_array(point),
+                TyVector3U32::new(24, 10, 24),
+            )
+            .unwrap()
+        });
 
         for scene in [
             random_scene(1, 0.15, 1),
@@ -1003,54 +967,24 @@ mod tests {
 
     #[test]
     fn view_rays_over_the_precision_scene_match_an_exact_walk() {
-        let scene = random_scene(3, 0.08, 0);
+        let scene = precision_view_scene();
+        let (_, placement) = scene.iter_placements().next().unwrap();
         let mut ties = 0;
 
-        let orbits = [
-            (45.0, 30.0, [12.0, 5.0, 12.0]),
-            (-30.0, 30.0, [12.0, 5.0, 12.0]),
-            (0.0, 0.0, [12.0, 5.0, 12.0]),
-            (0.0, 90.0, [12.0, 5.0, 12.0]),
-            (0.0, 0.0, [12.3, 5.1, 12.7]),
-        ];
+        for (_, view) in scene.iter_views() {
+            let rays = RenderViewRays::new(view, 64, 64)
+                .to_grid_rays(&placement.transform, TyVector3U32::new(24, 10, 24))
+                .unwrap();
 
-        let projections = [
-            RenderProjection::Perspective {
-                fov: 30f64.to_radians(),
-            },
-            RenderProjection::Orthographic { scale: 16.0 },
-        ];
+            for y in 0..64 {
+                for x in 0..64 {
+                    let ray = rays.ray(x, y);
 
-        for (azimuth, elevation, center) in orbits {
-            let back = TyVector3F64::from_azimuth_elevation(
-                f64::to_radians(azimuth),
-                f64::to_radians(elevation),
-            );
-            let up = if elevation == 90.0 {
-                -TyVector3F64::Z
-            } else {
-                TyVector3F64::Y
-            };
-            let pose = TyPoseF64::new(
-                TyVector3F64::from_array(center) + back * 40.0,
-                TyQuaternionF64::from_look_direction(-back, up).unwrap(),
-            );
-
-            for projection in projections {
-                let rays = RenderViewRays::new(&RenderView { pose, projection }, 64, 64)
-                    .to_grid_rays(&TyTransformF64::IDENTITY)
-                    .unwrap();
-
-                for y in 0..64 {
-                    for x in 0..64 {
-                        let ray = rays.ray(x, y);
-
-                        assert_eq!(
-                            walk_hits(&scene, ray),
-                            exact_hits(&scene, ray, &mut ties),
-                            "{ray:?}"
-                        );
-                    }
+                    assert_eq!(
+                        walk_hits(&scene, ray),
+                        exact_hits(&scene, ray, &mut ties),
+                        "{ray:?}"
+                    );
                 }
             }
         }

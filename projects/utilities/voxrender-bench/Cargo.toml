@@ -1,0 +1,16 @@
+[package]
+name = "voxrender-bench"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Benchmarks and prototypes for voxrender's GPU tiers."
+publish = false
+
+[dependencies]
+branded-id = "0.2.0"
+clap = { version = "4.5.58", features = ["derive"] }
+pollster = "0.4"
+ty-math = { version = "0.4.0", default-features = false }
+voxrender = { version = "0.4.0", features = ["fixtures"] }
+wgpu = "30.0.1"

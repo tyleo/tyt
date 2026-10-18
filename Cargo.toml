@@ -30,6 +30,7 @@ members = [
     "projects/utilities/voxconv",
     "projects/utilities/voxcore",
     "projects/utilities/voxrender",
+    "projects/utilities/voxrender-bench",
     "projects/utilities/vox-value-language",
     "projects/utilities/voxsmith",
     "projects/utilities/voxsurface",

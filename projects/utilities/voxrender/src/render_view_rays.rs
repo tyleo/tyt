@@ -2,7 +2,7 @@ use crate::{
     GRID_DIRECTION_BITS, GRID_FRACTION_BITS, GRID_GUARD_BITS, RenderGridViewRays, RenderProjection,
     RenderRay, RenderView, grid_point, grid_vector, quantize_point,
 };
-use ty_math::{TyTransformF64, TyVector3F64};
+use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 
 /// The rays through the pixel centers of a view over an image. Rows run top
 /// to bottom. A perspective ray fans out from the view's position by its
@@ -119,11 +119,15 @@ impl RenderViewRays {
         }
     }
 
-    /// These rays in the grid of a placement under `transform`, or `None`
-    /// when a corner pixel's origin lies out of the grid's
+    /// These rays in the grid of `bounds` of a placement under `transform`,
+    /// or `None` when a pixel's origin lies out of the grid's
     /// [range](crate::GRID_RANGE_BITS). The direction scale leaves room under
     /// `1 << GRID_DIRECTION_BITS` for the steps' rounding.
-    pub fn to_grid_rays(&self, transform: &TyTransformF64) -> Option<RenderGridViewRays> {
+    pub fn to_grid_rays(
+        &self,
+        transform: &TyTransformF64,
+        bounds: TyVector3U32,
+    ) -> Option<RenderGridViewRays> {
         let origin = grid_point(transform, self.origin);
         let origin_x = grid_vector(transform, self.origin_x);
         let origin_y = grid_vector(transform, self.origin_y);
@@ -136,8 +140,10 @@ impl RenderViewRays {
         let last_y = f64::from(self.height - 1);
         let corners = [(0.0, 0.0), (last_x, 0.0), (0.0, last_y), (last_x, last_y)];
 
+        // A far-out corner fails here before its steps could overflow. The
+        // integer corners settle the range's edge.
         for (x, y) in corners {
-            quantize_point(origin + origin_x * x + origin_y * y)?;
+            quantize_point(origin + origin_x * x + origin_y * y, bounds)?;
         }
 
         let largest = corners
@@ -156,7 +162,7 @@ impl RenderViewRays {
         let origin_scale = guard * 2f64.powi(GRID_FRACTION_BITS as i32);
         let direction_scale = guard * reach / largest;
 
-        Some(RenderGridViewRays {
+        let rays = RenderGridViewRays {
             width: self.width,
             height: self.height,
             origin: fixed(origin, origin_scale),
@@ -165,7 +171,9 @@ impl RenderViewRays {
             direction: fixed(direction, direction_scale),
             direction_x: fixed(direction_x, direction_scale),
             direction_y: fixed(direction_y, direction_scale),
-        })
+        };
+
+        rays.in_range(bounds).then_some(rays)
     }
 }
 

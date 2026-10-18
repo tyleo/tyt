@@ -43,11 +43,14 @@ The walk runs in integers so every renderer makes the same choices. A ray
 enters each placement's walk quantized into its grid: a fixed-point origin
 with 13 fraction bits and integer direction components of at most 2^16. A
 view's ray for a pixel comes from integer steps across the image carrying 12
-guard bits, rounded once. The walk steps across the boundary the ray reaches
-first, judged by the sign of an integer error term between each pair of
-axes. A tie steps x, then y, then z. A point on a boundary belongs to the
-cell the ray moves into, and on an axis the ray does not move along, to the
-cell above. A ray from outside a grid enters it as though it had walked
+guard bits, rounded once, halves up. A grid's sides, each ray's origin, and
+the origin's mirror across the grid lie within 2^18 cells of the grid's
+origin, so the walk's positions fit 32-bit integers. A render whose ray or
+light lies out of that range errors. The walk steps across the boundary the
+ray reaches first, judged by the sign of an integer error term between each
+pair of axes. A tie steps x, then y, then z. A point on a boundary belongs to
+the cell the ray moves into, and on an axis the ray does not move along, to
+the cell above. A ray from outside a grid enters it as though it had walked
 there from its origin. A hit's distance in meters comes from the integer
 state in `f64`.
 

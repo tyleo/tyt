@@ -8,9 +8,10 @@ pub const GRID_DIRECTION_BITS: u32 = 16;
 /// under one unit across 8192 pixels.
 pub const GRID_GUARD_BITS: u32 = 12;
 
-/// A quantized point lies within `1 << GRID_RANGE_BITS` cells of its grid's
-/// origin. The range keeps grid entry in 64-bit integers.
-pub const GRID_RANGE_BITS: u32 = 32;
+/// A grid's sides, a quantized point, and the point's mirror across the grid
+/// lie within `1 << GRID_RANGE_BITS` cells of the grid's origin. The range
+/// keeps the walk's positions in 32-bit integers.
+pub const GRID_RANGE_BITS: u32 = 18;
 
 /// A shadow ray starts `2^-SHADOW_INSET_BITS` of a cell in from its face's
 /// edges.

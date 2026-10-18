@@ -15,7 +15,7 @@ pub fn cast_ray(
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderRay, cast_ray, test_utilities::cells_scene};
+    use crate::{RenderRay, cast_ray, fixtures::cells_scene};
     use std::f64::consts::PI;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
 

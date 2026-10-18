@@ -69,6 +69,9 @@ mod cast_ray;
 #[cfg(feature = "cpu")]
 pub use cast_ray::*;
 
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixtures;
+
 #[cfg(feature = "cpu")]
 mod render;
 
@@ -152,6 +155,12 @@ mod normal_reflectance;
 
 #[cfg(feature = "cpu")]
 pub(crate) use normal_reflectance::*;
+
+#[cfg(feature = "cpu")]
+mod placement_bounds;
+
+#[cfg(feature = "cpu")]
+pub(crate) use placement_bounds::*;
 
 #[cfg(feature = "cpu")]
 mod quantize_direction;

@@ -17,9 +17,7 @@ pub fn transmitted_reflectance(material: &RenderMaterial, cosine: f64) -> TyLinS
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        RenderMaterial, normal_reflectance, test_utilities::glass, transmitted_reflectance,
-    };
+    use crate::{RenderMaterial, fixtures::glass, normal_reflectance, transmitted_reflectance};
     use ty_math::{TyLinSrgbF64, TyLinSrgbaF64};
 
     #[test]

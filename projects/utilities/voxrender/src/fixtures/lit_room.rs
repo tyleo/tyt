@@ -1,6 +1,6 @@
 use crate::{
     RenderLight, RenderMaterial, RenderPlacement, RenderScene,
-    test_utilities::{orbit_view, solid_object},
+    fixtures::{orbit_view, solid_object},
 };
 use branded_id::U32Id;
 use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TyTransformF64, TyVector3F64, TyVector3U32};

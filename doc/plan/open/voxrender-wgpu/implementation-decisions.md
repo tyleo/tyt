@@ -43,3 +43,32 @@ they land.
   3. room, all four
   4. spot-room, all four
   5. two-placements per-corner
+
+## S2. Desktop harness and B1
+
+- The scene builders live in `voxrender::fixtures`, compiled under
+  `any(test, feature = "fixtures")`. `bar_scene` and `check_goldens` stay
+  test-only because they need `RenderRay` under `cpu` and the `png`
+  dev-dependency. `precision_view_scene` holds the precision-sim's ten
+  views as the scene's views.
+- `GRID_RANGE_BITS` also bounds a grid's sides, so a hit point anywhere in
+  its grid fits i32. That replaces S1's `i128` entry: grid rays and hit
+  points hold i32, the walk computes in i64, and
+  `RenderGridRay::in_range` states what the walk asserts on each ray.
+- `RenderViewRays::to_grid_rays` and `RenderGridRay::from_ray` take the
+  grid's bounds for the mirror check. `to_grid_rays` rejects far corners in
+  f64 before their steps could overflow, and the integer corners settle the
+  range's edge.
+- A view's steps round their guard bits off halves up rather than away from
+  zero. The bench then splits each step into whole units and a fraction
+  under 2^12. The GPU sums the units with wrapping i32 and rounds only the
+  fractions, whose sum stays under 2^27, which matches the reference
+  exactly. No golden moved.
+- `RenderGridViewRays`' fields are public so a GPU tier can upload them.
+- `voxrender-bench` is binary-only. `first_hit.wgsl` writes each pixel's
+  placement index, voxel id, and face. Placements merge by f32 distance,
+  with ties going to the earlier placement as in the reference. A cell
+  holds its material id plus one, so the shader finds the first hit by
+  material change alone and needs no opacity.
+- naga's Metal backend casts signed adds and multiplies through unsigned
+  types, so the wrapping the entry relies on holds there.

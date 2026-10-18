@@ -3,7 +3,8 @@ use crate::{
     RenderGridRay, RenderHit, RenderImage, RenderLight, RenderMaterial, RenderOcclusion,
     RenderPixel, RenderRay, RenderRayWalk, RenderScene, RenderShadow, RenderViewRays, Result,
     SHADOW_INSET_BITS, ShadowTarget, apply_bloom, grid_point, grid_vector, material_pass,
-    normal_reflectance, quantize_direction, quantize_point, transmitted_reflectance,
+    normal_reflectance, placement_bounds, quantize_direction, quantize_point,
+    transmitted_reflectance,
 };
 use branded_id::U32Id;
 use std::{
@@ -60,7 +61,7 @@ pub fn render(
     let grid_rays = scene
         .iter_placements()
         .map(|(placement_id, placement)| {
-            rays.to_grid_rays(&placement.transform)
+            rays.to_grid_rays(&placement.transform, placement_bounds(scene, placement))
                 .ok_or(Error::GridRange { placement_id })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -516,7 +517,7 @@ fn shadow_factor(
 
         RenderShadow::PerPixel => {
             let across = |axis: usize, start: usize| {
-                (hit.point[axis] - start as i64 * ONE).clamp(INSET, ONE - INSET)
+                (i64::from(hit.point[axis]) - start as i64 * ONE).clamp(INSET, ONE - INSET)
             };
 
             sample([
@@ -546,17 +547,21 @@ fn shadow_factor(
 fn shadow_rays(
     scene: &RenderScene,
     placement_id: U32Id<BRenderPlacement>,
-    origin: [i64; 3],
+    origin: [i32; 3],
     world: TyVector3F64,
     target: &ShadowTarget,
 ) -> Result<Vec<RenderGridRay>> {
     scene
         .iter_placements()
         .map(|(other_id, other)| {
+            let bounds = placement_bounds(scene, other);
+
             let quantize = |point| {
-                quantize_point(grid_point(&other.transform, point)).ok_or(Error::GridRange {
-                    placement_id: other_id,
-                })
+                quantize_point(grid_point(&other.transform, point), bounds).ok_or(
+                    Error::GridRange {
+                        placement_id: other_id,
+                    },
+                )
             };
 
             let start = if other_id == placement_id {
@@ -597,14 +602,14 @@ fn entry_pass(scene: &RenderScene, walk: &RenderRayWalk) -> TyLinSrgbF64 {
 
 /// The fixed point on `face`'s plane `across` units from its min corner
 /// along its `u` and `v`.
-fn face_origin(face: &SurfaceSpan, across: [i64; 2]) -> [i64; 3] {
+fn face_origin(face: &SurfaceSpan, across: [i64; 2]) -> [i32; 3] {
     let mut point = [0; 3];
 
     point[face.d] = (i64::from(face.s) + i64::from(face.sign > 0)) * ONE;
     point[face.u()] = face.u0 as i64 * ONE + across[0];
     point[face.v()] = face.v0 as i64 * ONE + across[1];
 
-    point
+    point.map(|coordinate| i32::try_from(coordinate).expect("a grid's sides are within range"))
 }
 
 /// `values` blended bilinearly across `face` at `along`.
@@ -641,15 +646,17 @@ mod tests {
     use crate::{
         Error, RenderBloom, RenderHit, RenderLight, RenderMaterial, RenderObject, RenderOcclusion,
         RenderPixel, RenderPlacement, RenderProjection, RenderRay, RenderRayWalk, RenderScene,
-        RenderShadow, RenderView, ShadowTarget, cast_ray, fit_distance, material_pass, render,
+        RenderShadow, RenderView, ShadowTarget, cast_ray, fit_distance,
+        fixtures::{
+            cube_scene, glass, glass_scene, glow_scene, l_shape_scene, matte, room_scene,
+            solid_object, spot_room_scene, two_placements_scene,
+        },
+        material_pass, render,
         render::{
             BLACK, RayShade, WHITE, bilinear, check_bloom, cone_attenuation, direct_radiance,
             hemisphere_radiance, point_attenuation, shade_hit, shade_ray, shadow_factor,
         },
-        test_utilities::{
-            bar_scene, check_goldens, cube_scene, glass, glass_scene, glow_scene, l_shape_scene,
-            matte, room_scene, solid_object, spot_room_scene, two_placements_scene,
-        },
+        test_utilities::{bar_scene, check_goldens},
         transmitted_reflectance,
     };
     use branded_id::U32Id;

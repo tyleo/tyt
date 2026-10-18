@@ -1,4 +1,4 @@
-use crate::{RenderLight, RenderScene, RenderShadow, test_utilities::lit_room};
+use crate::{RenderLight, RenderScene, RenderShadow, fixtures::lit_room};
 use ty_math::{TyLinSrgbF64, TyVector3F64};
 
 /// The room under one point light near the corner with `shadow` and a range
