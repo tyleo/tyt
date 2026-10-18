@@ -1,15 +1,12 @@
 use crate::{
     VMaxLegacyChunkVoxels,
-    snapshots::{CHUNK_PITCH, Error, Result, VMaxVoxel, decode_morton_3d},
+    snapshots::{CHUNK_PITCH, CHUNK_VOXELS, Error, Result, VMaxVoxel, decode_morton_3d},
 };
 use std::collections::BTreeMap;
 
 /// The bytes a legacy chunk record takes: Swift's 16-byte stride for three or
 /// four 32-bit integers.
 const RECORD_BYTES: usize = 16;
-
-/// The voxels a chunk holds.
-const CHUNK_VOXELS: usize = (CHUNK_PITCH * CHUNK_PITCH * CHUNK_PITCH) as usize;
 
 /// Decodes the voxels of a contents file older than version 4, as Voxel Max
 /// loads one. Each 16-byte record in `chunks` holds a voxel origin inside its

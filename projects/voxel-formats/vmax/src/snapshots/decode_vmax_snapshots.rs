@@ -1,6 +1,6 @@
 use crate::{
     VMaxSnapshot,
-    snapshots::{CHUNK_PITCH, Error, Result, VMaxVoxel, decode_morton_3d},
+    snapshots::{CHUNK_PITCH, CHUNK_VOXELS, Error, Result, VMaxVoxel, decode_morton_3d},
 };
 use std::collections::BTreeMap;
 
@@ -23,11 +23,9 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSnapshot]) -> Result<Vec<VMaxVoxel
             grid[1] as i32 * CHUNK_PITCH,
             grid[2] as i32 * CHUNK_PITCH,
         ];
-        // `st.min[3]` is the Morton code of the chunk's first `ds` slot; it
-        // must be present and non-negative, or the chunk's voxels can't be
-        // placed.
-        let morton_offset = match storage.st.min.get(3) {
-            Some(&offset) if offset >= 0 => offset as u32,
+        // `st.min[3]` is the Morton code of the chunk's first `ds` slot.
+        let morton_offset = match storage.st.min.get(3).map(|&offset| usize::try_from(offset)) {
+            Some(Ok(offset)) => offset,
 
             _ => {
                 return Err(Error::Invalid(format!(
@@ -37,11 +35,28 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSnapshot]) -> Result<Vec<VMaxVoxel
             }
         };
 
-        for (slot, &[material, color]) in storage.ds.as_chunks::<2>().0.iter().enumerate() {
+        let (slots, remainder) = storage.ds.as_chunks::<2>();
+        if !remainder.is_empty() {
+            return Err(Error::Invalid(format!(
+                "snapshot chunk {chunk_id} has {} data bytes, not whole two-byte voxels",
+                storage.ds.len()
+            )));
+        }
+        if CHUNK_VOXELS
+            .checked_sub(morton_offset)
+            .is_none_or(|room| slots.len() > room)
+        {
+            return Err(Error::Invalid(format!(
+                "snapshot chunk {chunk_id} has {} voxels from Morton offset {morton_offset}, past the chunk's {CHUNK_VOXELS} slots",
+                slots.len()
+            )));
+        }
+
+        for (slot, &[material, color]) in slots.iter().enumerate() {
             if color == 0 {
                 continue;
             }
-            let local = decode_morton_3d(morton_offset + slot as u32);
+            let local = decode_morton_3d((morton_offset + slot) as u32);
             let position = (
                 base[0] + local[0] as i32,
                 base[1] + local[1] as i32,
@@ -88,5 +103,39 @@ mod tests {
         let mut snapshots = encode_vmax_snapshots(&[voxel(1, 2, 3)]);
         snapshots[0].s.st.min[3] = -1;
         assert!(decode_vmax_snapshots(&snapshots).is_err());
+    }
+
+    /// An odd-length `ds` ends in half a voxel, so it errors.
+    #[test]
+    fn rejects_an_odd_data_length() {
+        let mut snapshots = encode_vmax_snapshots(&[voxel(1, 2, 3)]);
+        snapshots[0].s.ds.push(0);
+
+        let error = decode_vmax_snapshots(&snapshots).unwrap_err();
+
+        assert!(error.to_string().contains("whole"), "{error}");
+    }
+
+    /// A `ds` running past the chunk's last slot would decode into the next
+    /// chunk, so it errors.
+    #[test]
+    fn rejects_data_past_the_chunk() {
+        let mut snapshots = encode_vmax_snapshots(&[voxel(1, 2, 3)]);
+        let offset = snapshots[0].s.st.min[3] as usize;
+        snapshots[0].s.ds.resize(2 * (32 * 32 * 32 - offset + 1), 0);
+
+        let error = decode_vmax_snapshots(&snapshots).unwrap_err();
+
+        assert!(error.to_string().contains("past"), "{error}");
+    }
+
+    /// A `ds` filling the chunk to its last slot decodes.
+    #[test]
+    fn decodes_data_ending_at_the_chunk_end() {
+        let mut snapshots = encode_vmax_snapshots(&[voxel(1, 2, 3)]);
+        let offset = snapshots[0].s.st.min[3] as usize;
+        snapshots[0].s.ds.resize(2 * (32 * 32 * 32 - offset), 0);
+
+        assert_eq!(decode_vmax_snapshots(&snapshots).unwrap(), [voxel(1, 2, 3)]);
     }
 }
