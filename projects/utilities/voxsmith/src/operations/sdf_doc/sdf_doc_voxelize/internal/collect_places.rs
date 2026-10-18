@@ -1,7 +1,7 @@
 use crate::operations::sdf_doc::SdfPlace;
 use branded_id::U32Id;
 use sdfcore::{BSdfNode, SdfState};
-use ty_math::TyVector3F64;
+use ty_math::{TyQuaternionExt, TyQuaternionF64, TyVector3F64};
 
 /// Every place of every part in `state`, each before its children, from the
 /// first root part. The places' grids start empty.
@@ -40,6 +40,15 @@ fn visit(
         path,
         pivot: node.pivot.unwrap_or(TyVector3F64::ZERO) + offset,
         offset,
+        rotation: node.rotation.iter().fold(
+            TyQuaternionF64::IDENTITY,
+            |rotation, axis_rotation| {
+                rotation.rotate_around_axis(
+                    axis_rotation.axis.unit_vector3_f64(),
+                    axis_rotation.degrees.to_radians(),
+                )
+            },
+        ),
         grid_indices: Vec::new(),
     });
 

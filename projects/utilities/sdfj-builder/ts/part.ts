@@ -1,6 +1,6 @@
 import * as check from "./check.ts";
 import { Step } from "./step.ts";
-import type { Vec3 } from "./types.ts";
+import type { AxisRotation, Vec3 } from "./types.ts";
 
 /** The fields a part holds before the builder writes its node and object. */
 export interface PartEntry {
@@ -12,6 +12,9 @@ export interface PartEntry {
 
   /** The move of the part's steps, child parts, and pivot. */
   readonly offset?: Vec3;
+
+  /** The rotations of the part about its pivot, in order. */
+  readonly rotation?: readonly AxisRotation[];
 
   /** The part's steps and child parts in list order. */
   readonly list: readonly (Step | Part)[];
@@ -36,15 +39,30 @@ export class Part {
 /** The part `name` that voxelizes `list` and turns about `pivot`. */
 export function part(
   name: string,
-  options: { pivot?: Vec3; offset?: Vec3 },
+  options: { pivot?: Vec3; offset?: Vec3; rotation?: AxisRotation[] },
   list: (Step | Part)[],
 ): Part {
   const path = `part ${JSON.stringify(check.text("part name", name))}`;
-  const option = check.knownOptions(path, options, ["pivot", "offset"]);
+  const option = check.knownOptions(path, options, [
+    "pivot",
+    "offset",
+    "rotation",
+  ]);
   return new Part({
     name,
     pivot: check.optional(`${path} pivot`, option.pivot, check.vec3),
     offset: check.optional(`${path} offset`, option.offset, check.vec3),
+    rotation: check.optional(
+      `${path} rotation`,
+      option.rotation,
+      (rotationPath, value) =>
+        check.list(
+          rotationPath,
+          value,
+          "an array of AxisRotations",
+          check.axisRotation,
+        ),
+    ),
     list: stepsAndParts(`${path} list`, list),
   });
 }

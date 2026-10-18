@@ -546,11 +546,12 @@ A pattern length left out takes its default count of cells times `g`.
    wrap its cells tightly. A grid with no live cell writes no object.
 3. Each place of a part writes a node named after the part, and the nodes nest
    as the places do. Every node below a root node takes the position
-   `(pivot - parentPivot) / g`, the identity rotation, and a scale of 1. Each
-   pivot there sits where the offsets on its path move it. Under
+   `(pivot - parentPivot) / g` and a scale of 1. Each pivot there sits where the
+   offsets on its path move it. Every node takes its part's `rotation`, whose
+   axis rotations apply about the parent's axes in list order. Under
    `--flatten nodes` or `--flatten objects`, only the root parts write nodes. A
    root part's node then places every object at or below the root part as the
-   root part's own.
+   root part's own. Flattening a rotated part below a root part errors.
 4. With `f = -(pivot + o) / g` and the pivot in the part's frame, a part's node
    places the part's object with an `origin` of the object's min cell index plus
    `f` when `f` is whole on every axis. Otherwise a child node named `voxels` at

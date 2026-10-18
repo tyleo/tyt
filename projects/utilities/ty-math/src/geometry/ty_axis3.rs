@@ -1,3 +1,4 @@
+use crate::TyVector3F64;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// One axis of a 3D vector.
@@ -22,6 +23,15 @@ impl TyAxis3 {
             TyAxis3::Z => 2,
         }
     }
+
+    /// The unit vector along the axis.
+    pub fn unit_vector3_f64(self) -> TyVector3F64 {
+        match self {
+            TyAxis3::X => TyVector3F64::X,
+            TyAxis3::Y => TyVector3F64::Y,
+            TyAxis3::Z => TyVector3F64::Z,
+        }
+    }
 }
 
 impl Display for TyAxis3 {
@@ -38,7 +48,7 @@ impl Display for TyAxis3 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TyAxis3, TyVector3U32};
+    use crate::{TyAxis3, TyVector3F64, TyVector3U32};
 
     #[test]
     fn indexes_a_vector_and_prints_lowercase() {
@@ -46,5 +56,10 @@ mod tests {
 
         assert_eq!(vector[TyAxis3::Y.index()], 5);
         assert_eq!(TyAxis3::Z.to_string(), "z");
+    }
+
+    #[test]
+    fn a_unit_vector_runs_along_its_axis() {
+        assert_eq!(TyAxis3::Y.unit_vector3_f64(), TyVector3F64::Y);
     }
 }

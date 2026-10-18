@@ -8,7 +8,7 @@ import { Shades } from "./shades.ts";
 import { Shape2d } from "./shape2d.ts";
 import { Shape3d } from "./shape3d.ts";
 import { Step } from "./step.ts";
-import type { Vec3 } from "./types.ts";
+import type { Axis, AxisRotation, Vec3 } from "./types.ts";
 
 /** A library vxl hands the builder. */
 export interface Library {
@@ -171,6 +171,10 @@ interface NodeEntry {
   readonly name: string;
   readonly pivot?: Vec3;
   readonly offset?: Vec3;
+  readonly rotation?: readonly {
+    readonly axis: Axis;
+    readonly degrees: number;
+  }[];
   readonly childObjects: readonly number[];
   readonly childNodes: readonly number[];
 }
@@ -287,6 +291,9 @@ class LibraryReader {
       name: node.name,
       pivot: node.pivot,
       offset: node.offset,
+      rotation: node.rotation?.map((
+        { axis, degrees },
+      ): AxisRotation => [axis, degrees]),
       list: [...steps, ...parts],
     });
   }

@@ -101,7 +101,14 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
   ],
   "objects": [{ "name": "part", "steps": [0, 1, 2, 3, 4] }],
   "nodes": [
-    { "name": "part", "pivot": [0, 0.5, 0], "offset": [1, 0, 0], "childObjects": [0], "childNodes": [] },
+    {
+      "name": "part",
+      "pivot": [0, 0.5, 0],
+      "offset": [1, 0, 0],
+      "rotation": [{ "axis": "y", "degrees": 120 }, { "axis": "x", "degrees": -35 }],
+      "childObjects": [0],
+      "childNodes": []
+    },
     { "name": "model", "childObjects": [], "childNodes": [0] }
   ],
   "rootNodes": [1],

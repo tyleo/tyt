@@ -100,6 +100,7 @@ type Vec3 = [number, number, number];
 type Axis = "x" | "y" | "z";
 type Axes = "x" | "y" | "z" | "xy" | "xz" | "yz" | "xyz";
 type Side = "+x" | "-x" | "+y" | "-y" | "+z" | "-z";
+type AxisRotation = [Axis, number];
 ```
 
 A `Shape3d` holds a 3D region, and a `Shape2d` holds a 2D region in a plane with
@@ -160,7 +161,7 @@ use the name. A part's grid grows to hold every `add` and `set`, and `carve`,
 ```ts
 function part(
   name: string,
-  options: { pivot?: Vec3; offset?: Vec3 },
+  options: { pivot?: Vec3; offset?: Vec3; rotation?: AxisRotation[] },
   list: (Step | Part)[],
 ): Part;
 ```
@@ -180,7 +181,10 @@ lids take parts when the prompt asks for pieces that move or separate objects.
    the joint.
 5. `pivot` defaults to `[0, 0, 0]`. `offset` moves the part's steps, child
    parts, and pivot. The offsets of nested parts add up.
-6. A step or a part can sit in several lists. A part writes a node at each
+6. `rotation` poses the part. Each `[axis, degrees]` in list order rotates the
+   part about its pivot on an axis of the parent's frame. The part voxelizes
+   unrotated. Its node takes the rotation
+7. A step or a part can sit in several lists. A part writes a node at each
    place, and under `--frame local` the nodes share one object.
 
 Every part takes a name no other part in its list shares. A function builds

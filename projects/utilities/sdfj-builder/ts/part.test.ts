@@ -22,6 +22,36 @@ Deno.test("part writes an object for its steps and a node", () => {
   assert.deepStrictEqual(rootNodes, [1]);
 });
 
+Deno.test("a part's rotations write in order", () => {
+  const lid = part("lid", {
+    pivot: [0, 1, 0],
+    rotation: [["y", 120], ["x", -35]],
+  }, [
+    add("lid", ball, white),
+  ]);
+  const { nodes } = document([lid]);
+  assert.deepStrictEqual(nodes[0], {
+    name: "lid",
+    pivot: [0, 1, 0],
+    rotation: [{ axis: "y", degrees: 120 }, { axis: "x", degrees: -35 }],
+    childObjects: [0],
+    childNodes: [],
+  });
+});
+
+Deno.test("an axis rotation takes an axis and finite degrees", () => {
+  assert.throws(() => part("lid", { rotation: [["w", 30]] } as never, []), {
+    message: 'part "lid" rotation[0][0] must be one of "x", "y", "z", not "w"',
+  });
+  assert.throws(() => part("lid", { rotation: [["x", Infinity]] }, []), {
+    message: 'part "lid" rotation[0][1] must be a finite number, not Infinity',
+  });
+  assert.throws(() => part("lid", { rotation: ["x", 30] } as never, []), {
+    message:
+      'part "lid" rotation[0] must be an AxisRotation of an axis and finite degrees, not "x"',
+  });
+});
+
 Deno.test("a step in several lists writes one entry", () => {
   const shared = add("shared", ball, white);
   const { steps, objects } = document([

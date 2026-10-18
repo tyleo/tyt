@@ -1,9 +1,9 @@
 use crate::{Error, Result};
 use branded_id::{IdVec, U32Id};
 use sdfcore::{
-    SdfAxes2d, SdfAxes3d, SdfCaps, SdfMain, SdfMap, SdfMapEntry, SdfMaterial, SdfNames, SdfNode,
-    SdfObject, SdfPattern, SdfProperty, SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d,
-    SdfSide, SdfState, SdfStep, SdfStepMaterial, SdfValue,
+    SdfAxes2d, SdfAxes3d, SdfAxisRotation, SdfCaps, SdfMain, SdfMap, SdfMapEntry, SdfMaterial,
+    SdfNames, SdfNode, SdfObject, SdfPattern, SdfProperty, SdfPropertyValue, SdfShades, SdfShape2d,
+    SdfShape3d, SdfSide, SdfState, SdfStep, SdfStepMaterial, SdfValue,
 };
 use sdfj::{
     SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjCaps, SdfjFile, SdfjIntValue, SdfjMap,
@@ -872,6 +872,14 @@ fn sdf_node_from_sdfj_node(node: &SdfjNode) -> StdResult<SdfNode, String> {
         name: node.name.clone(),
         pivot: node.pivot.map(TyVector3F64::from_array),
         offset: node.offset.map(TyVector3F64::from_array),
+        rotation: node
+            .rotation
+            .iter()
+            .map(|axis_rotation| SdfAxisRotation {
+                axis: ty_axis3_from_sdfj_axis(axis_rotation.axis),
+                degrees: axis_rotation.degrees,
+            })
+            .collect(),
         child_object_ids: wire_ids(&node.child_objects)?,
         child_node_ids: wire_ids(&node.child_nodes)?,
     })

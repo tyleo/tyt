@@ -48,6 +48,7 @@ mod tests {
                 name: "ball".to_owned(),
                 pivot: None,
                 offset: None,
+                rotation: Vec::new(),
                 child_objects: vec![0],
                 child_nodes: Vec::new(),
             }],

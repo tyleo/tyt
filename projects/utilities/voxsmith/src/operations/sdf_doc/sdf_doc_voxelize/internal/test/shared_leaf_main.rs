@@ -12,6 +12,7 @@ pub fn shared_leaf_main() -> SdfMain {
         name: name.to_string(),
         pivot: Some(TyVector3F64::new(0.5, 0.0, 0.0)),
         offset: offset.map(TyVector3F64::from_array),
+        rotation: Vec::new(),
         child_object_ids: objects.into_iter().map(U32Id::from_u32).collect(),
         child_node_ids: nodes.into_iter().map(U32Id::from_u32).collect(),
     };

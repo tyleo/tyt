@@ -1,6 +1,6 @@
 use branded_id::U32Id;
 use sdfcore::BSdfNode;
-use ty_math::TyVector3F64;
+use ty_math::{TyQuaternionF64, TyVector3F64};
 
 /// One place of a part in the hierarchy.
 #[derive(Clone, Debug, PartialEq)]
@@ -21,6 +21,9 @@ pub struct SdfPlace {
 
     /// The offsets on the place's path added up, in meters.
     pub offset: TyVector3F64,
+
+    /// The part's rotation about its pivot on the parent's axes.
+    pub rotation: TyQuaternionF64,
 
     /// The indices in the sampling's `grids` of the grids of the part's objects
     /// at this place.

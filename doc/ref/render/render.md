@@ -37,6 +37,11 @@ vxl object render turret.voxj
 
 # the hero view under the studio rig, the emissive materials glowing
 vxl object render turret.voxj --profile glow
+
+# the review sheet with the barrel part rotated 20 degrees about x
+vxl object render turret.voxj
+  --profile review
+  --rotate barrel x -20
 ```
 
 The images show inline in the terminal one below another, each scaled to fit,
@@ -412,7 +417,16 @@ mesh. A document with no objects errors. See
 
     The indexed hemisphere light's color from below.
 
-50. `--select <glob>`
+50. `--rotate <select> <x | y | z> <degrees>`
+    - Repeatable: yes
+
+    Rotates each node a hierarchy-path pattern matches by `degrees` about an
+    axis of its parent's frame. The rotation follows the node's rotation and
+    holds for this render alone. The flags apply in order. A pattern matching
+    no node errors. A rotation that reads right copies to the end of the
+    part's `rotation` in the model file.
+
+51. `--select <glob>`
     - Default: `*`, selecting every object
     - Repeatable: yes
 
@@ -421,13 +435,13 @@ mesh. A document with no objects errors. See
     default, so `--select-index` alone never unions with `*`. See
     [Object selectors](../../plan/open/vxl-commands/reference/conventions.md#object-selectors).
 
-51. `--select-index <index>`
+52. `--select-index <index>`
     - Repeatable: yes
 
     Chooses objects by id: an integer, an `a-b` range, or `*` for every
     object. An id the document lacks errors. Unions with `--select`.
 
-52. `--print-camera`
+53. `--print-camera`
     - Default: off
     - Repeatable: no
 

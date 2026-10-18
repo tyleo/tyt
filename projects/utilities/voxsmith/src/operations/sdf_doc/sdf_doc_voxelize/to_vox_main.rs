@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        SdfCell, SdfGrid, SdfSampling, SdfVoxMainOptions, is_exposed, retain_sdf_palette,
+        SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfVoxMainOptions, is_exposed, retain_sdf_palette,
         see_through_materials,
     },
     utilities::{FillMode, FlattenMode, VoxelFrame},
@@ -9,7 +9,7 @@ use crate::{
 use branded_id::{IdSlice, IdVec, IteratorExt, U32Id};
 use sdfcore::BSdfMaterial;
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
+use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMain, VoxObject};
 
 /// How far a node's offset to its object can sit from a whole number of voxels
@@ -215,7 +215,7 @@ fn placed(sampling: &SdfSampling, kept: &[Vec<SdfCell>]) -> (Vec<ObjectCells>, V
         nodes.push(PlaceNode {
             name,
             parent: place.parent,
-            transform: node_transform(sampling, place.parent, place.pivot),
+            transform: node_transform(sampling, place),
             object_indices,
             lattice_offset,
         });
@@ -236,6 +236,13 @@ fn flattened(
     let mut roots: Vec<usize> = Vec::with_capacity(sampling.places.len());
 
     for (index, place) in sampling.places.iter().enumerate() {
+        if place.parent.is_some() && place.rotation != TyQuaternionF64::IDENTITY {
+            return Err(Error::invalid(format!(
+                "{}: flattening drops the part's node, which carries its rotation",
+                place.path.join("/"),
+            )));
+        }
+
         roots.push(place.parent.map_or(index, |parent| roots[parent]));
     }
 
@@ -295,7 +302,7 @@ fn flattened(
         nodes.push(PlaceNode {
             name,
             parent: None,
-            transform: node_transform(sampling, None, place.pivot),
+            transform: node_transform(sampling, place),
             object_indices: (first_object..objects.len()).collect(),
             lattice_offset,
         });
@@ -375,23 +382,19 @@ fn object_cells(
     })
 }
 
-/// The transform of the node of a place at `pivot` under the place at
-/// `parent`.
-fn node_transform(
-    sampling: &SdfSampling,
-    parent: Option<usize>,
-    pivot: TyVector3F64,
-) -> TyTransformF64 {
-    match parent {
+/// The transform of `place`'s node.
+fn node_transform(sampling: &SdfSampling, place: &SdfPlace) -> TyTransformF64 {
+    match place.parent {
         Some(parent) => TyTransformF64 {
-            position: (pivot - sampling.places[parent].pivot) / sampling.voxel_size,
+            position: (place.pivot - sampling.places[parent].pivot) / sampling.voxel_size,
+            rotation: place.rotation,
             ..TyTransformF64::IDENTITY
         },
 
         None => TyTransformF64 {
-            position: pivot,
+            position: place.pivot,
+            rotation: place.rotation,
             scale: TyVector3F64::splat(sampling.voxel_size),
-            ..TyTransformF64::IDENTITY
         },
     }
 }
@@ -441,10 +444,10 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use sdfcore::{
-        SdfMain, SdfMaterial, SdfNode, SdfObject, SdfProperty, SdfPropertyValue, SdfShape3d,
-        SdfState, SdfStep, SdfStepMaterial,
+        SdfAxisRotation, SdfMain, SdfMaterial, SdfNode, SdfObject, SdfProperty, SdfPropertyValue,
+        SdfShape3d, SdfState, SdfStep, SdfStepMaterial,
     };
-    use ty_math::TyVector3F64;
+    use ty_math::{TyAxis3, TyVector3F64};
     use voxcore::VoxMain;
 
     /// The document of `main` sampled at one meter per voxel under `frame`.
@@ -602,6 +605,66 @@ mod tests {
         );
     }
 
+    /// `parts_main` with the lid rotated 90 degrees about y, then 90 about x.
+    fn rotated_lid_main() -> SdfMain {
+        let mut state = parts_main().into_state();
+        state.nodes[U32Id::from_u32(0).to_usize_id()].rotation = vec![
+            SdfAxisRotation {
+                axis: TyAxis3::Y,
+                degrees: 90.0,
+            },
+            SdfAxisRotation {
+                axis: TyAxis3::X,
+                degrees: 90.0,
+            },
+        ];
+
+        SdfMain::new(state).unwrap()
+    }
+
+    #[test]
+    fn a_part_node_takes_the_part_rotation_in_order_on_the_parent_axes() {
+        let document = write(
+            &rotated_lid_main(),
+            VoxelFrame::World,
+            FillMode::Solid,
+            FlattenMode::None,
+        );
+
+        let (_, lid) = document
+            .iter_hierarchy_nodes()
+            .find(|(_, node)| node.name == "lid")
+            .unwrap();
+        let rotation = lid.transform.rotation;
+
+        // The rotation about y carries +x onto -z, and the rotation about x then
+        // carries -z onto +y.
+        assert!((rotation * TyVector3F64::X).abs_diff_eq(TyVector3F64::Y, 1e-12));
+        assert_eq!(lid.transform.position, TyVector3F64::splat(2.0));
+    }
+
+    #[test]
+    fn flattening_a_rotated_part_errors() {
+        let sampling = sample(
+            &rotated_lid_main(),
+            &SdfSampleOptions {
+                resolution: GridResolution::VoxelSize(1.0),
+                frame: VoxelFrame::World,
+                record_writes: false,
+            },
+        )
+        .unwrap();
+        let options = SdfVoxMainOptions {
+            fill_mode: FillMode::Solid,
+            flatten: FlattenMode::Nodes,
+        };
+
+        assert_eq!(
+            to_vox_main(&sampling, &options).unwrap_err().to_string(),
+            "model/lid: flattening drops the part's node, which carries its rotation"
+        );
+    }
+
     #[test]
     fn flattening_nodes_keeps_each_part_object_on_the_root_part_grid() {
         let document = write(
@@ -677,6 +740,7 @@ mod tests {
             name: name.to_string(),
             pivot: None,
             offset: None,
+            rotation: Vec::new(),
             child_object_ids: vec![U32Id::from_u32(object)],
             child_node_ids: nodes.into_iter().map(U32Id::from_u32).collect(),
         };

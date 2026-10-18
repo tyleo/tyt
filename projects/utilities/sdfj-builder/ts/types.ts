@@ -7,6 +7,9 @@ export type Vec3 = [number, number, number];
 /** One of the three axes. */
 export type Axis = "x" | "y" | "z";
 
+/** A rotation of some degrees about an axis. */
+export type AxisRotation = [Axis, number];
+
 /** The axes a 3D mirror reflects across. */
 export type Axes = "x" | "y" | "z" | "xy" | "xz" | "yz" | "xyz";
 

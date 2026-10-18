@@ -340,3 +340,9 @@ land.
    draws errors, so no hand flag drops silently
 4. A sheet's tiles take an 8 pixel #808080 border by default because the gray
    stands out on light and dark backgrounds
+5. A part's `rotation` sets its node's rotation. The part voxelizes unrotated.
+   The render's `--rotate` rotates the same node, so a preview copies into the
+   model file one axis rotation at a time. One pose per part covers the four
+   test models posed by hand
+6. An axis rotation takes one axis letter and degrees, as a shape's `rotate`
+   does. A list of them composes on the parent's fixed axes in order

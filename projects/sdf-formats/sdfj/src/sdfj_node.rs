@@ -1,3 +1,4 @@
+use crate::SdfjAxisRotation;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +37,13 @@ pub struct SdfjNode {
         )
     )]
     pub offset: Option<[f64; 3]>,
+
+    /// The rotations of the part about its pivot, in order.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub rotation: Vec<SdfjAxisRotation>,
 
     /// Indices into [`SdfjFile::objects`](crate::SdfjFile::objects).
     pub child_objects: Vec<usize>,

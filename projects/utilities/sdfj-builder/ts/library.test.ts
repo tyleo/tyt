@@ -17,7 +17,9 @@ const leg = extrude(disk, { from: 0, to: 0.4 }).translate([0.15, 0, 0.15]);
 const stool = part("stool", { pivot: [0, 0.2, 0] }, [
   add("legs", leg.mirror("xz"), grain(walnut, { axis: "y", seed: 1 })),
   coat("trim", walnut, { sides: ["+y"], within: box([-1, 0, -1], [1, 1, 1]) }),
-  part("cushion", { offset: [0, 0.4, 0] }, [add("cushion", ball, white)]),
+  part("cushion", { offset: [0, 0.4, 0], rotation: [["y", 45]] }, [
+    add("cushion", ball, white),
+  ]),
 ]);
 
 /** The library of the stool's exports. */

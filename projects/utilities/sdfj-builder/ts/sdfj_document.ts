@@ -8,7 +8,7 @@ import { Shades } from "./shades.ts";
 import { Shape2d } from "./shape2d.ts";
 import { Shape3d } from "./shape3d.ts";
 import { Step } from "./step.ts";
-import type { Vec3 } from "./types.ts";
+import type { AxisRotation, Vec3 } from "./types.ts";
 
 /** The sdfj format version the builder writes. */
 const SDFJ_VERSION = 1;
@@ -85,7 +85,9 @@ export function sdfjDocument(
   exports: readonly (readonly [string, NamedValue])[] = [],
 ): SdfjDocument {
   const writer = new SdfjWriter();
-  writer.document.rootNodes.push(writer.node(name, undefined, undefined, list));
+  writer.document.rootNodes.push(
+    writer.node(name, undefined, undefined, undefined, list),
+  );
   for (const [, value] of exports) {
     writer.named(value);
   }
@@ -182,6 +184,7 @@ class SdfjWriter {
     name: string,
     pivot: Vec3 | undefined,
     offset: Vec3 | undefined,
+    rotation: readonly AxisRotation[] | undefined,
     list: readonly (Step | Part)[],
   ): number {
     const steps: number[] = [];
@@ -196,7 +199,16 @@ class SdfjWriter {
     const childObjects = steps.length === 0
       ? []
       : [this.document.objects.push({ name, steps }) - 1];
-    const node = entry({ name, pivot, offset, childObjects, childNodes });
+    const node = entry({
+      name,
+      pivot,
+      offset,
+      rotation: rotation?.length
+        ? rotation.map(([axis, degrees]) => ({ axis, degrees }))
+        : undefined,
+      childObjects,
+      childNodes,
+    });
     return this.document.nodes.push(node) - 1;
   }
 
@@ -204,8 +216,8 @@ class SdfjWriter {
   #part(part: Part): number {
     let index = this.#indices.get(part);
     if (index === undefined) {
-      const { name, pivot, offset, list } = Part.entry(part);
-      index = this.node(name, pivot, offset, list);
+      const { name, pivot, offset, rotation, list } = Part.entry(part);
+      index = this.node(name, pivot, offset, rotation, list);
       this.#indices.set(part, index);
     }
     return index;

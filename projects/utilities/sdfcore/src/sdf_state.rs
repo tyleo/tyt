@@ -1049,6 +1049,7 @@ mod tests {
                 name: "chair".to_owned(),
                 pivot: None,
                 offset: None,
+                rotation: Vec::new(),
                 child_object_ids: vec![U32Id::from_u32(0)],
                 child_node_ids: Vec::new(),
             }]),
@@ -1065,6 +1066,7 @@ mod tests {
             name: "room".to_owned(),
             pivot: None,
             offset: None,
+            rotation: Vec::new(),
             child_object_ids: Vec::new(),
             child_node_ids: vec![U32Id::from_u32(0)],
         });

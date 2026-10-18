@@ -16,18 +16,24 @@ use std::{
     fmt::Display,
     num::NonZeroU32,
     path::{Path, PathBuf},
+    slice,
     str::FromStr,
 };
-use ty_math::{TyAngleUnit, TyQuaternionF64, TySrgbU8, TyVector3F64};
+use ty_math::{TyAngleUnit, TyAxis3, TyQuaternionF64, TySrgbU8, TyVector3F64};
 use voxconv::load;
 use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::{
     Error as VoxsmithError,
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
-    operations::object::{
-        BRenderView, FitOrFixed, PoseTransform, RenderBloom, RenderOcclusion, RenderOutput,
-        RenderRecord, RenderShadow, RenderView, Rotation, ViewRecord, encode_render_png, render,
+    operations::{
+        node::rotate_nodes,
+        object::{
+            BRenderView, FitOrFixed, PoseTransform, RenderBloom, RenderOcclusion, RenderOutput,
+            RenderRecord, RenderShadow, RenderView, Rotation, ViewRecord, encode_render_png,
+            render,
+        },
     },
+    utilities::select_nodes,
 };
 
 /// Renders the selected objects, placed by the hierarchy reaching them, under
@@ -480,6 +486,19 @@ pub struct ObjectRender {
     )]
     light_ground: Vec<String>,
 
+    /// Rotates each node a gitignore-style hierarchy-path pattern matches by
+    /// `degrees` about `axis` of its parent's frame. The rotation follows the
+    /// node's rotation and holds for this render alone. Repeatable; the flags
+    /// apply in order.
+    #[arg(
+        value_names = ["select", "axis", "degrees"],
+        long,
+        num_args = 3,
+        allow_negative_numbers = true,
+        action = ArgAction::Append,
+    )]
+    rotate: Vec<String>,
+
     #[command(flatten)]
     selection: ObjectSelection,
 
@@ -503,7 +522,9 @@ impl ObjectRender {
 
         let from = input.resolve_format()?;
 
-        let main: VoxMain = load(&dependencies, from, &input.path)?;
+        let mut main: VoxMain = load(&dependencies, from, &input.path)?;
+
+        apply_rotate_flags(&mut main, &self.rotate)?;
 
         let object_ids = select_render_objects(&main, &self.selection)?;
 
@@ -1114,6 +1135,26 @@ fn select_render_objects<T: VoxExt>(
     Ok(object_ids)
 }
 
+/// Rotates the nodes each `--rotate` matches in `main`, in flag order. A
+/// pattern matching no node errors.
+fn apply_rotate_flags<T: VoxExt>(main: &mut VoxMain<T>, rotate: &[String]) -> Result<()> {
+    let flag = "--rotate";
+
+    for [select, axis, degrees] in flag_occurrences::<3>(rotate) {
+        let axis = parse_flag_value::<TyAxis3>(flag, axis)?;
+        let degrees = parse_flag_f64(flag, degrees)?;
+        let node_ids = select_nodes(main, slice::from_ref(select), &[])?;
+
+        if node_ids.is_empty() {
+            return Err(Error::usage(format!("{flag} `{select}` matches no node")));
+        }
+
+        rotate_nodes(main, &node_ids, axis, degrees)?;
+    }
+
+    Ok(())
+}
+
 /// Parses a token of `flag` through its `FromStr`.
 fn parse_flag_from_str<T: FromStr<Err: Display>>(flag: &str, text: &str) -> Result<T> {
     text.parse()
@@ -1185,7 +1226,9 @@ mod tests {
         commands::{
             ImageRecord, ObjectRender, RenderProfile, built_in_render_profiles,
             built_in_sdf_doc_config,
-            object::object_render::object_render::{camera_line, image_outputs},
+            object::object_render::object_render::{
+                apply_rotate_flags, camera_line, image_outputs,
+            },
         },
         owned_names,
     };
@@ -1200,6 +1243,7 @@ mod tests {
     use ty_math::{
         TyAngleUnit, TyLinSrgbF64, TyPoseF64, TyQuaternionF64, TySrgbU8, TySrgbaU8, TyVector3F64,
     };
+    use voxcore::{VoxHierarchyNode, VoxMain};
     use voxsmith::{
         dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
         operations::{
@@ -2779,6 +2823,48 @@ mod tests {
         assert!(error.contains("give --to png"), "{error}");
 
         assert!(ObjectRender::try_parse_from(["render", "model.voxj", "--to", "jpeg"]).is_err());
+    }
+
+    #[test]
+    fn a_rotate_rotates_the_matched_nodes_in_flag_order() {
+        let mut main: VoxMain = VoxMain::default();
+        let node = |name: &str| VoxHierarchyNode {
+            name: name.to_owned(),
+            ..VoxHierarchyNode::default()
+        };
+        let model_id = main.retain_hierarchy_node(node("model")).unwrap();
+        let arm_id = main.retain_hierarchy_node(node("arm")).unwrap();
+        main.set_hierarchy_node_children(model_id, vec![arm_id], Vec::new())
+            .unwrap();
+        main.push_root_hierarchy_node_id(model_id).unwrap();
+
+        let command = parse(&["--rotate", "arm", "z", "90", "--rotate", "arm", "x", "90"]);
+        apply_rotate_flags(&mut main, &command.rotate).unwrap();
+
+        // The rotation about z carries +x onto +y, and the rotation about x
+        // then carries +y onto +z.
+        let arm = main.hierarchy_node(arm_id).unwrap();
+        assert!((arm.transform.rotation * TyVector3F64::X).abs_diff_eq(TyVector3F64::Z, 1e-12));
+        assert_eq!(
+            main.hierarchy_node(model_id).unwrap().transform.rotation,
+            TyQuaternionF64::IDENTITY
+        );
+
+        let mut rotate_error = |args: &[&str]| {
+            let command = parse(args);
+            apply_rotate_flags(&mut main, &command.rotate)
+                .unwrap_err()
+                .to_string()
+        };
+        assert_eq!(
+            rotate_error(&["--rotate", "leg", "x", "10"]),
+            "error: --rotate `leg` matches no node\n"
+        );
+        assert!(rotate_error(&["--rotate", "arm", "w", "10"]).starts_with("error: --rotate: "));
+        assert_eq!(
+            rotate_error(&["--rotate", "arm", "x", "inf"]),
+            "error: --rotate takes a finite number, not `inf`\n"
+        );
     }
 
     #[test]

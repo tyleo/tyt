@@ -17,6 +17,7 @@ declare global {
   type Shape3d = api.Shape3d;
   type Side = api.Side;
   type Step = api.Step;
+  type AxisRotation = api.AxisRotation;
   type Value = api.Value;
   type Vec2 = api.Vec2;
   type Vec3 = api.Vec3;

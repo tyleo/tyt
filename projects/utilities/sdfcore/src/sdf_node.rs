@@ -1,4 +1,4 @@
-use crate::{BSdfNode, BSdfObject};
+use crate::{BSdfNode, BSdfObject, SdfAxisRotation};
 use branded_id::U32Id;
 use ty_math::TyVector3F64;
 
@@ -14,6 +14,9 @@ pub struct SdfNode {
 
     /// How far the part moves, in meters.
     pub offset: Option<TyVector3F64>,
+
+    /// The rotations of the part about its pivot, in order.
+    pub rotation: Vec<SdfAxisRotation>,
 
     /// The part's object, when its list holds steps.
     pub child_object_ids: Vec<U32Id<BSdfObject>>,

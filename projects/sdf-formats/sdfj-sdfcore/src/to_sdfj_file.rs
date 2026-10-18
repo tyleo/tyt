@@ -5,9 +5,10 @@ use sdfcore::{
     SdfValue,
 };
 use sdfj::{
-    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjCaps, SdfjFile, SdfjIntValue, SdfjMap,
-    SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode, SdfjObject, SdfjPattern, SdfjPropertyValue,
-    SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep, SdfjTaggedValue, SdfjValue,
+    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjAxisRotation, SdfjCaps, SdfjFile,
+    SdfjIntValue, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode, SdfjObject,
+    SdfjPattern, SdfjPropertyValue, SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep,
+    SdfjTaggedValue, SdfjValue,
 };
 use ty_math::{TyAxis3, TyVector2F64, TyVector3F64};
 
@@ -860,6 +861,14 @@ fn sdfj_node_from_sdf_node(node: &SdfNode) -> SdfjNode {
         name: node.name.clone(),
         pivot: node.pivot.as_ref().map(TyVector3F64::to_array),
         offset: node.offset.as_ref().map(TyVector3F64::to_array),
+        rotation: node
+            .rotation
+            .iter()
+            .map(|axis_rotation| SdfjAxisRotation {
+                axis: sdfj_axis_from_ty_axis3(axis_rotation.axis),
+                degrees: axis_rotation.degrees,
+            })
+            .collect(),
         child_objects: wire_indices(&node.child_object_ids),
         child_nodes: wire_indices(&node.child_node_ids),
     }

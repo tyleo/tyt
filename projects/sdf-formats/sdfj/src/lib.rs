@@ -13,6 +13,7 @@
 mod sdfj_axes2d;
 mod sdfj_axes3d;
 mod sdfj_axis;
+mod sdfj_axis_rotation;
 mod sdfj_caps;
 mod sdfj_file;
 mod sdfj_int_value;
@@ -36,6 +37,7 @@ mod sdfj_version;
 pub use sdfj_axes2d::*;
 pub use sdfj_axes3d::*;
 pub use sdfj_axis::*;
+pub use sdfj_axis_rotation::*;
 pub use sdfj_caps::*;
 pub use sdfj_file::*;
 pub use sdfj_int_value::*;

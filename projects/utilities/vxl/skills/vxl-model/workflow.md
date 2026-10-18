@@ -13,7 +13,8 @@ vxl sdf-doc build table.ts --library materials && vxl sdf-doc voxelize table.sdf
 The pass writes `table.sdfj`, `table.voxj`, `table-report.txt`, and the review
 sheet `table.png` beside the model file. The sheet holds the `hero`, `front`,
 and `right` views in its top row and the `back` and `top` views below them. A
-voxelize without the build reads a stale `.sdfj` document.
+voxelize without the build reads a stale `.sdfj` document. Every change goes in
+the model file because the next pass overwrites the `.voxj`.
 
 ## Building a model
 
@@ -114,6 +115,9 @@ vxl object render room.voxj
    rotation flag such as `--view-look-at`
 4. `--select` renders the matched parts alone. `--view-select <view> <select>`
    keeps the whole model and frames the view on the matched parts
+5. `--rotate <part> <axis> <degrees>` rotates a part about its pivot for one
+   render. A raised arm then shows its clearance. A pose the model keeps goes in
+   the part's `rotation`
 
 ## Exporting a mesh
 

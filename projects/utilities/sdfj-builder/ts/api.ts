@@ -68,4 +68,4 @@ export {
   set,
   type Step,
 } from "./step.ts";
-export type { Axes, Axis, Side, Vec2, Vec3 } from "./types.ts";
+export type { Axes, Axis, AxisRotation, Side, Vec2, Vec3 } from "./types.ts";

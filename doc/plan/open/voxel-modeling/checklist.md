@@ -141,11 +141,12 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
      under its first place only for finding 23
   6. The API doc points to `vxl palette show` for a custom property's values
      for finding 39. `vxl node list --show-transforms` already prints the nodes
-- [ ] **S17. Review sheet.** The contact sheet moves out of the
+- [x] **S17. Review sheet.** The contact sheet moves out of the
       [rendering follow-ups](../voxel-rendering-followups/README.md#contact-sheet)
       for findings 8, 17, and 19:
   1. `review` tiles its four views and a view from behind into one PNG
-  2. `--pose` turns a part's node about an axis for one render for finding 35
+  2. A part's `rotation` poses its node for finding 35. The render's `--rotate`
+     rotates a part for one render
 - [ ] **S18. Library colors.** Retune the `materials` library and `shades` under
       the review rig:
   1. Dark woods, iron, stone, and bark keep their pattern visible for finding 5

@@ -1,4 +1,4 @@
-import type { Axes, Axis, Side, Vec2, Vec3 } from "./types.ts";
+import type { Axes, Axis, AxisRotation, Side, Vec2, Vec3 } from "./types.ts";
 
 /** A check of the value at a path, returning the value as its type. */
 export type Check<T> = (path: string, value: unknown) => T;
@@ -53,6 +53,14 @@ export function vec2(path: string, value: unknown): Vec2 {
 export function vec3(path: string, value: unknown): Vec3 {
   const [x, y, z] = numbers(path, value, 3, "a Vec3 of 3 finite numbers");
   return [x, y, z];
+}
+
+/** A copy of `value` as an `AxisRotation`. */
+export function axisRotation(path: string, value: unknown): AxisRotation {
+  if (!Array.isArray(value) || value.length !== 2) {
+    fail(path, "an AxisRotation of an axis and finite degrees", value);
+  }
+  return [axis(`${path}[0]`, value[0]), finite(`${path}[1]`, value[1])];
 }
 
 /** `value` as a `Vec2`, with one number standing for both components. */
