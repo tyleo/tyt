@@ -20,6 +20,7 @@ pub fn synthesized_object_state(ext: &VMaxExt) -> VMaxExtObjectState {
         v: FALLBACK_CONTENT_VERSION,
         cam: None,
         camera_reference_center: None,
+        work_area: None,
     }
 }
 

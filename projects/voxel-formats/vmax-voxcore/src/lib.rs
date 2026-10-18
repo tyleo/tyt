@@ -6,7 +6,7 @@
 //! [`VMaxExt`] with the Voxel Max state that has no native voxcore home.
 //! [`from_vmax_file()`] loads a [`VMaxFile`](vmax::VMaxFile) into one and
 //! [`to_vmax_file()`] writes one back with equivalent world-space geometry,
-//! with [`VMaxWriteOptions`] picking colors, the scene camera and object sizes.
+//! with [`VMaxWriteOptions`] picking colors and the scene camera.
 //! [`to_vmax_vox_main()`] gives a bare `VoxMain<()>` a synthesized ext, and
 //! `take_ext` takes the ext back off. The ext keys an entry per entity by id
 //! and follows the state through voxcore's [`VoxExt`](voxcore::VoxExt) hooks.

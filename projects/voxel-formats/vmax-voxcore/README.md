@@ -10,46 +10,30 @@ The state is a `VMaxVoxMain`, a `VoxMain<VMaxExt>` carrying the Voxel Max
 state with no native voxcore home as its ext.
 
 - `from_vmax_file` / `to_vmax_file`: between a parsed `VMaxFile` and a
-  `VMaxVoxMain`. Geometry, palettes, and hierarchy become native voxcore
-  entities. Voxel Max is Z-up, so every object and node transform turns onto
-  voxcore's Y-up axes on load and back on write. Each object's snapshots are
-  decoded on the fly and re-encoded on write. A voxel outside its object's
-  work area, which Voxel Max keeps but hides, loads left out, as does a
-  contents file or palette no object references, which Voxel Max leaves
-  behind for a deleted object. A loaded document otherwise keeps its
-  world-space geometry, hierarchy, and palette provenance through its ext. The writer reads each object's one palette in
-  Voxel Max's layout, the one the loader builds. `baseColor` and `emissiveColor`
-  hold one value per color cell.
-  Every other property holds one value per material slot. A material pairs
-  one cell with one slot. The writer converts nothing. An object with a
-  second layer, or a palette off the layout, errors where it departs. An
-  external mesh, an object whose contents is a SceneKit archive
-  (`*.scndata`) rather than voxels, loads as a node placing nothing. The ext
-  keeps its object and every package file the scene does not model, such as
-  the mesh archives and their textures, and the writer puts them back as
-  stored. A conversion to another format leaves them out.
-- `to_vmax_vox_main`: a bare `VoxMain<()>` to a `VMaxVoxMain` with a
-  synthesized ext, which writes as a document synthesized from the scene.
-  The hierarchy becomes a tree first. A node placed along several paths is
-  cloned per extra path. A node no root reaches is released. Voxel Max
-  objects are leaves, so a node placing both objects and child nodes moves
-  its objects onto a child node of their own and writes as a group. A shared
-  palette needing more than Voxel Max's 8 material slots splits into one
-  palette per set of materials an object samples, unless a split would drop
-  an unsampled material. Each palette's material properties are then laid out
-  one value per slot, one slot per distinct set of values, unless they
-  already are. Every material keeps its values, and a material whose black
-  `emissiveColor` glows nowhere takes a slot at strength 0. `take_ext` on the
-  `VMaxVoxMain` takes the ext back off.
-- `VMaxWriteOptions`: the writer's options. `Default` stores palette colors
-  as PNG and keeps the ext's camera. `VMaxColorFormat` picks where each
-  palette's colors are stored. `SceneCameraSource` picks the scene camera the
-  document opens with. Each object's grid writes as its work area, with
-  fresh tool settings, in the smallest supported editor cube from 32 to 512
-  holding it. A grid wider than 512 or with no volume errors. Editor camera targets move with
-  the grid,
-  and an object with no kept camera takes one framed on its content; scene
-  positions, rotations, scales and parent transforms stay equivalent.
+  `VMaxVoxMain`. Geometry, palettes, and hierarchy become voxcore entities,
+  turned from Voxel Max's Z-up axes onto voxcore's Y-up axes. The ext keeps
+  the rest, so a round trip keeps world-space geometry, hierarchy, palette
+  provenance, external meshes, and the package files the scene does not
+  model. Each object writes in the smallest editor cube from 32 to 512 that
+  holds its grid. The writer reads palettes in the layout the loader builds.
+  `baseColor` and `emissiveColor` hold one value per color cell, and every
+  other property holds one value per material slot. A second layer, a palette
+  off that layout, or a grid wider than 512 errors.
+- `to_vmax_vox_main`: gives a bare `VoxMain<()>` a synthesized ext and
+  reshapes its scene to fit Voxel Max:
+  1. The hierarchy becomes a tree. A node placed along several paths is
+     cloned, and a node no root reaches is released
+  2. Voxel Max objects are leaves, so a node placing both objects and child
+     nodes moves its objects onto a child node
+  3. A palette needing more than Voxel Max's 8 material slots splits into one
+     palette per set of materials an object samples
+  4. Each palette's material properties are laid out one value per slot
+
+  `take_ext` on the `VMaxVoxMain` takes the ext back off.
+- `VMaxWriteOptions`: `VMaxColorFormat` picks where palette colors are
+  stored, PNG by default. `SceneCameraSource` picks the scene camera, the
+  ext's by default. An object with no kept camera gets one framed on its
+  content.
 
 ## Package conversion
 

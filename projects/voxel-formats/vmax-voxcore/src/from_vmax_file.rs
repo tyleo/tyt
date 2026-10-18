@@ -1,7 +1,7 @@
 use crate::{
     ABSORPTION, Error, PALETTE_COLORS, Result, SHADOWS, VMaxExt, VMaxExtMaterial,
-    VMaxExtMaterialDispersion, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, VMaxVoxMain,
-    decode_axis_angle, synthesized_object_state, vm_coefficient_to_pbr_factor,
+    VMaxExtMaterialDispersion, VMaxExtNode, VMaxExtObjectState, VMaxExtPalette, VMaxExtWorkArea,
+    VMaxVoxMain, decode_axis_angle, synthesized_object_state, vm_coefficient_to_pbr_factor,
 };
 use branded_id::{IteratorExt, U32Id};
 use std::{
@@ -11,7 +11,7 @@ use std::{
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
-    VMaxSceneJsonFile, VMaxViewBox,
+    VMaxSceneJsonFile,
     snapshots::{
         SNAPSHOT_CONTENTS_VERSION, VMaxVoxel, decode_vmax_legacy_chunks, decode_vmax_snapshots,
     },
@@ -32,22 +32,13 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 
 /// Loads a Voxel Max document into a [`VMaxVoxMain`], the inverse of
 /// [`to_vmax_file`](crate::to_vmax_file()). Geometry, palettes, and hierarchy
-/// become native voxcore entities. Voxel Max's axes run `+x` right, `+z` up,
-/// and `-y` toward the viewer, so every object and node transform turns onto
-/// voxcore's Y-up axes. The rest of the Voxel Max state becomes the ext. Voxel
-/// snapshots are decoded to voxels on the fly and palette color tables unpacked
-/// as needed. Color indices are 1-based in Voxel Max, so a voxel's color cell
-/// is `color_idx - 1`. The material byte is 0-based and used directly. An
-/// external mesh, an object whose contents is a SceneKit archive rather than
-/// voxels, places nothing in voxcore: its node keeps the mesh in the ext, and
-/// the package's unmodeled files ride in the ext as stored, so the write puts
-/// both back. A voxel outside its object's work area, which Voxel Max keeps
-/// but hides, is left out, so the write drops it. A contents file or palette
-/// no object references, which Voxel Max leaves behind when an object is
-/// deleted, is skipped, so the write drops it too.
+/// become voxcore entities on Y-up axes. The rest of the state goes to the ext,
+/// including external meshes and unmodeled files, which the write puts back.
+/// Voxels the work area hides stay, in a grown edit grid. Contents files and
+/// palettes no object references are skipped.
 ///
-/// Errors on malformed geometry, on an object whose contents file the package
-/// lacks, or on a cross-reference the checked insertions reject.
+/// Errors on malformed geometry, a missing contents file, a storage cube, work
+/// area, or voxel Voxel Max cannot hold, or a rejected cross-reference.
 pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut main = VoxMain::default();
@@ -58,7 +49,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
     // One voxcore object per distinct geometry; instances of one geometry
     // collapse to a single object placed by several nodes.
     let mut object_transforms: Vec<TyTransformF64> = Vec::new();
-    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])> = Vec::new();
+    let mut object_data: Vec<(U32Id<BVoxObject>, Option<String>, ObjectCapture)> = Vec::new();
     let mut object_ids: Vec<Option<U32Id<BVoxObject>>> = Vec::new();
     let mut instances: HashMap<InstanceKey, U32Id<BVoxObject>> = HashMap::new();
     for object in &scene.objects {
@@ -85,10 +76,10 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VMaxVoxMain> {
         }
         // The object and its placing transform turn together, so the node
         // stays on the object's content center.
-        let (vox_object, data, transform, camera_reference_center) =
+        let (vox_object, data, transform, capture) =
             build_object(serde, object, &mut main, &mut palette_provenance)?;
         let object_id = main.retain_object(vox_object.zup_to_yup())?;
-        object_data.push((object_id, data, camera_reference_center));
+        object_data.push((object_id, data, capture));
         object_transforms.push(transform.zup_to_yup());
         object_ids.push(Some(object_id));
         if let Some(key) = key {
@@ -139,6 +130,15 @@ impl InstanceKey {
             size,
         })
     }
+}
+
+/// What a read captures for the object's ext entry.
+struct ObjectCapture {
+    /// The live content center in the source grid.
+    camera_reference_center: [f64; 3],
+
+    /// The work area, when it hides voxels.
+    work_area: Option<VMaxExtWorkArea>,
 }
 
 /// The re-basing origin `round(center + bounds_min)` and `[X, Y, Z]` size from
@@ -197,10 +197,10 @@ fn build_object(
     object: &VMaxObject,
     main: &mut VoxMain<()>,
     palette_provenance: &mut BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
-) -> Result<(VoxObject, Option<String>, TyTransformF64, [f64; 3])> {
+) -> Result<(VoxObject, Option<String>, TyTransformF64, ObjectCapture)> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
-    let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
-        Vec::new()
+    let (voxels, work_area) = if object.data.is_empty() {
+        (Vec::new(), None)
     } else {
         let contents = serde.contents_files.get(&object.data).ok_or_else(|| {
             Error::invalid(format!(
@@ -210,17 +210,13 @@ fn build_object(
         })?;
         // Voxel Max reads an older contents file's legacy chunks in place of
         // its snapshots.
-        let mut voxels = if contents.v < SNAPSHOT_CONTENTS_VERSION {
+        let voxels = if contents.v < SNAPSHOT_CONTENTS_VERSION {
             decode_vmax_legacy_chunks(contents.v, &contents.chunks, &contents.voxels)?
         } else {
             decode_vmax_snapshots(&contents.snapshots)?
         };
-        if let Some((min, max)) = work_area(contents) {
-            voxels.retain(|voxel| {
-                (0..3).all(|axis| (min[axis]..=max[axis]).contains(&voxel.position[axis]))
-            });
-        }
-        voxels
+        let work_area = checked_work_area(object, contents, &voxels)?;
+        (voxels, work_area)
     };
 
     // The runtime grid is exactly tight: the occupied voxel extent, re-based so
@@ -235,21 +231,20 @@ fn build_object(
         // build volume; lacking one, it seats at the work area `vp.min` so the
         // edit grid still contains the runtime grid, and only at the world
         // origin when it has neither.
-        None => authored_box(object).unwrap_or_else(|| {
-            (
-                view_box(serde, object)
-                    .map(|vp| [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32])
-                    .unwrap_or([0, 0, 0]),
-                [0, 0, 0],
-            )
-        }),
+        None => authored_box(object)
+            .unwrap_or_else(|| (work_area.map_or([0, 0, 0], |(min, _)| min), [0, 0, 0])),
     };
     let camera_reference_center = from_fn(|axis| box_min[axis] as f64 + bounds[axis] as f64 / 2.0);
     let origin = pivot_origin(box_min, object.center);
     let transform = object_transform(object, box_min, origin);
-    // The build volume is the author's `tools.vp`; its `origin` offsets it from
-    // the placing node, and `offset` shifts a runtime-grid voxel into it.
-    let (edit_bounds, edit_origin) = edit_grid(view_box(serde, object), box_min, origin, bounds);
+    // The build volume is `tools.vp` grown to hold any voxels it hides.
+    // `offset` shifts a runtime-grid voxel into it.
+    let (edit_bounds, edit_origin, hiding_work_area) =
+        edit_grid(work_area, box_min, origin, bounds);
+    let capture = ObjectCapture {
+        camera_reference_center,
+        work_area: hiding_work_area,
+    };
     let offset = [
         origin[0] - edit_origin[0],
         origin[1] - edit_origin[1],
@@ -276,7 +271,7 @@ fn build_object(
     ));
 
     if voxels.is_empty() {
-        return Ok((vox_object, data, transform, camera_reference_center));
+        return Ok((vox_object, data, transform, capture));
     }
 
     // One palette carries the color table and the material list: each voxel
@@ -300,7 +295,7 @@ fn build_object(
         );
         let voxel_id = vox_object
             .voxel_id(position)
-            .expect("a voxel in the work area lies in the grid spanning it");
+            .expect("the edit grid holds every voxel");
 
         let material_id = palette.combo_material_ids[&combo_key(voxel, palette.has_materials)];
         vox_object
@@ -313,7 +308,7 @@ fn build_object(
             })?;
     }
 
-    Ok((vox_object, data, transform, camera_reference_center))
+    Ok((vox_object, data, transform, capture))
 }
 
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.
@@ -340,62 +335,81 @@ fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
     bounds
 }
 
-/// The region of an object's grid Voxel Max shows, as inclusive `(min, max)`
-/// corners: the work area `tools.vp`, else the extent `eo` names, which Voxel
-/// Max reads as 8 when absent or outside 5 to 9. `None` at the full extent of
-/// order 9, where every voxel shows. Voxel Max keeps a voxel outside the region
-/// but hides it, so the render a read gives leaves it out.
-fn work_area(contents: &VMaxContentsVmaxbFile) -> Option<([i32; 3], [i32; 3])> {
-    if let Some(tools) = &contents.tools {
-        let vp = &tools.vp;
-        return Some((vp.min.map(|v| v as i32), vp.max.map(|v| v as i32)));
+/// The contents file's `tools.vp` as inclusive corners, or `None` without
+/// `tools`. Errors on an `eo` outside 5 to 9, a `vp` inverted or outside the
+/// cube, or a voxel outside the cube. An absent `eo` means 8.
+fn checked_work_area(
+    object: &VMaxObject,
+    contents: &VMaxContentsVmaxbFile,
+    voxels: &[VMaxVoxel],
+) -> Result<Option<([i32; 3], [i32; 3])>> {
+    let order = contents.eo.unwrap_or(8);
+    if !(5..=9).contains(&order) {
+        return Err(Error::invalid(format!(
+            "object \"{}\" names storage cube order {order}, outside Voxel Max's 5 to 9",
+            object.name
+        )));
     }
-    let order = contents
-        .eo
-        .filter(|order| (5..=9).contains(order))
-        .unwrap_or(8);
-    (order < 9).then(|| ([0; 3], [(1 << order) - 1; 3]))
+    let width = 1_i32 << order;
+    let in_cube = |coordinate: i64| (0..i64::from(width)).contains(&coordinate);
+    if let Some(voxel) = voxels
+        .iter()
+        .find(|voxel| !voxel.position.iter().all(|&c| in_cube(i64::from(c))))
+    {
+        return Err(Error::invalid(format!(
+            "object \"{}\" has a voxel at {:?}, outside its {width}-wide storage cube",
+            object.name, voxel.position
+        )));
+    }
+    let Some(tools) = &contents.tools else {
+        return Ok(None);
+    };
+    let vp = &tools.vp;
+    let fits = (0..3)
+        .all(|axis| in_cube(vp.min[axis]) && in_cube(vp.max[axis]) && vp.min[axis] <= vp.max[axis]);
+    if !fits {
+        return Err(Error::invalid(format!(
+            "object \"{}\" has work area {:?} to {:?}, which is inverted or leaves its \
+             {width}-wide storage cube",
+            object.name, vp.min, vp.max
+        )));
+    }
+    let corner = |corner: [i64; 3]| corner.map(|c| i32::try_from(c).expect("checked in the cube"));
+    Ok(Some((corner(vp.min), corner(vp.max))))
 }
 
-/// The object's authored build volume (`tools.vp`) from its contents file, the
-/// size the author was working in. `None` when the object has no contents or no
-/// partition recorded.
-fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxViewBox> {
-    serde
-        .contents_files
-        .get(&object.data)?
-        .tools
-        .as_ref()
-        .map(|tools| &tools.vp)
-}
-
-/// The object's build volume (the author's `tools.vp`) as `(bounds, origin)` in
-/// the node's local voxel frame, which contains the runtime grid. The `origin`
-/// is the build volume's min corner offset from the node, `vp.min - box_min +
-/// origin`; an object with no build volume takes a zero-margin volume equal to
-/// its runtime grid.
+/// The build volume as `(bounds, origin)` in the node's local voxel frame.
+/// With a work area, it covers the work area and the voxels, and the work area
+/// comes back in that frame when it hides any. Without one, it equals the
+/// runtime grid.
 fn edit_grid(
-    view_box: Option<&VMaxViewBox>,
+    work_area: Option<([i32; 3], [i32; 3])>,
     box_min: [i32; 3],
     origin: [i32; 3],
     bounds: [u32; 3],
-) -> ([u32; 3], [i32; 3]) {
-    match view_box {
-        Some(vp) => (
-            [
-                (vp.max[0] - vp.min[0] + 1).max(0) as u32,
-                (vp.max[1] - vp.min[1] + 1).max(0) as u32,
-                (vp.max[2] - vp.min[2] + 1).max(0) as u32,
-            ],
-            [
-                vp.min[0] as i32 - box_min[0] + origin[0],
-                vp.min[1] as i32 - box_min[1] + origin[1],
-                vp.min[2] as i32 - box_min[2] + origin[2],
-            ],
-        ),
-
-        None => (bounds, origin),
-    }
+) -> ([u32; 3], [i32; 3], Option<VMaxExtWorkArea>) {
+    let Some((min, max)) = work_area else {
+        return (bounds, origin, None);
+    };
+    // An empty object has no voxels to cover.
+    let (grid_min, grid_max) = if bounds.contains(&0) {
+        (min, max)
+    } else {
+        (
+            from_fn(|axis| min[axis].min(box_min[axis])),
+            from_fn(|axis| max[axis].max(box_min[axis] + bounds[axis] as i32 - 1)),
+        )
+    };
+    let local = |corner: [i32; 3]| from_fn(|axis| corner[axis] - box_min[axis] + origin[axis]);
+    let hiding = (grid_min, grid_max) != (min, max);
+    (
+        from_fn(|axis| (grid_max[axis] - grid_min[axis] + 1) as u32),
+        local(grid_min),
+        hiding.then(|| VMaxExtWorkArea {
+            min: local(min),
+            max: local(max),
+        }),
+    )
 }
 
 /// The palette built for one object and added to a [`VoxMain`], with the data
@@ -755,13 +769,13 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 ///
 /// 1. `node_ids`: the hierarchy node ids in scene order, groups then objects
 /// 2. `palettes`: each object palette's provenance by palette id
-/// 3. `object_data`: each object's contents filename and live content center
-///    in its source grid, by object id. No filename takes a synthesized state.
+/// 3. `object_data`: each object's contents filename and read capture, by
+///    object id. No filename takes a synthesized state
 fn vmax_ext_from_file(
     serde: &VMaxFile,
     node_ids: &[U32Id<BVoxHierarchyNode>],
     palettes: BTreeMap<U32Id<BVoxPalette>, VMaxExtPalette>,
-    object_data: Vec<(U32Id<BVoxObject>, Option<String>, [f64; 3])>,
+    object_data: Vec<(U32Id<BVoxObject>, Option<String>, ObjectCapture)>,
 ) -> VMaxExt {
     let scene = &serde.scene_json_file;
     let mut scene_block = scene.clone();
@@ -783,9 +797,9 @@ fn vmax_ext_from_file(
         other_files: serde.other_files.clone(),
     };
 
-    for (object_id, data, camera_reference_center) in object_data {
+    for (object_id, data, capture) in object_data {
         let entry = match data.and_then(|data| serde.contents_files.get(&data)) {
-            Some(contents) => object_state_from_contents(contents, camera_reference_center),
+            Some(contents) => object_state_from_contents(contents, capture),
 
             None => synthesized_object_state(&ext),
         };
@@ -795,17 +809,17 @@ fn vmax_ext_from_file(
     ext
 }
 
-/// Captures the state of a contents file the ext keeps: its version and its
-/// camera frame. The work area is held natively as the object's grid.
+/// The ext entry for an object read from `data`.
 fn object_state_from_contents(
     data: &VMaxContentsVmaxbFile,
-    camera_reference_center: [f64; 3],
+    capture: ObjectCapture,
 ) -> VMaxExtObjectState {
     VMaxExtObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
         cam: Some(data.cam.clone()),
-        camera_reference_center: Some(camera_reference_center),
+        camera_reference_center: Some(capture.camera_reference_center),
+        work_area: capture.work_area,
     }
 }
 
@@ -842,7 +856,7 @@ fn node_from_group(group: &VMaxGroup) -> VMaxExtNode {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxWriteOptions, from_vmax_file, from_vmax_file::work_area, to_vmax_file};
+    use crate::{VMaxWriteOptions, from_vmax_file, to_vmax_file};
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyQuaternionF64, TyVector3Ext, TyVector3F64, TyVector3U32};
@@ -929,55 +943,119 @@ mod tests {
         }
     }
 
-    /// The work area `tools.vp` wins over the extent order, so a voxel inside
-    /// the extent but outside `vp` is left out.
-    #[test]
-    fn leaves_out_voxels_outside_the_work_area() {
-        let voxel = |x: i32| VMaxVoxel {
+    fn voxel_at(x: i32) -> VMaxVoxel {
+        VMaxVoxel {
             position: [x, 0, 0],
             material_idx: 0,
             color_idx: 1,
-        };
-        let mut file = one_object_file(
+        }
+    }
+
+    /// A one-object file whose 2-wide work area hides the voxel at `x = 2`.
+    fn file_hiding_a_voxel() -> VMaxFile {
+        one_object_file(
             [1.0, 1.0, 1.0],
             VMaxViewBox {
                 min: [0, 0, 0],
                 max: [1, 1, 1],
                 flat: None,
             },
-            &[voxel(0), voxel(1), voxel(2)],
+            &[voxel_at(0), voxel_at(1), voxel_at(2)],
+        )
+    }
+
+    /// A hidden voxel stays in a grown edit grid, and the ext keeps the work
+    /// area.
+    #[test]
+    fn keeps_voxels_the_work_area_hides() {
+        let main = from_vmax_file(&file_hiding_a_voxel()).unwrap();
+
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
+        let object = main.object(object_id).unwrap();
+        assert_eq!(object.iter_live().count(), 3);
+        // The 3x2x2 Z-up grid reloads onto voxcore's Y-up axes.
+        assert_eq!(object.bounds(), TyVector3U32::new(3, 2, 2));
+        let origin = object.yup_to_zup().origin().to_array();
+        let work_area = main.ext().object_states[&object_id]
+            .work_area
+            .clone()
+            .expect("the work area hides a voxel");
+        assert_eq!(work_area.min, origin);
+        assert_eq!(work_area.max, [origin[0] + 1, origin[1] + 1, origin[2] + 1]);
+    }
+
+    /// A work area hiding nothing leaves the ext without one.
+    #[test]
+    fn keeps_no_work_area_hiding_nothing() {
+        let file = one_object_file(
+            [1.0, 1.0, 1.0],
+            VMaxViewBox {
+                min: [0, 0, 0],
+                max: [2, 1, 1],
+                flat: None,
+            },
+            &[voxel_at(0), voxel_at(2)],
         );
-        file.contents_files.get_mut("contents1.vmaxb").unwrap().eo = Some(9);
 
         let main = from_vmax_file(&file).unwrap();
 
-        let object = main.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
-        assert_eq!(object.iter_live().count(), 2);
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
+        assert_eq!(main.ext().object_states[&object_id].work_area, None);
     }
 
-    /// Without `tools.vp`, the extent order `eo` bounds the shown region, read
-    /// as 8 when absent or outside 5 to 9, and order 9 shows every voxel.
     #[test]
-    fn the_extent_order_bounds_the_work_area_without_a_view_box() {
-        let area = |eo: Option<i64>| {
-            work_area(&VMaxContentsVmaxbFile {
-                snapshots: Vec::new(),
-                uuid: String::new(),
-                v: 4,
-                tools: None,
-                brush: None,
-                cam: VMaxCamera::default(),
-                pal: None,
-                eo,
-                chunks: Vec::new(),
-                voxels: Vec::new(),
-            })
-        };
+    fn rejects_a_storage_cube_order_outside_5_to_9() {
+        for eo in [4, 10] {
+            let mut file = file_hiding_a_voxel();
+            file.contents_files.get_mut("contents1.vmaxb").unwrap().eo = Some(eo);
 
-        assert_eq!(area(None), Some(([0; 3], [255; 3])));
-        assert_eq!(area(Some(4)), Some(([0; 3], [255; 3])));
-        assert_eq!(area(Some(6)), Some(([0; 3], [63; 3])));
-        assert_eq!(area(Some(9)), None);
+            let error = from_vmax_file(&file).unwrap_err();
+
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("storage cube order {eo}")),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_a_work_area_that_fits_no_cube() {
+        for (min, max) in [([1, 0, 0], [0, 1, 1]), ([0, 0, 0], [256, 1, 1])] {
+            let file = one_object_file(
+                [0.0, 0.0, 0.0],
+                VMaxViewBox {
+                    min,
+                    max,
+                    flat: None,
+                },
+                &[voxel_at(0)],
+            );
+
+            let error = from_vmax_file(&file).unwrap_err();
+
+            assert!(error.to_string().contains("has work area"), "{error}");
+        }
+    }
+
+    #[test]
+    fn rejects_a_voxel_outside_its_storage_cube() {
+        let mut file = file_hiding_a_voxel();
+        file.contents_files.get_mut("contents1.vmaxb").unwrap().eo = Some(5);
+        file.contents_files
+            .get_mut("contents1.vmaxb")
+            .unwrap()
+            .snapshots = encode_vmax_snapshots(&[voxel_at(0), voxel_at(40)]);
+
+        let error = from_vmax_file(&file).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("outside its 32-wide storage cube"),
+            "{error}"
+        );
     }
 
     #[test]

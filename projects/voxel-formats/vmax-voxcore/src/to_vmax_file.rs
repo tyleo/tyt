@@ -162,7 +162,12 @@ pub fn to_vmax_file(main: &VMaxVoxMain, options: &VMaxWriteOptions) -> Result<VM
             let object = object.yup_to_zup();
             let extent_order = object_extent_order(&object)?;
             let (tight, object_placement) = place_object_in_workspace(&object, 1 << extent_order);
-            let tools = VMaxTools::fresh(work_area(object_id, &object, &object_placement)?);
+            let tools = VMaxTools::fresh(work_area(
+                object_id,
+                &object,
+                object_state,
+                &object_placement,
+            )?);
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
@@ -1256,29 +1261,54 @@ fn contents_editor_state(
     }
 }
 
-/// The work area `vp` of an object: its edit grid in the written cube. Errors
-/// on an edit grid with no volume, such as an empty object's point, which no
-/// work area can hold.
+/// The object's `vp` in the written cube: the ext's kept work area, else the
+/// edit grid. Errors on an edit grid with no volume, and on a kept work area
+/// that is inverted or leaves the edit grid.
 fn work_area(
     object_id: U32Id<BVoxObject>,
     object: &VoxObject,
+    object_state: &VMaxExtObjectState,
     placement: &ObjectPlacement,
 ) -> Result<VMaxViewBox> {
-    let bounds = object.bounds();
-    if bounds.x == 0 || bounds.y == 0 || bounds.z == 0 {
+    let bounds = object.bounds().to_array();
+    if bounds.contains(&0) {
         return Err(Error::invalid(format!(
             "object {object_id} \"{}\" has an edit grid with no volume, which no Voxel Max \
              work area can hold; set its edit bounds first",
             object.name()
         )));
     }
-    let origin = object.origin();
-    let min: [i64; 3] =
-        from_fn(|axis| i64::from(placement.box_min[axis] - placement.origin[axis] + origin[axis]));
-    let size = bounds.to_array();
+    let origin = object.origin().to_array();
+    let grid_max: [i32; 3] = from_fn(|axis| origin[axis] + bounds[axis] as i32 - 1);
+    let (min, max) = match &object_state.work_area {
+        Some(kept) => {
+            let fits = (0..3).all(|axis| {
+                origin[axis] <= kept.min[axis]
+                    && kept.min[axis] <= kept.max[axis]
+                    && kept.max[axis] <= grid_max[axis]
+            });
+            if !fits {
+                return Err(Error::invalid(format!(
+                    "object {object_id} \"{}\" keeps work area {:?} to {:?}, which is inverted \
+                     or leaves its edit grid {origin:?} to {grid_max:?}; fix or drop the \
+                     work area",
+                    object.name(),
+                    kept.min,
+                    kept.max
+                )));
+            }
+            (kept.min, kept.max)
+        }
+
+        None => (origin, grid_max),
+    };
+    // Shift node-local corners into the written cube.
+    let written = |corner: [i32; 3]| {
+        from_fn(|axis| i64::from(placement.box_min[axis] - placement.origin[axis] + corner[axis]))
+    };
     Ok(VMaxViewBox {
-        min,
-        max: from_fn(|axis| min[axis] + i64::from(size[axis]) - 1),
+        min: written(min),
+        max: written(max),
         flat: None,
     })
 }
@@ -2133,6 +2163,7 @@ mod tests {
             max: [256, 128, 1],
             flat: None,
         }));
+        contents.eo = Some(9);
         contents.cam = VMaxCamera {
             o: [128.0, 128.0, 1.0],
             ..Default::default()
@@ -2354,6 +2385,64 @@ mod tests {
         );
     }
 
+    /// The sample with a work area hiding its `x = 128` voxels.
+    fn sample_hiding_voxels() -> VMaxFile {
+        let mut file = sample();
+        file.contents_files.get_mut("contents.vmaxb").unwrap().tools =
+            Some(VMaxTools::fresh(VMaxViewBox {
+                min: [127, 127, 0],
+                max: [127, 128, 1],
+                flat: None,
+            }));
+        file
+    }
+
+    /// A work area hiding voxels writes back and reloads to the same kept work
+    /// area.
+    #[test]
+    fn writes_a_work_area_hiding_voxels_back() {
+        let original = sample_hiding_voxels();
+        let main = from_vmax_file(&original).unwrap();
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
+
+        let rebuilt = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap();
+
+        let contents = &rebuilt.contents_files["contents.vmaxb"];
+        assert_eq!(contents.eo, Some(5));
+        assert_eq!(
+            contents.tools.as_ref().map(|tools| tools.vp.clone()),
+            Some(VMaxViewBox {
+                min: [15, 15, 0],
+                max: [15, 16, 1],
+                flat: None,
+            })
+        );
+        assert_eq!(placed_voxels(&rebuilt), placed_voxels(&original));
+        let reloaded = from_vmax_file(&rebuilt).unwrap();
+        assert_eq!(
+            reloaded.ext().object_states[&object_id].work_area,
+            main.ext().object_states[&object_id].work_area
+        );
+    }
+
+    #[test]
+    fn a_kept_work_area_leaving_the_edit_grid_errors() {
+        let mut main = from_vmax_file(&sample_hiding_voxels()).unwrap();
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
+        main.ext_mut()
+            .object_states
+            .get_mut(&object_id)
+            .unwrap()
+            .work_area
+            .as_mut()
+            .unwrap()
+            .max[0] += 2;
+
+        let error = to_vmax_file(&main, &VMaxWriteOptions::default()).unwrap_err();
+
+        assert!(error.to_string().contains("keeps work area"), "{error}");
+    }
+
     /// Current scene and object camera keys survive a read/write cycle,
     /// including authoritative orientation and orthographic zoom state.
     #[cfg(feature = "serde")]
@@ -2399,6 +2488,7 @@ mod tests {
             let vp = &mut contents.tools.as_mut().unwrap().vp;
             vp.min[0] = 127;
             vp.max[0] = max_x;
+            contents.eo = Some(9);
 
             let mut main = from_vmax_file(&original).unwrap();
 
