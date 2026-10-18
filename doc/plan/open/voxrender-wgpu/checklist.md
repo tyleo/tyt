@@ -42,18 +42,25 @@ code-level choices in
       6. The contract's Surface and Lights sections state the integer walk.
          Its Transforms section says floats stay f64 until the quantization
 - [ ] **S2. Desktop harness and B1 on this Mac.** `voxrender-bench` renders
-      headless through wgpu.
-      1. A CLI runs one benchmark per subcommand and writes its report
+      headless through wgpu. Items 1 to 4 are staged for review before 5 to
+      7.
+      1. `voxrender`'s golden and precision-sim scenes move behind a
+         `fixtures` feature, which its tests and the bench share
       2. `GRID_RANGE_BITS` drops to 18, and the range check keeps each
-         origin and its mirror within i32
-      3. The integer DDA runs in WGSL in i32 alone over S1's quantized
+         origin and its mirror within i32. The reference's grid rays and hit
+         points hold i32, and its walk computes in i64
+      3. A CLI runs one benchmark per subcommand and writes its report
+      4. The integer DDA runs in WGSL in i32 alone over S1's quantized
          inputs and a dense cell buffer. It enters a grid as
          [entry32.py](reference/precision-sim/entry32.py) does. It writes a
-         placement, cell, and face id per pixel, plus the per-corner shadow
-         bits
-      4. B1's desktop half passes with zero id mismatches against the
-         reference on the golden and precision-sim scenes
-      5. A float DDA on the same scenes records its flip count
+         placement, cell, and face id per pixel
+      5. The WGSL writes per-corner shadow bits. The entry's correction also
+         finds a point light's end cell. A shadow's start in another
+         placement's grid comes from f32
+      6. B1's desktop half passes B1's line against the reference on the
+         golden and precision-sim scenes. The report counts each scene's
+         mismatches
+      7. A float DDA on the same scenes records its flip count
 - [ ] **S3. Quest harness and B0.** `voxrender-bench` runs as an OpenXR app on
       Quest 3 and reports what the device exposes.
       1. The repo README's Development section documents the Android setup:

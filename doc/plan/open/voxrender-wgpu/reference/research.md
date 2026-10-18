@@ -994,7 +994,7 @@ display or runs as a bounded, counted per-frame step.
    of soundness holes [147].
 3. Features by tier:
    - Quest required: MULTIVIEW, TIMESTAMP_QUERY, SHADER_EARLY_DEPTH_TEST,
-     binding arrays, SUBGROUP, SHADER_INT64
+     binding arrays, SUBGROUP
    - Quest optional: EXPERIMENTAL_RAY_QUERY
    - phone floor: none of SUBGROUP, SHADER_INT64 or 64-bit atomics
 4. Serialize xrBeginFrame, xrEndFrame, acquire and release with Queue::submit
@@ -1251,8 +1251,8 @@ such as per-face shadows.
 
 **B1. Integer traversal (reference, desktop GPUs, Quest 3, one phone).**
 
-- **Question.** Does the integer DDA give identical cell and face ids on every
-  target, and what does it cost on Adreno?
+- **Question.** Does the integer DDA give the reference's cell and face ids on
+  every target, and what does it cost on Adreno?
 - **Setup.**
   - implement the DDA and quantization in the reference and in WGSL
   - render all goldens, fitted orthographic views of S1 and S5, and the
@@ -1262,13 +1262,14 @@ such as per-face shadows.
     phone
   - measure int32 add and compare throughput on Adreno 740
   - for the record, count f32 DDA flips on the same scenes
-- **Threshold.** Zero id mismatches on every target. Color within tolerance on
-  every pixel. The integer step costs at most 1.25x a float DDA step on Quest.
-- **Outcomes.** Pass: adopt it, change the reference, regenerate goldens. An id
-  mismatch is a bug, since the scheme is exact by construction, and is fixed
-  before B3. If the step is too slow, reduce F or DB, or move the coarse loop
-  to fewer bits. If it is still over 1.25x, Quest keeps a float DDA and its
-  goldens tolerate a counted share of flipped samples (Priority).
+- **Threshold.** Id mismatches on at most 0.1% of samples per scene on every
+  target, and color within tolerance on every other pixel. The integer step
+  costs at most 1.25x a float DDA step on Quest.
+- **Outcomes.** Pass: adopt it, change the reference, regenerate goldens. A
+  share over the line is a bug, found and fixed before B3. If the step is too
+  slow, reduce F or DB, or move the coarse loop to fewer bits. If it is still
+  over 1.25x, Quest keeps a float DDA and its goldens tolerate the float
+  walk's counted flips (Priority).
 
 **B2. Ray rate and step cost (Quest 3).**
 

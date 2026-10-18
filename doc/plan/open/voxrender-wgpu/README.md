@@ -59,19 +59,22 @@ knows transparency, so a raster arm can show the glass the reference renders.
    research's
    [section 3.3](reference/research.md#33-exact-traversal-and-precision) on
    inputs that shared code quantizes once, so cell and face choices agree
-   exactly across GPUs. The GPU tiers run it in i32 alone, grid entry
-   included. The goldens regenerate. If B1 finds the integer step
-   costs more than 1.25x a float step on Quest, Quest keeps a float walk. Its
-   goldens then tolerate a counted share of flipped samples
-2. Nothing enters `voxrender-wgpu` until a benchmark has picked it
-3. A threshold is fixed before its benchmark runs. A changed threshold is
+   across GPUs. The GPU tiers run it in i32 alone, grid entry included.
+   The goldens regenerate. If B1 finds the integer step costs more than
+   1.25x a float step on Quest, Quest keeps a float walk
+2. A tier matches the reference within reason. An input the GPU derives in
+   f32, such as a shadow's start in another placement's grid, can flip a
+   few samples. B1's line bounds the share. No tier takes 64-bit paths or
+   special-case math to remove the last flips
+3. Nothing enters `voxrender-wgpu` until a benchmark has picked it
+4. A threshold is fixed before its benchmark runs. A changed threshold is
    logged as a decision before the run, never fitted to a result
-4. The Quest benchmarks run on a retail Quest 3 in developer mode
-5. The headset harness builds wgpu from the OpenXR session's Vulkan instance
+5. The Quest benchmarks run on a retail Quest 3 in developer mode
+6. The headset harness builds wgpu from the OpenXR session's Vulkan instance
    and device through wgpu-hal. bevy_mod_openxr runs the same pattern on Quest
-6. The repo README's Development section documents the Android setup, which
+7. The repo README's Development section documents the Android setup, which
    runs by hand. No build script fetches or configures it
-7. Phones come last. B12 and the phone half of B1 run when a device is at
+8. Phones come last. B12 and the phone half of B1 run when a device is at
    hand
 
 ## Out of scope
