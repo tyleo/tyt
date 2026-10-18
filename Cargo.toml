@@ -31,6 +31,7 @@ members = [
     "projects/utilities/voxcore",
     "projects/utilities/voxrender",
     "projects/utilities/voxrender-bench",
+    "projects/utilities/voxrender-bench-quest",
     "projects/utilities/voxrender-cpu",
     "projects/utilities/vox-value-language",
     "projects/utilities/voxsmith",

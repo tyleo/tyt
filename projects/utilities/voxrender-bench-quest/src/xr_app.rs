@@ -1,0 +1,223 @@
+use crate::{Error, EyeSwapchain, Result, XrGpu, XrSystem};
+use openxr::{
+    CompositionLayerProjection, CompositionLayerProjectionView, Duration as XrDuration,
+    EnvironmentBlendMode, Event, EventDataBuffer, FrameStream, FrameWaiter, Offset2Di, Posef,
+    Rect2Di, ReferenceSpaceType, Session, SessionState, Space, SwapchainSubImage,
+    ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
+};
+use std::num::NonZeroU32;
+use wgpu::{
+    Color, CommandEncoderDescriptor, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDescriptor, StoreOp,
+};
+
+/// The views the app draws.
+const VIEW_TYPE: ViewConfigurationType = ViewConfigurationType::PRIMARY_STEREO;
+
+/// The color the pass clears both eyes to.
+const CLEAR: Color = Color {
+    r: 0.02,
+    g: 0.04,
+    b: 0.08,
+    a: 1.0,
+};
+
+/// An OpenXR session that clears both eyes each frame.
+pub struct XrApp {
+    // Fields drop in order, so the OpenXR handles go before the Vulkan
+    // device they use.
+    swapchain: EyeSwapchain,
+
+    space: Space,
+
+    frame_stream: FrameStream<XrVulkan>,
+
+    frame_waiter: FrameWaiter,
+
+    session: Session<XrVulkan>,
+
+    running: bool,
+
+    events: EventDataBuffer,
+
+    xr: XrSystem,
+
+    gpu: XrGpu,
+}
+
+impl XrApp {
+    /// Opens a session on the GPU and the eyes' swapchain.
+    pub fn new(xr: XrSystem, gpu: XrGpu) -> Result<Self> {
+        let blend_modes = xr
+            .instance
+            .enumerate_environment_blend_modes(xr.system, VIEW_TYPE)
+            .map_err(Error::Xr)?;
+
+        if !blend_modes.contains(&EnvironmentBlendMode::OPAQUE) {
+            return Err(Error::NoOpaqueBlend);
+        }
+
+        // SAFETY: `session_info` holds the live handles of `gpu`, which the
+        // session drops before.
+        let (session, frame_waiter, frame_stream) = unsafe {
+            xr.instance
+                .create_session::<XrVulkan>(xr.system, &gpu.session_info)
+        }
+        .map_err(Error::Xr)?;
+
+        let space = session
+            .create_reference_space(ReferenceSpaceType::LOCAL, Posef::IDENTITY)
+            .map_err(Error::Xr)?;
+
+        let swapchain = EyeSwapchain::new(&xr, &gpu, &session)?;
+
+        Ok(XrApp {
+            swapchain,
+            space,
+            frame_stream,
+            frame_waiter,
+            session,
+            running: false,
+            events: EventDataBuffer::new(),
+            xr,
+            gpu,
+        })
+    }
+
+    /// Whether the session is between begin and end, when frames run.
+    pub fn running(&self) -> bool {
+        self.running
+    }
+
+    /// Handles the runtime's pending events. Returns false once the session
+    /// exits.
+    pub fn poll(&mut self) -> Result<bool> {
+        while let Some(event) = self
+            .xr
+            .instance
+            .poll_event(&mut self.events)
+            .map_err(Error::Xr)?
+        {
+            match event {
+                Event::SessionStateChanged(changed) => {
+                    let session_state = changed.state();
+
+                    log::info!("session {session_state:?}");
+
+                    match session_state {
+                        SessionState::READY => {
+                            self.session.begin(VIEW_TYPE).map_err(Error::Xr)?;
+                            self.running = true;
+                        }
+
+                        SessionState::STOPPING => {
+                            self.session.end().map_err(Error::Xr)?;
+                            self.running = false;
+                        }
+
+                        SessionState::EXITING | SessionState::LOSS_PENDING => return Ok(false),
+
+                        _ => {}
+                    }
+                }
+
+                Event::InstanceLossPending(_) => return Ok(false),
+
+                _ => {}
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Waits for the next frame, clears both eyes in one multiview pass when
+    /// the runtime shows the frame and tracks the head, and submits it.
+    pub fn frame(&mut self) -> Result<()> {
+        let state = self.frame_waiter.wait().map_err(Error::Xr)?;
+
+        self.frame_stream.begin().map_err(Error::Xr)?;
+
+        let (view_flags, eyes) = self
+            .session
+            .locate_views(VIEW_TYPE, state.predicted_display_time, &self.space)
+            .map_err(Error::Xr)?;
+
+        // A projection layer needs real orientations, which tracking lacks
+        // until it starts.
+        if !state.should_render || !view_flags.contains(ViewStateFlags::ORIENTATION_VALID) {
+            return self
+                .frame_stream
+                .end(
+                    state.predicted_display_time,
+                    EnvironmentBlendMode::OPAQUE,
+                    &[],
+                )
+                .map_err(Error::Xr);
+        }
+
+        let image = self.swapchain.handle.acquire_image().map_err(Error::Xr)?;
+        let image = usize::try_from(image).expect("swapchain indices fit in usize");
+
+        self.swapchain
+            .handle
+            .wait_image(XrDuration::INFINITE)
+            .map_err(Error::Xr)?;
+
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("clear eyes"),
+            });
+
+        encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("clear eyes"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &self.swapchain.views[image],
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(CLEAR),
+                    store: StoreOp::Store,
+                },
+            })],
+            multiview_mask: NonZeroU32::new(0b11),
+            ..RenderPassDescriptor::default()
+        });
+
+        self.gpu.queue.submit([encoder.finish()]);
+
+        self.swapchain.handle.release_image().map_err(Error::Xr)?;
+
+        let rect = Rect2Di {
+            offset: Offset2Di { x: 0, y: 0 },
+            extent: self.swapchain.extent,
+        };
+
+        let projection_views: Vec<_> = eyes
+            .iter()
+            .zip(0..)
+            .map(|(eye, layer)| {
+                CompositionLayerProjectionView::new()
+                    .pose(eye.pose)
+                    .fov(eye.fov)
+                    .sub_image(
+                        SwapchainSubImage::new()
+                            .swapchain(&self.swapchain.handle)
+                            .image_array_index(layer)
+                            .image_rect(rect),
+                    )
+            })
+            .collect();
+
+        self.frame_stream
+            .end(
+                state.predicted_display_time,
+                EnvironmentBlendMode::OPAQUE,
+                &[&CompositionLayerProjection::new()
+                    .space(&self.space)
+                    .views(&projection_views)],
+            )
+            .map_err(Error::Xr)
+    }
+}

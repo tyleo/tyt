@@ -149,7 +149,7 @@ cargo build -p tyt --features bin   # Build the binary
 
 ## Development
 
-Images and other binaries live in [Git LFS](https://git-lfs.com). The voxrender-cpu golden tests compile the real PNGs in, so install `git-lfs` before cloning. A clone made without it holds pointer files, and `git lfs pull` fetches them.
+Images and other binaries live in [Git LFS](https://git-lfs.com). The voxrender-cpu golden tests compile the real PNGs in, and the Quest build runs the Gradle wrapper's jar, so install `git-lfs` before cloning. A clone made without it holds pointer files, and `git lfs pull` fetches them.
 
 After cloning, run setup once:
 
@@ -157,7 +157,7 @@ After cloning, run setup once:
 npm run setup
 ```
 
-This points `core.hooksPath` at `.githooks`, so a pre-commit hook runs `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` before each commit, and the Git LFS hooks upload binaries on push. A commit touching `projects/utilities/sdfj-builder` also runs the builder's Deno checks and needs `deno`. Setup also checks out the `submodules/branded-id` submodule, where `branded-id` is developed. The workspace builds against the published `branded-id`. To build against unreleased submodule changes, add `branded-id = { path = "submodules/branded-id" }` under the root manifest's `[patch.crates-io]`, and drop it once that version is published. Without npm, run `git config core.hooksPath .githooks` and `git submodule update --init submodules/branded-id`.
+This points `core.hooksPath` at `.githooks`, so a pre-commit hook runs `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` before each commit, and the Git LFS hooks upload binaries on push. A commit touching `projects/utilities/sdfj-builder` also runs the builder's Deno checks and needs `deno`. A commit touching `projects/utilities/voxrender-bench-quest` also lints it for Android and needs the `aarch64-linux-android` target. Setup also checks out the `submodules/branded-id` submodule, where `branded-id` is developed. The workspace builds against the published `branded-id`. To build against unreleased submodule changes, add `branded-id = { path = "submodules/branded-id" }` under the root manifest's `[patch.crates-io]`, and drop it once that version is published. Without npm, run `git config core.hooksPath .githooks` and `git submodule update --init submodules/branded-id`.
 
 Format and lint manually with:
 
@@ -168,7 +168,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ### Quest builds
 
-`voxrender-bench` also builds as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The bench's README holds the build and run commands. Gradle needs no install because the bench checks in its wrapper.
+`voxrender-bench-quest` runs voxrender's GPU benchmarks as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The crate's [README](projects/utilities/voxrender-bench-quest/README.md) holds the build and run commands. Gradle needs no install because the crate checks in its wrapper.
 
 1. A JDK starts Gradle. Gradle then fetches the JDK its daemon pins. Adoptium recommends a package manager:
 

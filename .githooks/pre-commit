@@ -30,3 +30,15 @@ if git diff --cached --name-only | grep -q '^projects/utilities/sdfj-builder/'; 
         exit 1
     fi
 fi
+
+if git diff --cached --name-only | grep -q '^projects/utilities/voxrender-bench-quest/'; then
+    if ! rustup target list --installed | grep -qx 'aarch64-linux-android'; then
+        echo "pre-commit: the commit touches voxrender-bench-quest, whose lints need the aarch64-linux-android target." >&2
+        exit 1
+    fi
+    if ! cargo clippy -p voxrender-bench-quest --target aarch64-linux-android -- -D warnings; then
+        echo >&2
+        echo "pre-commit: voxrender-bench-quest's Android lints failed - fix them, then re-stage." >&2
+        exit 1
+    fi
+fi

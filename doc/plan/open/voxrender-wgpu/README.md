@@ -45,9 +45,11 @@ GPU tier is then judged against goldens the reference renders under that rule.
    every GPU tier share. A consumer draws through its `Render` trait
 2. `voxrender-cpu` holds the reference renderer
 3. `voxrender-bench` is new and unpublished. It holds the harness and the
-   competing front ends. It runs headless on desktop and as an OpenXR app on
-   Quest. B3's losing arms are deleted
-4. `voxrender-wgpu` starts when B3 picks the front end. The winning arm moves
+   competing front ends, and runs them headless on desktop. B3's losing arms
+   are deleted
+4. `voxrender-bench-quest` is new and unpublished. It runs the bench as an
+   OpenXR app on Quest
+5. `voxrender-wgpu` starts when B3 picks the front end. The winning arm moves
    into it. The name was free on crates.io as of 2026-09-27
 
 A tier turns off the contract features it cannot afford, and the reference
@@ -75,7 +77,7 @@ knows transparency, so a raster arm can show the glass the reference renders.
    and device through wgpu-hal. bevy_mod_openxr runs the same pattern on Quest
 7. The repo README's Development section lists the Android tools and the steps
    to install them by hand. No build script fetches or configures them.
-   `voxrender-bench`'s README holds the build and run commands
+   `voxrender-bench-quest`'s README holds the build and run commands
 8. Phones come last. B12 and the phone half of B1 run when a device is at
    hand
 

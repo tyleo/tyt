@@ -72,8 +72,8 @@ code-level choices in
          golden and precision-sim scenes. The report counts each scene's
          mismatches
       3. A float DDA on the same scenes records its flip count
-- [ ] **S5. Quest harness and B0.** `voxrender-bench` runs as an OpenXR app on
-      Quest 3 and reports what the device exposes.
+- [ ] **S5. Quest harness and B0.** `voxrender-bench-quest` runs as an
+      OpenXR app on Quest 3 and reports what the device exposes.
       1. The repo README's Development section documents the Android setup:
          the SDK, NDK, and adb, the Rust Android target, the APK build tool,
          and the headset's developer mode

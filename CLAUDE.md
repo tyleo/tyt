@@ -9,7 +9,7 @@ cargo check
 ## Lint and format
 
 - `cargo fmt --all` formats; `cargo clippy --workspace --all-targets -- -D warnings` lints. Run both before committing.
-- A checked-in pre-commit hook (`.githooks/pre-commit`) runs the fmt check and clippy on every commit, so the same gate applies to humans and Claude. A commit touching `projects/utilities/sdfj-builder` also runs `deno check`, `deno lint`, `deno fmt --check`, and `deno test` there.
+- A checked-in pre-commit hook (`.githooks/pre-commit`) runs the fmt check and clippy on every commit, so the same gate applies to humans and Claude. A commit touching `projects/utilities/sdfj-builder` also runs `deno check`, `deno lint`, `deno fmt --check`, and `deno test` there. A commit touching `projects/utilities/voxrender-bench-quest` also runs clippy on it for `aarch64-linux-android`.
 - Enable the hook once after cloning with `npm run setup` (or `git config core.hooksPath .githooks`); see the README Development section.
 
 ## Style

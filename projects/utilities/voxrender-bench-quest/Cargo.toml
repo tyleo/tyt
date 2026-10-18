@@ -1,0 +1,19 @@
+[package]
+name = "voxrender-bench-quest"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "voxrender's GPU benchmarks as a Meta Quest OpenXR app."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "0.6.1", features = ["native-activity"] }
+android_logger = "0.15.1"
+ash = "0.38"
+log = "0.4"
+openxr = "0.22.0"
+wgpu = "30.0.1"

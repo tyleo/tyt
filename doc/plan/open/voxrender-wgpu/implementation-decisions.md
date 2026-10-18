@@ -122,3 +122,25 @@ they land.
   from the checked-in wrapper.
 - The Gradle task that runs cargo-ndk sets `ANDROID_NDK_HOME` from the
   build's `ndkVersion`. A shell profile never pins a repo's NDK.
+- The Quest app lives in its own crate, `voxrender-bench-quest`, a
+  `cdylib` that exports `android_main`. The desktop bench then never links
+  openxr, ash, or android-activity. The crate compiles only for Android,
+  so the pre-commit hook lints it with `--target aarch64-linux-android`
+  when a commit touches it.
+- The runtime creates the Vulkan instance and device through
+  `XR_KHR_vulkan_enable2` from wgpu-hal's instance extensions, device
+  extensions, and features. wgpu takes ownership of both. The app asks for
+  Vulkan 1.1, the version that made multiview core.
+- wgpu wraps each swapchain image with a no-op drop callback, so the
+  runtime keeps the image. The wrap starts it as a color target because
+  OpenXR hands out color images in `COLOR_ATTACHMENT_OPTIMAL` and takes them
+  back in that layout.
+- The swapchain takes the runtime's first sRGB format among
+  `R8G8B8A8_SRGB` and `B8G8R8A8_SRGB`.
+- A frame submits no layer until the views' orientations are valid. The
+  runtime rejects a projection layer with untracked poses.
+- The manifest sets `hasCode="false"`, and `android.builtInKotlin=false`
+  keeps AGP 9 from adding the Kotlin standard library. The Khronos loader's
+  AAR holds no Java.
+- The manifest declares hand tracking as optional, so the headset launches
+  the app without controllers. The bench takes no input.
