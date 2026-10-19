@@ -23,8 +23,9 @@ pub enum SdfStep {
         shape_id: U32Id<BSdfShape3d>,
     },
 
-    /// Recolors the live cells with an empty cell beyond them toward a listed
-    /// side. `onto_ids` limits it to the cells those `add` steps own.
+    /// Recolors the live cells whose point `depth` meters toward a listed side
+    /// lies outside the part's earlier shapes. `onto_ids` limits it to the
+    /// cells those `add` steps own.
     Coat {
         name: String,
 
@@ -32,7 +33,7 @@ pub enum SdfStep {
 
         sides: Option<Vec<SdfSide>>,
 
-        depth: Option<f64>,
+        depth: f64,
 
         within_id: Option<U32Id<BSdfShape3d>>,
 

@@ -431,10 +431,11 @@ step that changed it. A step reaches only its own part's grid.
 1. `add` sets every cell its shape covers to the material.
 2. `carve` empties every cell its shape covers.
 3. `paint` sets every live cell its shape covers to the material.
-4. `coat` reads a snapshot of the grid taken before it runs. A live cell takes
-   the material when one of the `depth` cells beyond it toward a listed side is
-   empty or outside the grid. `within` narrows the result to the cells its shape
-   covers.
+4. `coat` gives a live cell the material when the point `depth` meters from
+   the cell's center toward a listed side lies outside the part's earlier
+   shapes. The last `add` or `carve` whose shape holds the point decides. A
+   point no such shape holds lies outside. `within` narrows the result to the
+   cells its shape covers.
 5. `set` sets the cell `floor((p + o) / g)` of each point `p`.
 
 The last `add` that sets a cell owns it. A `carve` that empties the cell clears
@@ -646,12 +647,12 @@ it belongs to by its path of part names.
 4. vxl reads the document by the
    [sdfj format](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#rules)
    and checks every entry's arguments.
-   - Radii, widths, thicknesses, sizes, scales, periods, and `spread` are above
-     zero, except that a `cone` end may take 0. A `round` and a `chamfer` are
-     zero or more.
-   - Counts, `octaves`, and `depth` are whole numbers above zero. An `ngon`'s
-     `sides` is at least 3 and a `star`'s `points` at least 2. A seed is a
-     whole number from `-2^31` to `2^31 - 1`.
+   - Radii, widths, thicknesses, sizes, scales, periods, `spread`, and a
+     `coat`'s `depth` are above zero, except that a `cone` end may take 0. A
+     `round` and a `chamfer` are zero or more.
+   - Counts and `octaves` are whole numbers above zero. An `ngon`'s `sides` is
+     at least 3 and a `star`'s `points` at least 2. A seed is a whole number
+     from `-2^31` to `2^31 - 1`.
    - A pattern's `materials` and a `speckle`'s `accents` hold at least one
      material. A `union`, an `intersect`, and their smooth variants hold at
      least one shape, and an `onto` holds at least one step. A `polygon` lists
@@ -688,8 +689,8 @@ it belongs to by its path of part names.
    2^27 cells, and so does each root part's object under `--flatten objects`. No
    `bend` reaches past half a turn of its arc: its shape's box spans at most
    `pi * radius` along `along`.
-7. While the steps run, no distance reads NaN, and no `set` lists the same point
-   twice.
+7. While the steps run, no distance reads NaN, no `set` lists the same point
+   twice, and every `coat`'s `depth` reaches at least the voxel size.
 8. At the end, the model holds a live cell.
 
 A step that writes no cell and a part with no live cell show in the report and

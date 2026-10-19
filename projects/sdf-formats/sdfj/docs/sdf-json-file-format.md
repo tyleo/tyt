@@ -196,13 +196,13 @@ materials.
 
 ### Steps
 
-| `kind`  | Keys                                                                    |
-| ------- | ----------------------------------------------------------------------- |
-| `add`   | `name`, `shape`, `material` or `pattern`                                |
-| `carve` | `name`, `shape`                                                         |
-| `paint` | `name`, `shape`, `material` or `pattern`, `onto?`                       |
-| `coat`  | `name`, `material` or `pattern`, `sides?`, `depth?`, `within?`, `onto?` |
-| `set`   | `name`, `points`, `material` or `pattern`                               |
+| `kind`  | Keys                                                                   |
+| ------- | ---------------------------------------------------------------------- |
+| `add`   | `name`, `shape`, `material` or `pattern`                               |
+| `carve` | `name`, `shape`                                                        |
+| `paint` | `name`, `shape`, `material` or `pattern`, `onto?`                      |
+| `coat`  | `name`, `material` or `pattern`, `sides?`, `depth`, `within?`, `onto?` |
+| `set`   | `name`, `points`, `material` or `pattern`                              |
 
 A step that takes a material or a pattern holds exactly one of the two keys.
 

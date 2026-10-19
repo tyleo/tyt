@@ -26,9 +26,6 @@ export interface CoatOptions {
   /** The sides the coat looks toward from each live cell. */
   sides?: Side[];
 
-  /** How many cells beyond a live cell the coat looks. */
-  depth?: number;
-
   /** The shape whose cells the coat stays inside. */
   within?: Shape3d;
 
@@ -85,16 +82,19 @@ export function paint(
   });
 }
 
-/** Recolors the live cells with an empty cell within `depth` toward a side. */
+/**
+ * Recolors the live cells whose point `depth` meters toward a side lies outside
+ * the part's earlier shapes.
+ */
 export function coat(
   name: string,
   material: Material | Pattern,
+  depth: number,
   options?: CoatOptions,
 ): Step {
   const path = stepPath("coat", name);
   const option = check.knownOptions(path, options, [
     "sides",
-    "depth",
     "within",
     "onto",
   ]);
@@ -102,13 +102,13 @@ export function coat(
     kind: "coat",
     name,
     ...stepMaterial(`${path} material`, material),
+    depth: check.finite(`${path} depth`, depth),
     sides: check.optional(
       `${path} sides`,
       option.sides,
       (sidesPath, sides) =>
         check.list(sidesPath, sides, "an array of Sides", check.side),
     ),
-    depth: check.optional(`${path} depth`, option.depth, check.finite),
     within: check.optional(
       `${path} within`,
       option.within,

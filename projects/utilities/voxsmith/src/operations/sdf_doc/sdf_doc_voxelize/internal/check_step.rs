@@ -13,11 +13,7 @@ pub fn check_step(step: &SdfStep) -> StdResult<(), String> {
             depth, onto_ids, ..
         } => {
             let check = ArgumentCheck::new("coat");
-
-            if let Some(depth) = depth {
-                check.whole_above_zero("depth", *depth)?;
-            }
-
+            check.above_zero("depth", *depth)?;
             check_onto(&check, onto_ids.as_deref())
         }
 
@@ -63,7 +59,7 @@ mod tests {
     use ty_math::TyVector3F64;
 
     #[test]
-    fn a_set_lists_each_point_once_a_coat_reaches_whole_cells_and_onto_lists_a_step() {
+    fn a_set_lists_each_point_once_a_coat_reaches_past_zero_and_onto_lists_a_step() {
         let set = |points| SdfStep::Set {
             name: "studs".to_string(),
             points,
@@ -84,13 +80,13 @@ mod tests {
             name: "skin".to_string(),
             material: SdfStepMaterial::Material(U32Id::from_u32(0)),
             sides: None,
-            depth: Some(1.5),
+            depth: 0.0,
             within_id: None,
             onto_ids: None,
         };
         assert_eq!(
             check_step(&coat),
-            Err("coat depth must be a whole number above zero, not 1.5".to_string())
+            Err("coat depth must be above zero, not 0".to_string())
         );
 
         let paint = SdfStep::Paint {

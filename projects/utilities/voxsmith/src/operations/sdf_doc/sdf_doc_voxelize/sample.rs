@@ -198,7 +198,7 @@ mod tests {
                     name: "top".to_string(),
                     material: material(1),
                     sides: Some(vec![SdfSide::PositiveY]),
-                    depth: None,
+                    depth: 1.0,
                     within_id: None,
                     onto_ids: None,
                 },
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn a_coat_reaches_its_depth_toward_every_side() {
-        for (depth, written) in [(None, 26), (Some(2.0), 27)] {
+        for (depth, written) in [(1.0, 26), (2.0, 27)] {
             let main = single_part_main(
                 vec![cuboid([0.0, 0.0, 0.0], [3.0, 3.0, 3.0])],
                 vec![
@@ -273,6 +273,48 @@ mod tests {
             let sampling = sample(&main, &at_size(1.0)).unwrap();
             assert_eq!(sampling.grids[0].steps[1].written.len(), written);
         }
+    }
+
+    #[test]
+    fn a_coat_reads_the_shapes_and_errors_under_one_voxel() {
+        let coat = |depth| SdfStep::Coat {
+            name: "skin".to_string(),
+            material: material(1),
+            sides: Some(vec![SdfSide::PositiveY]),
+            depth,
+            within_id: None,
+            onto_ids: None,
+        };
+
+        let main = single_part_main(
+            vec![
+                cuboid([0.0, 0.0, 0.0], [1.0, 2.0, 1.0]),
+                cuboid([0.0, 1.0, 0.0], [1.0, 2.0, 1.0]),
+            ],
+            vec![
+                add("post", 0, 0),
+                SdfStep::Carve {
+                    name: "cut".to_string(),
+                    shape_id: U32Id::from_u32(1),
+                },
+                coat(0.5),
+            ],
+        );
+        let sampling = sample(&main, &at_size(0.5)).unwrap();
+        let grid = &sampling.grids[0];
+        let steps: Vec<Option<u32>> = (0..4)
+            .map(|y| grid.cell(TyVector3I32::new(0, y, 0)).unwrap().step)
+            .collect();
+        assert_eq!(steps, [Some(0), Some(2), Some(1), Some(1)]);
+
+        let main = single_part_main(
+            vec![cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0])],
+            vec![add("post", 0, 0), coat(0.4)],
+        );
+        assert_eq!(
+            error(&main, at_size(0.5)),
+            "model/skin: coat depth must be at least the voxel size 0.5, not 0.4"
+        );
     }
 
     #[test]
@@ -304,7 +346,7 @@ mod tests {
                     name: "rim".to_string(),
                     material: material(1),
                     sides: None,
-                    depth: None,
+                    depth: 1.0,
                     within_id: None,
                     onto_ids: onto(1),
                 },

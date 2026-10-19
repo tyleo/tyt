@@ -18,13 +18,13 @@ const CASES: [string, () => Step, Entry][] = [
   }],
   [
     "coat",
-    () => coat("snow", white, { sides: ["+y", "-x"], depth: 2, within: ball }),
+    () => coat("snow", white, 0.05, { sides: ["+y", "-x"], within: ball }),
     {
       kind: "coat",
       name: "snow",
       material: 0,
       sides: ["+y", "-x"],
-      depth: 2,
+      depth: 0.05,
       within: 0,
     },
   ],
@@ -63,11 +63,11 @@ Deno.test("onto writes the indices of earlier add steps", () => {
       body,
       rim,
       paint("gilt", ball, white, { onto: [body] }),
-      coat("snow", white, { onto: [body, rim] }),
+      coat("snow", white, 0.05, { onto: [body, rim] }),
     ]).steps.slice(2),
     [
       { kind: "paint", name: "gilt", shape: 0, material: 0, onto: [0] },
-      { kind: "coat", name: "snow", material: 0, onto: [0, 1] },
+      { kind: "coat", name: "snow", material: 0, depth: 0.05, onto: [0, 1] },
     ],
   );
 });
@@ -79,7 +79,7 @@ Deno.test("onto lists add steps earlier in the list", () => {
       "not []",
   });
   assert.throws(
-    () => coat("snow", white, { onto: [carve("cut", ball)] }),
+    () => coat("snow", white, 0.05, { onto: [carve("cut", ball)] }),
     { message: 'coat "snow" onto[0] must be an add Step, not the carve "cut"' },
   );
   assert.throws(
@@ -99,7 +99,7 @@ Deno.test("a step's arguments have to fit its entry", () => {
     message:
       'paint "gilt" material must be a Material or a Pattern, not "gold"',
   });
-  assert.throws(() => coat("snow", white, { side: ["+y"] } as never), {
+  assert.throws(() => coat("snow", white, 0.05, { side: ["+y"] } as never), {
     message: 'coat "snow" takes no option "side"',
   });
   assert.throws(() => carve(3 as never, ball), {

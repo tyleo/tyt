@@ -62,6 +62,24 @@ impl ArgumentCheck {
         self.expect(value >= 0.0, argument, "zero or more", value)
     }
 
+    /// Errors unless `value` reads at least the bound `least` that `expectation`
+    /// describes. `value` may fall short of `least` by up to `ROUNDING` times
+    /// `least`.
+    pub fn at_least(
+        &self,
+        argument: &str,
+        value: f64,
+        least: f64,
+        expectation: &str,
+    ) -> StdResult<(), String> {
+        self.expect(
+            least - value <= least.abs() * ROUNDING,
+            argument,
+            expectation,
+            value,
+        )
+    }
+
     /// Errors unless `value` reads at most the bound `most` that `expectation`
     /// describes. `value` may pass `most` by up to `ROUNDING` times `most`.
     pub fn at_most(

@@ -378,3 +378,11 @@ land.
    use no more memory
 3. The builder checks `onto` at the call and again in the part's list. Model
    evaluation checks it once more for documents other tools write
+4. `coat` tests at most 6 points per cell, one `depth` meters out toward each
+   listed side. A gap narrower than `depth` under a shape beyond it takes no
+   coat
+5. vxl errors on a `depth` under one voxel because a shorter one coats some
+   cells of a curved or off-grid surface and skips others
+6. A `set` point holds no shape, so a coat reads through it
+7. `depth` moves to a positional argument because the API takes each required
+   value as one

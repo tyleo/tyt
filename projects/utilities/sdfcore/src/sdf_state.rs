@@ -926,7 +926,7 @@ fn check_step(check: &EntryCheck, step: &SdfStep) -> Result<()> {
             ..
         } => {
             check_step_material(check, *material)?;
-            check.optional_numbers([*depth])?;
+            check.numbers([*depth])?;
             check.shape3d_ids(*within_id)?;
             check.step_ids(onto_ids.iter().flatten().copied())
         }

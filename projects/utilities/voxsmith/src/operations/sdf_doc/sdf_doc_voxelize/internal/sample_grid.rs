@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        Bounds3d, LatticeShapes, SdfCell, SdfEvaluation, SdfGrid, SdfShapes, SdfStepRecord,
-        ShapeSource, meters, pattern_material, side_direction, whole_count,
+        ArgumentCheck, Bounds3d, LatticeShapes, SdfCell, SdfEvaluation, SdfGrid, SdfShapes,
+        SdfStepRecord, ShapeSource, meters, pattern_material, side_direction,
     },
 };
 use branded_id::{IdVec, U32Id};
@@ -118,6 +118,9 @@ pub fn sample_grid(
         })
         .then(|| vec![None; grid.cells.len()]);
 
+    // Each `add` or `carve` shape run so far, with `true` for an `add`.
+    let mut solids = Vec::new();
+
     for (index, step_id) in object.step_ids.iter().enumerate() {
         let step = &state.steps[step_id.to_usize_id()];
 
@@ -126,6 +129,7 @@ pub fn sample_grid(
             patterns: &state.patterns,
             grid: &mut grid,
             owners: owners.as_deref_mut(),
+            solids: &solids,
             step_id: *step_id,
             step: index as u32,
             voxel_size,
@@ -139,6 +143,12 @@ pub fn sample_grid(
 
         let record = run.record;
         grid.steps.push(record);
+
+        match step {
+            SdfStep::Add { shape_id, .. } => solids.push((*shape_id, true)),
+            SdfStep::Carve { shape_id, .. } => solids.push((*shape_id, false)),
+            SdfStep::Coat { .. } | SdfStep::Paint { .. } | SdfStep::Set { .. } => {}
+        }
     }
 
     Ok(grid)
@@ -153,6 +163,8 @@ struct StepRun<'a, 'b> {
     grid: &'a mut SdfGrid,
 
     owners: Option<&'a mut [Option<U32Id<BSdfStep>>]>,
+
+    solids: &'a [(U32Id<BSdfShape3d>, bool)],
 
     step_id: U32Id<BSdfStep>,
 
@@ -201,41 +213,40 @@ impl StepRun<'_, '_> {
                 onto_ids,
                 ..
             } => {
-                let snapshot: Vec<bool> = self
-                    .grid
-                    .cells
-                    .iter()
-                    .map(|cell| cell.material.is_some())
-                    .collect();
+                ArgumentCheck::new("coat").at_least(
+                    "depth",
+                    *depth,
+                    self.voxel_size,
+                    &format!("at least the voxel size {}", meters(self.voxel_size)),
+                )?;
+
                 let sides = sides.as_deref().unwrap_or(&ALL_SIDES);
-                let depth = depth.map_or(1, whole_count);
-
-                let is_empty = |grid: &SdfGrid, cell: TyVector3I32| {
-                    grid.index(cell).is_none_or(|index| !snapshot[index])
-                };
-
                 let bounds = within_id.and_then(|within_id| self.lattice.cells(within_id));
 
                 for cell in self.cells_within(bounds) {
-                    if is_empty(self.grid, cell) || !self.is_onto(onto_ids.as_deref(), cell) {
+                    if !self.is_live(cell) || !self.is_onto(onto_ids.as_deref(), cell) {
                         continue;
                     }
 
-                    let reaches_empty = sides.iter().any(|side| {
-                        let (axis, sign) = side_direction(*side);
-                        let mut step = TyVector3I32::ZERO;
-                        step[axis.index()] = sign as i32;
+                    let mut reaches_outside = false;
 
-                        (1..=depth as i32)
-                            .any(|distance| is_empty(self.grid, cell + step * distance))
-                    });
+                    for side in sides {
+                        let (axis, sign) = side_direction(*side);
+                        let mut offset = TyVector3F64::ZERO;
+                        offset[axis.index()] = sign * depth;
+
+                        if !self.is_solid(self.center(cell) + offset)? {
+                            reaches_outside = true;
+                            break;
+                        }
+                    }
 
                     let within = match within_id {
                         Some(within_id) => self.evaluate(*within_id, cell)?.distance <= 0.0,
                         None => true,
                     };
 
-                    if reaches_empty && within {
+                    if reaches_outside && within {
                         let material_id = self.pick(*material, self.center(cell), cell);
                         self.write(cell, Some(material_id));
                     }
@@ -306,17 +317,44 @@ impl StepRun<'_, '_> {
         shape3d_id: U32Id<BSdfShape3d>,
         cell: TyVector3I32,
     ) -> StdResult<SdfEvaluation, String> {
-        let center = self.center(cell);
-        let evaluation = self.lattice.evaluate(shape3d_id, center);
+        self.evaluate_point(shape3d_id, self.center(cell))
+    }
+
+    /// The shape at `shape3d_id` evaluated at `point`. Errors on a distance
+    /// that reads NaN.
+    fn evaluate_point(
+        &self,
+        shape3d_id: U32Id<BSdfShape3d>,
+        point: TyVector3F64,
+    ) -> StdResult<SdfEvaluation, String> {
+        let evaluation = self.lattice.evaluate(shape3d_id, point);
 
         if evaluation.distance.is_nan() {
             return Err(format!(
                 "distance must be a number, not NaN at [{}, {}, {}]",
-                center.x, center.y, center.z
+                point.x, point.y, point.z
             ));
         }
 
         Ok(evaluation)
+    }
+
+    /// Whether `point` lies inside the part's shapes so far. The last `add` or
+    /// `carve` whose shape holds `point` decides.
+    fn is_solid(&self, point: TyVector3F64) -> StdResult<bool, String> {
+        let lattice_point = (point + self.shift) / self.voxel_size;
+
+        for &(shape3d_id, fills) in self.solids.iter().rev() {
+            let outside_box = self.lattice.cells(shape3d_id).is_some_and(|cells| {
+                lattice_point.cmplt(cells.min).any() || lattice_point.cmpgt(cells.max).any()
+            });
+
+            if !outside_box && self.evaluate_point(shape3d_id, point)?.distance <= 0.0 {
+                return Ok(fills);
+            }
+        }
+
+        Ok(false)
     }
 
     /// The center of `cell` where the shapes evaluate, moved back by the

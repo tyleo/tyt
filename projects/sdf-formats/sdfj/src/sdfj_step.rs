@@ -48,8 +48,8 @@ pub enum SdfjStep {
     /// Empties the shape's cells.
     Carve { name: String, shape: usize },
 
-    /// Recolors the live cells with an empty cell beyond them toward a listed
-    /// side.
+    /// Recolors the live cells whose point `depth` meters toward a listed side
+    /// lies outside the part's earlier shapes.
     Coat {
         name: String,
 
@@ -83,16 +83,8 @@ pub enum SdfjStep {
         )]
         sides: Option<Vec<SdfjSide>>,
 
-        #[cfg_attr(
-            feature = "serde",
-            serde(
-                default,
-                deserialize_with = "crate::present",
-                serialize_with = "crate::finite",
-                skip_serializing_if = "Option::is_none"
-            )
-        )]
-        depth: Option<f64>,
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        depth: f64,
 
         #[cfg_attr(
             feature = "serde",

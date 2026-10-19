@@ -124,6 +124,7 @@ function paint(
 function coat(
   name: string,
   material: Material | Pattern,
+  depth: number,
   options?: CoatOptions,
 ): Step;
 function set(
@@ -138,7 +139,6 @@ interface PaintOptions {
 
 interface CoatOptions {
   sides?: Side[];
-  depth?: number;
   within?: Shape3d;
   onto?: Step[];
 }
@@ -150,10 +150,10 @@ wherever two reach the same cell.
 1. `add` fills the shape's cells with the material and replaces what they held.
 2. `carve` empties the shape's cells.
 3. `paint` recolors the live cells inside the shape and fills none.
-4. `coat` recolors a live cell when one of the `depth` cells beyond it toward a
-   listed side is empty. The coat reads the grid as the earlier steps left it.
-   `sides` defaults to all six. `depth` counts cells and defaults to 1. `within`
-   limits the coat to a shape's cells.
+4. `coat` recolors a live cell when the point `depth` meters from its center
+   toward a listed side lies outside the part's earlier shapes. `depth` takes
+   at least one voxel, and `depth: v` coats the outer layer of cells. `sides`
+   defaults to all six. `within` limits the coat to a shape's cells.
 5. `set` fills the cell holding each point and places detail too small for a
    shape. A point at a cell center, `(i + 0.5) * v`, lands in that cell. A point
    on a cell boundary can land on either side of it.
@@ -876,7 +876,7 @@ add("branch", roundCone([0, 0.25, 0], [0.15, 0.45, 0.05], 0.05, 0.025), mat.bark
 add("cage", boxFrame([-0.1, 0, -0.1], [0.1, 0.25, 0.1], 0.025), mat.iron),
 
 // Snow on every upward face.
-coat("snow", mat.snow, { sides: ["+y"] }),
+coat("snow", mat.snow, 0.05, { sides: ["+y"] }),
 
 // A rough boulder.
 add("boulder", sphere([0, 0.125, 0], 0.15).displace({ amplitude: 0.0375, scale: 0.1, seed: 3 }), mat.granite),
