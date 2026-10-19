@@ -171,9 +171,8 @@ skips the build voxelizes a stale `.sdfj`.
    deck of a pirate ship.
 2. **Follow-ups.** The trials set the second phase. The report and a contact
    sheet hand back more per pass, and the library's colors read truer. New
-   tools drop crumbs and keep paint on its target. New calls draw curves, text,
-   and brickwork, and parts turn at any angle. Two more trial rounds measure the
-   changes.
+   options keep paint on its target. New calls draw curves, text, and brickwork,
+   and parts turn at any angle. Two more trial rounds measure the changes.
 
 ## Waiting for a reason
 
@@ -196,6 +195,9 @@ never:
    Round 7's later passes seated most floating details within one pass
 9. A `vxl object` command that draws a face-connected line of voxels between
    two points for finding 130. Only the guitar's strings asked for one
+10. A prune of small pieces for finding 24. Round 7's crumbs and intended pieces
+    overlap in size, and its broken strings, handles, and knobs are as small as
+    its crumbs, so a prune by size deletes details that need fixing
 
 ## Decisions
 

@@ -162,15 +162,12 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       beside round 6. The round compares its passes and cost with round 5's
       because round 6 ran the dropped review. [Round 7](trials-round-7.md)
       matches round 5's passes and cost.
-- [ ] **S20. Crumbs and spills.** Tools for the cleanup the rounds did by hand:
-  1. `vxl object prune` removes each face-connected piece of the selected
-     objects under a voxel count for finding 24. The skill's command chain runs
-     it between voxelize and render
-  2. `onto` limits a `paint` or a `coat` to the points that listed `add` steps
+- [ ] **S20. Spills.** Options that keep paint on its target:
+  1. `onto` limits a `paint` or a `coat` to the points that listed `add` steps
      still own for finding 34. A point belongs to the last `add` whose shape
      holds it unless a later `carve` emptied it. `onto` takes the steps as
      values, and each has to come earlier in the same list
-  3. `coat` reads the part's shapes so far in place of the grid. A point takes
+  2. `coat` reads the part's shapes so far in place of the grid. A point takes
      the coat when the point `depth` meters toward a listed side lies outside
      those shapes. `depth` has no default, and vxl errors on one under half a
      voxel
