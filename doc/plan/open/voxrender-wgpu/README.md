@@ -38,6 +38,21 @@ it join this plan then.
 A benchmark that needs a contract rule gets the rule in the reference first. A
 GPU tier is then judged against goldens the reference renders under that rule.
 
+## Moving scenes
+
+A game changes its scene every frame. Between two frames a caller can change
+any placement's transform, which placements show, and any material's values.
+The renderer takes each frame's scene as given and has no view of what drives
+it. The [voxel animation plan](../voxel-animation/README.md)'s clips, physics,
+and gameplay all arrive the same way. The work a change costs scales with what
+changed and the light-space tiles under it, never with the scene. A material
+change can move a placement between the opaque and transparent paths
+(research 3.9).
+
+B3 and B5 pick the design with motion in view. Both run the research's S6, a
+moving scene the bench scripts without a clip format. The animation plan is
+open and may still change when they run. S6 depends on none of its decisions.
+
 ## Crates
 
 1. `voxrender` takes the contract changes, each in the step whose benchmark

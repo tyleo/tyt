@@ -1115,6 +1115,10 @@ such as per-face shadows.
     in the frame, or the over-budget fallback.
 14. **CPU draw submission** on raster arms without indirect draws. Linear in
     brick clusters drawn, measured in B3.
+15. **Moving placements.** Every visible face of a moving placement and every
+    receiver in its light-space footprint refills each frame. Bounded by the
+    moving placements' visible faces and footprints, not by pixels, with the
+    over-budget fallback to per-face. Measured on S6 in B5.
 
 ## 5. Contract mapping
 
@@ -1216,7 +1220,10 @@ such as per-face shadows.
   S2 is a forest or city with 10^3 to 10^4 placements, some rotated or scaled,
   at mixed voxel sizes. S3 is a glass-heavy greenhouse with overlapping glass
   placements. S4 is foliage and fences, the silhouette worst case. S5 is a
-  large grazing floor plane.
+  large grazing floor plane. S6 puts eight walking, turning figures of 15
+  rigid parts each in S1's room under a sun. The figures overlap at their
+  joints. A flame cycles 8 objects at 12 Hz. A material pulses its emission.
+  The bench scripts the motion.
 - **Head paths.** One deterministic scripted path, a smooth turn at 200
   degrees/s, a 45-degree snap turn, and a teleport with fade.
 - **Timing.** wgpu timestamps at pass boundaries only, since inside-pass
@@ -1308,6 +1315,7 @@ such as per-face shadows.
   tonemap, and one output write. Memo fill is excluded here and measured in B5.
 - **Scenes.** S1 and S5 decide. S2 runs with LOD off as a stress test. S3 and
   S4 run as provisional until the B6 and B7 rules exist, then rerun as B3b.
+  S6 reports its time with per-frame TLAS and binning included.
 - **Setup.** 1680x1760x2 and 1344x1408x2. GPU level 4 fixed, and level 5 with
   dynamic resolution. TimeWarp on. If MR is a goal, a rerun at 456 MHz records
   the render scale that meets the line.
@@ -1349,12 +1357,13 @@ such as per-face shadows.
   mechanism?
 - **Setup.** The per-face inline fill (compute arm) and the per-brick prefill
   (raster arms). A sun plus one point light, opaque scenes against S3. Every
-  head path, plus a sun step, a moving caster, an edit, a head-relative light,
-  and a hand-held spot light swept by a controller. Insert cost with 32-bit
-  atomics.
-- **Measures.** Distinct visible faces, new faces per frame, corner rays per
-  second, the per-brick superset ratio, frames to converge after a teleport and
-  after a light step, provisional frame counts.
+  head path, plus a sun step, a moving caster, S6, an edit, a head-relative
+  light, and a hand-held spot light swept by a controller. Insert cost with
+  32-bit atomics.
+- **Measures.** Distinct visible faces, new faces per frame, faces S6's motion
+  invalidates per frame, fallback frames on S6, corner rays per second, the
+  per-brick superset ratio, frames to converge after a teleport and after a
+  light step, provisional frame counts.
 - **Threshold.** Steady state and smooth turns at 1.0 ms or less. Teleports and
   snap turns converge within the fade with no frame over budget. A sun step
   commits within 30 frames.

@@ -118,8 +118,10 @@ code-level choices in
 The steps after S8 get their detail when S8 lands. They run in this order:
 
 1. The stereo view in the reference: two off-axis frusta and a head pose
-2. B3, one step per arm the B2 rate allows, then the shootout
-3. The reference rules B4 to B7 need, each before its benchmark: bloom at
+2. S6, the moving scene, joins the bench scenes. Its motion is a scripted
+   function of time
+3. B3, one step per arm the B2 rate allows, then the shootout
+4. The reference rules B4 to B7 need, each before its benchmark: bloom at
    quarter resolution, the shadow memo's tier rules, `msaa4`, brick LOD, and
    transparency termination
-4. B4 to B12
+5. B4 to B12
