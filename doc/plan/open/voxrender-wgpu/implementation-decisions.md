@@ -240,3 +240,8 @@ they land.
   error terms or `t_max` with vector selects, with no dynamic index. Each
   steps its cell's voxel id by a per-axis stride. Only a hit computes its
   position and distance. B1's report on this Mac did not change.
+- With decision 1 settled, the float walk left `voxrender-wgpu` for
+  `voxrender-bench`, which traces it for B1's record. `integer_walk.wgsl`
+  holds the integer walk. `HitTrace::with_walk` appends another walk's
+  WGSL to `first_hit.wgsl` in its place. `GpuWalk` is gone. B1's report on
+  this Mac did not change.

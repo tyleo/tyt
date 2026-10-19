@@ -1,4 +1,4 @@
-use crate::{Error, GpuWalk, PixelHit, Result};
+use crate::{Error, PixelHit, Result};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
 use voxrender::{
@@ -39,14 +39,35 @@ pub struct HitTrace {
 
 impl HitTrace {
     /// Uploads `scene` and the rays of `view_id` over a `width` by `height`
-    /// image, and builds the walk's pipeline.
+    /// image, and builds the pipeline of `voxrender`'s integer walk.
     pub fn new(
         device: &Device,
         scene: &RenderScene,
         view_id: U32Id<BRenderView>,
         width: u32,
         height: u32,
-        walk: GpuWalk,
+    ) -> Result<Self> {
+        Self::with_walk(
+            device,
+            scene,
+            view_id,
+            width,
+            height,
+            include_str!("integer_walk.wgsl"),
+        )
+    }
+
+    /// As [`HitTrace::new`], tracing with `walk` in place of the integer
+    /// walk. `walk` is WGSL defining
+    /// `fn walk(placement: Placement, ray: Ray) -> Hit` over `first_hit.wgsl`'s
+    /// types and helpers.
+    pub fn with_walk(
+        device: &Device,
+        scene: &RenderScene,
+        view_id: U32Id<BRenderView>,
+        width: u32,
+        height: u32,
+        walk: &str,
     ) -> Result<Self> {
         let view = scene
             .view(view_id)
@@ -205,7 +226,9 @@ impl HitTrace {
 
         let module = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("first_hit"),
-            source: ShaderSource::Wgsl(include_str!("first_hit.wgsl").into()),
+            source: ShaderSource::Wgsl(
+                format!("{}\n{walk}", include_str!("first_hit.wgsl")).into(),
+            ),
         });
 
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
@@ -213,10 +236,7 @@ impl HitTrace {
             layout: None,
             module: &module,
             entry_point: Some("main"),
-            compilation_options: PipelineCompilationOptions {
-                constants: &[("FLOAT_WALK", f64::from(u8::from(walk == GpuWalk::Float)))],
-                ..PipelineCompilationOptions::default()
-            },
+            compilation_options: PipelineCompilationOptions::default(),
             cache: None,
         });
 

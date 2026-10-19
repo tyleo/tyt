@@ -1,9 +1,9 @@
-use crate::{ChainKernel, Error, Result, far_wall_scene};
+use crate::{ChainKernel, Error, Result, Walk, far_wall_scene};
 use std::{
     result::Result as StdResult,
     sync::mpsc::{self, Receiver, Sender},
 };
-use voxrender_wgpu::{GpuWalk, HitTrace};
+use voxrender_wgpu::HitTrace;
 use wgpu::{
     Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, CommandEncoder,
     CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePassTimestampWrites,
@@ -111,9 +111,8 @@ impl B1Timer {
                 .next()
                 .expect("the far wall scene has a view");
 
-            for (name, walk) in [("integer", GpuWalk::Integer), ("float", GpuWalk::Float)] {
-                let trace = HitTrace::new(device, &scene, view_id, width, height, walk)
-                    .map_err(Error::Trace)?;
+            for (name, walk) in [("integer", Walk::Integer), ("float", Walk::Float)] {
+                let trace = walk.trace(device, &scene, view_id, width, height)?;
 
                 kernels.push((format!("{name} walk, {depth} deep"), Work::Walk(trace)));
             }

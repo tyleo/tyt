@@ -1,4 +1,4 @@
-use crate::{Error, Gpu, Result, reference_hits};
+use crate::{Error, Gpu, Result, Walk, reference_hits};
 use voxrender::{
     RenderShadow,
     fixtures::{
@@ -7,7 +7,7 @@ use voxrender::{
         two_placements_scene,
     },
 };
-use voxrender_wgpu::{GpuWalk, HitTrace, PixelHit};
+use voxrender_wgpu::PixelHit;
 
 /// B1's line: the largest share of a scene's samples whose ids may differ
 /// from the reference's.
@@ -116,12 +116,10 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                 .map(|hit| hit.lit.len() * 4)
                 .sum::<usize>();
 
-            for (walk, tally) in [
-                (GpuWalk::Integer, &mut integer),
-                (GpuWalk::Float, &mut float),
-            ] {
-                let got = HitTrace::new(&gpu.device, scene, view_id, size, size, walk)
-                    .and_then(|trace| trace.trace(&gpu.device, &gpu.queue))
+            for (walk, tally) in [(Walk::Integer, &mut integer), (Walk::Float, &mut float)] {
+                let got = walk
+                    .trace(&gpu.device, scene, view_id, size, size)?
+                    .trace(&gpu.device, &gpu.queue)
                     .map_err(Error::Trace)?;
 
                 for (pixel, (want, got)) in want.iter().zip(&got).enumerate() {

@@ -9,12 +9,14 @@ runs on a device its caller opens.
 through every placement's grid in a compute shader. `dispatch` records the
 walk into a caller's pass. `trace` walks once and reads back each pixel's
 first hit as a `PixelHit`: the placement, the cell, the face, and the face's
-corner shadow bits for each light that casts shadows. `GpuWalk` picks the
-traversal. `GpuWalk::Integer` runs `voxrender`'s integer DDA in i32 over the
-shared quantized rays and matches `voxrender-cpu`'s hits. `GpuWalk::Float`
-runs an f32 DDA over the same inputs.
+corner shadow bits for each light that casts shadows.
+
+`HitTrace::new` runs `voxrender`'s integer DDA in i32 over the shared
+quantized rays. Its hits match `voxrender-cpu`'s. `HitTrace::with_walk`
+takes another walk in WGSL, so a benchmark can trace a candidate through
+the same harness.
 
 ```rust
-let trace = HitTrace::new(&device, &scene, view_id, 256, 256, GpuWalk::Integer)?;
+let trace = HitTrace::new(&device, &scene, view_id, 256, 256)?;
 let hits = trace.trace(&device, &queue)?;
 ```
