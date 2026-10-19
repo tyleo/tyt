@@ -1,8 +1,8 @@
 use crate::operations::sdf_doc::{
-    ArcSpan, BendMap, Bounds2d, Bounds3d, PointMap3d, SdfEvaluation, ShapeSource, align_rotation,
-    axis_rotation, box_distance, box_frame_distance, cone_distance, ellipsoid_distance,
-    exact_sin_cos, fbm, noise_seed, octahedron_distance, plane_axes, polygon_distance,
-    pyramid_distance, rect_distance, round_cone_distance, side_direction,
+    ArcSpan, BendMap, Bounds2d, Bounds3d, PointMap3d, SdfEvaluation, ShapeSource, SweepSample,
+    align_rotation, axis_rotation, box_distance, box_frame_distance, cone_distance,
+    ellipsoid_distance, exact_sin_cos, fbm, noise_seed, octahedron_distance, plane_axes,
+    polygon_distance, pyramid_distance, rect_distance, round_cone_distance, side_direction,
     smooth_intersect_distance, smooth_union_distance, whole_count,
 };
 use branded_id::{IdVec, U32Id};
@@ -231,6 +231,16 @@ pub enum Shape3dField {
         base_id: U32Id<BSdfShape3d>,
 
         cutter_ids: Vec<U32Id<BSdfShape3d>>,
+    },
+
+    /// A profile pushed along the curve its samples trace, with the profile's
+    /// v kept as near the unit `up` as the curve allows.
+    Sweep {
+        profile_id: U32Id<BSdfShape2d>,
+
+        samples: Vec<SweepSample>,
+
+        up: TyVector3F64,
     },
 
     /// A torus about the axis at index `axis`, cut to `span` when the span
@@ -627,6 +637,17 @@ impl Shape3dField {
                 cutter_ids: cutter_ids.clone(),
             },
 
+            SdfShape3d::Sweep {
+                profile_id,
+                points,
+                scales,
+                up,
+            } => Shape3dField::Sweep {
+                profile_id: *profile_id,
+                samples: SweepSample::along(points, scales.as_deref()),
+                up: unit(up.unwrap_or(TyVector3F64::Y)),
+            },
+
             SdfShape3d::Torus {
                 center,
                 ring_radius,
@@ -976,6 +997,54 @@ impl Shape3dField {
                 }
             }
 
+            Shape3dField::Sweep {
+                profile_id,
+                samples,
+                up,
+            } => {
+                let (index, fraction) = samples
+                    .windows(2)
+                    .enumerate()
+                    .map(|(index, pair)| {
+                        let start = pair[0].position;
+                        let along = pair[1].position - start;
+                        let fraction =
+                            ((point - start).dot(along) / along.dot(along)).clamp(0.0, 1.0);
+
+                        (
+                            index,
+                            fraction,
+                            (point - start - along * fraction).length_squared(),
+                        )
+                    })
+                    .min_by(|a, b| a.2.total_cmp(&b.2))
+                    .map(|(index, fraction, _)| (index, fraction))
+                    .expect("a sweep's curve holds a piece");
+                let [start, end] = [samples[index], samples[index + 1]];
+                let offset = point - start.position.lerp(end.position, fraction);
+                let tangent = start.tangent.lerp(end.tangent, fraction).normalize();
+                let scale = start.scale + (end.scale - start.scale) * fraction;
+                let u = tangent.cross(*up).normalize();
+                let local = TyVector2F64::new(offset.dot(u), offset.dot(u.cross(tangent)));
+                let profile = if scale > 0.0 {
+                    scale * shapes.distance2d(*profile_id, local / scale)
+                } else {
+                    local.length()
+                };
+
+                // Only the curve's two ends cap the profile.
+                let distance = if (index == 0 && fraction == 0.0)
+                    || (index == samples.len() - 2 && fraction == 1.0)
+                {
+                    let slab = offset.dot(tangent).abs();
+                    profile.max(slab).min(0.0) + TyVector2F64::new(profile.max(0.0), slab).length()
+                } else {
+                    profile
+                };
+
+                primitive(distance, point)
+            }
+
             Shape3dField::Torus {
                 center,
                 axis,
@@ -1193,6 +1262,22 @@ impl Shape3dField {
             Shape3dField::SmoothSubtract { base_id, .. }
             | Shape3dField::Subtract { base_id, .. } => of(base_id),
 
+            Shape3dField::Sweep {
+                profile_id,
+                samples,
+                ..
+            } => {
+                let profile = of_profile(profile_id);
+                let reach = profile.min.abs().max(profile.max.abs()).length();
+
+                samples
+                    .iter()
+                    .map(|sample| {
+                        Bounds3d::around(sample.position, TyVector3F64::splat(reach * sample.scale))
+                    })
+                    .reduce(|bounds, sample| bounds.union(&sample))
+            }
+
             Shape3dField::SmoothUnion { radius, shape_ids } => shape_ids
                 .iter()
                 .map(of)
@@ -1328,8 +1413,8 @@ fn mirror_maps(axes: SdfAxes3d, center: TyVector3F64) -> Vec<PointMap3d> {
 #[cfg(test)]
 mod tests {
     use crate::operations::sdf_doc::{
-        assert_shape3d, bounds_of, box_reference, fbm, grid3d, rect_reference, segment_distance3d,
-        shapes_of,
+        SweepSample, assert_shape3d, bounds_of, box_reference, fbm, grid3d, rect_reference,
+        segment_distance3d, shapes_of,
     };
     use branded_id::U32Id;
     use sdfcore::{BSdfShape2d, BSdfShape3d, SdfAxes3d, SdfShape2d, SdfShape3d, SdfSide};
@@ -2019,5 +2104,135 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_straight_sweep_turns_its_profile_s_u_right_and_v_up() {
+        let rect = SdfShape2d::Rect {
+            min: TyVector2F64::new(-0.5, -0.25),
+            max: TyVector2F64::new(0.25, 0.5),
+            chamfer: None,
+            round: None,
+        };
+        let sweep = |a: TyVector3F64, b: TyVector3F64, up: Option<TyVector3F64>| {
+            vec![SdfShape3d::Sweep {
+                profile_id: profile_id(0),
+                points: vec![a, b],
+                scales: None,
+                up,
+            }]
+        };
+        let x = TyVector3F64::new(0.6, 0.0, 0.0);
+        let z = TyVector3F64::new(0.0, 0.0, 0.6);
+
+        for (shapes3d, min, max) in [
+            (
+                sweep(-x, x, None),
+                TyVector3F64::new(-0.6, -0.25, -0.5),
+                TyVector3F64::new(0.6, 0.5, 0.25),
+            ),
+            (
+                sweep(-z, z, None),
+                TyVector3F64::new(-0.25, -0.25, -0.6),
+                TyVector3F64::new(0.5, 0.5, 0.6),
+            ),
+            (
+                sweep(-x, x, Some(TyVector3F64::new(0.0, 0.0, 2.0))),
+                TyVector3F64::new(-0.6, -0.25, -0.25),
+                TyVector3F64::new(0.6, 0.5, 0.5),
+            ),
+        ] {
+            let shapes = shapes_of(vec![rect.clone()], shapes3d);
+
+            for point in grid3d(GRID.0, GRID.1, GRID.2) {
+                let distance = shapes.evaluate(id(0), point).distance;
+                let expected = box_reference(point, min, max);
+
+                // Inside, the caps leave the depth to the profile.
+                if expected > 0.0 {
+                    assert!((distance - expected).abs() < 1e-12, "{point}");
+                } else {
+                    assert!(distance <= 1e-12, "{point}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_sweep_s_tube_keeps_its_radius_around_a_bend_and_tapers() {
+        let points = vec![
+            TyVector3F64::new(-0.6, -0.2, 0.0),
+            TyVector3F64::new(0.0, 0.3, 0.1),
+            TyVector3F64::new(0.6, -0.2, 0.0),
+        ];
+        let circle = SdfShape2d::Circle {
+            center: TyVector2F64::ZERO,
+            radius: 0.2,
+        };
+        let samples = SweepSample::along(&points, None);
+        let shapes = shapes_of(
+            vec![circle.clone()],
+            vec![SdfShape3d::Sweep {
+                profile_id: profile_id(0),
+                points: points.clone(),
+                scales: None,
+                up: None,
+            }],
+        );
+
+        for point in grid3d(GRID.0, GRID.1, GRID.2) {
+            let curve = samples
+                .windows(2)
+                .map(|pair| segment_distance3d(point, pair[0].position, pair[1].position))
+                .fold(f64::INFINITY, f64::min);
+
+            // The tube reference leaves out the flat caps at the ends.
+            if [points[0], points[2]]
+                .iter()
+                .all(|end| point.distance(*end) > curve + 1e-9)
+            {
+                let distance = shapes.evaluate(id(0), point).distance;
+                assert!((distance - (curve - 0.2)).abs() < 5e-3, "{point}");
+            }
+        }
+
+        // Scales halve the radius halfway along a straight sweep.
+        let shapes = shapes_of(
+            vec![circle],
+            vec![SdfShape3d::Sweep {
+                profile_id: profile_id(0),
+                points: vec![
+                    TyVector3F64::new(-0.6, 0.0, 0.0),
+                    TyVector3F64::new(0.6, 0.0, 0.0),
+                ],
+                scales: Some(vec![1.0, 0.0]),
+                up: None,
+            }],
+        );
+
+        assert!(
+            shapes
+                .evaluate(id(0), TyVector3F64::new(0.0, 0.09, 0.0))
+                .distance
+                < 0.0
+        );
+        assert!(
+            shapes
+                .evaluate(id(0), TyVector3F64::new(0.0, 0.11, 0.0))
+                .distance
+                > 0.0
+        );
+        assert!(
+            shapes
+                .evaluate(id(0), TyVector3F64::new(0.59, 0.0, 0.0))
+                .distance
+                < 0.0
+        );
+        assert!(
+            shapes
+                .evaluate(id(0), TyVector3F64::new(0.61, 0.0, 0.0))
+                .distance
+                > 0.0
+        );
     }
 }

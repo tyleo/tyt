@@ -36,7 +36,8 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
     { "kind": "elongate", "shape": 0, "lengths": [1, 0, 0], "center": [0.5, 0.5, 0.5] },
     { "kind": "twist", "shape": 0, "axis": "y", "degreesPerMeter": 90, "center": [0, 0, 0] },
     { "kind": "bend", "shape": 0, "along": "x", "toward": "+y", "radius": 2, "pivot": [0, 0, 0] },
-    { "kind": "displace", "shape": 0, "amplitude": 0.1, "scale": 0.5, "octaves": 3, "seed": 7 }
+    { "kind": "displace", "shape": 0, "amplitude": 0.1, "scale": 0.5, "octaves": 3, "seed": 7 },
+    { "kind": "sweep", "profile": 0, "points": [[0, 0, 0], [1, 1, 0]], "scales": [1, 0.5], "up": [0, 0, 1] }
   ],
   "shapes2d": [
     { "kind": "circle", "center": [0, 0], "radius": 1 },

@@ -358,6 +358,18 @@ fn sdfj_shape3d_from_sdf_shape3d(shape: &SdfShape3d) -> SdfjShape3d {
             cutters: wire_indices(cutter_ids),
         },
 
+        SdfShape3d::Sweep {
+            profile_id,
+            points,
+            scales,
+            up,
+        } => SdfjShape3d::Sweep {
+            profile: wire_index(*profile_id),
+            points: points.iter().map(TyVector3F64::to_array).collect(),
+            scales: scales.clone(),
+            up: up.as_ref().map(TyVector3F64::to_array),
+        },
+
         SdfShape3d::Torus {
             center,
             ring_radius,

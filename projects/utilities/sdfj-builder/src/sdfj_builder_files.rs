@@ -25,6 +25,7 @@ pub const SDFJ_BUILDER_FILES: &[SdfjBuilderFile] = &[
     builder_file!("ts/material.ts"),
     builder_file!("ts/model_list.ts"),
     builder_file!("ts/part.ts"),
+    builder_file!("ts/paths.ts"),
     builder_file!("ts/pattern.ts"),
     builder_file!("ts/primitives.ts"),
     builder_file!("ts/primitives2d.ts"),

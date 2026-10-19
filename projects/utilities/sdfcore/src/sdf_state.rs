@@ -529,6 +529,18 @@ fn check_shape3d(check: &EntryCheck, shape: &SdfShape3d) -> Result<()> {
             cutter_ids,
         } => check.shape3d_ids(iter::once(*base_id).chain(cutter_ids.iter().copied())),
 
+        SdfShape3d::Sweep {
+            profile_id,
+            points,
+            scales,
+            up,
+        } => {
+            check.shape2d_ids([*profile_id])?;
+            check.vector3s(points.iter().copied())?;
+            check.numbers(scales.iter().flatten().copied())?;
+            check.vector3s(*up)
+        }
+
         SdfShape3d::Torus {
             center,
             ring_radius,

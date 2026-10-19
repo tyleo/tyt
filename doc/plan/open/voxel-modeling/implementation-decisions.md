@@ -396,3 +396,14 @@ land.
 3. Evaluation splits each span into 16 segments and measures the result as a
    `polygon` or a `polyline`. The split ignores the voxel grid, so a renderer
    or a mesh export draws the same curve
+4. `sweep` keeps the profile's v as near `up` as the curve allows, so a helical
+   rail or ramp stays level. A rotation-minimizing frame never fails but rolls a
+   rect profile about 155 degrees per turn of a 1 m stair rail. A curve that
+   runs along `up` errors until the model passes another `up`
+5. `sweep` takes one profile scale per point because a body that bulges
+   mid-length needs more than an end scale. The scale runs smoothly between
+   points. A curve that takes it below 0 errors
+6. `sweep` measures from the nearest point on the sampled curve. Its cost per
+   point grows with the curve's length as a `polyline`'s does
+7. `helix` climbs a total height over a number of turns because a stair knows
+   its floor-to-floor height. It returns points and leaves sdfj unchanged

@@ -411,14 +411,14 @@ impl Shape2dField {
                 points,
                 width: None,
             } => Shape2dField::Polygon {
-                points: spline_points(points, true),
+                points: spline_points(points, true, TyVector2F64::distance),
             },
 
             SdfShape2d::Spline {
                 points,
                 width: Some(width),
             } => Shape2dField::Polyline {
-                points: spline_points(points, false),
+                points: spline_points(points, false, TyVector2F64::distance),
                 half_width: width / 2.0,
             },
 

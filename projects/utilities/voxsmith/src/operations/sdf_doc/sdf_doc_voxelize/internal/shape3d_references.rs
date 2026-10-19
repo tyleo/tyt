@@ -34,9 +34,9 @@ pub fn shape3d_references(
         | SdfShape3d::Sphere { .. }
         | SdfShape3d::Torus { .. } => (Vec::new(), None),
 
-        SdfShape3d::Extrude { profile_id, .. } | SdfShape3d::Revolve { profile_id, .. } => {
-            (Vec::new(), Some(*profile_id))
-        }
+        SdfShape3d::Extrude { profile_id, .. }
+        | SdfShape3d::Revolve { profile_id, .. }
+        | SdfShape3d::Sweep { profile_id, .. } => (Vec::new(), Some(*profile_id)),
 
         SdfShape3d::Intersect { shape_ids }
         | SdfShape3d::SmoothIntersect { shape_ids, .. }

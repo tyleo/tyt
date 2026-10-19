@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { sphere } from "./primitives.ts";
 import { circle } from "./primitives2d.ts";
-import { extrude, lathe, revolve } from "./profiles.ts";
+import { extrude, lathe, revolve, sweep } from "./profiles.ts";
 import { add } from "./step.ts";
 import { document, white } from "./test/tables.ts";
 
@@ -37,6 +37,26 @@ Deno.test("lathe writes its points, axis, and center", () => {
       points: [[0.5, 0], [0.25, 1]],
       axis: "x",
       center: [0, 0, 1],
+    },
+  ]);
+});
+
+Deno.test("sweep writes its profile, points, scales, and up", () => {
+  const shape = sweep(circle([0, 0], 0.1), [[0, 0, 0], [1, 1, 0]], {
+    scales: [1, 0.5],
+    up: [0, 0, 1],
+  });
+  const { shapes2d, shapes3d } = document([add("shape", shape, white)]);
+  assert.deepStrictEqual(shapes2d, [
+    { kind: "circle", center: [0, 0], radius: 0.1 },
+  ]);
+  assert.deepStrictEqual(shapes3d, [
+    {
+      kind: "sweep",
+      profile: 0,
+      points: [[0, 0, 0], [1, 1, 0]],
+      scales: [1, 0.5],
+      up: [0, 0, 1],
     },
   ]);
 });

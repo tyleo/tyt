@@ -254,6 +254,18 @@ the axis otherwise.
 3. `lathe` revolves the `polygon` of its points followed by their mirror images
    across the axis in reverse order. The outline closes across the axis at its
    first and last heights, and no edge runs along the axis.
+4. `sweep` samples the curve of an open `spline` through its points with each
+   point's scale as a fourth coordinate. The knots follow the 3D distances
+   alone. A sample's tangent `t` points from the sample before it to the sample
+   after it, or along the end segment at either end.
+   - The nearest point `c` on the sampled segments sets the frame. Along that
+     segment, `t` and the scale `s` blend linearly. The frame takes
+     `u = normalize(cross(t, up))` and `v = cross(u, t)`.
+   - The profile reads `s * d2(q / s)` at `q = [dot(p - c, u), dot(p - c, v)]`,
+     or `length(q)` where `s` reads 0.
+   - Where `c` lands on an end of the curve, the profile combines with
+     `abs(dot(p - c, t))` by the `extrude` formula. Elsewhere the profile's
+     distance stands alone and overstates the depth inside near the ends.
 
 ### Booleans
 
@@ -421,7 +433,9 @@ small would lose cells. Every rule below errs large.
    bends into.
 7. `extrude` takes the profile's box between `from` and `to`. `revolve` takes
    the box around the circle the profile's largest u sweeps, across the
-   profile's v span.
+   profile's v span. `sweep` takes the box around a cube at each sample whose
+   half side equals the sample's scale times the distance from the origin to
+   the profile box's farthest corner.
 8. `halfSpace` has no box and no clamp. An `intersect` with a bounded operand
    gives the result a box again.
 
@@ -479,7 +493,8 @@ the frame of the primitive that decides the distance.
    smallest distance among all their operands, and the earliest operand wins a
    tie. `intersect`, `subtract`, and their smooth variants pass on their first
    operand's frame position.
-4. `extrude` and `revolve` pass on their 3D point from before the plane mapping.
+4. `extrude`, `revolve`, and `sweep` pass on their 3D point from before the
+   plane mapping.
 
 A `coat` or a `set` pattern reads the cell's center as a primitive returns it:
 `[i + 0.5, j + 0.5, k + 0.5] * g - o`.
@@ -659,7 +674,7 @@ it belongs to by its path of part names.
    and checks every entry's arguments.
    - Radii, widths, thicknesses, sizes, scales, periods, `spread`, and a
      `coat`'s `depth` are above zero, except that a `cone` end may take 0. A
-     `round` and a `chamfer` are zero or more.
+     `round`, a `chamfer`, and a `sweep`'s `scales` are zero or more.
    - Counts and `octaves` are whole numbers above zero. An `ngon`'s `sides` is
      at least 3 and a `star`'s `points` at least 2. A seed is a whole number
      from `-2^31` to `2^31 - 1`.
@@ -667,7 +682,8 @@ it belongs to by its path of part names.
      material. A `union`, an `intersect`, and their smooth variants hold at
      least one shape, and an `onto` holds at least one step. A `polygon` and a
      `spline` without `width` list at least 3 points, and a `polyline`, a
-     `lathe`, and a `spline` with `width` list at least 2.
+     `lathe`, a `spline` with `width`, and a `sweep` list at least 2. A `sweep`
+     lists one scale per point.
    - `amplitude`, `warp`, and the lengths of an `elongate` are zero or more,
      `density` falls in `[0, 1]`, and a range's end passes its start.
    - Colors parse as `#RRGGBB`, or `#RRGGBBAA` for `baseColor`. Named properties
@@ -680,10 +696,10 @@ it belongs to by its path of part names.
      within half its shortest extent, and a `cylinder`'s within its radius and
      half its length.
    - The ends of a `cylinder`, a `cone`, a `capsule`, a `roundCone`, and a
-     `vesica` differ, as do the neighboring points of a `polyline` and a
-     `spline`. A `spline` without `width` takes its last point as the first
-     point's neighbor. A `roundCone`'s radii differ by less than the distance
-     between its ends.
+     `vesica` differ, as do the neighboring points of a `polyline`, a `spline`,
+     and a `sweep`. A `spline` without `width` takes its last point as the
+     first point's neighbor. A `roundCone`'s radii differ by less than the
+     distance between its ends.
    - A `star`'s inner radius stays below its outer radius, and an `arch` stands
      at least half its width tall. An `arc`, a `sector`, and a cut `torus` span
      at most 360 degrees. A `torus` takes both `from` and `to` or neither.
@@ -693,6 +709,9 @@ it belongs to by its path of part names.
      its shape has a box.
    - A `polygon` outline and the curve of a `spline` without `width` never
      cross themselves.
+   - A `sweep`'s `up` has nonzero length. The curve never runs along `up`:
+     `cross(t, up)` turns less than a quarter turn between neighboring samples.
+     Along the curve, the scale stays at 0 or more.
 5. Over the document, every step has a non-empty name no other step in its list
    shares, and every part has a non-empty name no other part in its list shares.
    The root parts count as one list. Every step in an `onto` is an `add` earlier

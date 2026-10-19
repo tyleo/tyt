@@ -18,6 +18,7 @@ export {
   type Value,
 } from "./material.ts";
 export { type Part, part } from "./part.ts";
+export { helix } from "./paths.ts";
 export {
   bands,
   cells,
@@ -56,7 +57,7 @@ export {
   star,
   vesica,
 } from "./primitives2d.ts";
-export { extrude, lathe, revolve } from "./profiles.ts";
+export { extrude, lathe, revolve, sweep } from "./profiles.ts";
 export { shades } from "./shades.ts";
 export { type Shape2d } from "./shape2d.ts";
 export { type Shape3d } from "./shape3d.ts";

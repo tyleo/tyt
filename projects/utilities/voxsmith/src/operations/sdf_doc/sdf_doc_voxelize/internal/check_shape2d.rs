@@ -163,7 +163,7 @@ pub fn check_shape2d(shape: &SdfShape2d) -> StdResult<(), String> {
             check.count("points", points.len(), 3)?;
             distinct_neighbors(&check, points, true)?;
             check.expect(
-                !crosses_itself(&spline_points(points, true)),
+                !crosses_itself(&spline_points(points, true, TyVector2F64::distance)),
                 "points",
                 "a curve that never crosses itself",
                 "a curve that crosses itself",

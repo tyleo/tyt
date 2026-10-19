@@ -1,4 +1,4 @@
-use crate::operations::sdf_doc::{ArgumentCheck, side_direction};
+use crate::operations::sdf_doc::{ArgumentCheck, SweepSample, side_direction};
 use branded_id::IdVec;
 use sdfcore::{BSdfShape3d, SdfShape3d, SdfSide};
 use std::result::Result as StdResult;
@@ -240,6 +240,53 @@ pub fn check_shape3d(
             ArgumentCheck::new("sphere").above_zero("radius", *radius)
         }
 
+        SdfShape3d::Sweep {
+            points, scales, up, ..
+        } => {
+            let check = ArgumentCheck::new("sweep");
+            check.count("points", points.len(), 2)?;
+
+            if let Some(pair) = points.windows(2).find(|pair| pair[0] == pair[1]) {
+                return Err(check.fail(
+                    "points",
+                    "distinct from their neighbors",
+                    format!("{} twice in a row", vector(pair[0])),
+                ));
+            }
+
+            if let Some(scales) = scales {
+                check.expect(
+                    scales.len() == points.len(),
+                    "scales",
+                    &format!("a list of {}, one per point", points.len()),
+                    format!("a list of {}", scales.len()),
+                )?;
+
+                for scale in scales {
+                    check.at_least_zero("scales", *scale)?;
+                }
+            }
+
+            let up = up.unwrap_or(TyVector3F64::Y);
+            check.expect(up.length() > 0.0, "up", "a direction", "a zero vector")?;
+
+            let samples = SweepSample::along(points, scales.as_deref());
+            check.expect(
+                samples.iter().all(|sample| sample.scale >= 0.0),
+                "scales",
+                "scales the curve keeps at 0 or more",
+                "scales the curve takes below 0",
+            )?;
+            check.expect(
+                samples
+                    .windows(2)
+                    .all(|pair| pair[0].tangent.cross(up).dot(pair[1].tangent.cross(up)) > 0.0),
+                "up",
+                "a direction the curve never runs along",
+                vector(up),
+            )
+        }
+
         SdfShape3d::Torus {
             ring_radius,
             tube_radius,
@@ -284,12 +331,12 @@ pub fn check_shape3d(
 
 /// Errors unless the ends `a` and `b` differ.
 fn ends(check: ArgumentCheck, a: TyVector3F64, b: TyVector3F64) -> StdResult<(), String> {
-    check.expect(
-        a != b,
-        "b",
-        "another point than a",
-        format!("[{}, {}, {}]", b.x, b.y, b.z),
-    )
+    check.expect(a != b, "b", "another point than a", vector(b))
+}
+
+/// `value` as the modeling API writes it.
+fn vector(value: TyVector3F64) -> String {
+    format!("[{}, {}, {}]", value.x, value.y, value.z)
 }
 
 /// `side` as the modeling API writes it.
@@ -335,6 +382,65 @@ mod tests {
             check(torus(Some(30.0), Some(400.0))),
             Err("torus to must be at most 360 past from 30, not 400".to_string())
         );
+    }
+
+    #[test]
+    fn a_sweep_scales_each_point_and_never_runs_along_up() {
+        let sweep = |points: &[[f64; 3]], scales: Option<Vec<f64>>, up| SdfShape3d::Sweep {
+            profile_id: U32Id::from_u32(0),
+            points: points.iter().copied().map(TyVector3F64::from).collect(),
+            scales,
+            up,
+        };
+        let line = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+        ];
+
+        assert!(check(sweep(&line, Some(vec![1.0, 0.5, 0.2, 0.0]), None)).is_ok());
+        assert_eq!(
+            check(sweep(&line[..1], None, None)),
+            Err("sweep points must be a list of at least 2, not a list of 1".to_string())
+        );
+        assert_eq!(
+            check(sweep(&[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], None, None)),
+            Err(
+                "sweep points must be distinct from their neighbors, not [0, 0, 0] twice in a row"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            check(sweep(&line, Some(vec![1.0, 0.5]), None)),
+            Err("sweep scales must be a list of 4, one per point, not a list of 2".to_string())
+        );
+        assert!(check(sweep(&line, Some(vec![1.0, -0.5, 0.2, 0.0]), None)).is_err());
+        assert_eq!(
+            check(sweep(&line, Some(vec![1.0, 1.0, 0.0, 0.0]), None)),
+            Err(
+                "sweep scales must be scales the curve keeps at 0 or more, not scales the curve \
+                 takes below 0"
+                    .to_string()
+            )
+        );
+
+        // A curve that rises straight up, or turns through straight up, runs
+        // along the default up.
+        let rise = [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let arch = [[-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]];
+        let turn = [[0.0, 0.0, 0.0], [0.5, 1.0, 0.0], [0.0, 2.0, 0.0]];
+        assert_eq!(
+            check(sweep(&rise, None, None)),
+            Err(
+                "sweep up must be a direction the curve never runs along, not [0, 1, 0]"
+                    .to_string()
+            )
+        );
+        assert!(check(sweep(&rise, None, Some(TyVector3F64::Z))).is_ok());
+        assert!(check(sweep(&arch, None, None)).is_ok());
+        assert!(check(sweep(&turn, None, None)).is_err());
+        assert!(check(sweep(&arch, None, Some(TyVector3F64::ZERO))).is_err());
     }
 
     #[test]

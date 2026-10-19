@@ -461,6 +461,36 @@ pub enum SdfjShape3d {
     /// A base shape with the cutters removed.
     Subtract { base: usize, cutters: Vec<usize> },
 
+    /// Pushes a 2D shape along a smooth curve through points.
+    Sweep {
+        profile: usize,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        points: Vec<[f64; 3]>,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                serialize_with = "crate::finite",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        scales: Option<Vec<f64>>,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                serialize_with = "crate::finite",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        up: Option<[f64; 3]>,
+    },
+
     /// A torus, or a cut of one between two angles.
     Torus {
         #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]

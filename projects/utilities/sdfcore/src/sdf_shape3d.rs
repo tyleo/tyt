@@ -262,6 +262,17 @@ pub enum SdfShape3d {
         cutter_ids: Vec<U32Id<BSdfShape3d>>,
     },
 
+    /// Pushes a 2D shape along a smooth curve through points.
+    Sweep {
+        profile_id: U32Id<BSdfShape2d>,
+
+        points: Vec<TyVector3F64>,
+
+        scales: Option<Vec<f64>>,
+
+        up: Option<TyVector3F64>,
+    },
+
     /// A torus, or a cut of one between two angles.
     Torus {
         center: TyVector3F64,

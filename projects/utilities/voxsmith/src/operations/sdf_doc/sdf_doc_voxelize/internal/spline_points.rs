@@ -1,13 +1,16 @@
-use ty_math::TyVector2F64;
+use std::ops::{Add, Mul, Sub};
 
 /// The segments each span of a spline splits into.
 const SEGMENTS: u32 = 16;
 
 /// The points along the centripetal Catmull-Rom curve through `points`, one
-/// per segment end. A closed curve's last segment runs back to the first point
-/// without repeating it. An open curve extends each end span straight back
-/// across its end point.
-pub fn spline_points(points: &[TyVector2F64], closed: bool) -> Vec<TyVector2F64> {
+/// per segment end, with knots spaced by `distance`. A closed curve's last
+/// segment runs back to the first point without repeating it. An open curve
+/// extends each end span straight back across its end point.
+pub fn spline_points<T>(points: &[T], closed: bool, distance: impl Fn(T, T) -> f64) -> Vec<T>
+where
+    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>,
+{
     let count = points.len();
 
     let at = |index: usize| {
@@ -28,10 +31,13 @@ pub fn spline_points(points: &[TyVector2F64], closed: bool) -> Vec<TyVector2F64>
     for span in 0..spans {
         let controls = [at(span), at(span + 1), at(span + 2), at(span + 3)];
         curve.push(controls[1]);
-        curve.extend(
-            (1..SEGMENTS)
-                .map(|segment| catmull_rom(controls, f64::from(segment) / f64::from(SEGMENTS))),
-        );
+        curve.extend((1..SEGMENTS).map(|segment| {
+            catmull_rom(
+                controls,
+                f64::from(segment) / f64::from(SEGMENTS),
+                &distance,
+            )
+        }));
     }
 
     if !closed {
@@ -44,14 +50,17 @@ pub fn spline_points(points: &[TyVector2F64], closed: bool) -> Vec<TyVector2F64>
 /// The point `fraction` of the way from `controls[1]` to `controls[2]` by the
 /// Barry-Goldman pyramid, with knots spaced by the square root of each
 /// control's distance from the last.
-fn catmull_rom(controls: [TyVector2F64; 4], fraction: f64) -> TyVector2F64 {
+fn catmull_rom<T>(controls: [T; 4], fraction: f64, distance: impl Fn(T, T) -> f64) -> T
+where
+    T: Copy + Add<Output = T> + Mul<f64, Output = T>,
+{
     let [p0, p1, p2, p3] = controls;
-    let t1 = p0.distance(p1).sqrt();
-    let t2 = t1 + p1.distance(p2).sqrt();
-    let t3 = t2 + p2.distance(p3).sqrt();
+    let t1 = distance(p0, p1).sqrt();
+    let t2 = t1 + distance(p1, p2).sqrt();
+    let t3 = t2 + distance(p2, p3).sqrt();
     let t = t1 + (t2 - t1) * fraction;
 
-    let mix = |a: TyVector2F64, b: TyVector2F64, from: f64, to: f64| {
+    let mix = |a: T, b: T, from: f64, to: f64| {
         a * ((to - t) / (to - from)) + b * ((t - from) / (to - from))
     };
 
@@ -81,13 +90,13 @@ mod tests {
     fn a_spline_passes_through_each_point() {
         let points = vectors(&[(0.0, 0.0), (1.0, 0.2), (1.4, 1.0), (0.3, 1.5)]);
 
-        let open = spline_points(&points, false);
+        let open = spline_points(&points, false, TyVector2F64::distance);
         assert_eq!(open.len(), 3 * 16 + 1);
         for (index, point) in points.iter().enumerate() {
             assert_eq!(open[index * 16], *point);
         }
 
-        let closed = spline_points(&points, true);
+        let closed = spline_points(&points, true, TyVector2F64::distance);
         assert_eq!(closed.len(), 4 * 16);
         for (index, point) in points.iter().enumerate() {
             assert_eq!(closed[index * 16], *point);
@@ -96,7 +105,11 @@ mod tests {
 
     #[test]
     fn an_open_spline_through_two_points_runs_straight() {
-        let line = spline_points(&vectors(&[(0.0, 0.0), (2.0, 1.0)]), false);
+        let line = spline_points(
+            &vectors(&[(0.0, 0.0), (2.0, 1.0)]),
+            false,
+            TyVector2F64::distance,
+        );
 
         for (index, point) in line.iter().enumerate() {
             let expected = TyVector2F64::new(2.0, 1.0) * (index as f64 / 16.0);
@@ -113,7 +126,7 @@ mod tests {
             })
             .collect();
 
-        for point in spline_points(&points, true) {
+        for point in spline_points(&points, true, TyVector2F64::distance) {
             assert!((point.length() - 1.0).abs() < 1e-2, "{point}");
         }
     }

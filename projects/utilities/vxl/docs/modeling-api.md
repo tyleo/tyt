@@ -370,6 +370,11 @@ function lathe(
   points: Vec2[],
   options?: { axis?: Axis; center?: Vec3 },
 ): Shape3d;
+function sweep(
+  profile: Shape2d,
+  points: Vec3[],
+  options?: { scales?: number[]; up?: Vec3 },
+): Shape3d;
 ```
 
 1. `extrude` pushes the profile from `from` to `to` along the z axis unless
@@ -383,6 +388,34 @@ function lathe(
 3. `lathe` revolves the outline its `[radius, height]` points trace and closes
    the outline back along the axis. A `lathe` turns legs, balusters, vases, and
    finials.
+4. `sweep` runs the profile along a smooth curve through every point for
+   cables, tails, horns, and rails. The profile's origin rides the curve.
+   Facing along the curve, v points as near `up` as the curve allows and u
+   points right. `up` reads +y unless given. The curve may never run along
+   `up`, so a rising trunk passes another `up`. `scales` sets the profile's
+   scale at each point for tapers. The ends cut flat.
+
+### Paths
+
+```ts
+function helix(
+  base: Vec3,
+  radius: number,
+  height: number,
+  turns: number,
+  options?: { axis?: Axis; start?: number; perTurn?: number },
+): Vec3[];
+```
+
+1. `helix` returns the points of a coil `radius` around the y axis through
+   `base` unless `axis` picks another. The coil climbs `height` over `turns`
+   turns with `perTurn` points per turn, which reads 12 unless given. `turns`
+   has to give a whole number of points.
+2. The first point sits `radius` along +z for the y axis, +x for z, and +y for
+   x, turned `start` degrees the way `rotate` turns. Positive `turns` wind the
+   way `rotate` turns, and negative ones wind back.
+3. A `sweep` through a helix makes a spring or a stair rail. A stair places one
+   tread at each point.
 
 ### Booleans
 

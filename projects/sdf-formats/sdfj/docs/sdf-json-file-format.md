@@ -104,6 +104,7 @@ key the entry holds only when the model passes it.
 | `extrude`                        | `profile`, `axis?`, `from`, `to`                              |
 | `revolve`                        | `profile`, `axis?`, `center?`                                 |
 | `lathe`                          | `points`, `axis?`, `center?`                                  |
+| `sweep`                          | `profile`, `points`, `scales?`, `up?`                         |
 | `union`, `intersect`             | `shapes`                                                      |
 | `subtract`                       | `base`, `cutters`                                             |
 | `smoothUnion`, `smoothIntersect` | `radius`, `shapes`                                            |

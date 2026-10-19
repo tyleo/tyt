@@ -43,6 +43,7 @@ declare global {
   var gradient: typeof api.gradient;
   var grain: typeof api.grain;
   var halfSpace: typeof api.halfSpace;
+  var helix: typeof api.helix;
   var int: typeof api.int;
   var intersect: typeof api.intersect;
   var json: typeof api.json;
@@ -72,6 +73,7 @@ declare global {
   var spline: typeof api.spline;
   var star: typeof api.star;
   var subtract: typeof api.subtract;
+  var sweep: typeof api.sweep;
   var torus: typeof api.torus;
   var union: typeof api.union;
   var vesica: typeof api.vesica;

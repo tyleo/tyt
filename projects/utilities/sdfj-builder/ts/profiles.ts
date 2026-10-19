@@ -45,3 +45,24 @@ export function lathe(
     center: check.optional("lathe center", option.center, check.vec3),
   });
 }
+
+/** The solid `profile` traces along the smooth curve through `points`. */
+export function sweep(
+  profile: Shape2d,
+  points: Vec3[],
+  options?: { scales?: number[]; up?: Vec3 },
+): Shape3d {
+  const option = check.knownOptions("sweep", options, ["scales", "up"]);
+  return new Shape3d({
+    kind: "sweep",
+    profile: check.instance("sweep profile", profile, Shape2d),
+    points: check.list("sweep points", points, "an array of Vec3s", check.vec3),
+    scales: check.optional(
+      "sweep scales",
+      option.scales,
+      (path, value) =>
+        check.list(path, value, "an array of numbers", check.finite),
+    ),
+    up: check.optional("sweep up", option.up, check.vec3),
+  });
+}
