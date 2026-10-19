@@ -1,7 +1,7 @@
-use crate::{RenderHit, ShadowTarget, placement_bounds, shadow_origin};
+use crate::{RenderHit, placement_bounds, shadow_origin};
 use voxrender::{
-    Error, RenderGridRay, RenderScene, Result, grid_point, grid_vector, quantize_direction,
-    quantize_point,
+    Error, RenderGridRay, RenderScene, Result, ShadowTarget, grid_point, grid_vector,
+    quantize_direction, quantize_point,
 };
 
 /// One ray per placement of `scene`, in placement order, toward `target`
@@ -53,9 +53,11 @@ pub fn shadow_rays(
 
 #[cfg(test)]
 mod tests {
-    use crate::{ShadowTarget, cast_ray, shadow_rays};
+    use crate::{cast_ray, shadow_rays};
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
-    use voxrender::{GRID_FRACTION_BITS, RenderGridRay, RenderRay, fixtures::cells_scene};
+    use voxrender::{
+        GRID_FRACTION_BITS, RenderGridRay, RenderRay, ShadowTarget, fixtures::cells_scene,
+    };
 
     const ONE: i32 = 1 << GRID_FRACTION_BITS;
 

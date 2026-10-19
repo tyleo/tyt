@@ -168,3 +168,23 @@ they land.
   `XR_EXT_performance_settings` offers only hints that the runtime's clock
   throttling treats as a baseline. The app logs the property's value with
   its frame times.
+
+## S6. B1 on Quest
+
+- `voxrender-bench` is a library. A benchmark takes a `Gpu` holding the
+  caller's adapter info, device, and queue, and returns its report.
+  `voxrender-bench-desktop` holds the CLI and opens a headless device.
+  `voxrender-bench-quest` passes the OpenXR session's device. One desktop
+  binary serves macOS, Windows, and Linux because wgpu picks each one's
+  backend.
+- `voxrender-wgpu` starts at S6 with B1's walk in `first_hit.wgsl`.
+  `trace_hits` uploads a scene, traces a view, and reads back each pixel's
+  `PixelHit`. B1's desktop half picked the integer walk. The float
+  walk comes along because decision 1 can still make it Quest's walk.
+  B1 judges both from `voxrender-bench`, so the benchmark crate holds only
+  the reference side and the report.
+- `ShadowTarget` moved from `voxrender-cpu` to `voxrender` because the GPU
+  tier must not depend on the reference. `RenderLight::shadow_target` and
+  `RenderViewRays::to_scene_grid_rays` hold the setup the reference, the
+  GPU tier, and the bench each repeated. The reference's `render` now uses
+  `to_scene_grid_rays`. No golden moved.

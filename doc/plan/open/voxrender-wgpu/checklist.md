@@ -87,6 +87,17 @@ code-level choices in
 - [ ] **S6. B1 on Quest.** S2's and S4's kernels run in the headset. The
       run counts id mismatches and measures the int32 cost and the integer
       step against a float step. Decision 1 applies the 1.25x line.
+      1. `voxrender-bench` becomes a library over a GPU device its caller
+         opens. `voxrender-bench-desktop` takes the CLI and the headless
+         device. `voxrender-wgpu` takes the walk. `voxrender` takes the ray
+         and shadow-target setup that both renderers share
+      2. The Quest app renders the reference on the headset at startup and
+         logs B1's id and shadow counts
+      3. Once the session runs, each frame times one walk's dispatch at the
+         eye resolution, alternating the integer and float walks. A
+         dependent-chain kernel times i32 against f32 add and compare
+      4. The report lands in benchmarks.md. Decision 1 applies the 1.25x
+         line
 - [ ] **S7. Bench scenes and the per-object structure.**
       1. `voxrender-bench` builds the research's five scenes from fixtures
          and generators

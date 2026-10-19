@@ -1,34 +1,19 @@
-//! Benchmarks and prototypes for voxrender's GPU tiers. Each subcommand runs
+//! voxrender's GPU benchmarks as a headless desktop app. Each subcommand runs
 //! one benchmark of the voxrender-wgpu plan and prints its report.
 
 use clap::{Parser, Subcommand, value_parser};
 use std::process;
+use voxrender_bench::run_b1;
 
 // Internal API
 
-mod corner_across;
 mod error;
-mod gpu;
-mod gpu_hits;
-mod gpu_walk;
-mod pixel_hit;
-mod reference_hits;
+mod headless_gpu;
 mod result;
-mod run_b1;
-mod shadow_targets;
-mod view_grid_rays;
 
-pub(crate) use corner_across::*;
 pub(crate) use error::*;
-pub(crate) use gpu::*;
-pub(crate) use gpu_hits::*;
-pub(crate) use gpu_walk::*;
-pub(crate) use pixel_hit::*;
-pub(crate) use reference_hits::*;
+pub(crate) use headless_gpu::*;
 pub(crate) use result::*;
-pub(crate) use run_b1::*;
-pub(crate) use shadow_targets::*;
-pub(crate) use view_grid_rays::*;
 
 /// Runs voxrender's GPU benchmarks.
 #[derive(Clone, Debug, Parser)]
@@ -59,7 +44,9 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Command::B1 { size } => run_b1(size),
+        Command::B1 { size } => {
+            headless_gpu().and_then(|gpu| run_b1(&gpu, size).map_err(Error::Bench))
+        }
     };
 
     match result {

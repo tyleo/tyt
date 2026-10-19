@@ -1,6 +1,6 @@
 use crate::{
-    RenderGrid, RenderHit, RenderRayWalk, ShadowTarget, apply_bloom, material_pass,
-    normal_reflectance, placement_bounds, shadow_origin, shadow_rays, transmitted_reflectance,
+    RenderGrid, RenderHit, RenderRayWalk, apply_bloom, material_pass, normal_reflectance,
+    shadow_origin, shadow_rays, transmitted_reflectance,
 };
 use branded_id::U32Id;
 use std::{
@@ -11,7 +11,7 @@ use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyTransformF64, TyVector3F64};
 use voxrender::{
     BRenderView, Error, GRID_FRACTION_BITS, RenderBloom, RenderImage, RenderLight, RenderMaterial,
     RenderOcclusion, RenderPixel, RenderRay, RenderScene, RenderShadow, RenderViewRays, Result,
-    SHADOW_INSET_BITS,
+    SHADOW_INSET_BITS, ShadowTarget,
 };
 use voxsurface::{SurfaceSpan, corner_occlusion, inner_corner_occlusion};
 
@@ -59,13 +59,7 @@ pub fn render(
 
     let rays = RenderViewRays::new(view, width, height);
 
-    let grid_rays = scene
-        .iter_placements()
-        .map(|(placement_id, placement)| {
-            rays.to_grid_rays(&placement.transform, placement_bounds(scene, placement))
-                .ok_or(Error::GridRange { placement_id })
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let grid_rays = rays.to_scene_grid_rays(scene)?;
 
     let mut image = RenderImage::new(width, height);
     let mut emission = vec![TyLinSrgbF32::new(0.0, 0.0, 0.0); width as usize * height as usize];
@@ -576,7 +570,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        RenderHit, RenderRayWalk, ShadowTarget, cast_ray, material_pass, render,
+        RenderHit, RenderRayWalk, cast_ray, material_pass, render,
         render::{
             BLACK, RayShade, WHITE, bilinear, check_bloom, cone_attenuation, direct_radiance,
             hemisphere_radiance, point_attenuation, shade_hit, shade_ray, shadow_factor,
@@ -592,7 +586,7 @@ mod tests {
     use voxrender::{
         Error, RenderBloom, RenderLight, RenderMaterial, RenderObject, RenderOcclusion,
         RenderPixel, RenderPlacement, RenderProjection, RenderRay, RenderScene, RenderShadow,
-        RenderView, fit_distance,
+        RenderView, ShadowTarget, fit_distance,
         fixtures::{
             cube_scene, glass, glass_scene, glow_scene, l_shape_scene, matte, room_scene,
             solid_object, spot_room_scene, two_placements_scene,

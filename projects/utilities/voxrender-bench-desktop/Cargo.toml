@@ -1,0 +1,14 @@
+[package]
+name = "voxrender-bench-desktop"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "voxrender's GPU benchmarks as a headless desktop app."
+publish = false
+
+[dependencies]
+clap = { version = "4.5.58", features = ["derive"] }
+pollster = "0.4"
+voxrender-bench = "0.1.0"
+wgpu = "30.0.1"

@@ -1,4 +1,4 @@
-use crate::{Gpu, GpuWalk, PixelHit, Result, gpu_hits, reference_hits};
+use crate::{Error, Gpu, Result, reference_hits};
 use voxrender::{
     RenderShadow,
     fixtures::{
@@ -7,6 +7,7 @@ use voxrender::{
         two_placements_scene,
     },
 };
+use voxrender_wgpu::{GpuWalk, PixelHit, trace_hits};
 
 /// B1's line: the largest share of a scene's samples whose ids may differ
 /// from the reference's.
@@ -25,14 +26,11 @@ struct Tally {
     shadows: usize,
 }
 
-/// Runs B1's desktop half over the golden and precision-sim scenes, each
-/// view drawn over a `size` square image, and returns the report in
-/// Markdown. The integer walk's primary ids and corner shadow bits are
-/// judged against B1's line. The float walk's flips are counted for the
-/// record.
-pub fn run_b1(size: u32) -> Result<String> {
-    let gpu = Gpu::new()?;
-
+/// Runs B1 on `gpu` over the golden and precision-sim scenes, each view
+/// drawn over a `size` square image, and returns the report in Markdown.
+/// The integer walk's primary ids and corner shadow bits are judged against
+/// B1's line. The float walk's flips are counted for the record.
+pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = [
         ("cube", cube_scene(RenderShadow::PerPixel)),
         ("glass", glass_scene(RenderShadow::PerPixel)),
@@ -111,7 +109,8 @@ pub fn run_b1(size: u32) -> Result<String> {
                 (GpuWalk::Integer, &mut integer),
                 (GpuWalk::Float, &mut float),
             ] {
-                let got = gpu_hits(&gpu, scene, view_id, size, walk)?;
+                let got = trace_hits(&gpu.device, &gpu.queue, scene, view_id, size, walk)
+                    .map_err(Error::Trace)?;
 
                 for (pixel, (want, got)) in want.iter().zip(&got).enumerate() {
                     let shown = tally.ids + tally.shadows < SHOWN;

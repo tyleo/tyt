@@ -1,4 +1,4 @@
-use crate::RenderShadow;
+use crate::{RenderShadow, ShadowTarget};
 use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyVector3F64};
 
 /// A light in world space. Each kind carries the part of a pose it reads
@@ -85,4 +85,39 @@ pub enum RenderLight {
         /// The strength scaling both colors.
         strength: f64,
     },
+}
+
+impl RenderLight {
+    /// Where the light's shadow rays head. The hemisphere casts none.
+    pub fn shadow_target(&self) -> Option<ShadowTarget> {
+        match *self {
+            RenderLight::Directional { rotation, .. } => {
+                Some(ShadowTarget::Direction(rotation * TyVector3F64::Z))
+            }
+
+            RenderLight::Point { position, .. } | RenderLight::Spot { position, .. } => {
+                Some(ShadowTarget::Position(position))
+            }
+
+            RenderLight::Hemisphere { .. } => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{RenderShadow, ShadowTarget, fixtures::spot_room_scene};
+
+    #[test]
+    fn the_hemisphere_casts_no_shadow() {
+        let scene = spot_room_scene(RenderShadow::PerPixel);
+
+        let targets: Vec<_> = scene
+            .iter_lights()
+            .filter_map(|(_, light)| light.shadow_target())
+            .collect();
+
+        assert_eq!(targets.len(), scene.iter_lights().count() - 1);
+        assert!(matches!(targets[0], ShadowTarget::Position(_)));
+    }
 }

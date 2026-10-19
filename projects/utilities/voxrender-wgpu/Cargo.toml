@@ -1,0 +1,18 @@
+[package]
+name = "voxrender-wgpu"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "The realtime GPU renderer for voxrender's render contract, through wgpu."
+
+[package.metadata.workspaces]
+independent = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+branded-id = "0.2.0"
+voxrender = "0.4.0"
+wgpu = "30.0.1"

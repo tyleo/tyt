@@ -43,6 +43,7 @@ mod render_shadow;
 mod render_view;
 mod render_view_rays;
 mod result;
+mod shadow_target;
 mod tonemap;
 
 pub use b_render_light::*;
@@ -77,6 +78,7 @@ pub use render_shadow::*;
 pub use render_view::*;
 pub use render_view_rays::*;
 pub use result::*;
+pub use shadow_target::*;
 pub use tonemap::*;
 
 // Optional API

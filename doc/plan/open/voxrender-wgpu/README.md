@@ -44,13 +44,17 @@ GPU tier is then judged against goldens the reference renders under that rule.
    needs the change. It also holds the quantization code the reference and
    every GPU tier share. A consumer draws through its `Render` trait
 2. `voxrender-cpu` holds the reference renderer
-3. `voxrender-bench` is new and unpublished. It holds the harness and the
-   competing front ends, and runs them headless on desktop. B3's losing arms
-   are deleted
-4. `voxrender-bench-quest` is new and unpublished. It runs the bench as an
-   OpenXR app on Quest
-5. `voxrender-wgpu` starts when B3 picks the front end. The winning arm moves
-   into it. The name was free on crates.io as of 2026-09-27
+3. `voxrender-wgpu` is the GPU renderer. It holds what the benchmarks have
+   picked, starting with B1's walk. B3's winning front end moves into it.
+   The name was free on crates.io as of 2026-09-27
+4. `voxrender-bench` is new and unpublished. It holds the benchmarks and the
+   candidates under trial. It judges the candidates and `voxrender-wgpu`
+   against `voxrender-cpu` on a GPU device its caller opens. B3's losing
+   arms are deleted
+5. `voxrender-bench-desktop` is new and unpublished. It runs the benchmarks
+   headless on desktop
+6. `voxrender-bench-quest` is new and unpublished. It runs the benchmarks as
+   an OpenXR app on Quest
 
 A tier turns off the contract features it cannot afford, and the reference
 renders that tier's goldens with the same features off. `voxsurface`'s cull

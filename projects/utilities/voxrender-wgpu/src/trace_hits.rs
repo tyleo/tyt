@@ -1,15 +1,14 @@
-use crate::{Error, Gpu, GpuWalk, PixelHit, Result, shadow_targets, view_grid_rays};
+use crate::{Error, GpuWalk, PixelHit, Result};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
 use voxrender::{
-    BRenderView, Error as RenderError, GRID_GUARD_BITS, RenderScene, grid_point, grid_vector,
-    quantize_direction, quantize_point,
+    BRenderView, Error as RenderError, GRID_GUARD_BITS, RenderScene, RenderViewRays, ShadowTarget,
+    grid_point, grid_vector, quantize_direction, quantize_point,
 };
-use voxrender_cpu::ShadowTarget;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device, MapMode,
-    PipelineCompilationOptions, PollType, ShaderModuleDescriptor, ShaderSource,
+    PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -19,17 +18,28 @@ const NO_HIT: u32 = u32::MAX;
 /// The bytes of one hit in the shader's output.
 const HIT_BYTES: u64 = 16;
 
-/// The GPU's first hit through each pixel of `view_id` over a `size` square
-/// image, row by row, from `first_hit.wgsl` under `walk`.
-pub fn gpu_hits(
-    gpu: &Gpu,
+/// The first hit through each pixel of `view_id` over a `size` square
+/// image, row by row.
+pub fn trace_hits(
+    device: &Device,
+    queue: &Queue,
     scene: &RenderScene,
     view_id: U32Id<BRenderView>,
     size: u32,
     walk: GpuWalk,
 ) -> Result<Vec<Option<PixelHit>>> {
-    let grid_rays = view_grid_rays(scene, view_id, size)?;
-    let targets = shadow_targets(scene);
+    let view = scene
+        .view(view_id)
+        .ok_or(Error::Render(RenderError::UnknownView { view_id }))?;
+
+    let grid_rays = RenderViewRays::new(view, size, size)
+        .to_scene_grid_rays(scene)
+        .map_err(Error::Render)?;
+
+    let targets: Vec<_> = scene
+        .iter_lights()
+        .filter_map(|(_, light)| light.shadow_target())
+        .collect();
 
     // Each object's cells in raster order: 0 when empty, else its material
     // id plus one.
@@ -138,8 +148,6 @@ pub fn gpu_hits(
         frame.extend(value.to_le_bytes());
     }
 
-    let device = &gpu.device;
-
     let init = |label, contents: &[u8], usage| {
         device.create_buffer_init(&BufferInitDescriptor {
             label: Some(label),
@@ -240,7 +248,7 @@ pub fn gpu_hits(
 
     encoder.copy_buffer_to_buffer(&hits, 0, &hit_readback, 0, hit_bytes);
     encoder.copy_buffer_to_buffer(&shadows, 0, &shadow_readback, 0, shadow_bytes);
-    gpu.queue.submit([encoder.finish()]);
+    queue.submit([encoder.finish()]);
 
     let hits = read_words(device, &hit_readback)?;
     let shadows = read_words(device, &shadow_readback)?;
@@ -344,7 +352,7 @@ fn push_f32s(bytes: &mut Vec<u8>, values: [f32; 3]) {
 
 #[cfg(test)]
 mod tests {
-    use crate::gpu_hits::split;
+    use crate::trace_hits::split;
 
     #[test]
     fn a_split_keeps_its_value_with_a_fraction_under_the_guard() {

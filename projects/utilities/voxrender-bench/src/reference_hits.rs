@@ -1,7 +1,8 @@
-use crate::{Error, PixelHit, Result, corner_across, shadow_targets, view_grid_rays};
+use crate::{Error, Result, corner_across};
 use branded_id::U32Id;
-use voxrender::{BRenderView, RenderScene};
+use voxrender::{BRenderView, Error as RenderError, RenderScene, RenderViewRays};
 use voxrender_cpu::{RenderRayWalk, shadow_rays};
+use voxrender_wgpu::PixelHit;
 
 /// The reference's first hit through each pixel of `view_id` over a `size`
 /// square image, row by row.
@@ -10,9 +11,20 @@ pub fn reference_hits(
     view_id: U32Id<BRenderView>,
     size: u32,
 ) -> Result<Vec<Option<PixelHit>>> {
-    let grid_rays = view_grid_rays(scene, view_id, size)?;
+    let view = scene
+        .view(view_id)
+        .ok_or(Error::Render(RenderError::UnknownView { view_id }))?;
+
+    let grid_rays = RenderViewRays::new(view, size, size)
+        .to_scene_grid_rays(scene)
+        .map_err(Error::Render)?;
+
     let placements: Vec<_> = scene.iter_placements().map(|(id, _)| id).collect();
-    let targets = shadow_targets(scene);
+
+    let targets: Vec<_> = scene
+        .iter_lights()
+        .filter_map(|(_, light)| light.shadow_target())
+        .collect();
 
     let mut hits = Vec::new();
 

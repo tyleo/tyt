@@ -3,7 +3,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 use voxrender::Error as RenderError;
-use wgpu::{BufferAsyncError, MapRangeError, PollError, RequestAdapterError, RequestDeviceError};
+use voxrender_wgpu::Error as WgpuError;
 
 /// Why a benchmark failed to run.
 #[derive(Debug)]
@@ -11,31 +11,15 @@ pub enum Error {
     /// The reference could not set up a scene's rays.
     Render(RenderError),
 
-    /// No GPU adapter was found.
-    Adapter(RequestAdapterError),
-
-    /// The adapter would not open a device.
-    Device(RequestDeviceError),
-
-    /// Waiting on the GPU failed.
-    Poll(PollError),
-
-    /// A readback buffer would not map.
-    Map(BufferAsyncError),
-
-    /// A mapped readback range was not available.
-    MapRange(MapRangeError),
+    /// The GPU tier's trace failed.
+    Trace(WgpuError),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Error::Render(error) => write!(f, "the reference failed: {error}"),
-            Error::Adapter(error) => write!(f, "no GPU adapter: {error}"),
-            Error::Device(error) => write!(f, "no GPU device: {error}"),
-            Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
-            Error::Map(error) => write!(f, "a readback buffer would not map: {error}"),
-            Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
+            Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
         }
     }
 }

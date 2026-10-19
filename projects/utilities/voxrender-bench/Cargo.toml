@@ -9,9 +9,7 @@ publish = false
 
 [dependencies]
 branded-id = "0.2.0"
-clap = { version = "4.5.58", features = ["derive"] }
-pollster = "0.4"
-ty-math = { version = "0.4.0", default-features = false }
 voxrender = { version = "0.4.0", features = ["fixtures"] }
 voxrender-cpu = "0.1.0"
+voxrender-wgpu = "0.1.0"
 wgpu = "30.0.1"

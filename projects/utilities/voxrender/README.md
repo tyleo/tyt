@@ -67,7 +67,10 @@ its -Z with the point light's falloff, fading across a cone between an
 inner and an outer half-angle in radians. A hemisphere light is a sky color
 above and a ground color below, mixed by a normal's world +Y. The three
 shadowing kinds carry a `RenderShadow`: none, one ray per pixel, one per
-face, or one per face corner.
+face, or one per face corner. `RenderLight::shadow_target` gives the
+`ShadowTarget` a light's shadow rays head for: the direction toward a
+directional light, or a point or spot light's position. The hemisphere casts
+none.
 
 ```rust
 let sun = RenderLight::Directional {
@@ -97,7 +100,8 @@ let view = RenderView {
 over an image. A `RenderGridRay` is a ray quantized into one placement's
 grid: a fixed-point origin, an integer direction, and an optional last cell.
 `to_grid_rays` lowers a view's rays into a placement's grid as integer steps,
-so every renderer derives the same ray for a pixel.
+so every renderer derives the same ray for a pixel. `to_scene_grid_rays`
+lowers a view's rays into every placement's grid, in placement order.
 `RenderGridRay::from_ray` quantizes one world ray. `RenderGridRay::toward`
 aims a ray at a point and ends it there.
 

@@ -555,12 +555,12 @@ fn position_of(cell: [i64; 3], flip: [bool; 3], bounds: [i64; 3]) -> TyVector3U3
 
 #[cfg(test)]
 mod tests {
-    use crate::{RenderRayWalk, ShadowTarget, is_opaque, test_utilities::bar_scene};
+    use crate::{RenderRayWalk, is_opaque, test_utilities::bar_scene};
     use std::array;
     use ty_math::{TyLinSrgbaF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxrender::{
         GRID_FRACTION_BITS, RenderGridRay, RenderLight, RenderRay, RenderScene, RenderViewRays,
-        SHADOW_INSET_BITS,
+        SHADOW_INSET_BITS, ShadowTarget,
         fixtures::{
             cells_scene, glass, matte, precision_lights, precision_view_scene, random_scene,
             stairs_scene,

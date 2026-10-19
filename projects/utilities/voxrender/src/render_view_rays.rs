@@ -1,6 +1,7 @@
 use crate::{
-    GRID_DIRECTION_BITS, GRID_FRACTION_BITS, GRID_GUARD_BITS, RenderGridViewRays, RenderProjection,
-    RenderRay, RenderView, grid_point, grid_vector, quantize_point,
+    Error, GRID_DIRECTION_BITS, GRID_FRACTION_BITS, GRID_GUARD_BITS, RenderGridViewRays,
+    RenderProjection, RenderRay, RenderScene, RenderView, Result, grid_point, grid_vector,
+    quantize_point,
 };
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 
@@ -174,6 +175,23 @@ impl RenderViewRays {
         };
 
         rays.in_range(bounds).then_some(rays)
+    }
+
+    /// The rays in each placement's grid of `scene`, in placement order.
+    /// Errors with `GridRange` when a placement's rays leave the range.
+    pub fn to_scene_grid_rays(&self, scene: &RenderScene) -> Result<Vec<RenderGridViewRays>> {
+        scene
+            .iter_placements()
+            .map(|(placement_id, placement)| {
+                let bounds = scene
+                    .object(placement.object_id)
+                    .expect("a placement's object is one of the scene's")
+                    .bounds();
+
+                self.to_grid_rays(&placement.transform, bounds)
+                    .ok_or(Error::GridRange { placement_id })
+            })
+            .collect()
     }
 }
 

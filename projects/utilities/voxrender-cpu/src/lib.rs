@@ -11,14 +11,12 @@ mod render;
 mod render_hit;
 mod render_ray_walk;
 mod shadow_rays;
-mod shadow_target;
 
 pub use cast_ray::*;
 pub use render::*;
 pub use render_hit::*;
 pub use render_ray_walk::*;
 pub use shadow_rays::*;
-pub use shadow_target::*;
 
 // Internal API
 

@@ -3070,11 +3070,19 @@ name = "voxrender-bench"
 version = "0.1.0"
 dependencies = [
  "branded-id",
- "clap",
- "pollster",
- "ty-math",
  "voxrender",
  "voxrender-cpu",
+ "voxrender-wgpu",
+ "wgpu",
+]
+
+[[package]]
+name = "voxrender-bench-desktop"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "pollster",
+ "voxrender-bench",
  "wgpu",
 ]
 
@@ -3100,6 +3108,15 @@ dependencies = [
  "voxcore",
  "voxrender",
  "voxsurface",
+]
+
+[[package]]
+name = "voxrender-wgpu"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "voxrender",
+ "wgpu",
 ]
 
 [[package]]
