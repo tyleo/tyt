@@ -5,6 +5,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     io::Error as IOError,
 };
+use voxrender_bench::Error as BenchError;
 use wgpu::{
     BufferAsyncError, MapRangeError, PollError, RequestDeviceError,
     hal::{DeviceError, InstanceError},
@@ -87,6 +88,9 @@ pub enum Error {
 
     /// `getprop` would not run.
     Getprop(IOError),
+
+    /// A benchmark failed.
+    Bench(BenchError),
 }
 
 impl Display for Error {
@@ -117,6 +121,7 @@ impl Display for Error {
             Error::Map(error) => write!(f, "a readback buffer would not map: {error}"),
             Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
             Error::Getprop(error) => write!(f, "getprop would not run: {error}"),
+            Error::Bench(error) => write!(f, "a benchmark failed: {error}"),
         }
     }
 }

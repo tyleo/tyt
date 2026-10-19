@@ -2,6 +2,9 @@
 // its face sees each light, by voxrender's integer walk in i32 alone. The
 // entry, the end cell, and the error terms rely on integer arithmetic
 // wrapping.
+//
+// Adreno's shader compiler crashes on a dynamic index into a bool vector, so
+// a component's test reads the integers instead.
 
 const FRACTION_BITS: u32 = 13u;
 const ONE: i32 = 8192;
@@ -210,7 +213,7 @@ fn integer_walk(placement: Placement, ray: Ray) -> Hit {
         for (var a = 0; a < 3; a++) {
             let t = -f32(origin[a]) / f32(direction[a]);
 
-            if entering[a] && t > latest {
+            if direction[a] > 0 && origin[a] < 0 && t > latest {
                 latest = t;
                 entry = a;
             }
@@ -253,7 +256,7 @@ fn integer_walk(placement: Placement, ray: Ray) -> Hit {
 
                 cell[a] = c;
 
-                if entering[a] && c < 0 {
+                if direction[a] > 0 && origin[a] < 0 && c < 0 {
                     behind = a;
                 }
             }
@@ -338,8 +341,9 @@ fn integer_walk(placement: Placement, ray: Ray) -> Hit {
             // An entry faces the ray: the cell's upper face on a mirrored
             // axis.
             let distance = f32(ahead) / f32(direction[axis]) * meters;
+            let upper = ray.direction[axis] < 0;
 
-            return Hit(true, start.starts_inside, distance, position, axis, flip[axis]);
+            return Hit(true, start.starts_inside, distance, position, axis, upper);
         }
 
         inside = material;
@@ -449,7 +453,9 @@ fn float_walk(placement: Placement, ray: Ray) -> Hit {
         let material = material_at(placement, position);
 
         if material != 0u && material != inside {
-            return Hit(true, start.starts_inside, t * meters, position, axis, flip[axis]);
+            let upper = ray.direction[axis] < 0;
+
+            return Hit(true, start.starts_inside, t * meters, position, axis, upper);
         }
 
         inside = material;

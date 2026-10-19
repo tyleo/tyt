@@ -1,8 +1,8 @@
-use crate::{Result, XrApp, XrGpu, XrSystem, probe_gpu, probe_indirect, probe_system};
+use crate::{Result, XrApp, XrGpu, XrSystem, log_b1, probe_gpu, probe_indirect, probe_system};
 use android_activity::{AndroidApp, MainEvent, PollEvent};
 use android_logger::Config;
 use log::LevelFilter;
-use std::time::Duration;
+use std::{panic, time::Duration};
 
 /// How long the loop sleeps on Android's events while no session runs.
 const IDLE_POLL: Duration = Duration::from_millis(100);
@@ -16,6 +16,10 @@ fn android_main(app: AndroidApp) {
             .with_max_level(LevelFilter::Info)
             .with_tag("voxrender-bench"),
     );
+
+    // android-activity catches a panic on this thread, and the default hook's
+    // message reaches no log.
+    panic::set_hook(Box::new(|info| log::error!("{info}")));
 
     if let Err(error) = run(&app) {
         log::error!("{error}");
@@ -34,6 +38,8 @@ fn run(app: &AndroidApp) -> Result<()> {
 
     probe_gpu(&gpu)?;
     probe_indirect(&gpu)?;
+    log_b1(&gpu)?;
+
     let mut xr_app = XrApp::new(xr, gpu)?;
 
     let mut destroyed = false;

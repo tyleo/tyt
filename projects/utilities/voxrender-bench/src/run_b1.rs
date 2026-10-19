@@ -13,7 +13,7 @@ use voxrender_wgpu::{GpuWalk, PixelHit, trace_hits};
 /// from the reference's.
 const LINE: f64 = 0.001;
 
-/// The mismatches printed to stderr per scene and walk.
+/// The mismatches the report lists per scene and walk.
 const SHOWN: usize = 3;
 
 /// How one walk's samples compare with the reference's over a scene.
@@ -29,7 +29,8 @@ struct Tally {
 /// Runs B1 on `gpu` over the golden and precision-sim scenes, each view
 /// drawn over a `size` square image, and returns the report in Markdown.
 /// The integer walk's primary ids and corner shadow bits are judged against
-/// B1's line. The float walk's flips are counted for the record.
+/// B1's line. The float walk's flips are counted for the record. The report
+/// lists the first mismatching pixels of each scene and walk.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = [
         ("cube", cube_scene(RenderShadow::PerPixel)),
@@ -59,8 +60,17 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
 
     let info = &gpu.info;
 
+    // Adreno's driver info spans several lines.
+    let driver_info = info
+        .driver_info
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+
     let mut lines = vec![
-        "## B1 desktop: ids and corner shadows".to_owned(),
+        "## B1: ids and corner shadows".to_owned(),
         String::new(),
         format!(
             "- Adapter: {} ({:?}){}",
@@ -69,7 +79,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
             if info.driver.is_empty() {
                 String::new()
             } else {
-                format!(", driver {} {}", info.driver, info.driver_info)
+                format!(", driver {} {driver_info}", info.driver)
             }
         ),
         format!("- Image: {size} by {size} pixels per view"),
@@ -86,6 +96,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     ];
 
     let mut pass = true;
+    let mut mismatches = Vec::new();
 
     for (name, scene) in &scenes {
         let mut views = 0;
@@ -130,10 +141,10 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                     }
 
                     if shown && want != got {
-                        eprintln!(
-                            "{name}, {walk:?} walk, view {view_id}, pixel ({x}, {y}): \
+                        mismatches.push(format!(
+                            "- {name}, {walk:?} walk, view {view_id}, pixel ({x}, {y}): \
                              reference {want:?}, GPU {got:?}"
-                        );
+                        ));
                     }
                 }
             }
@@ -154,6 +165,14 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
 
     lines.push(String::new());
     lines.push(format!("Result: {}.", if pass { "pass" } else { "fail" }));
+
+    if !mismatches.is_empty() {
+        lines.push(String::new());
+        lines.push("The first mismatching pixels of each scene and walk:".to_owned());
+        lines.push(String::new());
+        lines.extend(mismatches);
+    }
+
     lines.push(String::new());
 
     Ok(lines.join("\n"))

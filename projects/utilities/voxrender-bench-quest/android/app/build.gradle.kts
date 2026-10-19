@@ -36,8 +36,9 @@ val cargoNdk = tasks.register<CargoNdk>("cargoNdk") {
 
     workingDir = crateDir.asFile
     executable = "cargo"
-    inputs.dir(crateDir.dir("src"))
-    inputs.file(crateDir.file("Cargo.toml"))
+
+    // Cargo tracks the crate's inputs, including its workspace dependencies.
+    outputs.upToDateWhen { false }
 
     doFirst {
         environment("ANDROID_NDK_HOME", ndkDirectory.get().asFile.absolutePath)

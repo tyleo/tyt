@@ -90,7 +90,7 @@ reference. The run times nothing, so it has no GPU level or temperature.
 
 - Device: Apple M4 Max, Metal 4, macOS 27.0.1 (26A434)
 - wgpu 30.0.1 on Metal. The adapter reports no driver version
-- Command: `cargo run --release -p voxrender-bench -- b1 --size 256`
+- Command: `cargo run --release -p voxrender-bench-desktop -- b1 --size 256`
 - Samples: each pixel's placement, cell, and face. On a pixel whose ids
   match, each light's four corner shadow rays, as whether each meets a
   surface

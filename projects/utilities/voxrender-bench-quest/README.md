@@ -5,7 +5,8 @@ OpenXR session on Vulkan and builds wgpu from the session's instance and
 device. Each frame, one multiview pass clears both eyes.
 
 The app runs B0's device probe and logs each result on a line that starts
-with `b0`. The voxrender-wgpu
+with `b0`. Before the session opens, the app runs B1 and logs its report on
+lines that start with `b1`. The voxrender-wgpu
 [research](../../../doc/plan/open/voxrender-wgpu/reference/research.md#7-next-phase-benchmarks-and-prototypes-in-order)
 sets what B0 asks.
 
@@ -40,10 +41,11 @@ The property pins the GPU at level 4, the level the benchmarks' thresholds
 assume, until the headset reboots. `adb logcat -s VrApi` shows the level as
 the second number after `GPU=`.
 
-The headset's library also lists the app under Unknown Sources. The session
-starts only while someone wears the headset. The app logs B0's visibility
-mask once the session has focus. The app logs the first window of frame
-times about ten seconds in, then another every seven seconds.
+The headset's library also lists the app under Unknown Sources. B1 takes
+about 22 seconds, and the session opens after it. The session starts only
+while someone wears the headset. The app logs B0's visibility mask once the
+session has focus. The app logs the first window of frame times about ten
+seconds after the session starts, then another every seven seconds.
 
 ## Lint
 

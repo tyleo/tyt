@@ -188,3 +188,20 @@ they land.
   `RenderViewRays::to_scene_grid_rays` hold the setup the reference, the
   GPU tier, and the bench each repeated. The reference's `render` now uses
   `to_scene_grid_rays`. No golden moved.
+- B1's report lists the first mismatching pixels of each scene and walk.
+  They went to stderr before, which Android drops.
+- The Quest app runs B1 before it opens the session, at the desktop run's
+  256 by 256 pixels. The reference renders on the headset, so the app reads
+  no files. The app logs the report one line at a time because logcat cuts
+  long messages.
+- The Adreno 740's shader compiler, version E031.50.14.00, segfaults in
+  `vkCreateComputePipelines` on a dynamic index into a bool vector. A
+  bisect on the headset traced it to `entering[a]` and `flip[axis]`, and
+  naga's runtime checks played no part. `first_hit.wgsl` tests the integer
+  components instead. The output on this Mac did not change.
+- android-activity catches a panic in `android_main` and finishes the
+  activity. The default hook's message reaches no log, so the app sets a
+  hook that logs it.
+- Gradle's `cargoNdk` task always runs and leaves change tracking to cargo.
+  Its inputs had covered only the app crate, so a change in
+  `voxrender-bench` or `voxrender-wgpu` left the APK stale.
