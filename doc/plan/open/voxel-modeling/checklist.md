@@ -162,19 +162,21 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       beside round 6. The round compares its passes and cost with round 5's
       because round 6 ran the dropped review. [Round 7](trials-round-7.md)
       matches round 5's passes and cost.
-- [ ] **S20. Grid steps.** Steps and options that read the grid as the earlier
-      steps left it:
-  1. An `add` option moves the shape toward a side until the shape meets a live
-     cell for finding 11. Gems then settle on a pile, and a tree stands on
-     displaced terrain without a guessed height
-  2. `prune` empties every face-connected piece under a cell count for finding
-     24
-  3. `onto` limits a `paint` or a `coat` to the kept cells of listed steps for
-     finding 34
+- [ ] **S20. Crumbs and spills.** Tools for the cleanup the rounds did by hand:
+  1. `vxl object prune` removes each face-connected piece of the selected
+     objects under a voxel count for finding 24. The skill's command chain runs
+     it between voxelize and render
+  2. `onto` limits a `paint` or a `coat` to the points that listed `add` steps
+     still own for finding 34. A point belongs to the last `add` whose shape
+     holds it unless a later `carve` emptied it. `onto` takes the steps as
+     values, and each has to come earlier in the same list
+  3. `coat` reads the part's shapes so far in place of the grid. A point takes
+     the coat when the point `depth` meters toward a listed side lies outside
+     those shapes. `depth` has no default, and vxl errors on one under half a
+     voxel
 - [ ] **S21. New calls.** Calls the rounds built by hand:
   1. `spline` draws a smooth 2D curve through points as an outline or a stroke
-     for finding 87. A straight stroke draws a face-connected line of cells
-     between two points for finding 130
+     for finding 87
   2. `sweep` runs a 2D profile along a 3D path of points and can taper it.
      `helix` gives a coiled path for stairs, springs, and spirals. Both answer
      finding 25

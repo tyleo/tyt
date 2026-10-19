@@ -171,9 +171,9 @@ skips the build voxelizes a stale `.sdfj`.
    deck of a pirate ship.
 2. **Follow-ups.** The trials set the second phase. The report and a contact
    sheet hand back more per pass, and the library's colors read truer. New
-   steps seat details, drop crumbs, and keep paint on its target. New calls draw
-   curves, text, and brickwork, and parts turn at any angle. Two more trial
-   rounds measure the changes.
+   tools drop crumbs and keep paint on its target. New calls draw curves, text,
+   and brickwork, and parts turn at any angle. Two more trial rounds measure the
+   changes.
 
 ## Waiting for a reason
 
@@ -192,6 +192,10 @@ never:
 6. A `typescript` library group whose sources vxl builds before the model
 7. Review sheets that pick their views per model, such as a left view or no
    back view behind a room, for round 7's finding 127
+8. A `vxl node settle` that seats one placed object on another for finding 11.
+   Round 7's later passes seated most floating details within one pass
+9. A `vxl object` command that draws a face-connected line of voxels between
+   two points for finding 130. Only the guitar's strings asked for one
 
 ## Decisions
 
