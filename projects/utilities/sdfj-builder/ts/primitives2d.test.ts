@@ -10,6 +10,7 @@ import {
   polyline,
   rect,
   sector,
+  spline,
   star,
   vesica,
 } from "./primitives2d.ts";
@@ -68,6 +69,15 @@ const CASES: [string, () => Shape2d, Entry][] = [
     radius: 1,
     fromDegrees: 0,
     toDegrees: 90,
+  }],
+  ["spline outline", () => spline([[0, 0], [1, 0], [0, 1]]), {
+    kind: "spline",
+    points: [[0, 0], [1, 0], [0, 1]],
+  }],
+  ["spline stroke", () => spline([[0, 0], [1, 0]], 0.1), {
+    kind: "spline",
+    points: [[0, 0], [1, 0]],
+    width: 0.1,
   }],
   ["star", () => star([0, 0], 5, 1, 0.5), {
     kind: "star",

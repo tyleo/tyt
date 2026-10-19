@@ -572,6 +572,15 @@ fn sdf_shape2d_from_sdfj_shape2d(shape: &SdfjShape2d) -> StdResult<SdfShape2d, S
             shape_ids: wire_ids(shapes)?,
         },
 
+        SdfjShape2d::Spline { points, width } => SdfShape2d::Spline {
+            points: points
+                .iter()
+                .copied()
+                .map(TyVector2F64::from_array)
+                .collect(),
+            width: *width,
+        },
+
         SdfjShape2d::Star {
             center,
             points,

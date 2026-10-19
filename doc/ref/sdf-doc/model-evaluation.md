@@ -220,15 +220,24 @@ In the plane:
    fail.
 6. `polyline` measures to its nearest segment the same way and subtracts half
    the width.
-7. `arc` turns the plane so the arc's middle lies on +v and folds u to `abs(u)`.
+7. `spline` replaces its points with points along the centripetal Catmull-Rom
+   curve through them. It then measures as a `polygon` without `width` and as a
+   `polyline` with it.
+   - Each span between neighboring points splits into 16 segments at even steps
+     of its knot parameter. The knots lie apart by the square root of the
+     distance between neighboring points.
+   - A closed spline's spans wrap around to the first point. An open one adds
+     `2 * p[0] - p[1]` before its first point and the same reflection after its
+     last.
+8. `arc` turns the plane so the arc's middle lies on +v and folds u to `abs(u)`.
    With `s` and `c` the sine and cosine of half its span, a point where
    `c * u > s * v` measures to the arc's end point, and any other point to the
    circle as `abs(length(p) - radius)`. Both then subtract half the width. Flat
    caps instead cut the band square at the ends by the ring formula.
-8. `sector` folds the same way and takes the larger of the circle's distance and
+9. `sector` folds the same way and takes the larger of the circle's distance and
    the signed distance to the end's radius segment by the pie formula.
-9. `vesica` uses the oriented vesica formula with half its width.
-10. `arch` measures to its outline of base, sides, and half circle by the tunnel
+10. `vesica` uses the oriented vesica formula with half its width.
+11. `arch` measures to its outline of base, sides, and half circle by the tunnel
     formula.
 
 ### From 2D to 3D
@@ -392,7 +401,8 @@ small would lose cells. Every rule below errs large.
    - In the plane, a `circle` and an `ellipse` span their center plus and minus
      their radius or radii, and a `rect` and an `arch` span their corners. An
      `ngon`, a `star`, and a `polygon` take the box around their vertices, and a
-     `polyline` takes the box around its points grown by half its width.
+     `polyline` takes the box around its points grown by half its width. A
+     `spline` takes the box of the `polygon` or `polyline` its curve forms.
    - An `arc` takes the box around its end points and the points at `radius` in
      each axis direction its span crosses. Half its width then grows that box. A
      `sector`'s box also holds its center, and a `vesica` spans `a` and `b`
@@ -655,8 +665,9 @@ it belongs to by its path of part names.
      from `-2^31` to `2^31 - 1`.
    - A pattern's `materials` and a `speckle`'s `accents` hold at least one
      material. A `union`, an `intersect`, and their smooth variants hold at
-     least one shape, and an `onto` holds at least one step. A `polygon` lists
-     at least 3 points, and a `polyline` and a `lathe` list at least 2.
+     least one shape, and an `onto` holds at least one step. A `polygon` and a
+     `spline` without `width` list at least 3 points, and a `polyline`, a
+     `lathe`, and a `spline` with `width` list at least 2.
    - `amplitude`, `warp`, and the lengths of an `elongate` are zero or more,
      `density` falls in `[0, 1]`, and a range's end passes its start.
    - Colors parse as `#RRGGBB`, or `#RRGGBBAA` for `baseColor`. Named properties
@@ -669,8 +680,10 @@ it belongs to by its path of part names.
      within half its shortest extent, and a `cylinder`'s within its radius and
      half its length.
    - The ends of a `cylinder`, a `cone`, a `capsule`, a `roundCone`, and a
-     `vesica` differ, as do a `polyline`'s neighboring points. A `roundCone`'s
-     radii differ by less than the distance between its ends.
+     `vesica` differ, as do the neighboring points of a `polyline` and a
+     `spline`. A `spline` without `width` takes its last point as the first
+     point's neighbor. A `roundCone`'s radii differ by less than the distance
+     between its ends.
    - A `star`'s inner radius stays below its outer radius, and an `arch` stands
      at least half its width tall. An `arc`, a `sector`, and a cut `torus` span
      at most 360 degrees. A `torus` takes both `from` and `to` or neither.
@@ -678,7 +691,8 @@ it belongs to by its path of part names.
      ways. An `elongate`'s `center` lies inside its shape's box along each axis
      it stretches. A `bend`'s `along` and `toward` lie on different axes, and
      its shape has a box.
-   - A `polygon` outline never crosses itself.
+   - A `polygon` outline and the curve of a `spline` without `width` never
+     cross themselves.
 5. Over the document, every step has a non-empty name no other step in its list
    shares, and every part has a non-empty name no other part in its list shares.
    The root parts count as one list. Every step in an `onto` is an `add` earlier

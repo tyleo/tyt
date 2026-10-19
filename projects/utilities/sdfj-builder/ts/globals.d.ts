@@ -69,6 +69,7 @@ declare global {
   var smoothUnion: typeof api.smoothUnion;
   var speckle: typeof api.speckle;
   var sphere: typeof api.sphere;
+  var spline: typeof api.spline;
   var star: typeof api.star;
   var subtract: typeof api.subtract;
   var torus: typeof api.torus;

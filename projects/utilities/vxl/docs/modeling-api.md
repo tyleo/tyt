@@ -315,6 +315,7 @@ function star(
 ): Shape2d;
 function polygon(points: Vec2[]): Shape2d;
 function polyline(points: Vec2[], width: number): Shape2d;
+function spline(points: Vec2[], width?: number): Shape2d;
 function arc(
   center: Vec2,
   radius: number,
@@ -344,10 +345,13 @@ Angles in the plane run from +u toward +v.
 4. `polygon` closes its outline back to the first point.
 5. `polyline` and `arc` stroke a line `width` across for trim, filigree, and
    lettering. An arc's ends come round unless `caps` makes them flat.
-6. `sector` cuts a pie slice from a disk.
-7. `vesica` makes a pointed lens `width` across from `a` to `b` for leaves,
+6. `spline` draws a smooth curve through every point for bodies, arms, and
+   scrolls. Without `width` the curve closes into an outline, and with `width`
+   it runs open as a stroke.
+7. `sector` cuts a pie slice from a disk.
+8. `vesica` makes a pointed lens `width` across from `a` to `b` for leaves,
    blades, and flames.
-8. `arch` tops the rectangle between its corners with a half circle as wide as
+9. `arch` tops the rectangle between its corners with a half circle as wide as
    the rectangle. `max` has to sit at least half the width above `min`. Doors,
    windows, and gravestones start from an `arch`.
 

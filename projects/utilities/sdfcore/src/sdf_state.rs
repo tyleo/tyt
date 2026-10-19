@@ -697,6 +697,11 @@ fn check_shape2d(check: &EntryCheck, shape: &SdfShape2d) -> Result<()> {
             check.shape2d_ids(iter::once(*base_id).chain(cutter_ids.iter().copied()))
         }
 
+        SdfShape2d::Spline { points, width } => {
+            check.vector2s(points.iter().copied())?;
+            check.optional_numbers([*width])
+        }
+
         SdfShape2d::Star {
             center,
             points,

@@ -386,3 +386,13 @@ land.
 6. A `set` point holds no shape, so a coat reads through it
 7. `depth` moves to a positional argument because the API takes each required
    value as one
+
+## S21. New calls
+
+1. `spline` closes into an outline without `width` and runs open as a stroke
+   with it, so one call covers both
+2. The curve runs centripetal Catmull-Rom through every point, which never
+   kinks or loops within a span however unevenly the points lie
+3. Evaluation splits each span into 16 segments and measures the result as a
+   `polygon` or a `polyline`. The split ignores the voxel grid, so a renderer
+   or a mesh export draws the same curve

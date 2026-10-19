@@ -164,6 +164,14 @@ pub enum SdfShape2d {
         shape_ids: Vec<U32Id<BSdfShape2d>>,
     },
 
+    /// A smooth curve through points, closed into an outline or open with a
+    /// width.
+    Spline {
+        points: Vec<TyVector2F64>,
+
+        width: Option<f64>,
+    },
+
     /// A star.
     Star {
         center: TyVector2F64,

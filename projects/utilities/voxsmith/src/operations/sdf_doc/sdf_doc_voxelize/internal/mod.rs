@@ -61,6 +61,7 @@ mod shape_source;
 mod side_direction;
 mod smooth_intersect_distance;
 mod smooth_union_distance;
+mod spline_points;
 mod vesica_distance;
 mod whole_count;
 
@@ -125,6 +126,7 @@ pub(crate) use shape3d_references::*;
 pub(crate) use side_direction::*;
 pub(crate) use smooth_intersect_distance::*;
 pub(crate) use smooth_union_distance::*;
+pub(crate) use spline_points::*;
 pub(crate) use vesica_distance::*;
 pub(crate) use whole_count::*;
 

@@ -1,4 +1,4 @@
-use crate::operations::sdf_doc::ArgumentCheck;
+use crate::operations::sdf_doc::{ArgumentCheck, spline_points};
 use sdfcore::SdfShape2d;
 use std::result::Result as StdResult;
 use ty_math::TyVector2F64;
@@ -77,16 +77,7 @@ pub fn check_shape2d(shape: &SdfShape2d) -> StdResult<(), String> {
             let check = ArgumentCheck::new("polyline");
             check.count("points", points.len(), 2)?;
             check.above_zero("width", *width)?;
-
-            match points.windows(2).find(|pair| pair[0] == pair[1]) {
-                Some(pair) => Err(check.fail(
-                    "points",
-                    "distinct from their neighbors",
-                    format!("[{}, {}] twice in a row", pair[0].x, pair[0].y),
-                )),
-
-                None => Ok(()),
-            }
+            distinct_neighbors(&check, points, false)
         }
 
         SdfShape2d::Rect {
@@ -164,6 +155,31 @@ pub fn check_shape2d(shape: &SdfShape2d) -> StdResult<(), String> {
             check.count("shapes", shape_ids.len(), 1)
         }
 
+        SdfShape2d::Spline {
+            points,
+            width: None,
+        } => {
+            let check = ArgumentCheck::new("spline");
+            check.count("points", points.len(), 3)?;
+            distinct_neighbors(&check, points, true)?;
+            check.expect(
+                !crosses_itself(&spline_points(points, true)),
+                "points",
+                "a curve that never crosses itself",
+                "a curve that crosses itself",
+            )
+        }
+
+        SdfShape2d::Spline {
+            points,
+            width: Some(width),
+        } => {
+            let check = ArgumentCheck::new("spline");
+            check.count("points", points.len(), 2)?;
+            check.above_zero("width", *width)?;
+            distinct_neighbors(&check, points, false)
+        }
+
         SdfShape2d::Star {
             points,
             outer_radius,
@@ -209,6 +225,31 @@ fn span(check: ArgumentCheck, from: f64, to: f64) -> StdResult<(), String> {
         &format!("at most 360 past fromDegrees {from}"),
         to,
     )
+}
+
+/// Errors when two neighboring `points` match. The last point neighbors the
+/// first when `closed`.
+fn distinct_neighbors(
+    check: &ArgumentCheck,
+    points: &[TyVector2F64],
+    closed: bool,
+) -> StdResult<(), String> {
+    let wrap = closed.then(|| [points[points.len() - 1], points[0]]);
+
+    match points
+        .windows(2)
+        .map(|pair| [pair[0], pair[1]])
+        .chain(wrap)
+        .find(|pair| pair[0] == pair[1])
+    {
+        Some(pair) => Err(check.fail(
+            "points",
+            "distinct from their neighbors",
+            format!("[{}, {}] twice in a row", pair[0].x, pair[0].y),
+        )),
+
+        None => Ok(()),
+    }
 }
 
 /// Errors unless a rect's corner cut `corner` reads zero or more and at most
@@ -336,6 +377,49 @@ mod tests {
         // A spike folding back along its edge touches itself.
         assert!(
             check_shape2d(&polygon(&[(0.0, 0.0), (2.0, 0.0), (1.0, 0.0), (1.0, 1.0)])).is_err()
+        );
+    }
+
+    #[test]
+    fn a_spline_lists_distinct_neighbors_and_its_outline_never_crosses_itself() {
+        let spline = |points: &[(f64, f64)], width: Option<f64>| SdfShape2d::Spline {
+            points: points
+                .iter()
+                .map(|(u, v)| TyVector2F64::new(*u, *v))
+                .collect(),
+            width,
+        };
+        let square = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+
+        assert!(check_shape2d(&spline(&square, None)).is_ok());
+        assert!(check_shape2d(&spline(&square[..2], Some(0.1))).is_ok());
+        assert_eq!(
+            check_shape2d(&spline(&square[..2], None)),
+            Err("spline points must be a list of at least 3, not a list of 2".to_string())
+        );
+        assert_eq!(
+            check_shape2d(&spline(
+                &[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0), (0.0, 0.0)],
+                None
+            )),
+            Err(
+                "spline points must be distinct from their neighbors, not [0, 0] twice in a row"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            check_shape2d(&spline(&[(0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0)], None)),
+            Err(
+                "spline points must be a curve that never crosses itself, not a curve that crosses itself"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            check_shape2d(&spline(&[(0.0, 0.0), (0.0, 0.0)], Some(0.1))),
+            Err(
+                "spline points must be distinct from their neighbors, not [0, 0] twice in a row"
+                    .to_string()
+            )
         );
     }
 

@@ -52,6 +52,7 @@ export {
   polyline,
   rect,
   sector,
+  spline,
   star,
   vesica,
 } from "./primitives2d.ts";

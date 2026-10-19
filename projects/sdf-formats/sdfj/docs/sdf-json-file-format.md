@@ -136,6 +136,7 @@ references an entry in `shapes2d`.
 | `star`                           | `center`, `points`, `outerRadius`, `innerRadius`                 |
 | `polygon`                        | `points`                                                         |
 | `polyline`                       | `points`, `width`                                                |
+| `spline`                         | `points`, `width?`                                               |
 | `arc`                            | `center`, `radius`, `fromDegrees`, `toDegrees`, `width`, `caps?` |
 | `sector`                         | `center`, `radius`, `fromDegrees`, `toDegrees`                   |
 | `vesica`                         | `a`, `b`, `width`                                                |

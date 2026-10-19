@@ -2,7 +2,7 @@ use crate::operations::sdf_doc::{
     ArcSpan, Bounds2d, PointMap2d, ShapeSource, arc_distance, arch_distance, chamfer_rect_distance,
     ellipse_distance, exact_sin_cos, fold_to_direction, polygon_distance, polyline_distance,
     rect_distance, sector_distance, smooth_intersect_distance, smooth_union_distance,
-    vesica_distance, whole_count,
+    spline_points, vesica_distance, whole_count,
 };
 use branded_id::{IdVec, U32Id};
 use sdfcore::{BSdfShape2d, SdfAxes2d, SdfCaps, SdfShape2d};
@@ -405,6 +405,21 @@ impl Shape2dField {
             SdfShape2d::SmoothUnion { radius, shape_ids } => Shape2dField::SmoothUnion {
                 radius: *radius,
                 shape_ids: shape_ids.clone(),
+            },
+
+            SdfShape2d::Spline {
+                points,
+                width: None,
+            } => Shape2dField::Polygon {
+                points: spline_points(points, true),
+            },
+
+            SdfShape2d::Spline {
+                points,
+                width: Some(width),
+            } => Shape2dField::Polyline {
+                points: spline_points(points, false),
+                half_width: width / 2.0,
             },
 
             SdfShape2d::Star {

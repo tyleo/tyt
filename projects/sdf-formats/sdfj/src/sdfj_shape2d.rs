@@ -275,6 +275,24 @@ pub enum SdfjShape2d {
         shapes: Vec<usize>,
     },
 
+    /// A smooth curve through points, closed into an outline or open with a
+    /// width.
+    Spline {
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        points: Vec<[f64; 2]>,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                serialize_with = "crate::finite",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        width: Option<f64>,
+    },
+
     /// A star.
     Star {
         #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]

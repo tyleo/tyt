@@ -13,6 +13,7 @@ pub fn shape2d_references(shape: &SdfShape2d) -> Vec<U32Id<BSdfShape2d>> {
         | SdfShape2d::Polyline { .. }
         | SdfShape2d::Rect { .. }
         | SdfShape2d::Sector { .. }
+        | SdfShape2d::Spline { .. }
         | SdfShape2d::Star { .. }
         | SdfShape2d::Vesica { .. } => Vec::new(),
 

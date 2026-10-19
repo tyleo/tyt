@@ -63,7 +63,9 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
     { "kind": "repeat", "shape": 0, "step": [1, 1], "count": [2, 3] },
     { "kind": "repeatPolar", "shape": 0, "count": 6, "center": [0, 1] },
     { "kind": "offset", "shape": 0, "distance": 0.1 },
-    { "kind": "shell", "shape": 0, "thickness": 0.1 }
+    { "kind": "shell", "shape": 0, "thickness": 0.1 },
+    { "kind": "spline", "points": [[0, 0], [1, 0], [0, 1]] },
+    { "kind": "spline", "points": [[0, 0], [1, 0]], "width": 0.1 }
   ],
   "materials": [
     {

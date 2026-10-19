@@ -89,6 +89,23 @@ export function polyline(points: Vec2[], width: number): Shape2d {
   });
 }
 
+/**
+ * The smooth curve through `points`, closed into an outline, or open and
+ * stroked `width` across.
+ */
+export function spline(points: Vec2[], width?: number): Shape2d {
+  return new Shape2d({
+    kind: "spline",
+    points: check.list(
+      "spline points",
+      points,
+      "an array of Vec2s",
+      check.vec2,
+    ),
+    width: check.optional("spline width", width, check.finite),
+  });
+}
+
 /** The arc of `radius` between two angles, stroked `width` across. */
 export function arc(
   center: Vec2,
