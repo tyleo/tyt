@@ -120,6 +120,20 @@ corner samples. It traced that to input rounding, which the shared
 quantization now removes for both walks. Every float flip is on a primary
 ray.
 
+**Bench scenes, 2026-10-19.** The research's five scenes joined B1 in S7,
+run as above.
+
+| Scene | Views | Pixels | Shadow samples | Id mismatches | Shadow mismatches | Float id flips | Float shadow flips |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| S1 art room | 2 | 131072 | 345556 | 0 | 0 | 6 | 0 |
+| S2 city | 2 | 131072 | 376508 | 0 | 0 | 1 | 0 |
+| S3 greenhouse | 3 | 196608 | 500392 | 0 | 0 | 10 | 0 |
+| S4 foliage | 2 | 131072 | 174176 | 0 | 0 | 8 | 0 |
+| S5 grazing floor | 2 | 131072 | 389416 | 0 | 0 | 7 | 0 |
+
+The integer walk matches the reference on every sample of the five. The
+earlier scenes' counts did not change.
+
 ## B1 Quest 3, 2026-10-18
 
 The integer walk's ids and corner shadow bits on the headset, against the

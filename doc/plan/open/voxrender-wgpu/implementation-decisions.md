@@ -245,3 +245,28 @@ they land.
   holds the integer walk. `HitTrace::with_walk` appends another walk's
   WGSL to `first_hit.wgsl` in its place. `GpuWalk` is gone. B1's report on
   this Mac did not change.
+
+## S7. Bench scenes and the per-object structure
+
+- The research's five scenes live in `voxrender-bench`, built from
+  `voxrender`'s fixtures and generators seeded by a cell hash. Each has
+  90-degree eye views at head height:
+  1. S1 art room: a 3 m room of 2 cm voxels open on two sides, with 1 cm
+     props, seen at arm's length over its table and from a fitted
+     orthographic view
+  2. S2 city: 16 by 16 blocks in 1025 placements, buildings of 25 cm voxels
+     scaled by up to a fifth, trees of 10 cm, and cars of 5 cm. Every fifth
+     building and ninth car turns freely. Seen from a street and from the
+     air
+  3. S3 greenhouse: a 6 m frame of 2 cm voxels glazed with 84 overlapping
+     panes, alternate panes a voxel further out and the roof's tilted 3
+     degrees, with 1 cm plants inside
+  4. S4 foliage: picket fences one voxel wide on one-voxel gaps, one of them
+     at 33 degrees, sparse bushes, and sparse tree crowns
+  5. S5 grazing floor: 20.48 m of 2 cm tiles four voxels deep. Its second
+     view is orthographic, 4 m across, 10 degrees above the floor, because
+     a view fitted to the whole floor at that angle covers a tenth of its
+     pixels
+- The scenes join B1's ids run, which takes 28 s at 256 by 256 pixels on
+  this Mac. Each scene's tests check that every view hits on at least a
+  tenth of its pixels

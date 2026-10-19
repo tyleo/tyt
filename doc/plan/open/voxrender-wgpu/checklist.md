@@ -100,11 +100,16 @@ code-level choices in
          line
 - [ ] **S7. Bench scenes and the per-object structure.**
       1. `voxrender-bench` builds the research's five scenes from fixtures
-         and generators
+         and generators. B1's ids run over them
       2. The 64-tree of research section 3.4 is built on the CPU from a
-         dense grid
-      3. Tests: a walk over the tree finds the reference's first hits on
-         every scene
+         dense grid: a dense root of 16^3 tiles, 4^3 inner nodes with u32
+         pair masks and popcount-compacted children, uniform-material
+         collapse, and 4^3 leaves with 0, 1, 2, 4, or 8-bit palettes. Tests:
+         the tree gives back every cell of each scene's objects
+      3. A WGSL walk over the tree runs through `HitTrace::with_walk`. It
+         skips an empty node by an f32 guess of its exit cell, which wrapping
+         multiply-adds and an exact sign check correct. B1's ids gain the
+         tree walk, which must meet B1's line on every scene
 - [ ] **S8. B2 on Quest.** The run measures ray rate and step cost with B2's
       setup. The rate decides which B3 arms get built.
 

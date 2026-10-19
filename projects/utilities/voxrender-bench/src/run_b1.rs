@@ -1,4 +1,7 @@
-use crate::{Error, Gpu, Result, Walk, reference_hits};
+use crate::{
+    Error, Gpu, Result, Walk, art_room_scene, city_scene, foliage_scene, grazing_floor_scene,
+    greenhouse_scene, reference_hits,
+};
 use voxrender::{
     RenderShadow,
     fixtures::{
@@ -26,8 +29,9 @@ struct Tally {
     shadows: usize,
 }
 
-/// Runs B1 on `gpu` over the golden and precision-sim scenes, each view
-/// drawn over a `size` square image, and returns the report in Markdown.
+/// Runs B1 on `gpu` over the golden, precision-sim, and bench scenes, each
+/// view drawn over a `size` square image, and returns the report in
+/// Markdown.
 /// The integer walk's primary ids and corner shadow bits are judged against
 /// B1's line. The float walk's flips are counted for the record. The report
 /// lists the first mismatching pixels of each scene and walk.
@@ -56,6 +60,11 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
             "precision shadows, stairs",
             precision_shadow_scene(stairs_scene()),
         ),
+        ("S1 art room", art_room_scene()),
+        ("S2 city", city_scene()),
+        ("S3 greenhouse", greenhouse_scene()),
+        ("S4 foliage", foliage_scene()),
+        ("S5 grazing floor", grazing_floor_scene()),
     ];
 
     let info = &gpu.info;
