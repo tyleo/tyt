@@ -414,8 +414,6 @@ function helix(
 2. The first point sits `radius` along +z for the y axis, +x for z, and +y for
    x, turned `start` degrees the way `rotate` turns. Positive `turns` wind the
    way `rotate` turns, and negative ones wind back.
-3. A `sweep` through a helix makes a spring or a stair rail. A stair places one
-   tread at each point.
 
 ### Booleans
 
