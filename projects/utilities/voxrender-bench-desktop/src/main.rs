@@ -10,10 +10,12 @@ use voxrender_bench::run_b1;
 mod error;
 mod headless_gpu;
 mod result;
+mod time_b1;
 
 pub(crate) use error::*;
 pub(crate) use headless_gpu::*;
 pub(crate) use result::*;
+pub(crate) use time_b1::*;
 
 /// Runs voxrender's GPU benchmarks.
 #[derive(Clone, Debug, Parser)]
@@ -38,6 +40,33 @@ enum Command {
         )]
         size: u32,
     },
+
+    /// B1: times the integer and float walks and the i32 and f32 chains on
+    /// this GPU.
+    #[command(name = "b1-times")]
+    B1Times {
+        /// The width of each eye's image.
+        #[arg(
+            value_name = "pixels",
+            long,
+            default_value_t = 1680,
+            value_parser = value_parser!(u32).range(1..=8192)
+        )]
+        width: u32,
+
+        /// The height of each eye's image.
+        #[arg(
+            value_name = "pixels",
+            long,
+            default_value_t = 1760,
+            value_parser = value_parser!(u32).range(1..=8192)
+        )]
+        height: u32,
+
+        /// The windows to report.
+        #[arg(value_name = "count", long, default_value_t = 1)]
+        windows: usize,
+    },
 }
 
 fn main() {
@@ -47,6 +76,12 @@ fn main() {
         Command::B1 { size } => {
             headless_gpu().and_then(|gpu| run_b1(&gpu, size).map_err(Error::Bench))
         }
+
+        Command::B1Times {
+            width,
+            height,
+            windows,
+        } => headless_gpu().and_then(|gpu| time_b1(&gpu, width, height, windows)),
     };
 
     match result {

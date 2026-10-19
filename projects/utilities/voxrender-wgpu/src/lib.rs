@@ -7,12 +7,12 @@
 
 mod error;
 mod gpu_walk;
+mod hit_trace;
 mod pixel_hit;
 mod result;
-mod trace_hits;
 
 pub use error::*;
 pub use gpu_walk::*;
+pub use hit_trace::*;
 pub use pixel_hit::*;
 pub use result::*;
-pub use trace_hits::*;

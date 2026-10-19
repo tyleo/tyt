@@ -3070,6 +3070,7 @@ name = "voxrender-bench"
 version = "0.1.0"
 dependencies = [
  "branded-id",
+ "ty-math",
  "voxrender",
  "voxrender-cpu",
  "voxrender-wgpu",

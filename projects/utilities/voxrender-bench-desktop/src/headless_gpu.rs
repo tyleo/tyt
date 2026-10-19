@@ -1,8 +1,9 @@
 use crate::{Error, Result};
 use voxrender_bench::Gpu;
-use wgpu::{DeviceDescriptor, Instance, PowerPreference, RequestAdapterOptions};
+use wgpu::{DeviceDescriptor, Features, Instance, PowerPreference, RequestAdapterOptions};
 
-/// The high-performance adapter's device with default limits.
+/// The high-performance adapter's device with default limits, and with
+/// timestamp queries when the adapter has them.
 pub fn headless_gpu() -> Result<Gpu> {
     let instance = Instance::default();
 
@@ -14,6 +15,7 @@ pub fn headless_gpu() -> Result<Gpu> {
 
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("voxrender-bench-desktop"),
+        required_features: adapter.features() & Features::TIMESTAMP_QUERY,
         ..DeviceDescriptor::default()
     }))
     .map_err(Error::Device)?;

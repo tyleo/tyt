@@ -2,11 +2,13 @@
 
 voxrender's GPU benchmarks as a Meta Quest 3 OpenXR app. The app opens an
 OpenXR session on Vulkan and builds wgpu from the session's instance and
-device. Each frame, one multiview pass clears both eyes.
+device. Each frame, one multiview pass clears both eyes, and B1's timer
+records its next timed pass.
 
 The app runs B0's device probe and logs each result on a line that starts
 with `b0`. Before the session opens, the app runs B1 and logs its report on
-lines that start with `b1`. The voxrender-wgpu
+lines that start with `b1`. Once the session runs, the app logs each window
+of B1's times on `b1` lines too. The voxrender-wgpu
 [research](../../../doc/plan/open/voxrender-wgpu/reference/research.md#7-next-phase-benchmarks-and-prototypes-in-order)
 sets what B0 asks.
 
@@ -45,7 +47,9 @@ The headset's library also lists the app under Unknown Sources. B1 takes
 about 22 seconds, and the session opens after it. The session starts only
 while someone wears the headset. The app logs B0's visibility mask once the
 session has focus. The app logs the first window of frame times about ten
-seconds after the session starts, then another every seven seconds.
+seconds after the session starts, then another every seven seconds. A window
+of B1's times takes 3,600 timed passes after a warm-up of 300, and the walks
+slow the frame rate while they run.
 
 ## Lint
 

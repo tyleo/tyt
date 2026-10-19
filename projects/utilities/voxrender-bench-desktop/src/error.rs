@@ -3,7 +3,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 use voxrender_bench::Error as BenchError;
-use wgpu::{RequestAdapterError, RequestDeviceError};
+use wgpu::{PollError, RequestAdapterError, RequestDeviceError};
 
 /// Why the app failed to run a benchmark.
 #[derive(Debug)]
@@ -16,6 +16,9 @@ pub enum Error {
 
     /// The benchmark failed.
     Bench(BenchError),
+
+    /// Waiting on the GPU failed.
+    Poll(PollError),
 }
 
 impl Display for Error {
@@ -24,6 +27,7 @@ impl Display for Error {
             Error::Adapter(error) => write!(f, "no GPU adapter: {error}"),
             Error::Device(error) => write!(f, "no GPU device: {error}"),
             Error::Bench(error) => write!(f, "{error}"),
+            Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
         }
     }
 }

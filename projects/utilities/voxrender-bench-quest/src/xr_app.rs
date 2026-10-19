@@ -8,6 +8,7 @@ use openxr::{
     ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
 };
 use std::num::NonZeroU32;
+use voxrender_bench::B1Timer;
 use wgpu::{
     Color, CommandEncoderDescriptor, LoadOp, Operations, RenderPassColorAttachment,
     RenderPassDescriptor, StoreOp,
@@ -27,14 +28,16 @@ const CLEAR: Color = Color {
     a: 1.0,
 };
 
-/// An OpenXR session that clears both eyes each frame and runs B0's session
-/// probes.
+/// An OpenXR session that clears both eyes each frame, runs B0's session
+/// probes, and times B1's kernels.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
     swapchain: EyeSwapchain,
 
     frame_times: Option<FrameTimes>,
+
+    b1_timer: B1Timer,
 
     space: Space,
 
@@ -98,9 +101,18 @@ impl XrApp {
         let frame_times = FrameTimes::new(&xr, &session)?;
         let swapchain = EyeSwapchain::new(&xr, &gpu, &session)?;
 
+        let b1_timer = B1Timer::new(
+            &gpu.device,
+            &gpu.queue,
+            u32::try_from(swapchain.extent.width).expect("an eye's width is positive"),
+            u32::try_from(swapchain.extent.height).expect("an eye's height is positive"),
+        )
+        .map_err(Error::Bench)?;
+
         Ok(XrApp {
             swapchain,
             frame_times,
+            b1_timer,
             space,
             frame_stream,
             frame_waiter,
@@ -171,8 +183,8 @@ impl XrApp {
         Ok(true)
     }
 
-    /// Waits for the next frame, clears both eyes in one multiview pass when
-    /// the runtime shows the frame and tracks the head, and submits it.
+    /// Waits for and submits the next frame, which draws only when the
+    /// runtime shows it and tracks the head.
     pub fn frame(&mut self) -> Result<()> {
         let state = self.frame_waiter.wait().map_err(Error::Xr)?;
 
@@ -213,7 +225,7 @@ impl XrApp {
             .gpu
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("clear eyes"),
+                label: Some("frame"),
             });
 
         encoder.begin_render_pass(&RenderPassDescriptor {
@@ -231,7 +243,21 @@ impl XrApp {
             ..RenderPassDescriptor::default()
         });
 
+        self.b1_timer
+            .record(&self.gpu.device, &self.gpu.queue, &mut encoder)
+            .map_err(Error::Bench)?;
+
         self.gpu.queue.submit([encoder.finish()]);
+
+        if let Some(report) = self
+            .b1_timer
+            .collect(&self.gpu.device, &self.gpu.queue)
+            .map_err(Error::Bench)?
+        {
+            for line in report.lines() {
+                log::info!("b1 {line}");
+            }
+        }
 
         self.swapchain.handle.release_image().map_err(Error::Xr)?;
 

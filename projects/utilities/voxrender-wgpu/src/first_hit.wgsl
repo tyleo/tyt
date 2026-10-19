@@ -93,11 +93,6 @@ fn at_pixel(steps: Steps, x: i32, y: i32) -> vec3<i32> {
     return whole + (fraction >> vec3<u32>(GUARD_BITS));
 }
 
-// The index in the error terms of axes a < b.
-fn pair(a: i32, b: i32) -> i32 {
-    return a + b - 1;
-}
-
 fn miss() -> Hit {
     return Hit(false, false, 0.0, vec3<i32>(0), 0, false);
 }
@@ -114,6 +109,33 @@ fn voxel_of(placement: Placement, position: vec3<i32>) -> u32 {
     let at = vec3<u32>(position);
 
     return at.x * bounds.y * bounds.z + at.y * bounds.z + at.z;
+}
+
+// The voxel id of `position`, linear in it, so a position outside the grid
+// has one too.
+fn linear_voxel(placement: Placement, position: vec3<i32>) -> i32 {
+    let bounds = placement.bounds;
+
+    return position.x * bounds.y * bounds.z + position.y * bounds.z + position.z;
+}
+
+// The change to the voxel id of a mirrored walk's cell when it steps up each
+// axis.
+fn voxel_strides(placement: Placement, flip: vec3<bool>) -> vec3<i32> {
+    let bounds = placement.bounds;
+    let strides = vec3<i32>(bounds.y * bounds.z, bounds.z, 1);
+
+    return select(strides, -strides, flip);
+}
+
+// Which component of a vector `axis` picks, without a dynamic index.
+fn axis_mask(axis: i32) -> vec3<bool> {
+    return vec3<i32>(0, 1, 2) == vec3<i32>(axis);
+}
+
+// The component of `vector` that `axis` picks, without a dynamic index.
+fn pick(vector: vec3<i32>, axis: i32) -> i32 {
+    return select(select(vector.x, vector.y, axis == 1), vector.z, axis == 2);
 }
 
 // The ray from `origin` toward `point`, as voxrender's
@@ -305,43 +327,42 @@ fn integer_walk(placement: Placement, ray: Ray) -> Hit {
         next.y * direction.z - next.z * direction.y,
     );
 
+    // A step up each axis changes the error terms by these.
+    let change = ONE * direction;
+    let x_change = vec3<i32>(change.y, change.z, 0);
+    let y_change = vec3<i32>(-change.x, 0, change.z);
+    let z_change = vec3<i32>(0, -change.x, -change.y);
+
+    let strides = voxel_strides(placement, flip);
+    var voxel = linear_voxel(placement, select(cell, bounds - vec3<i32>(1) - cell, flip));
+
     let meters = length(placement.scale.xyz * vec3<f32>(ray.direction)) / f32(ONE);
     let steps = bounds.x + bounds.y + bounds.z + 3;
 
     for (var n = 0; n < steps; n++) {
-        let first = select(0, 1, error[0] > 0);
-        let axis = select(first, 2, error[pair(first, 2)] > 0);
+        let first = select(0, 1, error.x > 0);
+        let axis = select(first, 2, select(error.y, error.z, first == 1) > 0);
 
-        let ahead = (cell[axis] + 1) * ONE - origin[axis];
+        cell += select(vec3<i32>(0), vec3<i32>(1), axis_mask(axis));
 
-        cell[axis] += 1;
-
-        if cell[axis] > last[axis] {
+        // Only the stepped axis can pass its last cell.
+        if any(cell > last) {
             return start;
         }
 
-        for (var other = 0; other < 3; other++) {
-            if other == axis {
-                continue;
-            }
+        error += select(select(x_change, y_change, axis == 1), z_change, axis == 2);
+        voxel += pick(strides, axis);
 
-            let change = ONE * direction[other];
-
-            if axis < other {
-                error[pair(axis, other)] += change;
-            } else {
-                error[pair(other, axis)] -= change;
-            }
-        }
-
-        let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
-        let material = material_at(placement, position);
+        let material = cells[placement.cells.x + u32(voxel)];
 
         if material != 0u && material != inside {
+            let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
+
             // An entry faces the ray: the cell's upper face on a mirrored
             // axis.
-            let distance = f32(ahead) / f32(direction[axis]) * meters;
-            let upper = ray.direction[axis] < 0;
+            let ahead = pick(cell, axis) * ONE - pick(origin, axis);
+            let distance = f32(ahead) / f32(pick(direction, axis)) * meters;
+            let upper = pick(ray.direction, axis) < 0;
 
             return Hit(true, start.starts_inside, distance, position, axis, upper);
         }
@@ -433,27 +454,34 @@ fn float_walk(placement: Placement, ray: Ray) -> Hit {
         }
     }
 
+    let strides = voxel_strides(placement, flip);
+    var voxel = linear_voxel(placement, select(cell, bounds - vec3<i32>(1) - cell, flip));
+
     let meters = length(placement.scale.xyz * vec3<f32>(ray.direction));
     let steps = bounds.x + bounds.y + bounds.z + 3;
 
     for (var n = 0; n < steps; n++) {
         let first = select(0, 1, t_max.y < t_max.x);
-        let axis = select(first, 2, t_max.z < t_max[first]);
-        let t = t_max[axis];
+        let first_t = select(t_max.x, t_max.y, first == 1);
+        let axis = select(first, 2, t_max.z < first_t);
+        let t = select(first_t, t_max.z, axis == 2);
+        let stepped = axis_mask(axis);
 
-        cell[axis] += 1;
+        cell += select(vec3<i32>(0), vec3<i32>(1), stepped);
 
-        if cell[axis] > last[axis] {
+        // Only the stepped axis can pass its last cell.
+        if any(cell > last) {
             return start;
         }
 
-        t_max[axis] += t_delta[axis];
+        t_max += select(vec3<f32>(0.0), t_delta, stepped);
+        voxel += pick(strides, axis);
 
-        let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
-        let material = material_at(placement, position);
+        let material = cells[placement.cells.x + u32(voxel)];
 
         if material != 0u && material != inside {
-            let upper = ray.direction[axis] < 0;
+            let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
+            let upper = pick(ray.direction, axis) < 0;
 
             return Hit(true, start.starts_inside, t * meters, position, axis, upper);
         }

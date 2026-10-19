@@ -205,3 +205,38 @@ they land.
 - Gradle's `cargoNdk` task always runs and leaves change tracking to cargo.
   Its inputs had covered only the app crate, so a change in
   `voxrender-bench` or `voxrender-wgpu` left the APK stale.
+- `HitTrace` replaced `trace_hits`. It uploads a scene and a view's rays
+  once. `dispatch` records the walk into the caller's pass, and `trace`
+  walks once and reads back the hits.
+- `B1Timer` in `voxrender-bench` times B1's kernels. The Quest frame loop
+  and the desktop's `b1-times` drive it. Each pass times one kernel over
+  both eyes at the eye resolution, and the passes cycle through six
+  kernels:
+  1. the integer and float walks over the far wall scene 8 cells deep
+  2. the same walks 16 cells deep
+  3. the i32 and f32 dependent chains
+- The first 300 passes warm up. A window holds 600 passes per kernel and
+  reports each kernel's p50 and p99.
+- The far wall scene views an empty grid from inside, so no ray enters
+  from outside. It has no lights, so the walks trace primary rays alone.
+  The step ratio divides the walks' growth from 8 to 16 cells deep, which
+  cancels each pixel's setup and output. On this Mac a walk's time grows
+  linearly with depth.
+- The chain runs 64 links of an add, a compare, and a select per
+  invocation, one invocation per pixel. It stores only on an end that never
+  comes, so it stays ALU-bound.
+- Metal shows a pass's timestamps to a resolve only once the pass's command
+  buffer completes. A resolve in the same command buffer read the slot's
+  previous pass. A slot now resolves in its own submit after
+  `on_submitted_work_done` reports its pass.
+- Metal overlapped consecutive passes that wrote separate buffers, which
+  inflated each pass's time. The timer records nothing while its last pass
+  runs. An unpaced desktop loop still inflated times by about 20% and
+  doubled p99, so `b1-times` waits for each submit to finish.
+- The Quest device requires `TIMESTAMP_QUERY`, which B0 listed.
+- The first Quest timing put the integer step at 2.75x the float step,
+  while the i32 chain ran at 1.03x the f32 chain. The step's cost came from
+  its code. Both walks now pick the axis, step the cell, and update the
+  error terms or `t_max` with vector selects, with no dynamic index. Each
+  steps its cell's voxel id by a per-axis stride. Only a hit computes its
+  position and distance. B1's report on this Mac did not change.

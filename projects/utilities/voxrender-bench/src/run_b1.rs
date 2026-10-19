@@ -7,7 +7,7 @@ use voxrender::{
         two_placements_scene,
     },
 };
-use voxrender_wgpu::{GpuWalk, PixelHit, trace_hits};
+use voxrender_wgpu::{GpuWalk, HitTrace, PixelHit};
 
 /// B1's line: the largest share of a scene's samples whose ids may differ
 /// from the reference's.
@@ -120,7 +120,8 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                 (GpuWalk::Integer, &mut integer),
                 (GpuWalk::Float, &mut float),
             ] {
-                let got = trace_hits(&gpu.device, &gpu.queue, scene, view_id, size, walk)
+                let got = HitTrace::new(&gpu.device, scene, view_id, size, size, walk)
+                    .and_then(|trace| trace.trace(&gpu.device, &gpu.queue))
                     .map_err(Error::Trace)?;
 
                 for (pixel, (want, got)) in want.iter().zip(&got).enumerate() {

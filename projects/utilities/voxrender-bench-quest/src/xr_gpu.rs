@@ -153,11 +153,12 @@ impl XrGpu {
             .expose_adapter(physical_device)
             .ok_or(Error::NoAdapter)?;
 
-        if !exposed.features.contains(Features::MULTIVIEW) {
-            return Err(Error::NoMultiview);
+        let features = Features::MULTIVIEW | Features::TIMESTAMP_QUERY;
+
+        if !exposed.features.contains(features) {
+            return Err(Error::MissingFeatures(features - exposed.features));
         }
 
-        let features = Features::MULTIVIEW;
         let limits = exposed.capabilities.limits.clone();
         let device_extensions = exposed.adapter.required_device_extensions(features);
 

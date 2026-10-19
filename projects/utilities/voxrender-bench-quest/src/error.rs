@@ -7,7 +7,7 @@ use std::{
 };
 use voxrender_bench::Error as BenchError;
 use wgpu::{
-    BufferAsyncError, MapRangeError, PollError, RequestDeviceError,
+    BufferAsyncError, Features, MapRangeError, PollError, RequestDeviceError,
     hal::{DeviceError, InstanceError},
 };
 
@@ -47,8 +47,8 @@ pub enum Error {
     /// wgpu would not wrap the physical device.
     NoAdapter,
 
-    /// The adapter lacks multiview.
-    NoMultiview,
+    /// The adapter lacks features the app needs.
+    MissingFeatures(Features),
 
     /// wgpu would not wrap the Vulkan device.
     HalDevice(DeviceError),
@@ -107,7 +107,7 @@ impl Display for Error {
             Error::NoGraphicsQueue => write!(f, "the GPU has no graphics queue"),
             Error::HalInstance(error) => write!(f, "wgpu rejected the Vulkan instance: {error}"),
             Error::NoAdapter => write!(f, "wgpu rejected the physical device"),
-            Error::NoMultiview => write!(f, "the adapter lacks multiview"),
+            Error::MissingFeatures(features) => write!(f, "the adapter lacks {features:?}"),
             Error::HalDevice(error) => write!(f, "wgpu rejected the Vulkan device: {error}"),
             Error::Device(error) => write!(f, "wgpu would not open the device: {error}"),
             Error::NoOpaqueBlend => write!(f, "the system has no opaque blend mode"),
