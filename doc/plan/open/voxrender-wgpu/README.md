@@ -67,8 +67,8 @@ knows transparency, so a raster arm can show the glass the reference renders.
    [section 3.3](reference/research.md#33-exact-traversal-and-precision) on
    inputs that shared code quantizes once, so cell and face choices agree
    across GPUs. The GPU tiers run it in i32 alone, grid entry included.
-   The goldens regenerate. If B1 finds the integer step costs more than
-   1.25x a float step on Quest, Quest keeps a float walk
+   The goldens regenerate. Quest runs the integer walk too, because B1
+   found its step under 1.25x a float step there
 2. A tier matches the reference within reason. An input the GPU derives in
    f32, such as a shadow's start in another placement's grid, can flip a
    few samples. B1's line bounds the share. No tier takes 64-bit paths or

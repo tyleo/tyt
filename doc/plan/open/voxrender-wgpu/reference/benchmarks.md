@@ -119,3 +119,80 @@ research's simulation found f32 against f64 disagreeing on 2.3 to 8.0% of
 corner samples. It traced that to input rounding, which the shared
 quantization now removes for both walks. Every float flip is on a primary
 ray.
+
+## B1 Quest 3, 2026-10-18
+
+The integer walk's ids and corner shadow bits on the headset, against the
+reference rendered there, and the GPU times of the walks and the chains.
+
+- Device, GPU, wgpu, and openxr: as in B0
+- Command: the run steps in `voxrender-bench-quest`'s README. The ids run
+  before the session opens. The times run worn. The walks slow the frames
+  to about 30 FPS
+- GPU level: 4. VrApi showed 640 MHz on every sample of the first timing
+  run. The second run showed 640 MHz on 101 of 117 samples and 285 MHz on
+  16. The log did not record which samples fell inside the timed window
+- Temperature: 40 C per VrApi
+- Samples and float walk: as in B1 desktop
+
+**Ids.**
+
+| Scene | Views | Pixels | Shadow samples | Id mismatches | Shadow mismatches | Float id flips | Float shadow flips |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| cube | 1 | 65536 | 55176 | 0 | 0 | 0 | 0 |
+| glass | 1 | 65536 | 128188 | 0 | 0 | 1 | 0 |
+| glow | 1 | 65536 | 105484 | 0 | 0 | 0 | 0 |
+| l-shape | 1 | 65536 | 89796 | 0 | 0 | 1 | 0 |
+| room | 1 | 65536 | 133384 | 0 | 0 | 0 | 0 |
+| spot-room | 1 | 65536 | 133384 | 0 | 0 | 0 | 0 |
+| two-placements | 1 | 65536 | 57504 | 0 | 0 | 0 | 0 |
+| precision views | 10 | 655360 | 0 | 0 | 0 | 10 | 0 |
+| precision shadows, sparse | 3 | 196608 | 7031760 | 0 | 0 | 0 | 0 |
+| precision shadows, dense | 3 | 196608 | 7186560 | 0 | 0 | 0 | 0 |
+| precision shadows, stairs | 3 | 196608 | 6026240 | 0 | 0 | 0 | 0 |
+
+The integer walk matches the reference on every sample, as on this Mac. The
+float walk flips 12 pixels and no shadow sample, where this Mac's flipped 24.
+
+**Times.**
+
+- Kernels: the integer and float walks over the far wall scene 8 and 16
+  cells deep, and the i32 and f32 chains of 64 links
+- Each pass times one kernel over two 1680 by 1760 eyes with GPU
+  timestamps. 300 passes warm up, and a window holds 600 per kernel
+- Step ratio: the integer walk's growth from 8 to 16 cells deep over the
+  float walk's
+- This Mac: the device of B1 desktop, through
+  `cargo run --release -p voxrender-bench-desktop -- b1-times`
+
+| Kernel | Quest p50 | Quest p99 | Mac p50 | Mac p99 |
+| --- | ---: | ---: | ---: | ---: |
+| integer walk, 8 deep | 11.797 | 12.959 | 1.737 | 1.928 |
+| float walk, 8 deep | 13.979 | 15.984 | 1.820 | 2.041 |
+| integer walk, 16 deep | 18.121 | 20.119 | 3.236 | 3.467 |
+| float walk, 16 deep | 21.870 | 22.829 | 3.172 | 3.391 |
+| i32 chain | 17.246 | 19.203 | 0.651 | 0.824 |
+| f32 chain | 16.835 | 18.796 | 0.593 | 0.674 |
+
+Times are in ms, from one window on Quest and the second of three on this
+Mac. The integer step costs 0.801x the float step on Quest and 1.108x on
+this Mac. The i32 chain costs 1.024x the f32 chain on Quest and 1.098x on
+this Mac. This Mac's three windows agree to within 0.5%.
+
+The first Quest run timed the walks before their step rewrite. Its integer
+walk took 23.8 and 47.9 ms and its float walk 15.2 and 24.0 ms, a step
+ratio of 2.75x. Its three windows agreed to within 1%, and its 256-link
+chains ran at 1.03x. The old integer step's cost came from indexing
+vectors by a computed axis.
+
+**Outcomes.**
+
+1. B1 passes on Quest. The integer walk's ids and shadow bits match the
+   reference everywhere
+2. The integer step costs 0.80x a float step on Quest, under the 1.25x
+   line. Decision 1 keeps the integer walk on Quest, so Quest's goldens
+   need no float tolerance
+3. On the Adreno 740, i32 add and compare cost about what f32 does. The
+   research's doubt about integer throughput on Adreno does not apply to
+   this walk
+4. B1's NVIDIA, AMD, and phone runs wait for those devices
