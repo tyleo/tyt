@@ -437,6 +437,10 @@ step that changed it. A step reaches only its own part's grid.
    covers.
 5. `set` sets the cell `floor((p + o) / g)` of each point `p`.
 
+The last `add` that sets a cell owns it. A `carve` that empties the cell clears
+the owner. `onto` narrows a `paint` or a `coat` to the cells its `add` steps
+own.
+
 The steps outside every part belong to the root part. A pattern evaluates per
 cell from the cell's [frame position](#pattern-frames) as its step runs.
 
@@ -650,8 +654,8 @@ it belongs to by its path of part names.
      whole number from `-2^31` to `2^31 - 1`.
    - A pattern's `materials` and a `speckle`'s `accents` hold at least one
      material. A `union`, an `intersect`, and their smooth variants hold at
-     least one shape. A `polygon` lists at least 3 points, and a `polyline` and
-     a `lathe` list at least 2.
+     least one shape, and an `onto` holds at least one step. A `polygon` lists
+     at least 3 points, and a `polyline` and a `lathe` list at least 2.
    - `amplitude`, `warp`, and the lengths of an `elongate` are zero or more,
      `density` falls in `[0, 1]`, and a range's end passes its start.
    - Colors parse as `#RRGGBB`, or `#RRGGBBAA` for `baseColor`. Named properties
@@ -676,8 +680,9 @@ it belongs to by its path of part names.
    - A `polygon` outline never crosses itself.
 5. Over the document, every step has a non-empty name no other step in its list
    shares, and every part has a non-empty name no other part in its list shares.
-   The root parts count as one list. Every material that sets a custom property
-   gives it one kind.
+   The root parts count as one list. Every step in an `onto` is an `add` earlier
+   in each list holding the `paint` or the `coat`. Every material that sets a
+   custom property gives it one kind.
 6. Over the sampling and the grid, every `add` shape has a box, and a
    `--resolution` reference side reads above zero. Each part's grid stays within
    2^27 cells, and so does each root part's object under `--flatten objects`. No

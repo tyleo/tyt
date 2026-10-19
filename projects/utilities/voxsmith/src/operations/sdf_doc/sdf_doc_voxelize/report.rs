@@ -770,11 +770,13 @@ mod tests {
                     name: "band".to_string(),
                     shape_id: U32Id::from_u32(2),
                     material: SdfStepMaterial::Material(U32Id::from_u32(1)),
+                    onto_ids: None,
                 },
                 SdfStep::Paint {
                     name: "miss".to_string(),
                     shape_id: U32Id::from_u32(3),
                     material: SdfStepMaterial::Material(U32Id::from_u32(1)),
+                    onto_ids: None,
                 },
             ],
         );
@@ -889,6 +891,7 @@ model.voxj  37 voxels of 1 m  2 pieces  4x5x4  [0, 0, 0] .. [4, 5, 4]
                     name: "stain".to_string(),
                     shape_id: U32Id::from_u32(0),
                     material: SdfStepMaterial::Material(U32Id::from_u32(1)),
+                    onto_ids: None,
                 },
             ],
         );

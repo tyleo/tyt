@@ -10,6 +10,7 @@ declare global {
   type IntValue = api.IntValue;
   type JsonValue = api.JsonValue;
   type Material = api.Material;
+  type PaintOptions = api.PaintOptions;
   type Part = api.Part;
   type Pattern = api.Pattern;
   type Properties = api.Properties;

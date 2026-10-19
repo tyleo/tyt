@@ -906,13 +906,10 @@ fn check_pattern(check: &EntryCheck, pattern: &SdfPattern) -> Result<()> {
     }
 }
 
-/// Checks a step's numbers, shapes, and material.
+/// Checks a step's numbers, shapes, material, and steps.
 fn check_step(check: &EntryCheck, step: &SdfStep) -> Result<()> {
     match step {
         SdfStep::Add {
-            shape_id, material, ..
-        }
-        | SdfStep::Paint {
             shape_id, material, ..
         } => {
             check.shape3d_ids([*shape_id])?;
@@ -925,11 +922,24 @@ fn check_step(check: &EntryCheck, step: &SdfStep) -> Result<()> {
             material,
             depth,
             within_id,
+            onto_ids,
             ..
         } => {
             check_step_material(check, *material)?;
             check.optional_numbers([*depth])?;
-            check.shape3d_ids(*within_id)
+            check.shape3d_ids(*within_id)?;
+            check.step_ids(onto_ids.iter().flatten().copied())
+        }
+
+        SdfStep::Paint {
+            shape_id,
+            material,
+            onto_ids,
+            ..
+        } => {
+            check.shape3d_ids([*shape_id])?;
+            check_step_material(check, *material)?;
+            check.step_ids(onto_ids.iter().flatten().copied())
         }
 
         SdfStep::Set {

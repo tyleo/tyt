@@ -7,8 +7,8 @@ use crate::{
 };
 use branded_id::{IdVec, U32Id};
 use sdfcore::{
-    BSdfMaterial, BSdfObject, BSdfPattern, BSdfShape3d, SdfPattern, SdfSide, SdfState, SdfStep,
-    SdfStepMaterial,
+    BSdfMaterial, BSdfObject, BSdfPattern, BSdfShape3d, BSdfStep, SdfPattern, SdfSide, SdfState,
+    SdfStep, SdfStepMaterial,
 };
 use std::result::Result as StdResult;
 use ty_math::{TyVector3F64, TyVector3I32, TyVector3U32};
@@ -107,6 +107,17 @@ pub fn sample_grid(
         steps: Vec::with_capacity(object.step_ids.len()),
     };
 
+    // The `add` step owning each cell, kept only for a part whose steps read
+    // it.
+    let mut owners = object
+        .step_ids
+        .iter()
+        .any(|step_id| match &state.steps[step_id.to_usize_id()] {
+            SdfStep::Coat { onto_ids, .. } | SdfStep::Paint { onto_ids, .. } => onto_ids.is_some(),
+            SdfStep::Add { .. } | SdfStep::Carve { .. } | SdfStep::Set { .. } => false,
+        })
+        .then(|| vec![None; grid.cells.len()]);
+
     for (index, step_id) in object.step_ids.iter().enumerate() {
         let step = &state.steps[step_id.to_usize_id()];
 
@@ -114,6 +125,8 @@ pub fn sample_grid(
             lattice: &lattice,
             patterns: &state.patterns,
             grid: &mut grid,
+            owners: owners.as_deref_mut(),
+            step_id: *step_id,
             step: index as u32,
             voxel_size,
             shift,
@@ -139,6 +152,10 @@ struct StepRun<'a, 'b> {
 
     grid: &'a mut SdfGrid,
 
+    owners: Option<&'a mut [Option<U32Id<BSdfStep>>]>,
+
+    step_id: U32Id<BSdfStep>,
+
     step: u32,
 
     voxel_size: f64,
@@ -162,6 +179,7 @@ impl StepRun<'_, '_> {
                     if evaluation.distance <= 0.0 {
                         let material_id = self.pick(*material, evaluation.frame_position, cell);
                         self.write(cell, Some(material_id));
+                        self.own(cell, Some(self.step_id));
                     }
                 }
             }
@@ -170,6 +188,7 @@ impl StepRun<'_, '_> {
                 for cell in self.cells_within(self.lattice.cells(*shape_id)) {
                     if self.is_live(cell) && self.evaluate(*shape_id, cell)?.distance <= 0.0 {
                         self.write(cell, None);
+                        self.own(cell, None);
                     }
                 }
             }
@@ -179,6 +198,7 @@ impl StepRun<'_, '_> {
                 sides,
                 depth,
                 within_id,
+                onto_ids,
                 ..
             } => {
                 let snapshot: Vec<bool> = self
@@ -197,7 +217,7 @@ impl StepRun<'_, '_> {
                 let bounds = within_id.and_then(|within_id| self.lattice.cells(within_id));
 
                 for cell in self.cells_within(bounds) {
-                    if is_empty(self.grid, cell) {
+                    if is_empty(self.grid, cell) || !self.is_onto(onto_ids.as_deref(), cell) {
                         continue;
                     }
 
@@ -223,10 +243,13 @@ impl StepRun<'_, '_> {
             }
 
             SdfStep::Paint {
-                shape_id, material, ..
+                shape_id,
+                material,
+                onto_ids,
+                ..
             } => {
                 for cell in self.cells_within(self.lattice.cells(*shape_id)) {
-                    if !self.is_live(cell) {
+                    if !self.is_live(cell) || !self.is_onto(onto_ids.as_deref(), cell) {
                         continue;
                     }
 
@@ -327,6 +350,33 @@ impl StepRun<'_, '_> {
         self.grid
             .cell(cell)
             .is_some_and(|cell| cell.material.is_some())
+    }
+
+    /// Whether one of the `add` steps `onto_ids` owns `cell`, or `true` for a
+    /// step without `onto`.
+    fn is_onto(&self, onto_ids: Option<&[U32Id<BSdfStep>]>, cell: TyVector3I32) -> bool {
+        let Some(onto_ids) = onto_ids else {
+            return true;
+        };
+
+        let owners = self
+            .owners
+            .as_deref()
+            .expect("a part reading onto keeps owners");
+        let index = self.grid.index(cell).expect("a step reads inside its grid");
+
+        owners[index].is_some_and(|owner_id| onto_ids.contains(&owner_id))
+    }
+
+    /// Makes `owner_id` the owner of `cell` in a part that keeps owners.
+    fn own(&mut self, cell: TyVector3I32, owner_id: Option<U32Id<BSdfStep>>) {
+        if let Some(owners) = self.owners.as_deref_mut() {
+            let index = self
+                .grid
+                .index(cell)
+                .expect("a step writes inside its grid");
+            owners[index] = owner_id;
+        }
     }
 
     /// Writes `material` into `cell` and records the cell once for the step.

@@ -103,6 +103,16 @@ pub enum SdfjStep {
             )
         )]
         within: Option<usize>,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        onto: Option<Vec<usize>>,
     },
 
     /// Recolors the live cells inside the shape.
@@ -130,6 +140,16 @@ pub enum SdfjStep {
             )
         )]
         pattern: Option<usize>,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        onto: Option<Vec<usize>>,
     },
 
     /// Fills the cell holding each point.

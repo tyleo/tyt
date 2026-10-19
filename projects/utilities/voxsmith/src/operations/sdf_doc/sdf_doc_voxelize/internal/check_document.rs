@@ -5,8 +5,8 @@ use crate::{
         shape3d_references,
     },
 };
-use branded_id::{IdVec, IteratorExt};
-use sdfcore::{BSdfShape3d, SdfShape3d, SdfState};
+use branded_id::{IdVec, IteratorExt, U32Id};
+use sdfcore::{BSdfShape3d, BSdfStep, SdfShape3d, SdfState, SdfStep};
 use std::collections::HashSet;
 
 /// Runs model evaluation's checks of the entries' arguments and of the names
@@ -62,14 +62,17 @@ pub fn check_document(state: &SdfState, places: &[SdfPlace], paths: &EntryPaths)
         )?;
 
         for object_id in &node.child_object_ids {
+            let step_ids = &state.objects[object_id.to_usize_id()].step_ids;
+
             check_names(
                 &path,
                 "step",
-                state.objects[object_id.to_usize_id()]
-                    .step_ids
+                step_ids
                     .iter()
                     .map(|step_id| state.steps[step_id.to_usize_id()].name()),
             )?;
+
+            check_onto(state, &path, step_ids)?;
         }
     }
 
@@ -97,6 +100,34 @@ fn shape_has_box(shape: &SdfShape3d, has_box: &IdVec<BSdfShape3d, bool>) -> bool
 
         _ => boxed.all(|boxed| boxed),
     }
+}
+
+/// Errors unless the `onto` of each step in the list `step_ids` at `path` lists
+/// `add` steps earlier in the list.
+fn check_onto(state: &SdfState, path: &str, step_ids: &[U32Id<BSdfStep>]) -> Result<()> {
+    for (index, step_id) in step_ids.iter().enumerate() {
+        let step = &state.steps[step_id.to_usize_id()];
+
+        let (call, onto_ids) = match step {
+            SdfStep::Coat { onto_ids, .. } => ("coat", onto_ids),
+            SdfStep::Paint { onto_ids, .. } => ("paint", onto_ids),
+            SdfStep::Add { .. } | SdfStep::Carve { .. } | SdfStep::Set { .. } => continue,
+        };
+
+        for onto_id in onto_ids.iter().flatten() {
+            let onto = &state.steps[onto_id.to_usize_id()];
+
+            if !matches!(onto, SdfStep::Add { .. }) || !step_ids[..index].contains(onto_id) {
+                return Err(Error::invalid(format!(
+                    "{path}/{}: {call} onto must list add steps earlier in the list, not {:?}",
+                    step.name(),
+                    onto.name()
+                )));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Errors unless every name of `kind` in the list `names` at `path` holds a

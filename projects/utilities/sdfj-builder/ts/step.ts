@@ -31,6 +31,15 @@ export interface CoatOptions {
 
   /** The shape whose cells the coat stays inside. */
   within?: Shape3d;
+
+  /** The `add` steps whose cells the coat stays on. */
+  onto?: Step[];
+}
+
+/** The options of a `paint`. */
+export interface PaintOptions {
+  /** The `add` steps whose cells the paint stays on. */
+  onto?: Step[];
 }
 
 /** Fills the cells of `shape` with `material`. */
@@ -63,13 +72,16 @@ export function paint(
   name: string,
   shape: Shape3d,
   material: Material | Pattern,
+  options?: PaintOptions,
 ): Step {
   const path = stepPath("paint", name);
+  const option = check.knownOptions(path, options, ["onto"]);
   return new Step({
     kind: "paint",
     name,
     shape: check.instance(`${path} shape`, shape, Shape3d),
     ...stepMaterial(`${path} material`, material),
+    onto: check.optional(`${path} onto`, option.onto, onto),
   });
 }
 
@@ -84,6 +96,7 @@ export function coat(
     "sides",
     "depth",
     "within",
+    "onto",
   ]);
   return new Step({
     kind: "coat",
@@ -101,6 +114,7 @@ export function coat(
       option.within,
       (withinPath, within) => check.instance(withinPath, within, Shape3d),
     ),
+    onto: check.optional(`${path} onto`, option.onto, onto),
   });
 }
 
@@ -128,6 +142,33 @@ export function set(
 /** The path `call`'s errors start with, after checking `name`. */
 function stepPath(call: string, name: unknown): string {
   return `${call} ${JSON.stringify(check.text(`${call} name`, name))}`;
+}
+
+/** The one or more `add` steps the array `value` holds. */
+function onto(path: string, value: unknown): Step[] {
+  const steps = check.list(
+    path,
+    value,
+    "an array of add Steps",
+    (itemPath, item) =>
+      item instanceof Step
+        ? addStep(itemPath, item)
+        : check.fail(itemPath, "an add Step", item),
+  );
+  return steps.length > 0
+    ? steps
+    : check.fail(path, "an array of at least one add Step", value);
+}
+
+/** `step` after checking that it is an `add`. */
+function addStep(path: string, step: Step): Step {
+  const { kind, name } = Step.entry(step);
+  if (kind !== "add") {
+    throw new Error(
+      `${path} must be an add Step, not the ${kind} ${JSON.stringify(name)}`,
+    );
+  }
+  return step;
 }
 
 /** The key and value a step writes for `value`. */

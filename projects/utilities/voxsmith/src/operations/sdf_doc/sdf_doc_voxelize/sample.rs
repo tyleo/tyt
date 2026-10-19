@@ -192,6 +192,7 @@ mod tests {
                     name: "stain".to_string(),
                     shape_id: U32Id::from_u32(2),
                     material: material(1),
+                    onto_ids: None,
                 },
                 SdfStep::Coat {
                     name: "top".to_string(),
@@ -199,6 +200,7 @@ mod tests {
                     sides: Some(vec![SdfSide::PositiveY]),
                     depth: None,
                     within_id: None,
+                    onto_ids: None,
                 },
                 SdfStep::Set {
                     name: "stud".to_string(),
@@ -263,6 +265,7 @@ mod tests {
                         sides: None,
                         depth,
                         within_id: None,
+                        onto_ids: None,
                     },
                 ],
             );
@@ -270,6 +273,83 @@ mod tests {
             let sampling = sample(&main, &at_size(1.0)).unwrap();
             assert_eq!(sampling.grids[0].steps[1].written.len(), written);
         }
+    }
+
+    #[test]
+    fn onto_keeps_a_paint_and_a_coat_on_the_cells_their_adds_still_own() {
+        let row = |from, to| cuboid([from, 0.0, 0.0], [to, 1.0, 1.0]);
+        let onto = |step: u32| Some(vec![U32Id::from_u32(step)]);
+
+        let main = single_part_main(
+            vec![row(0.0, 4.0), row(2.0, 6.0), row(3.0, 4.0), row(0.0, 6.0)],
+            vec![
+                add("body", 0, 0),
+                add("gem", 1, 0),
+                SdfStep::Carve {
+                    name: "cut".to_string(),
+                    shape_id: U32Id::from_u32(2),
+                },
+                SdfStep::Set {
+                    name: "stud".to_string(),
+                    points: vec![TyVector3F64::new(3.5, 0.5, 0.5)],
+                    material: material(0),
+                },
+                SdfStep::Paint {
+                    name: "gilt".to_string(),
+                    shape_id: U32Id::from_u32(3),
+                    material: material(1),
+                    onto_ids: onto(0),
+                },
+                SdfStep::Coat {
+                    name: "rim".to_string(),
+                    material: material(1),
+                    sides: None,
+                    depth: None,
+                    within_id: None,
+                    onto_ids: onto(1),
+                },
+            ],
+        );
+
+        let sampling = sample(&main, &at_size(1.0)).unwrap();
+        let grid = &sampling.grids[0];
+        let steps: Vec<Option<u32>> = (0..6)
+            .map(|x| grid.cell(TyVector3I32::new(x, 0, 0)).unwrap().step)
+            .collect();
+        assert_eq!(
+            steps,
+            [Some(4), Some(4), Some(5), Some(3), Some(5), Some(5)]
+        );
+    }
+
+    #[test]
+    fn onto_lists_only_earlier_adds() {
+        let paint = |onto: u32| SdfStep::Paint {
+            name: "gilt".to_string(),
+            shape_id: U32Id::from_u32(0),
+            material: material(1),
+            onto_ids: Some(vec![U32Id::from_u32(onto)]),
+        };
+        let cut = SdfStep::Carve {
+            name: "cut".to_string(),
+            shape_id: U32Id::from_u32(0),
+        };
+        let block = vec![cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0])];
+
+        assert_eq!(
+            error(
+                &single_part_main(block.clone(), vec![paint(1), add("body", 0, 0)]),
+                at_size(1.0)
+            ),
+            "model/gilt: paint onto must list add steps earlier in the list, not \"body\""
+        );
+        assert_eq!(
+            error(
+                &single_part_main(block, vec![add("body", 0, 0), cut, paint(1)]),
+                at_size(1.0)
+            ),
+            "model/gilt: paint onto must list add steps earlier in the list, not \"cut\""
+        );
     }
 
     /// Two-material `bands` across x, one cell thick.

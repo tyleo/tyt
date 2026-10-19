@@ -1,17 +1,29 @@
 use crate::operations::sdf_doc::ArgumentCheck;
-use sdfcore::SdfStep;
+use branded_id::U32Id;
+use sdfcore::{BSdfStep, SdfStep};
 use std::{collections::HashSet, result::Result as StdResult};
 
 /// Checks the arguments of the step `step` other than its shapes, material,
 /// and pattern.
 pub fn check_step(step: &SdfStep) -> StdResult<(), String> {
     match step {
-        SdfStep::Add { .. } | SdfStep::Carve { .. } | SdfStep::Paint { .. } => Ok(()),
+        SdfStep::Add { .. } | SdfStep::Carve { .. } => Ok(()),
 
-        SdfStep::Coat { depth, .. } => match depth {
-            Some(depth) => ArgumentCheck::new("coat").whole_above_zero("depth", *depth),
-            None => Ok(()),
-        },
+        SdfStep::Coat {
+            depth, onto_ids, ..
+        } => {
+            let check = ArgumentCheck::new("coat");
+
+            if let Some(depth) = depth {
+                check.whole_above_zero("depth", *depth)?;
+            }
+
+            check_onto(&check, onto_ids.as_deref())
+        }
+
+        SdfStep::Paint { onto_ids, .. } => {
+            check_onto(&ArgumentCheck::new("paint"), onto_ids.as_deref())
+        }
 
         SdfStep::Set { points, .. } => {
             let mut seen = HashSet::with_capacity(points.len());
@@ -32,6 +44,17 @@ pub fn check_step(step: &SdfStep) -> StdResult<(), String> {
     }
 }
 
+/// Errors on an `onto` that lists no step.
+fn check_onto(
+    check: &ArgumentCheck,
+    onto_ids: Option<&[U32Id<BSdfStep>]>,
+) -> StdResult<(), String> {
+    match onto_ids {
+        Some(onto_ids) => check.count("onto", onto_ids.len(), 1),
+        None => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::operations::sdf_doc::check_step;
@@ -40,7 +63,7 @@ mod tests {
     use ty_math::TyVector3F64;
 
     #[test]
-    fn a_set_lists_each_point_once_and_a_coat_reaches_whole_cells() {
+    fn a_set_lists_each_point_once_a_coat_reaches_whole_cells_and_onto_lists_a_step() {
         let set = |points| SdfStep::Set {
             name: "studs".to_string(),
             points,
@@ -63,10 +86,22 @@ mod tests {
             sides: None,
             depth: Some(1.5),
             within_id: None,
+            onto_ids: None,
         };
         assert_eq!(
             check_step(&coat),
             Err("coat depth must be a whole number above zero, not 1.5".to_string())
+        );
+
+        let paint = SdfStep::Paint {
+            name: "gilt".to_string(),
+            shape_id: U32Id::from_u32(0),
+            material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+            onto_ids: Some(Vec::new()),
+        };
+        assert_eq!(
+            check_step(&paint),
+            Err("paint onto must be a list of at least 1, not a list of 0".to_string())
         );
     }
 }

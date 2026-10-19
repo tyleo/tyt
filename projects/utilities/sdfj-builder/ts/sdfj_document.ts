@@ -189,8 +189,11 @@ class SdfjWriter {
   ): number {
     const steps: number[] = [];
     const childNodes: number[] = [];
+    const listed = new Set<Step>();
     for (const item of list) {
       if (item instanceof Step) {
+        checkOnto(item, listed);
+        listed.add(item);
         steps.push(this.#index(item));
       } else {
         childNodes.push(this.#part(item));
@@ -272,6 +275,19 @@ class SdfjWriter {
       return [this.document.shapes3d, Shape3d.entry(value)];
     }
     return [this.document.steps, Step.entry(value)];
+  }
+}
+
+/** Throws unless each step in the `onto` of `step` is in `listed`. */
+function checkOnto(step: Step, listed: ReadonlySet<Step>): void {
+  const { kind, name, onto } = Step.entry(step);
+  for (const ontoStep of (onto ?? []) as Step[]) {
+    if (!listed.has(ontoStep)) {
+      throw new Error(
+        `${kind} ${JSON.stringify(name)} onto must list steps earlier in ` +
+          `its list, not ${JSON.stringify(Step.entry(ontoStep).name)}`,
+      );
+    }
   }
 }
 

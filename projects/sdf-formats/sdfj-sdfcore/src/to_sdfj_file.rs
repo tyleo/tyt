@@ -796,6 +796,7 @@ fn sdfj_step_from_sdf_step(step: &SdfStep) -> SdfjStep {
             sides,
             depth,
             within_id,
+            onto_ids,
         } => SdfjStep::Coat {
             name: name.clone(),
             material: sdfj_material_index(*material),
@@ -805,17 +806,20 @@ fn sdfj_step_from_sdf_step(step: &SdfStep) -> SdfjStep {
                 .map(|sides| sides.iter().copied().map(sdfj_side_from_sdf_side).collect()),
             depth: *depth,
             within: within_id.map(wire_index),
+            onto: onto_ids.as_deref().map(wire_indices),
         },
 
         SdfStep::Paint {
             name,
             shape_id,
             material,
+            onto_ids,
         } => SdfjStep::Paint {
             name: name.clone(),
             shape: wire_index(*shape_id),
             material: sdfj_material_index(*material),
             pattern: sdfj_pattern_index(*material),
+            onto: onto_ids.as_deref().map(wire_indices),
         },
 
         SdfStep::Set {

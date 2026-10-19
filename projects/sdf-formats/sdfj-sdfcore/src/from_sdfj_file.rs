@@ -806,6 +806,7 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
             sides,
             depth,
             within,
+            onto,
         } => SdfStep::Coat {
             name: name.clone(),
             material: sdf_step_material_from_material_and_pattern(*material, *pattern)?,
@@ -814,6 +815,7 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
                 .map(|sides| sides.iter().copied().map(sdf_side_from_sdfj_side).collect()),
             depth: *depth,
             within_id: within.map(wire_id).transpose()?,
+            onto_ids: onto.as_deref().map(wire_ids).transpose()?,
         },
 
         SdfjStep::Paint {
@@ -821,10 +823,12 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
             shape,
             material,
             pattern,
+            onto,
         } => SdfStep::Paint {
             name: name.clone(),
             shape_id: wire_id(*shape)?,
             material: sdf_step_material_from_material_and_pattern(*material, *pattern)?,
+            onto_ids: onto.as_deref().map(wire_ids).transpose()?,
         },
 
         SdfjStep::Set {

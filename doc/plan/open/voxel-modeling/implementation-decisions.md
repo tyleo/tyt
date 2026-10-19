@@ -368,3 +368,13 @@ land.
 7. The dark woods, stone, and bark keep their colors because their patterns
    show on every lit face under the review rig at the default spread. Most of
    round 6's near-black cases came from iron. Iron waits with the other metals
+
+## S20. Spills
+
+1. The last `add` that fills a cell owns it. A `carve` that empties the cell
+   clears the owner, and `set`, `paint`, and `coat` leave it. A renderer
+   reading the shapes at a point finds the same owner
+2. A part keeps owners only when one of its steps takes `onto`, so other parts
+   use no more memory
+3. The builder checks `onto` at the call and again in the part's list. Model
+   evaluation checks it once more for documents other tools write

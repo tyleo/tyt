@@ -95,8 +95,8 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
   "steps": [
     { "kind": "add", "name": "add", "shape": 0, "material": 0 },
     { "kind": "carve", "name": "carve", "shape": 1 },
-    { "kind": "paint", "name": "paint", "shape": 2, "pattern": 0 },
-    { "kind": "coat", "name": "coat", "pattern": 1, "sides": ["+y", "-x"], "depth": 2, "within": 3 },
+    { "kind": "paint", "name": "paint", "shape": 2, "pattern": 0, "onto": [0] },
+    { "kind": "coat", "name": "coat", "pattern": 1, "sides": ["+y", "-x"], "depth": 2, "within": 3, "onto": [0] },
     { "kind": "set", "name": "set", "points": [[0, 0, 0], [0.5, 0, 0]], "material": 1 }
   ],
   "objects": [{ "name": "part", "steps": [0, 1, 2, 3, 4] }],

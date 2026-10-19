@@ -28,6 +28,7 @@ const CASES: [string, () => Step, Entry][] = [
       within: 0,
     },
   ],
+
   ["paint", () => paint("gilt", ball, checker([white])), {
     kind: "paint",
     name: "gilt",
@@ -52,6 +53,42 @@ Deno.test("set of one point writes a list of one point", () => {
   assert.deepStrictEqual(document([set("eye", [1, 2, 3], white)]).steps, [
     { kind: "set", name: "eye", points: [[1, 2, 3]], material: 0 },
   ]);
+});
+
+Deno.test("onto writes the indices of earlier add steps", () => {
+  const body = add("body", ball, white);
+  const rim = add("rim", ball, white);
+  assert.deepStrictEqual(
+    document([
+      body,
+      rim,
+      paint("gilt", ball, white, { onto: [body] }),
+      coat("snow", white, { onto: [body, rim] }),
+    ]).steps.slice(2),
+    [
+      { kind: "paint", name: "gilt", shape: 0, material: 0, onto: [0] },
+      { kind: "coat", name: "snow", material: 0, onto: [0, 1] },
+    ],
+  );
+});
+
+Deno.test("onto lists add steps earlier in the list", () => {
+  const body = add("body", ball, white);
+  assert.throws(() => paint("gilt", ball, white, { onto: [] }), {
+    message: 'paint "gilt" onto must be an array of at least one add Step, ' +
+      "not []",
+  });
+  assert.throws(
+    () => coat("snow", white, { onto: [carve("cut", ball)] }),
+    { message: 'coat "snow" onto[0] must be an add Step, not the carve "cut"' },
+  );
+  assert.throws(
+    () => document([paint("gilt", ball, white, { onto: [body] }), body]),
+    {
+      message: 'paint "gilt" onto must list steps earlier in its list, ' +
+        'not "body"',
+    },
+  );
 });
 
 Deno.test("a step's arguments have to fit its entry", () => {

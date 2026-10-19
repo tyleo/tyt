@@ -65,6 +65,7 @@ export {
   coat,
   type CoatOptions,
   paint,
+  type PaintOptions,
   set,
   type Step,
 } from "./step.ts";

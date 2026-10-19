@@ -119,6 +119,7 @@ function paint(
   name: string,
   shape: Shape3d,
   material: Material | Pattern,
+  options?: PaintOptions,
 ): Step;
 function coat(
   name: string,
@@ -131,10 +132,15 @@ function set(
   material: Material | Pattern,
 ): Step;
 
+interface PaintOptions {
+  onto?: Step[];
+}
+
 interface CoatOptions {
   sides?: Side[];
   depth?: number;
   within?: Shape3d;
+  onto?: Step[];
 }
 ```
 
@@ -151,6 +157,10 @@ wherever two reach the same cell.
 5. `set` fills the cell holding each point and places detail too small for a
    shape. A point at a cell center, `(i + 0.5) * v`, lands in that cell. A point
    on a cell boundary can land on either side of it.
+
+`onto` keeps a `paint` or a `coat` on the cells the listed `add` steps own. A
+cell belongs to the last `add` that filled it until a `carve` empties it. Each
+step in `onto` has to be an `add` earlier in the same list.
 
 Every step takes a name no other step in its list shares. The report and errors
 use the name. A part's grid grows to hold every `add` and `set`, and `carve`,

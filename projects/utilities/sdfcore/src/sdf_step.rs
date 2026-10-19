@@ -1,4 +1,4 @@
-use crate::{BSdfShape3d, SdfSide, SdfStepMaterial};
+use crate::{BSdfShape3d, BSdfStep, SdfSide, SdfStepMaterial};
 use branded_id::U32Id;
 use ty_math::TyVector3F64;
 
@@ -24,7 +24,7 @@ pub enum SdfStep {
     },
 
     /// Recolors the live cells with an empty cell beyond them toward a listed
-    /// side.
+    /// side. `onto_ids` limits it to the cells those `add` steps own.
     Coat {
         name: String,
 
@@ -35,15 +35,20 @@ pub enum SdfStep {
         depth: Option<f64>,
 
         within_id: Option<U32Id<BSdfShape3d>>,
+
+        onto_ids: Option<Vec<U32Id<BSdfStep>>>,
     },
 
-    /// Recolors the live cells inside the shape.
+    /// Recolors the live cells inside the shape. `onto_ids` limits it to the
+    /// cells those `add` steps own.
     Paint {
         name: String,
 
         shape_id: U32Id<BSdfShape3d>,
 
         material: SdfStepMaterial,
+
+        onto_ids: Option<Vec<U32Id<BSdfStep>>>,
     },
 
     /// Fills the cell holding each point.
