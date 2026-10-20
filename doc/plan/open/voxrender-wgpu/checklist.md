@@ -98,7 +98,7 @@ code-level choices in
          dependent chain of i32 or f32 adds and compares
       4. The report lands in benchmarks.md. Decision 1 applies the 1.25x
          line
-- [ ] **S7. Bench scenes and the per-object structure.**
+- [x] **S7. Bench scenes and the per-object structure.**
       1. `voxrender-bench` builds the research's five scenes from fixtures
          and generators. B1's ids run over them
       2. The 64-tree of research section 3.4 is built on the CPU from a

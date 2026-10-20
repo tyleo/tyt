@@ -1,103 +1,20 @@
 // voxrender's integer walk in i32 alone: the first cell past the start whose
-// material differs from the start cell's, through one placement's grid. The
-// entry, the end cell, and the error terms rely on integer arithmetic
-// wrapping.
+// material differs from the start cell's, through one placement's grid.
 fn walk(placement: Placement, ray: Ray) -> Hit {
+    let mirrored = enter(placement, ray);
+
+    if !mirrored.found {
+        return miss();
+    }
+
     let bounds = placement.bounds.xyz;
-    let flip = ray.direction < vec3<i32>(0);
+    let origin = mirrored.origin;
+    let direction = mirrored.direction;
+    let flip = mirrored.flip;
+    let last = mirrored.last;
+    let entry = mirrored.entry;
 
-    // Mirror each axis the ray moves down, so the walk only steps up.
-    let origin = select(ray.origin, bounds * ONE - ray.origin, flip);
-    let direction = abs(ray.direction);
-
-    for (var a = 0; a < 3; a++) {
-        if direction[a] == 0 && (origin[a] < 0 || origin[a] >= bounds[a] * ONE) {
-            return miss();
-        }
-    }
-
-    var last = bounds - vec3<i32>(1);
-
-    if ray.ends {
-        last = min(last, select(ray.end, bounds - vec3<i32>(1) - ray.end, flip));
-    }
-
-    let entering = direction > vec3<i32>(0) & origin < vec3<i32>(0);
-    var cell = origin >> vec3<u32>(FRACTION_BITS);
-    var entry = -1;
-
-    if any(entering) {
-        // The f32 guess of the face the ray reaches last. A near tie can pick
-        // a face too early, which the correction below finds.
-        var latest = -1.0;
-
-        for (var a = 0; a < 3; a++) {
-            let t = -f32(origin[a]) / f32(direction[a]);
-
-            if direction[a] > 0 && origin[a] < 0 && t > latest {
-                latest = t;
-                entry = a;
-            }
-        }
-
-        for (var attempt = 0; attempt < 3; attempt++) {
-            var behind = -1;
-
-            for (var a = 0; a < 3; a++) {
-                if a == entry || direction[a] == 0 {
-                    continue;
-                }
-
-                let e = entry;
-
-                // The f32 guess of the ray's cell on `a` at the face of `e`.
-                let x = (f32(origin[a]) + -f32(origin[e]) / f32(direction[e]) * f32(direction[a]))
-                    / f32(ONE);
-
-                if x > f32(bounds[a] + WINDOW) {
-                    return miss();
-                }
-
-                var c = i32(floor(max(x, -f32(WINDOW) - 2.0)));
-
-                // `r` is exact modulo 2^32 and within i32 near the ray. A
-                // crossing at the face on a later axis comes after the entry.
-                let span = ONE * direction[e];
-                var r = origin[a] * direction[e] - origin[e] * direction[a] - c * span;
-
-                for (var k = 0; k <= WINDOW && (r < 0 || (r == 0 && a > e)); k++) {
-                    c -= 1;
-                    r += span;
-                }
-
-                for (var k = 0; k <= WINDOW && (r > span || (r == span && a < e)); k++) {
-                    c += 1;
-                    r -= span;
-                }
-
-                cell[a] = c;
-
-                if direction[a] > 0 && origin[a] < 0 && c < 0 {
-                    behind = a;
-                }
-            }
-
-            if behind < 0 {
-                break;
-            }
-
-            // The ray had not crossed `behind` yet at the guessed face.
-            entry = behind;
-        }
-
-        cell[entry] = -1;
-    }
-
-    for (var a = 0; a < 3; a++) {
-        if a != entry && (cell[a] < 0 || cell[a] >= bounds[a]) {
-            return miss();
-        }
-    }
+    var cell = mirrored.cell;
 
     var inside = 0u;
 
@@ -118,13 +35,7 @@ fn walk(placement: Placement, ray: Ray) -> Hit {
         }
     }
 
-    let next = (cell + vec3<i32>(1)) * ONE - origin;
-
-    var error = vec3<i32>(
-        next.x * direction.y - next.y * direction.x,
-        next.x * direction.z - next.z * direction.x,
-        next.y * direction.z - next.z * direction.y,
-    );
+    var error = error_at(cell, origin, direction);
 
     // A step up each axis changes the error terms by these.
     let change = ONE * direction;

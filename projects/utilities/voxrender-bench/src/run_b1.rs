@@ -20,9 +20,9 @@ struct Tally {
 
 /// Runs B1 on `gpu` over its scenes, each view drawn over a `size` square
 /// image, and returns the report in Markdown.
-/// The integer walk's primary ids and corner shadow bits are judged against
-/// B1's line. The float walk's flips are counted for the record. The report
-/// lists the first mismatching pixels of each scene and walk.
+/// The integer and tree walks' primary ids and corner shadow bits are judged
+/// against B1's line. The float walk's flips are counted for the record. The
+/// report lists the first mismatching pixels of each scene and walk.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = b1_scenes();
 
@@ -52,15 +52,15 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         ),
         format!("- Image: {size} by {size} pixels per view"),
         format!(
-            "- Line: the integer walk's ids differ on at most {}% of a scene's pixels \
+            "- Line: the integer and tree walks' ids differ on at most {}% of a scene's pixels \
              and of its corner shadow samples",
             LINE * 100.0
         ),
         String::new(),
         "| Scene | Views | Pixels | Shadow samples | Id mismatches | Shadow mismatches \
-         | Float id flips | Float shadow flips |"
+         | Float id flips | Float shadow flips | Tree id mismatches | Tree shadow mismatches |"
             .to_owned(),
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |".to_owned(),
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |".to_owned(),
     ];
 
     let mut pass = true;
@@ -72,6 +72,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         let mut samples = 0;
         let mut integer = Tally::default();
         let mut float = Tally::default();
+        let mut tree = Tally::default();
 
         for (view_id, _) in scene.iter_views() {
             let want = reference_hits(scene, view_id, size)?;
@@ -84,7 +85,11 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                 .map(|hit| hit.lit.len() * 4)
                 .sum::<usize>();
 
-            for (walk, tally) in [(Walk::Integer, &mut integer), (Walk::Float, &mut float)] {
+            for (walk, tally) in [
+                (Walk::Integer, &mut integer),
+                (Walk::Float, &mut float),
+                (Walk::Tree, &mut tree),
+            ] {
                 let got = walk
                     .trace(&gpu.device, scene, view_id, size, size)?
                     .trace(&gpu.device, &gpu.queue)
@@ -117,16 +122,18 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
             }
         }
 
-        let id_share = share(integer.ids, pixels);
-        let shadow_share = share(integer.shadows, samples);
-        pass &= id_share <= LINE && shadow_share <= LINE;
+        for tally in [&integer, &tree] {
+            pass &= share(tally.ids, pixels) <= LINE && share(tally.shadows, samples) <= LINE;
+        }
 
         lines.push(format!(
-            "| {name} | {views} | {pixels} | {samples} | {} | {} | {} | {} |",
+            "| {name} | {views} | {pixels} | {samples} | {} | {} | {} | {} | {} | {} |",
             count(integer.ids, pixels),
             count(integer.shadows, samples),
             count(float.ids, pixels),
             count(float.shadows, samples),
+            count(tree.ids, pixels),
+            count(tree.shadows, samples),
         ));
     }
 

@@ -290,3 +290,18 @@ they land.
   | S5 grazing floor | 4194304 | 2952989 | 16384 | 2162 | 0, 65536 | 0 |
 
   None of the five has a uniform 16^3 tile or a 4 or 8-bit leaf
+- The tree walk is `voxrender-bench`'s `tree_walk.wgsl`.
+  `HitTrace::with_walk` takes the words a walk reads per object, and
+  `dense_cells` gives the integer walk's. The integer walk's entry and error
+  terms moved into `first_hit.wgsl`'s `enter` and `error_at`, which the tree
+  walk shares
+- A cell in a leaf takes one integer step. A cell in an empty or uniform
+  region jumps to the first cell past the region's cube, cut to the grid:
+  1. An f32 guess picks the face the ray leaves across and the cell on each
+     other axis
+  2. Each cell's remainder corrects it under the entry's tie rules
+  3. A cell past the cube moves the exit to its axis
+  4. `error_at` gives the landing cell's error terms directly. They are exact
+     because a cell on the ray keeps them within i32
+- The bench builds each object's tree twice per trace: once to report a
+  build error, and once inside `with_walk`, whose `cells` cannot fail

@@ -1,9 +1,9 @@
-use crate::{Error, PixelHit, Result};
+use crate::{Error, PixelHit, Result, dense_cells};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
 use voxrender::{
-    BRenderView, Error as RenderError, GRID_GUARD_BITS, RenderScene, RenderViewRays, ShadowTarget,
-    grid_point, grid_vector, quantize_direction, quantize_point,
+    BRenderView, Error as RenderError, GRID_GUARD_BITS, RenderObject, RenderScene, RenderViewRays,
+    ShadowTarget, grid_point, grid_vector, quantize_direction, quantize_point,
 };
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages,
@@ -39,7 +39,8 @@ pub struct HitTrace {
 
 impl HitTrace {
     /// Uploads `scene` and the rays of `view_id` over a `width` by `height`
-    /// image, and builds the pipeline of `voxrender`'s integer walk.
+    /// image, and builds the pipeline of `voxrender`'s integer walk over each
+    /// object's [`dense_cells`].
     pub fn new(
         device: &Device,
         scene: &RenderScene,
@@ -54,13 +55,14 @@ impl HitTrace {
             width,
             height,
             include_str!("integer_walk.wgsl"),
+            dense_cells,
         )
     }
 
     /// As [`HitTrace::new`], tracing with `walk` in place of the integer
     /// walk. `walk` is WGSL defining
     /// `fn walk(placement: Placement, ray: Ray) -> Hit` over `first_hit.wgsl`'s
-    /// types and helpers.
+    /// types and helpers. It reads the words `cells` gives each object.
     pub fn with_walk(
         device: &Device,
         scene: &RenderScene,
@@ -68,6 +70,7 @@ impl HitTrace {
         width: u32,
         height: u32,
         walk: &str,
+        cells: impl Fn(&RenderObject) -> Vec<u32>,
     ) -> Result<Self> {
         let view = scene
             .view(view_id)
@@ -82,24 +85,16 @@ impl HitTrace {
             .filter_map(|(_, light)| light.shadow_target())
             .collect();
 
-        // Each object's cells in raster order: 0 when empty, else its material
-        // id plus one.
-        let mut cells = Vec::new();
+        let mut words = Vec::new();
         let mut offsets = HashMap::new();
 
         for (object_id, object) in scene.iter_objects() {
             offsets.insert(
                 object_id,
-                u32::try_from(cells.len()).expect("a scene's cells number under 2^32"),
+                u32::try_from(words.len()).expect("a scene's cells number under 2^32"),
             );
 
-            let bounds = object.bounds();
-
-            for index in 0..bounds.x * bounds.y * bounds.z {
-                let material_id = object.voxel_material(U32Id::from_u32(index));
-
-                cells.push(material_id.map_or(0, |material_id| material_id.to_u32() + 1));
-            }
+            words.extend(cells(object));
         }
 
         let mut placements = Vec::new();
@@ -201,7 +196,7 @@ impl HitTrace {
         let placements = init("placements", &placements, BufferUsages::STORAGE);
         let cells = init(
             "cells",
-            &cells
+            &words
                 .iter()
                 .flat_map(|cell: &u32| cell.to_le_bytes())
                 .collect::<Vec<_>>(),

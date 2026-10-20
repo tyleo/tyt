@@ -134,6 +134,12 @@ run as above.
 The integer walk matches the reference on every sample of the five. The
 earlier scenes' counts did not change.
 
+**Tree walk, 2026-10-20.** S7's tree walk joined B1, run as above over all
+sixteen scenes. It matches the reference on every id and shadow sample of
+each. The integer and float counts did not change. A check build that lands
+each skip one cell too far mismatches 0.4 to 4.3% of the pixels in S1 to S4.
+S5 walks cell by cell, because every child its rays reach is a mixed leaf.
+
 ## B1 Quest 3, 2026-10-18
 
 The integer walk's ids and corner shadow bits on the headset, against the
