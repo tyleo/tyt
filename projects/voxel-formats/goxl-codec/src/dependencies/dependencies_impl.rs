@@ -2,7 +2,7 @@ use crate::{DecodePng, EncodePng, GoxlRgbaImage};
 use png::{BitDepth, ColorType, Decoder, Encoder};
 use std::io::Cursor;
 
-/// The dependencies over `png`.
+/// The dependencies the `impl` feature provides.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

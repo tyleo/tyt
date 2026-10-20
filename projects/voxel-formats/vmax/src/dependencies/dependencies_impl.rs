@@ -1,7 +1,7 @@
 use crate::{DecodeBase64, EncodeBase64};
 use base64::{Engine, engine::general_purpose::STANDARD};
 
-/// The dependencies over the `base64` crate's standard engine.
+/// The dependencies the `impl` feature provides.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

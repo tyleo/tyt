@@ -6,9 +6,9 @@ use voxj::{
     VoxjObject,
 };
 
-/// The dependencies over `serde_json` and `flate2`. It also implements the
-/// `voxj` crate's traits over [`voxj::DependenciesImpl`], so one value serves
-/// the whole family.
+/// The dependencies the `impl` feature provides.
+/// It also implements the `voxj` crate's traits, so one value serves the
+/// whole family.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

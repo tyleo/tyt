@@ -1,6 +1,6 @@
 //! The dependencies the converters take: base64 decoding and encoding for
 //! data URIs, injected so the crate carries no encoder. `DependenciesImpl`,
-//! behind the `impl` feature, binds them over `base64`.
+//! behind the `impl` feature, binds them.
 
 // Public API
 

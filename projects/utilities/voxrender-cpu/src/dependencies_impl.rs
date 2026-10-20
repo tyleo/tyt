@@ -1,8 +1,8 @@
 use crate::MapRows;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-/// The dependencies over `rayon`. `map_rows` spreads the rows across
-/// `rayon`'s global thread pool.
+/// The dependencies the `impl` feature provides. `map_rows` spreads the rows
+/// across threads.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

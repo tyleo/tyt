@@ -1,6 +1,6 @@
 //! The dependencies that give an opaque file its base64 text form, injected
 //! so the crate carries no base64 library. [`DependenciesImpl`], behind the `impl`
-//! feature, binds them over `base64`.
+//! feature, binds them.
 
 // Public API
 

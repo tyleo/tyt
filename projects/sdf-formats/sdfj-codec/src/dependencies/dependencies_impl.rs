@@ -1,7 +1,7 @@
 use crate::{DecodeSdfjJson, EncodeSdfjJson};
 use sdfj::SdfjFile;
 
-/// The dependencies over `serde_json`.
+/// The dependencies the `impl` feature provides.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

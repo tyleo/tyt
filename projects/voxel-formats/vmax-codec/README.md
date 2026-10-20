@@ -33,19 +33,10 @@ uninterpreted.
 
 ## Dependencies
 
-Each load and save function transcodes its payloads through traits:
-
-1. `DecodeVMaxPlist` and `EncodeVMaxPlist` for the binary plists
-2. `DecompressLzfse` and `CompressLzfse` for their LZFSE framing
-3. `DecodePng` and `EncodePng` for the PNGs
-4. `DecodeVMaxSceneJson` and `EncodeVMaxSceneJson` for `scene.json`
-
-Each function binds on what it uses and takes `dependencies` first.
-Implement the traits, or use `DependenciesImpl` behind the default `impl`
-feature: plists over `plist`, LZFSE over `lzfse`, PNGs over `png`, and JSON
-over `serde_json` with exact float parsing. The feature adds those crates
-plus `serde` for the derives on `vmax`'s types. A lean build depends on
-`vmax` alone.
+Each load and save function transcodes its payloads through traits, binding
+on what it uses and taking `dependencies` first. Implement the traits, or use
+`DependenciesImpl` behind the default `impl` feature, which parses JSON floats
+exactly.
 
 ## Example
 

@@ -1,6 +1,6 @@
 //! The dependencies the codec takes: zlib compression and decompression,
 //! injected so the crate carries no compression library.
-//! [`DependenciesImpl`], behind the `impl` feature, binds them over `flate2`.
+//! [`DependenciesImpl`], behind the `impl` feature, binds them.
 
 // Public API
 

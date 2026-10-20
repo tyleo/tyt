@@ -62,8 +62,8 @@ from bytes:
   buffer as the `BIN` chunk. The crate frames the container itself.
 
 Each takes the dependencies for data URIs: `DecodeBase64` to load and
-`EncodeBase64` to write. `DependenciesImpl` supplies both over `base64`
-behind the `impl` feature. The crate carries no image library; images stay
+`EncodeBase64` to write. `DependenciesImpl`, behind the `impl` feature,
+supplies both. The crate carries no image library; images stay
 encoded.
 
 ## The ext

@@ -7,9 +7,9 @@
 //! meshconv, and sdfconv. `operations` holds a module per vxl command group,
 //! each behind a feature of the same name. `utilities` holds what the
 //! operations share.
-//! The caller supplies the operations' image codecs and threading through
-//! `dependencies`. [`DependenciesImpl`](dependencies::DependenciesImpl), behind
-//! the `impl` feature, binds them over `png`, `zune-jpeg`, and `rayon`.
+//! The caller supplies the operations' dependencies through `dependencies`.
+//! [`DependenciesImpl`](dependencies::DependenciesImpl), behind the `impl`
+//! feature, binds them.
 
 // Public API
 

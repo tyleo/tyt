@@ -1,6 +1,6 @@
 //! The dependencies the codec takes: PNG decoding and encoding, injected
 //! so the crate carries no image library. [`DependenciesImpl`], behind the
-//! `impl` feature, binds them over `png`.
+//! `impl` feature, binds them.
 
 // Public API
 

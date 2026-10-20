@@ -12,6 +12,6 @@ Reads are bounds-checked, so truncated or malformed input is rejected.
 
 ## Dependencies
 
-The `.qbt` and `.qbcl` readers and writers transcode each matrix's zlib stream through the `DecompressZlib` and `CompressZlib` traits, taking `dependencies` first. Implement the traits, or use `DependenciesImpl` behind the default `impl` feature, which covers both over `flate2`. `flate2` is the only dependency besides `qbcl`. The `.qb` functions need no dependencies, so a lean `qb` build depends on `qbcl` alone.
+The `.qbt` and `.qbcl` readers and writers transcode each matrix's zlib stream through the `DecompressZlib` and `CompressZlib` traits, taking `dependencies` first. Implement the traits, or use `DependenciesImpl` behind the default `impl` feature, which covers both. The `.qb` functions need no dependencies, so a lean `qb` build depends on `qbcl` alone.
 
 See `qbcl` for the data types and the `validation` module.

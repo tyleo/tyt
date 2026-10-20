@@ -8,7 +8,7 @@ Reads and writes [Goxel](https://goxel.xyz/) `.gox` files.
 
 ## Dependencies
 
-The block and preview PNGs go through two traits, `DecodePng` to read and `EncodePng` to write. Both exchange a `GoxlRgbaImage`. Each function binds on what it uses and takes `dependencies` first. Implement the traits, or use `DependenciesImpl` behind the default `impl` feature, which decodes and encodes over `png`. A lean build depends on `goxl` alone.
+The block and preview PNGs go through two traits, `DecodePng` to read and `EncodePng` to write. Both exchange a `GoxlRgbaImage`. Each function binds on what it uses and takes `dependencies` first. Implement the traits, or use `DependenciesImpl` behind the default `impl` feature.
 
 ## Example
 

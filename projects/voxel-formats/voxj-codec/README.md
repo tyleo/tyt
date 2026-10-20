@@ -19,10 +19,9 @@ pool, or a repeated object key.
 
 Each transcodes the JSON through the `DecodeVoxjJson` and `EncodeVoxjJson`
 traits and the `.voxjz` member through `Deflate` and `Inflate`. Implement the
-traits, or use `DependenciesImpl` behind the default `impl` feature: JSON over
-`serde_json` with exact float parsing, and deflate over `flate2`.
-`DependenciesImpl` also implements the `voxj` crate's traits, so one value
-serves both crates. Those two crates are the only dependencies besides `voxj`.
+traits, or use `DependenciesImpl` behind the default `impl` feature, which
+parses floats exactly. `DependenciesImpl` also implements the `voxj` crate's
+traits, so one value serves both crates.
 
 The `voxj` crate's `objects` module decodes and re-encodes the blocks, and
 its `validation` module checks a parsed document against the format rules.

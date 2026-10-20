@@ -64,7 +64,7 @@ per channel.
 
 `render` takes its `Dependencies` first, which map the image's rows to their
 shades. `DependenciesImpl`, behind the default `impl` feature, spreads the rows
-across `rayon`'s thread pool.
+across threads.
 
 A `RenderBloom` adds a halo over the emissive term before the tonemap. The
 part of each hit's emission whose brightest channel passes the threshold

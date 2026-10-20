@@ -3,8 +3,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
 
-/// The dependencies over the `base64` crate's standard engine and a deflate
-/// cost: an object costs the bytes its compact JSON takes deflated.
+/// The dependencies the `impl` feature provides. An object costs the bytes
+/// its compact JSON takes deflated.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

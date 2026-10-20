@@ -1,8 +1,6 @@
-//! The dependencies the codec takes: LZFSE, the plist and scene JSON
-//! codings, and PNG, injected so the crate carries none of those libraries.
-//! [`DependenciesImpl`], behind the `impl` feature, binds them over `lzfse`,
-//! `plist`, `png`, and `serde_json`, and vmax's over `vmax::DependenciesImpl`,
-//! so one value serves the whole family.
+//! The dependencies the codec takes, injected so the crate carries no codec
+//! library. [`DependenciesImpl`], behind the `impl` feature, binds them and
+//! vmax's, so one value serves the whole family.
 
 // Public API
 

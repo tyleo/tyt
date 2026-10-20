@@ -26,9 +26,9 @@ const EXIF: [u8; 68] = [
     0x00, 0x00, 0x00, 0x00,
 ];
 
-/// The dependencies over `lzfse`, `plist`, `png`, and `serde_json`. It also
-/// implements the `vmax` crate's traits over [`vmax::DependenciesImpl`], so
-/// one value serves the whole family.
+/// The dependencies the `impl` feature provides.
+/// It also implements the `vmax` crate's traits, so one value serves the
+/// whole family.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 

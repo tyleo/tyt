@@ -9,6 +9,6 @@ crate defines.
 
 Each transcodes the JSON through the `DecodeSdfjJson` and `EncodeSdfjJson`
 traits. A caller implements the traits or takes `DependenciesImpl` behind the
-default `impl` feature, which codes the JSON over `serde_json` with exact float
+default `impl` feature, which codes the JSON with exact float
 parsing and the key order kept. A write errors when the file holds a NaN, an
 infinity, or a repeated object key.

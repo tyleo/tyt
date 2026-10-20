@@ -1,7 +1,7 @@
 //! The dependencies the document types take: base64 for the encoded
 //! blocks and a cost the block-encoding search minimizes, injected so the
 //! crate carries no base64 library. [`DependenciesImpl`], behind the `impl`
-//! feature, binds them over `base64` and a deflate cost.
+//! feature, binds them.
 
 // Public API
 

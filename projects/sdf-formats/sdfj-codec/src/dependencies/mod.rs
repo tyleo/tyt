@@ -1,6 +1,6 @@
 //! The dependencies the codec takes: the JSON coding, injected so the crate
 //! carries no JSON library. [`DependenciesImpl`], behind the `impl` feature,
-//! binds them over `serde_json`.
+//! binds them.
 
 // Public API
 

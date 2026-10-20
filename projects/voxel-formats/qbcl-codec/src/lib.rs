@@ -5,7 +5,7 @@
 //! Construction Library (`.qbcl`). See the `qbcl` crate for the data types.
 //! The `.qbt` and `.qbcl` readers and writers take their zlib codec through
 //! [`DecompressZlib`] and [`CompressZlib`]. `DependenciesImpl`, behind the
-//! default `impl` feature, supplies both over `flate2`.
+//! default `impl` feature, supplies both.
 
 #[cfg(not(any(feature = "qb", feature = "qbt", feature = "qbcl")))]
 compile_error!("qbcl-codec needs at least one format feature enabled: qb, qbt, or qbcl");

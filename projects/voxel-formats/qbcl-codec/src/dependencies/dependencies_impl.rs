@@ -2,7 +2,7 @@ use crate::{CompressZlib, DecompressZlib};
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use std::io::{Read, Write};
 
-/// The dependencies over `flate2`.
+/// The dependencies the `impl` feature provides.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
