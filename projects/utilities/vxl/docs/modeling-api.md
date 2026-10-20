@@ -130,6 +130,7 @@ function coat(
 function set(
   name: string,
   points: Vec3 | Vec3[],
+  size: number,
   material: Material | Pattern,
 ): Step;
 
@@ -154,9 +155,9 @@ wherever two reach the same cell.
    toward a listed side lies outside the part's earlier shapes. `depth` takes
    at least one voxel, and `depth: v` coats the outer layer of cells. `sides`
    defaults to all six. `within` limits the coat to a shape's cells.
-5. `set` fills the cell holding each point and places detail too small for a
-   shape. A point at a cell center, `(i + 0.5) * v`, lands in that cell. A point
-   on a cell boundary can land on either side of it.
+5. `set` fills the cells whose centers lie in a cube `size` wide around each
+   point and places detail too small for a shape. A `size` of `v` around a cell
+   center, `(i + 0.5) * v`, fills that one cell.
 
 `onto` keeps a `paint` or a `coat` on the cells the listed `add` steps own. A
 cell belongs to the last `add` that filled it until a `carve` empties it. Each
@@ -654,11 +655,13 @@ group glows. The gems, `ice`, and `water` also transmit light at their own
 ```ts
 function bands(
   materials: Material[],
-  options: { axis: Axis; period?: number; warp?: number; seed?: number },
+  period: number,
+  options: { axis: Axis; warp?: number; seed?: number },
 ): Pattern;
 function grain(
   base: Material | Material[],
-  options: { axis: Axis; period?: number; warp?: number; seed: number },
+  period: number,
+  options: { axis: Axis; warp?: number; seed: number },
 ): Pattern;
 function gradient(
   materials: Material[],
@@ -672,36 +675,38 @@ function gradient(
 ): Pattern;
 function noise(
   materials: Material[],
-  options: { scale: number; octaves?: number; seed: number },
+  scale: number,
+  options: { octaves?: number; seed: number },
 ): Pattern;
 function cells(
   materials: Material[],
-  options: { size: number; seed: number; border?: Material },
+  size: number,
+  options: { seed: number; border?: { material: Material; width: number } },
 ): Pattern;
 function speckle(
   base: Material,
   accents: Material | Material[],
+  size: number,
   options: { density: number; seed: number },
 ): Pattern;
-function checker(materials: Material[], options?: { size?: number }): Pattern;
+function checker(materials: Material[], size: number): Pattern;
 ```
 
 A pattern picks one of its materials per cell and never blends them. The palette
 then stays as small as the material lists. A seed always gives the same picks,
-and a seed left out reads 0. A length a pattern leaves out counts cells at any
-voxel size.
+and a seed left out reads 0.
 
 1. `bands` slices space across `axis` into slabs `period` thick and cycles
    through `materials` in order. `warp` bends the slabs by up to that much
-   noise. `period` defaults to 1 cell and `warp` to 0.
+   noise. `warp` defaults to 0.
 2. `grain` cuts space into rings `period` thick around the line along `axis`
    through the frame's origin and gives each ring a random pick. Faces that run
    along `axis` streak, and end faces show the rings. A board, post, or leg
    takes the axis it runs along. A board built around the origin and moved by
    `translate` streaks across its faces. A board built in place far from the
    origin reads as one broad ring. `warp` bends the rings as it bends `bands`.
-   `period` defaults to 2 cells and `warp` to 1.5 cells. A single `base` stands
-   for `shades(base)`.
+   `warp` defaults to 0.75 of `period`. A single `base` stands for
+   `shades(base)`.
 3. `gradient` splits `from` to `to` along `axis` into equal spans that take the
    materials in order. Cells before `from` take the first material and cells
    past `to` the last. `warp` bends the spans as it bends `bands` and defaults
@@ -710,14 +715,13 @@ voxel size.
    ranges that take the materials in order. Each material covers about an equal
    share of the cells. `octaves` defaults to 4.
 5. `cells` breaks space into irregular cells about `size` across that each take
-   a random pick. `border` fills a seam one grid cell wide between the cells for
-   cobblestone and mortar. Cells under about 6 voxels across read mostly as
-   border.
-6. `speckle` gives each grid cell a `density` chance of a random accent and
-   leaves the rest `base`. Because `speckle` reads grid cells, its copies
-   differ.
-7. `checker` alternates its materials over cubes `size` wide. `size` defaults to
-   1 cell.
+   a random pick. `border` fills a seam `width` wide between the cells with its
+   `material` for cobblestone and mortar. A `width` under the voxel size leaves
+   gaps in the seam.
+6. `speckle` gives each cube `size` wide on the grid a `density` chance of a
+   random accent and leaves the rest `base`. Because `speckle` reads cubes fixed
+   to the grid, its copies differ. A `size` of `v` accents single cells.
+7. `checker` alternates its materials over cubes `size` wide.
 
 ## Libraries
 
@@ -863,7 +867,7 @@ shapes the smallest features:
    about 2 voxels across or they break into pieces.
 2. A sphere, cylinder, cone, octahedron, or rounded corner under a radius of
    about 3 voxels reads as a plus sign, a rod, or a block. Small round details
-   read better as boxes or single `set` cells.
+   read better as boxes or `set` cells.
 3. A large `add` placed after a detail buries it because later steps win. Large
    forms go first and details after. Nested shapes of one feature bury each
    other in any order.
@@ -883,7 +887,7 @@ for `--voxel-size 0.025`.
 ```ts
 // Four turned legs from one profile.
 const leg = lathe([[0.0375, 0], [0.03, 0.15], [0.045, 0.225], [0.03, 0.425]]).translate([0.2, 0, 0.2]);
-add("legs", leg.mirror("xz"), grain(mat.oak, { axis: "y", seed: 1 })),
+add("legs", leg.mirror("xz"), grain(mat.oak, 0.05, { axis: "y", seed: 1 })),
 
 // A jewel set into a surface. The later add takes the cells the two share.
 add("jewel", octahedron([0, 0.875, -0.175], 0.075), mat.ruby),
@@ -898,10 +902,10 @@ add("bowl", subtract(sphere([0, 0.15, 0], 0.15).shell(0.025), halfSpace("+y", 0.
 add("studs", box([0.225, 0.075, -0.025], [0.275, 0.125, 0.025]).repeatPolar("y", 12), mat.iron),
 
 // Floor planks in alternating shades.
-add("floor", box([-0.4, 0, -0.4], [0.4, 0.025, 0.4]), bands(shades(mat.pine), { axis: "x", period: 0.1 })),
+add("floor", box([-0.4, 0, -0.4], [0.4, 0.025, 0.4]), bands(shades(mat.pine), 0.1, { axis: "x" })),
 
 // A cobbled wall with an arched doorway through it.
-add("wall", box([0, 0, 0], [0.8, 0.4, 0.075]), cells(shades(mat.stone), { size: 0.15, seed: 7, border: mat.dirt })),
+add("wall", box([0, 0, 0], [0.8, 0.4, 0.075]), cells(shades(mat.stone), 0.15, { seed: 7, border: { material: mat.dirt, width: 0.025 } })),
 carve("doorway", extrude(arch([0.325, 0], [0.475, 0.25]), { from: 0, to: 0.075 })),
 
 // A tapered branch.
@@ -923,7 +927,8 @@ add("boulder", sphere([0, 0.125, 0], 0.15).displace({ amplitude: 0.0375, scale: 
 // A walnut side table facing +z with three sapphires set in its front apron,
 // sized for --voxel-size 0.025. Building each board around the origin and
 // moving it into place centers its grain.
-const walnut = (axis: Axis, seed: number) => grain(mat.walnut, { axis, seed });
+const walnut = (axis: Axis, seed: number) =>
+  grain(mat.walnut, 0.05, { axis, seed });
 
 const leg = lathe([
   [0.0375, 0],

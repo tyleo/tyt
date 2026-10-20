@@ -5,7 +5,7 @@ import { add } from "./step.ts";
 import { ball, document, white } from "./test/tables.ts";
 
 Deno.test("shades writes its call and one entry per shade", () => {
-  const pattern = bands(shades(white, { count: 2, spread: 0.1 }), {
+  const pattern = bands(shades(white, { count: 2, spread: 0.1 }), 0.05, {
     axis: "x",
   });
   const { materials, shades: calls } = document([add("shape", ball, pattern)]);

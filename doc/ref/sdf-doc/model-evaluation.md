@@ -101,10 +101,10 @@ inside. The sampling sets the voxel size `g` from the settings.
 2. `--resolution <reference> <n>` sets `g` to the reference side divided by `n`.
    The sides come from boxes taken before any rounding.
 3. World references measure the box around every part's `add` shapes and `set`
-   points at every place.
+   cubes at every place.
 4. Object references measure each part's box and take the extreme across parts,
    with or without `--flatten`. A part's box wraps the `add` shapes and `set`
-   points in the part's list. A part with none has no box.
+   cubes in the part's list. A part with none has no box.
 
 The lattice anchors at the origin. The cell `[i, j, k]` spans from
 `[i, j, k] * g` to `[i + 1, j + 1, k + 1] * g`. vxl samples each part's shapes
@@ -460,7 +460,9 @@ step that changed it. A step reaches only its own part's grid.
    shapes. The last `add` or `carve` whose shape holds the point decides. A
    point no such shape holds lies outside. `within` narrows the result to the
    cells its shape covers.
-5. `set` sets the cell `floor((p + o) / g)` of each point `p`.
+5. `set` sets each cell whose center `c = [i + 0.5, j + 0.5, k + 0.5] * g`
+   satisfies `p + o - size / 2 <= c < p + o + size / 2` on every axis, for each
+   point `p`.
 
 The last `add` that sets a cell owns it. A `carve` that empties the cell clears
 the owner. `onto` narrows a `paint` or a `coat` to the cells its `add` steps
@@ -511,7 +513,7 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
    takes material `mod(floor(s / period), n)`.
 2. `grain` computes `s = r + warp * fbm(q / (4 * period))`, where `r` is the
    length of `q` with its `axis` component set to 0. The cell takes material
-   `mod(hash(floor(s / period)), n)`.
+   `mod(hash(floor(s / period)), n)`. `warp` defaults to `0.75 * period`.
 3. `gradient` computes
    `t = (q[axis] + warp * fbm(q / ((to - from) / 4)) - from) / (to - from)`, and
    the cell takes material `floor(t * n)` held within `[0, n - 1]`.
@@ -524,21 +526,21 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
      cell's cube in raster order with x outermost, and the first strict minimum
      wins. The nearest point's cube `c` gives the cell material
      `mod(hash(c, 3), n)`.
-   - With `a` the offset from the cell to the nearest point, `border` takes the
-     cell when another point at offset `b` among the 125 cubes around the
-     nearest point's cube gives
-     `size * dot((a + b) / 2, (b - a) / length(b - a))` of half a voxel or less.
+   - With `a` the offset from the cell to the nearest point, the border's
+     material takes the cell when another point at offset `b` among the 125
+     cubes around the nearest point's cube gives
+     `size * dot((a + b) / 2, (b - a) / length(b - a))` of half the border's
+     `width` or less.
      The [Voronoi edges](https://iquilezles.org/articles/voronoilines/) article
      derives this distance.
    - Each offset adds its cube's offset and its jitter before subtracting the
      cell's position within the cell's cube.
-6. `speckle` reads the cell's indices `[i, j, k]`. The cell takes an accent when
-   `unit(hash(i, j, k, 0))` reads below `density`. With `m` accents, the cell
-   takes accent `mod(hash(i, j, k, 1), m)`.
+6. `speckle` reads the cube `c = floor([i + 0.5, j + 0.5, k + 0.5] * g / size)`
+   holding the cell's center. The cell takes an accent when `unit(hash(c, 0))`
+   reads below `density`. With `m` accents, the cell takes accent
+   `mod(hash(c, 1), m)`.
 7. `checker` gives the cell material
    `mod(floor(q[0] / size) + floor(q[1] / size) + floor(q[2] / size), n)`.
-
-A pattern length left out takes its default count of cells times `g`.
 
 ## Materials
 

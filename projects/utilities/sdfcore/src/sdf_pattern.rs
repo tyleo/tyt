@@ -1,4 +1,4 @@
-use crate::BSdfMaterial;
+use crate::{BSdfMaterial, SdfBorder};
 use branded_id::U32Id;
 use ty_math::TyAxis3;
 
@@ -13,7 +13,7 @@ pub enum SdfPattern {
 
         axis: TyAxis3,
 
-        period: Option<f64>,
+        period: f64,
 
         warp: Option<f64>,
 
@@ -29,14 +29,14 @@ pub enum SdfPattern {
 
         seed: f64,
 
-        border_id: Option<U32Id<BSdfMaterial>>,
+        border: Option<SdfBorder>,
     },
 
     /// Cubes that alternate the materials.
     Checker {
         material_ids: Vec<U32Id<BSdfMaterial>>,
 
-        size: Option<f64>,
+        size: f64,
     },
 
     /// Equal spans along an axis that take the materials in order.
@@ -60,7 +60,7 @@ pub enum SdfPattern {
 
         axis: TyAxis3,
 
-        period: Option<f64>,
+        period: f64,
 
         warp: Option<f64>,
 
@@ -83,6 +83,8 @@ pub enum SdfPattern {
         base_id: U32Id<BSdfMaterial>,
 
         accent_ids: Vec<U32Id<BSdfMaterial>>,
+
+        size: f64,
 
         density: f64,
 

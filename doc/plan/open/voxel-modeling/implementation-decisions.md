@@ -405,3 +405,19 @@ land.
    points. A curve that takes it below 0 errors
 6. `helix` climbs a total height over a number of turns because a stair knows
    its floor-to-floor height. It returns points and leaves sdfj unchanged
+
+## S22. Meters only
+
+1. The `.sdfj` `version` stays 1. A document that leaves out a length now
+   errors on the missing key
+2. A `cells` border holds its material and its width in one object, so a border
+   cannot come without a width
+3. `set` takes its size before its material because the points and the size
+   describe what fills, as an `add`'s shape does
+4. A `set` cube takes a cell whose center lies on its min face and leaves one
+   on its max face. A size of k voxels then fills k cells per axis wherever the
+   point lies
+5. `speckle` hashes the cube of its size that holds the cell's center. A size
+   of one voxel picks per cell as before
+6. tyt-assets' models write the old defaults out at their voxel sizes. They
+   voxelize byte for byte as before, so their `.vmax` files stand

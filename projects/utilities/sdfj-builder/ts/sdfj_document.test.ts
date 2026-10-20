@@ -60,8 +60,8 @@ Deno.test("the chair writes the sdfj format's chair", async () => {
     ],
     shades: [{ base: 0, count: 3 }, { base: 0, count: 3 }],
     patterns: [
-      { kind: "grain", materials: [1, 2, 3], axis: "y", seed: 1 },
-      { kind: "grain", materials: [4, 5, 6], axis: "x", seed: 2 },
+      { kind: "grain", materials: [1, 2, 3], axis: "y", period: 0.05, seed: 1 },
+      { kind: "grain", materials: [4, 5, 6], axis: "x", period: 0.05, seed: 2 },
     ],
     steps: [
       { kind: "add", name: "legs", shape: 2, pattern: 0 },

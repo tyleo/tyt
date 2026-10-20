@@ -857,22 +857,32 @@ fn check_pattern(check: &EntryCheck, pattern: &SdfPattern) -> Result<()> {
             ..
         } => {
             check.material_ids(material_ids.iter().copied())?;
-            check.optional_numbers([*period, *warp, *seed])
+            check.numbers([*period])?;
+            check.optional_numbers([*warp, *seed])
         }
 
         SdfPattern::Cells {
             material_ids,
             size,
             seed,
-            border_id,
+            border,
         } => {
-            check.material_ids(material_ids.iter().copied().chain(*border_id))?;
-            check.numbers([*size, *seed])
+            check.material_ids(
+                material_ids
+                    .iter()
+                    .copied()
+                    .chain(border.map(|border| border.material_id)),
+            )?;
+            check.numbers(
+                [*size, *seed]
+                    .into_iter()
+                    .chain(border.map(|border| border.width)),
+            )
         }
 
         SdfPattern::Checker { material_ids, size } => {
             check.material_ids(material_ids.iter().copied())?;
-            check.optional_numbers([*size])
+            check.numbers([*size])
         }
 
         SdfPattern::Gradient {
@@ -896,8 +906,8 @@ fn check_pattern(check: &EntryCheck, pattern: &SdfPattern) -> Result<()> {
             ..
         } => {
             check.material_ids(material_ids.iter().copied())?;
-            check.numbers([*seed])?;
-            check.optional_numbers([*period, *warp])
+            check.numbers([*period, *seed])?;
+            check.optional_numbers([*warp])
         }
 
         SdfPattern::Noise {
@@ -914,11 +924,12 @@ fn check_pattern(check: &EntryCheck, pattern: &SdfPattern) -> Result<()> {
         SdfPattern::Speckle {
             base_id,
             accent_ids,
+            size,
             density,
             seed,
         } => {
             check.material_ids(iter::once(*base_id).chain(accent_ids.iter().copied()))?;
-            check.numbers([*density, *seed])
+            check.numbers([*size, *density, *seed])
         }
     }
 }
@@ -960,9 +971,13 @@ fn check_step(check: &EntryCheck, step: &SdfStep) -> Result<()> {
         }
 
         SdfStep::Set {
-            points, material, ..
+            points,
+            size,
+            material,
+            ..
         } => {
             check.vector3s(points.iter().copied())?;
+            check.numbers([*size])?;
             check_step_material(check, *material)
         }
     }
@@ -1059,7 +1074,7 @@ mod tests {
             patterns: IdVec::from(vec![SdfPattern::Grain {
                 material_ids: vec![U32Id::from_u32(1), U32Id::from_u32(2)],
                 axis: TyAxis3::Y,
-                period: None,
+                period: 0.02,
                 warp: None,
                 seed: 1.0,
             }]),

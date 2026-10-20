@@ -1,12 +1,12 @@
 use branded_id::U32Id;
 use sdfcore::{
-    SdfAxes2d, SdfAxes3d, SdfCaps, SdfMain, SdfMaterial, SdfNode, SdfObject, SdfPattern,
+    SdfAxes2d, SdfAxes3d, SdfBorder, SdfCaps, SdfMain, SdfMaterial, SdfNode, SdfObject, SdfPattern,
     SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d, SdfSide, SdfStep, SdfStepMaterial,
     SdfValue,
 };
 use sdfj::{
-    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjAxisRotation, SdfjCaps, SdfjFile,
-    SdfjIntValue, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode, SdfjObject,
+    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjAxisRotation, SdfjBorder, SdfjCaps,
+    SdfjFile, SdfjIntValue, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode, SdfjObject,
     SdfjPattern, SdfjPropertyValue, SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep,
     SdfjTaggedValue, SdfjValue,
 };
@@ -719,12 +719,15 @@ fn sdfj_pattern_from_sdf_pattern(pattern: &SdfPattern) -> SdfjPattern {
             material_ids,
             size,
             seed,
-            border_id,
+            border,
         } => SdfjPattern::Cells {
             materials: wire_indices(material_ids),
             size: *size,
             seed: *seed,
-            border: border_id.map(wire_index),
+            border: border.map(|SdfBorder { material_id, width }| SdfjBorder {
+                material: wire_index(material_id),
+                width,
+            }),
         },
 
         SdfPattern::Checker { material_ids, size } => SdfjPattern::Checker {
@@ -777,11 +780,13 @@ fn sdfj_pattern_from_sdf_pattern(pattern: &SdfPattern) -> SdfjPattern {
         SdfPattern::Speckle {
             base_id,
             accent_ids,
+            size,
             density,
             seed,
         } => SdfjPattern::Speckle {
             base: wire_index(*base_id),
             accents: wire_indices(accent_ids),
+            size: *size,
             density: *density,
             seed: *seed,
         },
@@ -842,10 +847,12 @@ fn sdfj_step_from_sdf_step(step: &SdfStep) -> SdfjStep {
         SdfStep::Set {
             name,
             points,
+            size,
             material,
         } => SdfjStep::Set {
             name: name.clone(),
             points: points.iter().map(TyVector3F64::to_array).collect(),
+            size: *size,
             material: sdfj_material_index(*material),
             pattern: sdfj_pattern_index(*material),
         },

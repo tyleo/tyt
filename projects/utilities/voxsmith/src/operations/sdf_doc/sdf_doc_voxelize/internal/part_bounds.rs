@@ -2,7 +2,7 @@ use crate::operations::sdf_doc::{Bounds3d, SdfShapes};
 use branded_id::U32Id;
 use sdfcore::{BSdfObject, SdfState, SdfStep};
 
-/// The box around the `add` shapes and `set` points of the object at
+/// The box around the `add` shapes and `set` cubes of the object at
 /// `object_id`, before any rounding, or `None` for an object with neither.
 pub fn part_bounds(
     state: &SdfState,
@@ -17,11 +17,11 @@ pub fn part_bounds(
                 vec![shapes.bounds3d(*shape_id).expect("an add shape has a box")]
             }
 
-            SdfStep::Set { points, .. } => points
+            SdfStep::Set { points, size, .. } => points
                 .iter()
                 .map(|point| Bounds3d {
-                    min: *point,
-                    max: *point,
+                    min: point - size / 2.0,
+                    max: point + size / 2.0,
                 })
                 .collect(),
 

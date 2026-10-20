@@ -21,14 +21,17 @@ pub fn check_step(step: &SdfStep) -> StdResult<(), String> {
             check_onto(&ArgumentCheck::new("paint"), onto_ids.as_deref())
         }
 
-        SdfStep::Set { points, .. } => {
+        SdfStep::Set { points, size, .. } => {
+            let check = ArgumentCheck::new("set");
+            check.above_zero("size", *size)?;
+
             let mut seen = HashSet::with_capacity(points.len());
 
             match points
                 .iter()
                 .find(|point| !seen.insert(point.to_array().map(f64::to_bits)))
             {
-                Some(point) => Err(ArgumentCheck::new("set").fail(
+                Some(point) => Err(check.fail(
                     "points",
                     "distinct",
                     format!("[{}, {}, {}] twice", point.x, point.y, point.z),
@@ -59,21 +62,25 @@ mod tests {
     use ty_math::TyVector3F64;
 
     #[test]
-    fn a_set_lists_each_point_once_a_coat_reaches_past_zero_and_onto_lists_a_step() {
-        let set = |points| SdfStep::Set {
+    fn a_set_lists_each_point_once_at_a_size_a_coat_reaches_past_zero_and_onto_lists_a_step() {
+        let set = |points, size| SdfStep::Set {
             name: "studs".to_string(),
             points,
+            size,
             material: SdfStepMaterial::Material(U32Id::from_u32(0)),
         };
 
-        assert!(check_step(&set(vec![TyVector3F64::ZERO, TyVector3F64::X])).is_ok());
+        assert!(check_step(&set(vec![TyVector3F64::ZERO, TyVector3F64::X], 0.1)).is_ok());
         assert_eq!(
-            check_step(&set(vec![
-                TyVector3F64::X,
-                TyVector3F64::ZERO,
-                TyVector3F64::X
-            ])),
+            check_step(&set(
+                vec![TyVector3F64::X, TyVector3F64::ZERO, TyVector3F64::X],
+                0.1
+            )),
             Err("set points must be distinct, not [1, 0, 0] twice".to_string())
+        );
+        assert_eq!(
+            check_step(&set(vec![TyVector3F64::ZERO], 0.0)),
+            Err("set size must be above zero, not 0".to_string())
         );
 
         let coat = SdfStep::Coat {

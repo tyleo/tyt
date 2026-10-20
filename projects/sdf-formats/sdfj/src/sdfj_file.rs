@@ -122,7 +122,7 @@ mod tests {
             ],
             "shades": [{ "base": 0, "count": 3 }],
             "patterns": [
-                { "kind": "grain", "materials": [1, 2, 3], "axis": "y", "seed": 1 },
+                { "kind": "grain", "materials": [1, 2, 3], "axis": "y", "period": 0.05, "seed": 1 },
             ],
             "steps": [
                 { "kind": "add", "name": "legs", "shape": 2, "pattern": 0 },

@@ -23,45 +23,37 @@ export class Pattern {
 /** Slabs `period` thick across `axis` that cycle through `materials`. */
 export function bands(
   materials: Material[],
-  options: { axis: Axis; period?: number; warp?: number; seed?: number },
+  period: number,
+  options: { axis: Axis; warp?: number; seed?: number },
 ): Pattern {
-  const option = check.knownOptions("bands", options, [
-    "axis",
-    "period",
-    "warp",
-    "seed",
-  ]);
+  const option = check.knownOptions("bands", options, ["axis", "warp", "seed"]);
   return new Pattern({
     kind: "bands",
     materials: materialList("bands materials", materials),
     axis: check.axis("bands axis", option.axis),
-    period: check.optional("bands period", option.period, check.finite),
+    period: check.finite("bands period", period),
     warp: check.optional("bands warp", option.warp, check.finite),
     seed: check.optional("bands seed", option.seed, check.finite),
   });
 }
 
 /**
- * Rings around `axis` that each pick a random material. A single `base`
- * stands for `shades(base)`.
+ * Rings `period` thick around `axis` that each pick a random material. A
+ * single `base` stands for `shades(base)`.
  */
 export function grain(
   base: Material | Material[],
-  options: { axis: Axis; period?: number; warp?: number; seed: number },
+  period: number,
+  options: { axis: Axis; warp?: number; seed: number },
 ): Pattern {
-  const option = check.knownOptions("grain", options, [
-    "axis",
-    "period",
-    "warp",
-    "seed",
-  ]);
+  const option = check.knownOptions("grain", options, ["axis", "warp", "seed"]);
   return new Pattern({
     kind: "grain",
     materials: Array.isArray(base)
       ? materialList("grain base", base)
       : shades(check.instance("grain base", base, Material)),
     axis: check.axis("grain axis", option.axis),
-    period: check.optional("grain period", option.period, check.finite),
+    period: check.finite("grain period", period),
     warp: check.optional("grain warp", option.warp, check.finite),
     seed: check.finite("grain seed", option.seed),
   });
@@ -96,52 +88,49 @@ export function gradient(
   });
 }
 
-/** Fractal noise split into ranges that take `materials` in order. */
+/**
+ * Fractal noise with features about `scale` across, split into ranges that
+ * take `materials` in order.
+ */
 export function noise(
   materials: Material[],
-  options: { scale: number; octaves?: number; seed: number },
+  scale: number,
+  options: { octaves?: number; seed: number },
 ): Pattern {
-  const option = check.knownOptions("noise", options, [
-    "scale",
-    "octaves",
-    "seed",
-  ]);
+  const option = check.knownOptions("noise", options, ["octaves", "seed"]);
   return new Pattern({
     kind: "noise",
     materials: materialList("noise materials", materials),
-    scale: check.finite("noise scale", option.scale),
+    scale: check.finite("noise scale", scale),
     octaves: check.optional("noise octaves", option.octaves, check.finite),
     seed: check.finite("noise seed", option.seed),
   });
 }
 
-/** Irregular cells about `size` across that each pick a random material. */
+/**
+ * Irregular cells about `size` across that each pick a random material, with
+ * an optional `border` seam `width` wide between them.
+ */
 export function cells(
   materials: Material[],
-  options: { size: number; seed: number; border?: Material },
+  size: number,
+  options: { seed: number; border?: { material: Material; width: number } },
 ): Pattern {
-  const option = check.knownOptions("cells", options, [
-    "size",
-    "seed",
-    "border",
-  ]);
+  const option = check.knownOptions("cells", options, ["seed", "border"]);
   return new Pattern({
     kind: "cells",
     materials: materialList("cells materials", materials),
-    size: check.finite("cells size", option.size),
+    size: check.finite("cells size", size),
     seed: check.finite("cells seed", option.seed),
-    border: check.optional(
-      "cells border",
-      option.border,
-      (path, value) => check.instance(path, value, Material),
-    ),
+    border: check.optional("cells border", option.border, border),
   });
 }
 
-/** `base` with a `density` chance per grid cell of a random accent. */
+/** `base` with a `density` chance per cube `size` wide of a random accent. */
 export function speckle(
   base: Material,
   accents: Material | Material[],
+  size: number,
   options: { density: number; seed: number },
 ): Pattern {
   const option = check.knownOptions("speckle", options, ["density", "seed"]);
@@ -151,22 +140,34 @@ export function speckle(
     accents: Array.isArray(accents)
       ? materialList("speckle accents", accents)
       : [check.instance("speckle accents", accents, Material)],
+    size: check.finite("speckle size", size),
     density: check.finite("speckle density", option.density),
     seed: check.finite("speckle seed", option.seed),
   });
 }
 
 /** `materials` alternating over cubes `size` wide. */
-export function checker(
-  materials: Material[],
-  options?: { size?: number },
-): Pattern {
-  const option = check.knownOptions("checker", options, ["size"]);
+export function checker(materials: Material[], size: number): Pattern {
   return new Pattern({
     kind: "checker",
     materials: materialList("checker materials", materials),
-    size: check.optional("checker size", option.size, check.finite),
+    size: check.finite("checker size", size),
   });
+}
+
+/** The `cells` border `value`. */
+function border(
+  path: string,
+  value: unknown,
+): { material: Material; width: number } {
+  if (!check.isPlainObject(value)) {
+    check.fail(path, "an object", value);
+  }
+  const option = check.knownOptions(path, value, ["material", "width"]);
+  return {
+    material: check.instance(`${path} material`, option.material, Material),
+    width: check.finite(`${path} width`, option.width),
+  };
 }
 
 /** A copy of the material array `value`. */

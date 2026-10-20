@@ -15,7 +15,7 @@ const walnut = material({ baseColor: "#5C4033", roughness: 0.6 });
 const leg = extrude(disk, { from: 0, to: 0.4 }).translate([0.15, 0, 0.15]);
 
 const stool = part("stool", { pivot: [0, 0.2, 0] }, [
-  add("legs", leg.mirror("xz"), grain(walnut, { axis: "y", seed: 1 })),
+  add("legs", leg.mirror("xz"), grain(walnut, 0.05, { axis: "y", seed: 1 })),
   coat("trim", walnut, 0.05, {
     sides: ["+y"],
     within: box([-1, 0, -1], [1, 1, 1]),

@@ -52,11 +52,13 @@ pub enum SdfStep {
         onto_ids: Option<Vec<U32Id<BSdfStep>>>,
     },
 
-    /// Fills the cell holding each point.
+    /// Fills a cube `size` wide around each point.
     Set {
         name: String,
 
         points: Vec<TyVector3F64>,
+
+        size: f64,
 
         material: SdfStepMaterial,
     },

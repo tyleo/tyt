@@ -1,4 +1,4 @@
-const oak = (axis: Axis, seed: number) => grain(mat.oak, { axis, seed });
+const oak = (axis: Axis, seed: number) => grain(mat.oak, 0.05, { axis, seed });
 const leg = lathe([
   [0.0375, 0],
   [0.03, 0.15],

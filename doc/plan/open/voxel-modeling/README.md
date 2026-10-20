@@ -223,8 +223,8 @@ solves them ahead of time rather than a fix at a time:
 2. Combinators build shapes. An ordered list of steps applies the shapes to a
    part's grid, and the later step wins.
 3. Claude writes TypeScript against a typed builder and never raw per-voxel
-   loops. `set` covers the single voxel a shape cannot place. TypeScript gives
-   the model variables, functions, and loops. Node 24, Bun, and Deno all run
+   loops. `set` fills a cube at each point for detail too small for a shape.
+   TypeScript gives the model variables, functions, and loops. Node 24, Bun, and Deno all run
    TypeScript with no build step.
 4. The operator set stays closed, with no custom per-voxel code in the model. A
    closed set keeps the output vetted and lets vxl evaluate every operator in
@@ -245,8 +245,7 @@ solves them ahead of time rather than a fix at a time:
     `vxl mesh-doc voxelize`: the output path, the sizing flags with their
     defaults, `--frame`, `--fill-mode`, the encoding flags, and profiles in
     `.vxlconfig`. The lattice anchors at the origin. The root node's scale holds
-    the voxel size. `set`, `coat`, `speckle`, the `cells` border, and the
-    pattern lengths a model leaves out count cells at any size.
+    the voxel size. Every length a model writes reads in meters.
 11. Each part voxelizes on its own grid into a voxj object. A step reaches only
     its own part's cells, and parts can overlap. A turned joint then shows each
     part whole.

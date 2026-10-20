@@ -216,13 +216,15 @@ materials.
 
 | `kind`     | Keys                                                |
 | ---------- | --------------------------------------------------- |
-| `bands`    | `materials`, `axis`, `period?`, `warp?`, `seed?`    |
-| `grain`    | `materials`, `axis`, `period?`, `warp?`, `seed`     |
+| `bands`    | `materials`, `axis`, `period`, `warp?`, `seed?`     |
+| `grain`    | `materials`, `axis`, `period`, `warp?`, `seed`      |
 | `gradient` | `materials`, `axis`, `from`, `to`, `warp?`, `seed?` |
 | `noise`    | `materials`, `scale`, `octaves?`, `seed`            |
 | `cells`    | `materials`, `size`, `seed`, `border?`              |
-| `speckle`  | `base`, `accents`, `density`, `seed`                |
-| `checker`  | `materials`, `size?`                                |
+| `speckle`  | `base`, `accents`, `size`, `density`, `seed`        |
+| `checker`  | `materials`, `size`                                 |
+
+A `cells` border holds `material` and `width`.
 
 ### Steps
 
@@ -232,7 +234,7 @@ materials.
 | `carve` | `name`, `shape`                                                        |
 | `paint` | `name`, `shape`, `material` or `pattern`, `onto?`                      |
 | `coat`  | `name`, `material` or `pattern`, `sides?`, `depth`, `within?`, `onto?` |
-| `set`   | `name`, `points`, `material` or `pattern`                              |
+| `set`   | `name`, `points`, `size`, `material` or `pattern`                      |
 
 A step that takes a material or a pattern holds exactly one of the two keys.
 
@@ -306,7 +308,7 @@ The legs and seat of the
 [chair](../../../utilities/vxl/docs/modeling-api.md#example):
 
 ```ts
-const oak = (axis: Axis, seed: number) => grain(mat.oak, { axis, seed });
+const oak = (axis: Axis, seed: number) => grain(mat.oak, 0.05, { axis, seed });
 const leg = lathe([
   [0.0375, 0],
   [0.03, 0.15],
@@ -358,8 +360,20 @@ Built with the `materials` library, `chair.sdfj` holds:
     { "base": 0, "count": 3 },
   ],
   "patterns": [
-    { "kind": "grain", "materials": [1, 2, 3], "axis": "y", "seed": 1 },
-    { "kind": "grain", "materials": [4, 5, 6], "axis": "x", "seed": 2 },
+    {
+      "kind": "grain",
+      "materials": [1, 2, 3],
+      "axis": "y",
+      "period": 0.05,
+      "seed": 1,
+    },
+    {
+      "kind": "grain",
+      "materials": [4, 5, 6],
+      "axis": "x",
+      "period": 0.05,
+      "seed": 2,
+    },
   ],
   "steps": [
     { "kind": "add", "name": "legs", "shape": 2, "pattern": 0 },

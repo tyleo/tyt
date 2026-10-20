@@ -738,6 +738,7 @@ mod tests {
         let set = |name: &str, point: f64| SdfStep::Set {
             name: name.to_string(),
             points: vec![TyVector3F64::splat(point)],
+            size: 1.0,
             material: SdfStepMaterial::Material(U32Id::from_u32(0)),
         };
         let node = |name: &str, object: u32, nodes: Vec<u32>| SdfNode {

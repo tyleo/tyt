@@ -1,4 +1,4 @@
-use crate::SdfjAxis;
+use crate::{SdfjAxis, SdfjBorder};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -23,16 +23,8 @@ pub enum SdfjPattern {
 
         axis: SdfjAxis,
 
-        #[cfg_attr(
-            feature = "serde",
-            serde(
-                default,
-                deserialize_with = "crate::present",
-                serialize_with = "crate::finite",
-                skip_serializing_if = "Option::is_none"
-            )
-        )]
-        period: Option<f64>,
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        period: f64,
 
         #[cfg_attr(
             feature = "serde",
@@ -76,23 +68,15 @@ pub enum SdfjPattern {
                 skip_serializing_if = "Option::is_none"
             )
         )]
-        border: Option<usize>,
+        border: Option<SdfjBorder>,
     },
 
     /// Cubes that alternate the materials.
     Checker {
         materials: Vec<usize>,
 
-        #[cfg_attr(
-            feature = "serde",
-            serde(
-                default,
-                deserialize_with = "crate::present",
-                serialize_with = "crate::finite",
-                skip_serializing_if = "Option::is_none"
-            )
-        )]
-        size: Option<f64>,
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        size: f64,
     },
 
     /// Equal spans along an axis that take the materials in order.
@@ -136,16 +120,8 @@ pub enum SdfjPattern {
 
         axis: SdfjAxis,
 
-        #[cfg_attr(
-            feature = "serde",
-            serde(
-                default,
-                deserialize_with = "crate::present",
-                serialize_with = "crate::finite",
-                skip_serializing_if = "Option::is_none"
-            )
-        )]
-        period: Option<f64>,
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        period: f64,
 
         #[cfg_attr(
             feature = "serde",
@@ -189,6 +165,9 @@ pub enum SdfjPattern {
         base: usize,
 
         accents: Vec<usize>,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        size: f64,
 
         #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
         density: f64,

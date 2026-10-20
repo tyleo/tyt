@@ -216,6 +216,7 @@ mod tests {
                 SdfStep::Set {
                     name: "stud".to_string(),
                     points: vec![TyVector3F64::new(5.5, 0.5, 0.5)],
+                    size: 1.0,
                     material: material(1),
                 },
             ],
@@ -261,6 +262,37 @@ mod tests {
             (Some(U32Id::from_u32(1)), Some(4))
         );
         assert_eq!((cell(4, 0, 0).material, cell(4, 0, 0).step), (None, None));
+    }
+
+    #[test]
+    fn a_set_fills_the_cells_its_cube_centers() {
+        let set = |point, size| {
+            single_part_main(
+                Vec::new(),
+                vec![SdfStep::Set {
+                    name: "stud".to_string(),
+                    points: vec![TyVector3F64::from_array(point)],
+                    size,
+                    material: material(0),
+                }],
+            )
+        };
+
+        for (point, size, count) in [
+            ([0.5, 0.5, 0.5], 1.0, 1),
+            ([0.5, 0.5, 0.5], 3.0, 27),
+            ([1.0, 1.0, 1.0], 2.0, 8),
+            ([1.0, 1.0, 1.0], 1.0, 1),
+        ] {
+            let cells =
+                live_cells(&sample(&DependenciesImpl, &set(point, size), &at_size(1.0)).unwrap());
+            assert_eq!(cells.len(), count, "{point:?} at {size}");
+        }
+
+        assert_eq!(
+            error(&set([0.2, 0.5, 0.5], 0.2), at_size(1.0)),
+            "model must hold a live cell, not only empty grids"
+        );
     }
 
     #[test]
@@ -345,6 +377,7 @@ mod tests {
                 SdfStep::Set {
                     name: "stud".to_string(),
                     points: vec![TyVector3F64::new(3.5, 0.5, 0.5)],
+                    size: 1.0,
                     material: material(0),
                 },
                 SdfStep::Paint {
@@ -410,7 +443,7 @@ mod tests {
         SdfPattern::Bands {
             material_ids: vec![U32Id::from_u32(0), U32Id::from_u32(1)],
             axis: TyAxis3::X,
-            period: None,
+            period: 1.0,
             warp: None,
             seed: None,
         }
@@ -473,6 +506,7 @@ mod tests {
             steps: IdVec::from_vec(vec![SdfStep::Set {
                 name: "stud".to_string(),
                 points: vec![TyVector3F64::new(0.5, 0.5, 0.5)],
+                size: 1.0,
                 material: SdfStepMaterial::Pattern(U32Id::from_u32(0)),
             }]),
             objects: IdVec::from_vec(vec![SdfObject {

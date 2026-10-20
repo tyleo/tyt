@@ -1,14 +1,14 @@
 use crate::{Error, Result};
 use branded_id::{IdVec, U32Id};
 use sdfcore::{
-    SdfAxes2d, SdfAxes3d, SdfAxisRotation, SdfCaps, SdfMain, SdfMap, SdfMapEntry, SdfMaterial,
-    SdfNames, SdfNode, SdfObject, SdfPattern, SdfProperty, SdfPropertyValue, SdfShades, SdfShape2d,
-    SdfShape3d, SdfSide, SdfState, SdfStep, SdfStepMaterial, SdfValue,
+    SdfAxes2d, SdfAxes3d, SdfAxisRotation, SdfBorder, SdfCaps, SdfMain, SdfMap, SdfMapEntry,
+    SdfMaterial, SdfNames, SdfNode, SdfObject, SdfPattern, SdfProperty, SdfPropertyValue,
+    SdfShades, SdfShape2d, SdfShape3d, SdfSide, SdfState, SdfStep, SdfStepMaterial, SdfValue,
 };
 use sdfj::{
-    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjCaps, SdfjFile, SdfjIntValue, SdfjMap,
-    SdfjMapEntry, SdfjMaterial, SdfjNode, SdfjObject, SdfjPattern, SdfjPropertyValue, SdfjShades,
-    SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep, SdfjTaggedValue, SdfjValue,
+    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjBorder, SdfjCaps, SdfjFile, SdfjIntValue,
+    SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNode, SdfjObject, SdfjPattern, SdfjPropertyValue,
+    SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep, SdfjTaggedValue, SdfjValue,
 };
 use std::result::Result as StdResult;
 use ty_math::{TyAxis3, TyVector2F64, TyVector3F64};
@@ -741,7 +741,14 @@ fn sdf_pattern_from_sdfj_pattern(pattern: &SdfjPattern) -> StdResult<SdfPattern,
             material_ids: wire_ids(materials)?,
             size: *size,
             seed: *seed,
-            border_id: border.map(wire_id).transpose()?,
+            border: match border {
+                Some(SdfjBorder { material, width }) => Some(SdfBorder {
+                    material_id: wire_id(*material)?,
+                    width: *width,
+                }),
+
+                None => None,
+            },
         },
 
         SdfjPattern::Checker { materials, size } => SdfPattern::Checker {
@@ -794,11 +801,13 @@ fn sdf_pattern_from_sdfj_pattern(pattern: &SdfjPattern) -> StdResult<SdfPattern,
         SdfjPattern::Speckle {
             base,
             accents,
+            size,
             density,
             seed,
         } => SdfPattern::Speckle {
             base_id: wire_id(*base)?,
             accent_ids: wire_ids(accents)?,
+            size: *size,
             density: *density,
             seed: *seed,
         },
@@ -859,6 +868,7 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
         SdfjStep::Set {
             name,
             points,
+            size,
             material,
             pattern,
         } => SdfStep::Set {
@@ -868,6 +878,7 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
                 .copied()
                 .map(TyVector3F64::from_array)
                 .collect(),
+            size: *size,
             material: sdf_step_material_from_material_and_pattern(*material, *pattern)?,
         },
     })

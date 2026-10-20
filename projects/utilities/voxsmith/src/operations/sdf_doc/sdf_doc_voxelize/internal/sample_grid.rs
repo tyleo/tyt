@@ -54,8 +54,6 @@ pub fn sample_grid<D: MapCells>(
     let object = &state.objects[object_id.to_usize_id()];
     let path = place_path.join("/");
 
-    let set_cell = |point: TyVector3F64| ((point + shift) / voxel_size).floor();
-
     let range = object
         .step_ids
         .iter()
@@ -64,12 +62,9 @@ pub fn sample_grid<D: MapCells>(
                 vec![lattice.cells(*shape_id).expect("an add shape has a box")]
             }
 
-            SdfStep::Set { points, .. } => points
+            SdfStep::Set { points, size, .. } => points
                 .iter()
-                .map(|point| Bounds3d {
-                    min: set_cell(*point),
-                    max: set_cell(*point) + 1.0,
-                })
+                .map(|point| set_cells(*point, *size, voxel_size, shift))
                 .collect(),
 
             SdfStep::Carve { .. } | SdfStep::Coat { .. } | SdfStep::Paint { .. } => Vec::new(),
@@ -285,12 +280,18 @@ impl StepRun<'_, '_> {
             }
 
             SdfStep::Set {
-                points, material, ..
+                points,
+                size,
+                material,
+                ..
             } => {
                 for point in points {
-                    let cell = ((*point + self.shift) / self.voxel_size).floor().as_ivec3();
-                    let material_id = self.pick(*material, self.center(cell), cell);
-                    self.write(cell, Some(material_id));
+                    let cells = set_cells(*point, *size, self.voxel_size, self.shift);
+
+                    for cell in self.cells_within(Some(cells)) {
+                        let material_id = self.pick(*material, self.center(cell), cell);
+                        self.write(cell, Some(material_id));
+                    }
                 }
             }
         }
@@ -422,8 +423,7 @@ impl StepRun<'_, '_> {
             SdfStepMaterial::Pattern(pattern_id) => pattern_material(
                 &self.patterns[pattern_id.to_usize_id()],
                 frame_position,
-                cell,
-                self.voxel_size,
+                (cell.as_dvec3() + 0.5) * self.voxel_size,
             ),
         }
     }
@@ -478,6 +478,18 @@ impl StepRun<'_, '_> {
             material,
             step: Some(self.step),
         };
+    }
+}
+
+/// The cell box of a `set` cube `size` wide around `point`. A center on the
+/// cube's min face lies inside it, and a center on its max face outside.
+fn set_cells(point: TyVector3F64, size: f64, voxel_size: f64, shift: TyVector3F64) -> Bounds3d {
+    let center = (point + shift) / voxel_size;
+    let half = size / voxel_size / 2.0;
+
+    Bounds3d {
+        min: (center - half - 0.5).ceil(),
+        max: (center + half - 0.5).ceil(),
     }
 }
 

@@ -176,9 +176,9 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   2. `sweep` runs a 2D profile along a 3D path of points and can taper it.
      `helix` gives a coiled path for stairs, springs, and spirals. Both answer
      finding 25
-- [ ] **S22. Meters only.** sdfj stops counting voxels, for decision 20:
-  1. Each pattern takes its defining length as its second argument: a period
-     for `bands` and `grain`, a scale for `noise`, and a size for `checker`,
+- [x] **S22. Meters only.** sdfj stops counting voxels, for decision 20:
+  1. Each pattern takes its defining length after its materials: a period for
+     `bands` and `grain`, a scale for `noise`, and a size for `checker`,
      `cells`, and `speckle`. `speckle` picks per world-aligned cube of its size
   2. `grain`'s `warp` defaults to 0.75 of its period
   3. The `cells` border takes a width

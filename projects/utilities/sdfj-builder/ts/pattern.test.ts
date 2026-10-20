@@ -19,8 +19,7 @@ const gray = material({ baseColor: "#808080" });
 const CASES: [string, () => Pattern, Entry][] = [
   [
     "bands",
-    () =>
-      bands([white, black], { axis: "x", period: 0.1, warp: 0.05, seed: 1 }),
+    () => bands([white, black], 0.1, { axis: "x", warp: 0.05, seed: 1 }),
     {
       kind: "bands",
       materials: [0, 1],
@@ -32,16 +31,20 @@ const CASES: [string, () => Pattern, Entry][] = [
   ],
   [
     "cells",
-    () => cells([white, black], { size: 0.15, seed: 7, border: gray }),
+    () =>
+      cells([white, black], 0.15, {
+        seed: 7,
+        border: { material: gray, width: 0.02 },
+      }),
     {
       kind: "cells",
       materials: [0, 1],
       size: 0.15,
       seed: 7,
-      border: 2,
+      border: { material: 2, width: 0.02 },
     },
   ],
-  ["checker", () => checker([white, black], { size: 0.05 }), {
+  ["checker", () => checker([white, black], 0.05), {
     kind: "checker",
     materials: [0, 1],
     size: 0.05,
@@ -68,8 +71,7 @@ const CASES: [string, () => Pattern, Entry][] = [
   ],
   [
     "grain",
-    () =>
-      grain([white, black], { axis: "y", period: 0.05, warp: 0.03, seed: 3 }),
+    () => grain([white, black], 0.05, { axis: "y", warp: 0.03, seed: 3 }),
     {
       kind: "grain",
       materials: [0, 1],
@@ -79,20 +81,25 @@ const CASES: [string, () => Pattern, Entry][] = [
       seed: 3,
     },
   ],
-  ["noise", () => noise([white, black], { scale: 0.1, octaves: 3, seed: 4 }), {
+  ["noise", () => noise([white, black], 0.1, { octaves: 3, seed: 4 }), {
     kind: "noise",
     materials: [0, 1],
     scale: 0.1,
     octaves: 3,
     seed: 4,
   }],
-  ["speckle", () => speckle(white, [black, gray], { density: 0.1, seed: 5 }), {
-    kind: "speckle",
-    base: 0,
-    accents: [1, 2],
-    density: 0.1,
-    seed: 5,
-  }],
+  [
+    "speckle",
+    () => speckle(white, [black, gray], 0.05, { density: 0.1, seed: 5 }),
+    {
+      kind: "speckle",
+      base: 0,
+      accents: [1, 2],
+      size: 0.05,
+      density: 0.1,
+      seed: 5,
+    },
+  ],
 ];
 
 for (const [call, pattern, entry] of CASES) {
@@ -103,7 +110,7 @@ for (const [call, pattern, entry] of CASES) {
 }
 
 Deno.test("grain with one base writes the materials of shades(base)", () => {
-  const pattern = grain(white, { axis: "y", seed: 1 });
+  const pattern = grain(white, 0.05, { axis: "y", seed: 1 });
   const { materials, patterns, shades } = document([
     add("shape", ball, pattern),
   ]);
@@ -115,20 +122,37 @@ Deno.test("grain with one base writes the materials of shades(base)", () => {
   ]);
   assert.deepStrictEqual(shades, [{ base: 0, count: 3 }]);
   assert.deepStrictEqual(patterns, [
-    { kind: "grain", materials: [1, 2, 3], axis: "y", seed: 1 },
+    { kind: "grain", materials: [1, 2, 3], axis: "y", period: 0.05, seed: 1 },
   ]);
 });
 
 Deno.test("speckle with one accent writes a list of one accent", () => {
-  const pattern = speckle(white, black, { density: 0.1, seed: 1 });
+  const pattern = speckle(white, black, 0.05, { density: 0.1, seed: 1 });
   const { patterns } = document([add("shape", ball, pattern)]);
   assert.deepStrictEqual(patterns, [
-    { kind: "speckle", base: 0, accents: [1], density: 0.1, seed: 1 },
+    {
+      kind: "speckle",
+      base: 0,
+      accents: [1],
+      size: 0.05,
+      density: 0.1,
+      seed: 1,
+    },
   ]);
 });
 
+Deno.test("a cells border takes a material and a width", () => {
+  assert.throws(() => cells([white], 0.1, { seed: 1, border: gray as never }), {
+    message: "cells border must be an object, not a Material",
+  });
+  assert.throws(
+    () => cells([white], 0.1, { seed: 1, border: { material: gray } as never }),
+    { message: "cells border width must be a finite number, not undefined" },
+  );
+});
+
 Deno.test("a pattern's materials have to be materials", () => {
-  assert.throws(() => checker([white, "#000000" as never]), {
+  assert.throws(() => checker([white, "#000000" as never], 0.05), {
     message: 'checker materials[1] must be a Material, not "#000000"',
   });
 });

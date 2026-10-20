@@ -144,12 +144,15 @@ pub enum SdfjStep {
         onto: Option<Vec<usize>>,
     },
 
-    /// Fills the cell holding each point.
+    /// Fills a cube `size` wide around each point.
     Set {
         name: String,
 
         #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
         points: Vec<[f64; 3]>,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        size: f64,
 
         #[cfg_attr(
             feature = "serde",

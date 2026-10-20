@@ -91,8 +91,8 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
     { "kind": "grain", "materials": [2, 3], "axis": "y", "period": 0.1, "warp": 0.05, "seed": 4 },
     { "kind": "gradient", "materials": [0, 1], "axis": "z", "from": 0, "to": 1, "warp": 0.05, "seed": 5 },
     { "kind": "noise", "materials": [0, 1], "scale": 0.5, "octaves": 3, "seed": 6 },
-    { "kind": "cells", "materials": [0, 2], "size": 0.15, "seed": 7, "border": 1 },
-    { "kind": "speckle", "base": 0, "accents": [1, 2], "density": 0.2, "seed": 8 },
+    { "kind": "cells", "materials": [0, 2], "size": 0.15, "seed": 7, "border": { "material": 1, "width": 0.02 } },
+    { "kind": "speckle", "base": 0, "accents": [1, 2], "size": 0.1, "density": 0.2, "seed": 8 },
     { "kind": "checker", "materials": [0, 1], "size": 0.1 }
   ],
   "steps": [
@@ -100,7 +100,7 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
     { "kind": "carve", "name": "carve", "shape": 1 },
     { "kind": "paint", "name": "paint", "shape": 2, "pattern": 0, "onto": [0] },
     { "kind": "coat", "name": "coat", "pattern": 1, "sides": ["+y", "-x"], "depth": 2, "within": 3, "onto": [0] },
-    { "kind": "set", "name": "set", "points": [[0, 0, 0], [0.5, 0, 0]], "material": 1 }
+    { "kind": "set", "name": "set", "points": [[0, 0, 0], [0.5, 0, 0]], "size": 0.1, "material": 1 }
   ],
   "objects": [{ "name": "part", "steps": [0, 1, 2, 3, 4] }],
   "nodes": [

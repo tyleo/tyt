@@ -118,10 +118,11 @@ export function coat(
   });
 }
 
-/** Fills the cell holding each of `points` with `material`. */
+/** Fills a cube `size` wide around each of `points` with `material`. */
 export function set(
   name: string,
   points: Vec3 | Vec3[],
+  size: number,
   material: Material | Pattern,
 ): Step {
   const path = stepPath("set", name);
@@ -135,6 +136,7 @@ export function set(
       "a Vec3 or an array of Vec3s",
       check.vec3,
     ),
+    size: check.finite(`${path} size`, size),
     ...stepMaterial(`${path} material`, material),
   });
 }

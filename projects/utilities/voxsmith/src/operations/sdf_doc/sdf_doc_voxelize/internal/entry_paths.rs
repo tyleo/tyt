@@ -209,9 +209,13 @@ fn pattern_material_ids(pattern: &SdfPattern) -> Vec<U32Id<BSdfMaterial>> {
 
         SdfPattern::Cells {
             material_ids,
-            border_id,
+            border,
             ..
-        } => material_ids.iter().chain(border_id).copied().collect(),
+        } => material_ids
+            .iter()
+            .copied()
+            .chain(border.map(|border| border.material_id))
+            .collect(),
 
         SdfPattern::Speckle {
             base_id,

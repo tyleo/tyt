@@ -29,16 +29,17 @@ const CASES: [string, () => Step, Entry][] = [
     },
   ],
 
-  ["paint", () => paint("gilt", ball, checker([white])), {
+  ["paint", () => paint("gilt", ball, checker([white], 0.05)), {
     kind: "paint",
     name: "gilt",
     shape: 0,
     pattern: 0,
   }],
-  ["set", () => set("eyes", [[0, 0, 0], [1, 1, 1]], white), {
+  ["set", () => set("eyes", [[0, 0, 0], [1, 1, 1]], 0.05, white), {
     kind: "set",
     name: "eyes",
     points: [[0, 0, 0], [1, 1, 1]],
+    size: 0.05,
     material: 0,
   }],
 ];
@@ -50,8 +51,8 @@ for (const [call, step, entry] of CASES) {
 }
 
 Deno.test("set of one point writes a list of one point", () => {
-  assert.deepStrictEqual(document([set("eye", [1, 2, 3], white)]).steps, [
-    { kind: "set", name: "eye", points: [[1, 2, 3]], material: 0 },
+  assert.deepStrictEqual(document([set("eye", [1, 2, 3], 0.05, white)]).steps, [
+    { kind: "set", name: "eye", points: [[1, 2, 3]], size: 0.05, material: 0 },
   ]);
 });
 
