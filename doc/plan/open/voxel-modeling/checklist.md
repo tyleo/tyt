@@ -170,22 +170,55 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   2. `coat` reads the part's shapes so far in place of the grid. A point takes
      the coat when the point `depth` meters toward a listed side lies outside
      those shapes. `depth` has no default, and vxl errors on one under one voxel
-- [ ] **S21. New calls.** Calls the rounds built by hand:
+- [x] **S21. Curves.** Curves the rounds built by hand:
   1. `spline` draws a smooth 2D curve through points as an outline or a stroke
      for finding 87
   2. `sweep` runs a 2D profile along a 3D path of points and can taper it.
      `helix` gives a coiled path for stairs, springs, and spirals. Both answer
      finding 25
-  3. `text` lays out a string as a 2D shape in a built-in pixel font for
-     finding 47
-  4. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
-  5. `random` gives the model a seeded generator for placements and sizes for
-     findings 26 and 91
-- [ ] **S22. Rotation.** Rotated shapes for finding 22:
+- [ ] **S22. Meters only.** sdfj stops counting voxels, for decision 20:
+  1. Each pattern takes its defining length as its second argument: a period
+     for `bands` and `grain`, a scale for `noise`, and a size for `checker`,
+     `cells`, and `speckle`. `speckle` picks per world-aligned cube of its size
+  2. `grain`'s `warp` defaults to 0.75 of its period
+  3. The `cells` border takes a width
+  4. `set` takes a size and fills a cube of that size centered on each point
+  5. Decision 10 drops its cell counts, and decision 3 recasts `set`
+  6. tyt-assets' models move to the new arguments
+  7. The owner can move models in other repositories, such as the voxel art
+     repository, to the new arguments
+- [ ] **S23. Build variables.** A model reads build variables through `vars`,
+      which `vxl sdf-doc build` fills from `--var <name>=<value>` and a build
+      profile's `vars`. Reading a variable the build lacks errors. The `.sdfj`
+      document holds only the numbers the variables gave. No variable stands
+      for the voxel size
+- [ ] **S24. Rotation.** Rotated shapes for finding 22:
   1. Under `--flatten`, vxl samples a rotated part at its angle on the root
-     part's grid
+     part's grid. The sampling takes the part's rotation and offset as inputs
   2. `flip` reflects a shape across axes without keeping the original
-- [ ] **S23. Round 7 fixes.** Answer round 7's
+- [ ] **S25. Shared nodes.** A node the `.sdfj` document shares stays one voxj
+      node with several parents, along with its subtree and objects:
+  1. Under `--frame world`, places whose shifts differ by whole voxels share
+     the node. Places that would sample differently error. The error suggests
+     whole-voxel offsets, `--frame local`, or a fresh part per place
+  2. The `voxels` child of an off-lattice pivot is shared with its node
+  3. `--flatten` still expands every place
+  4. The report keeps a line per place
+  5. Decision 18 drops "Each place writes a node"
+- [ ] **S26. Slash warnings.** A voxcore check lists the nodes and objects
+      whose names hold `/`, which makes their joined paths ambiguous. vxl runs
+      the check after every conversion into voxcore, from a file read or from a
+      voxelize, and warns with a pointer to `--select-index`. Names pass
+      through unchanged
+- [ ] **S27. New calls.** More calls the rounds built by hand:
+  1. `text` lays out a string as a 2D shape for finding 47. The font comes
+     from a file or an installed font that a flag or `.vxlconfig` provides,
+     never from vxl. The build stores each glyph used as an exact outline of
+     lines and quadratic curves. Cubic curves split into quadratics at import
+  2. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
+  3. `random` gives the model a seeded generator for placements and sizes for
+     findings 26 and 91
+- [ ] **S28. Round 7 fixes.** Answer round 7's
       [findings](trials-round-7.md#findings) before the next round:
   1. The review sheet keeps `<stem>.png` whatever views the command adds for
      finding 126
@@ -197,5 +230,5 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   4. `coat` takes a slope limit for finding 135, and `gradient` takes its range
      in either order for finding 136
   5. The library's `oak` stays apart from `pine` for finding 13
-- [ ] **S24. Round 8.** Run the prompts after S20 to S23 and log the round
+- [ ] **S29. Round 8.** Run the prompts after S20 to S28 and log the round
       beside round 7.

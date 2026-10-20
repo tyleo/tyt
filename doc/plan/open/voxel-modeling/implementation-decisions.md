@@ -387,7 +387,7 @@ land.
 7. `depth` moves to a positional argument because the API takes each required
    value as one
 
-## S21. New calls
+## S21. Curves
 
 1. `spline` closes into an outline without `width` and runs open as a stroke
    with it, so one call covers both

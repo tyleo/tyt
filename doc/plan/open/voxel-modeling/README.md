@@ -183,21 +183,38 @@ never:
    cobbles
 2. A `hueShift` option on `shades` that turns the darks' hue one way and the
    lights' hue the other
-3. A step that picks darker shades in crevices and lighter ones on edges. Review
-   renders shade crevices already, but an exported mesh keeps only the colors
-4. A step that hollows the finished grid without the walls a union's shell
-   leaves
-5. A step that runs a part's steps on another part's grid
-6. A `typescript` library group whose sources vxl builds before the model
-7. Review sheets that pick their views per model, such as a left view or no
+3. A step that runs a part's steps on another part's grid
+4. A `typescript` library group whose sources vxl builds before the model
+5. Review sheets that pick their views per model, such as a left view or no
    back view behind a room, for round 7's finding 127
-8. A `vxl node settle` that seats one placed object on another for finding 11.
+
+### Voxel space
+
+These candidates work on the voxel grid, while a model builds in signed
+distances. They wait for one approach to editing the grid, such as a family of
+`vxl object` and `vxl node` commands, rather than a fix at a time:
+
+1. A step that picks darker shades in crevices and lighter ones on edges. Review
+   renders shade crevices already, but an exported mesh keeps only the colors
+2. A step that hollows the finished grid without the walls a union's shell
+   leaves
+3. A `vxl node settle` that seats one placed object on another for finding 11.
    Round 7's later passes seated most floating details within one pass
-9. A `vxl object` command that draws a face-connected line of voxels between
+4. A `vxl object` command that draws a face-connected line of voxels between
    two points for finding 130. Only the guitar's strings asked for one
-10. A prune of small pieces for finding 24. Round 7's crumbs and intended pieces
-    overlap in size, and its broken strings, handles, and knobs are as small as
-    its crumbs, so a prune by size deletes details that need fixing
+5. A prune of small pieces for finding 24. Round 7's crumbs and intended pieces
+   overlap in size, and its broken strings, handles, and knobs are as small as
+   its crumbs, so a prune by size deletes details that need fixing
+
+### Beyond realtime SDF
+
+These candidates need more than the distance at one point. A realtime SDF
+renderer evaluates every call per point, so they wait for one approach that
+solves them ahead of time rather than a fix at a time:
+
+1. A `settle` option on `add` that moves the shape toward a side until it
+   touches the shapes before it, for finding 11. vxl solves the move over
+   whole shapes
 
 ## Decisions
 
@@ -289,3 +306,10 @@ never:
     `rootNodes`.
 19. Phase 2 builds the follow-ups the later rounds kept asking for. Phase 1's
     other candidates wait for a reason.
+20. sdfj suits a realtime SDF renderer and never depends on the voxel grid.
+    Every call works at one point and costs little there. Candidates that need
+    the grid or a solve beyond one point wait for an approach of their own,
+    which may arrive as an extension.
+21. A name appears once, where its thing is made. A model refers to the thing
+    by value, and the `.sdfj` and `.voxj` documents by index. Names label
+    errors and reports. A `names` map lists only exports.
