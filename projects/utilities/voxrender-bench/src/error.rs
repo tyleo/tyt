@@ -1,8 +1,9 @@
+use branded_id::U32Id;
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
 };
-use voxrender::Error as RenderError;
+use voxrender::{BRenderMaterial, Error as RenderError};
 use voxrender_wgpu::Error as WgpuError;
 use wgpu::{BufferAsyncError, MapRangeError, PollError};
 
@@ -29,6 +30,12 @@ pub enum Error {
 
     /// A pass's end timestamp came before its start.
     TimestampOrder,
+
+    /// A material id is past what a tree's slot holds.
+    TreeMaterial { material_id: U32Id<BRenderMaterial> },
+
+    /// A tree's word offset is past what its slot holds.
+    TreeSize { offset: usize },
 }
 
 impl Display for Error {
@@ -41,6 +48,12 @@ impl Display for Error {
             Error::Map(error) => write!(f, "a timestamp readback would not map: {error}"),
             Error::MapRange(error) => write!(f, "a timestamp range was unavailable: {error}"),
             Error::TimestampOrder => write!(f, "a pass ended before it began"),
+            Error::TreeMaterial { material_id } => {
+                write!(f, "material {material_id} is past what a tree's slot holds")
+            }
+            Error::TreeSize { offset } => {
+                write!(f, "word offset {offset} is past what a tree's slot holds")
+            }
         }
     }
 }

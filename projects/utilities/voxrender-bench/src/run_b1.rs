@@ -1,15 +1,4 @@
-use crate::{
-    Error, Gpu, Result, Walk, art_room_scene, city_scene, foliage_scene, grazing_floor_scene,
-    greenhouse_scene, reference_hits,
-};
-use voxrender::{
-    RenderShadow,
-    fixtures::{
-        cube_scene, glass_scene, glow_scene, l_shape_scene, precision_shadow_scene,
-        precision_view_scene, random_scene, room_scene, spot_room_scene, stairs_scene,
-        two_placements_scene,
-    },
-};
+use crate::{Error, Gpu, Result, Walk, b1_scenes, reference_hits};
 use voxrender_wgpu::PixelHit;
 
 /// B1's line: the largest share of a scene's samples whose ids may differ
@@ -29,43 +18,13 @@ struct Tally {
     shadows: usize,
 }
 
-/// Runs B1 on `gpu` over the golden, precision-sim, and bench scenes, each
-/// view drawn over a `size` square image, and returns the report in
-/// Markdown.
+/// Runs B1 on `gpu` over its scenes, each view drawn over a `size` square
+/// image, and returns the report in Markdown.
 /// The integer walk's primary ids and corner shadow bits are judged against
 /// B1's line. The float walk's flips are counted for the record. The report
 /// lists the first mismatching pixels of each scene and walk.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
-    let scenes = [
-        ("cube", cube_scene(RenderShadow::PerPixel)),
-        ("glass", glass_scene(RenderShadow::PerPixel)),
-        ("glow", glow_scene(RenderShadow::PerPixel)),
-        ("l-shape", l_shape_scene(RenderShadow::PerPixel)),
-        ("room", room_scene(RenderShadow::PerPixel)),
-        ("spot-room", spot_room_scene(RenderShadow::PerPixel)),
-        (
-            "two-placements",
-            two_placements_scene(RenderShadow::PerPixel),
-        ),
-        ("precision views", precision_view_scene()),
-        (
-            "precision shadows, sparse",
-            precision_shadow_scene(random_scene(1, 0.15, 1)),
-        ),
-        (
-            "precision shadows, dense",
-            precision_shadow_scene(random_scene(2, 0.40, 1)),
-        ),
-        (
-            "precision shadows, stairs",
-            precision_shadow_scene(stairs_scene()),
-        ),
-        ("S1 art room", art_room_scene()),
-        ("S2 city", city_scene()),
-        ("S3 greenhouse", greenhouse_scene()),
-        ("S4 foliage", foliage_scene()),
-        ("S5 grazing floor", grazing_floor_scene()),
-    ];
+    let scenes = b1_scenes();
 
     let info = &gpu.info;
 

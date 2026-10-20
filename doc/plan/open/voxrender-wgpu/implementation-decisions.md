@@ -270,3 +270,23 @@ they land.
 - The scenes join B1's ids run, which takes 28 s at 256 by 256 pixels on
   this Mac. Each scene's tests check that every view hits on at least a
   tenth of its pixels
+- `voxrender-bench`'s `Tree64` builds one object's 64-tree into one word
+  array. Its doc gives the layout. Choices beyond the checklist:
+  1. A slot word tags its kind in its top 3 bits. An empty tile is word 0
+  2. A node's child slots follow its two mask words, so a node holds no
+     child pointer and takes 8 B plus 4 B per non-empty child
+  3. A leaf's palette holds only the values its cells use
+  4. The build errors when a material id or a word offset is past a slot's
+     29 bits. The cell cap does not bound the offsets, since a thin object
+     can take more words than cells
+- The trees against the harness's dense u32 cells:
+
+  | Scene | Cells | Live | Dense KiB | Tree KiB | 1, 2-bit leaves | Uniform children |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | S1 art room | 3358318 | 187806 | 13118 | 126 | 4984, 650 | 496 |
+  | S2 city | 673024 | 341997 | 2629 | 337 | 7394, 5702 | 1308 |
+  | S3 greenhouse | 9727072 | 291502 | 37996 | 203 | 8821, 326 | 744 |
+  | S4 foliage | 1729600 | 358049 | 6756 | 773 | 969, 23629 | 32 |
+  | S5 grazing floor | 4194304 | 2952989 | 16384 | 2162 | 0, 65536 | 0 |
+
+  None of the five has a uniform 16^3 tile or a 4 or 8-bit leaf

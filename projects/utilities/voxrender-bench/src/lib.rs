@@ -10,16 +10,19 @@ mod error;
 mod gpu;
 mod result;
 mod run_b1;
+mod tree64;
 
 pub use b1_timer::*;
 pub use error::*;
 pub use gpu::*;
 pub use result::*;
 pub use run_b1::*;
+pub use tree64::*;
 
 // Internal API
 
 mod art_room_scene;
+mod b1_scenes;
 mod cell_noise;
 mod chain_kernel;
 mod city_scene;
@@ -39,6 +42,7 @@ mod retain_next_object;
 mod walk;
 
 pub(crate) use art_room_scene::*;
+pub(crate) use b1_scenes::*;
 pub(crate) use cell_noise::*;
 pub(crate) use chain_kernel::*;
 pub(crate) use city_scene::*;
