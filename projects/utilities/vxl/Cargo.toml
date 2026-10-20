@@ -1,6 +1,6 @@
 [package]
 name = "vxl"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -24,11 +24,11 @@ image = { version = "0.25", default-features = false }
 jsonc-parser = { version = "0.33.1", features = ["serde"] }
 meshconv = "0.3.0"
 meshdoc = "0.3.0"
-sdfconv = "0.2.0"
-sdfj = "0.2.0"
-sdfj-builder = "0.3.0"
-sdfj-codec = "0.2.0"
-sdfj-sdfcore = "0.2.0"
+sdfconv = "0.3.0"
+sdfj = "0.3.0"
+sdfj-builder = "0.4.0"
+sdfj-codec = "0.3.0"
+sdfj-sdfcore = "0.3.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3.27"
@@ -37,9 +37,9 @@ ty-math = "0.4.0"
 ty-preferences = "0.4.0"
 viuer = "0.11"
 vox-value-language = "0.2.0"
-voxconv = "0.3.0"
+voxconv = "0.4.0"
 voxcore = { version = "0.4.0", default-features = false }
-voxsmith = { version = "0.6.0", default-features = false, features = [
+voxsmith = { version = "0.7.0", default-features = false, features = [
     "impl",
     "mesh_doc",
     "node",

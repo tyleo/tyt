@@ -896,7 +896,7 @@ dependencies = [
 
 [[package]]
 name = "gltf-meshdoc"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64",
  "branded-id",
@@ -922,7 +922,7 @@ version = "0.2.0"
 
 [[package]]
 name = "goxl-codec"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "goxl",
  "png",
@@ -1382,7 +1382,7 @@ version = "0.2.0"
 
 [[package]]
 name = "mvox-codec"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "mvox",
 ]
@@ -1909,7 +1909,7 @@ version = "0.2.0"
 
 [[package]]
 name = "qbcl-codec"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "flate2",
  "qbcl",
@@ -2248,7 +2248,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "sdfconv"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "branded-id",
  "sdfcore",
@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "sdfcore"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -2266,7 +2266,7 @@ dependencies = [
 
 [[package]]
 name = "sdfj"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2274,11 +2274,11 @@ dependencies = [
 
 [[package]]
 name = "sdfj-builder"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "sdfj-codec"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "sdfj",
  "serde_json",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "sdfj-sdfcore"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "branded-id",
  "sdfcore",
@@ -2668,7 +2668,7 @@ dependencies = [
 
 [[package]]
 name = "ty-math"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "glam",
  "palette",
@@ -2693,7 +2693,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "ty-clap",
@@ -2838,7 +2838,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-vmax"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "branded-id",
  "clap",
@@ -2962,7 +2962,7 @@ dependencies = [
 
 [[package]]
 name = "vmax"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "serde",
@@ -2971,7 +2971,7 @@ dependencies = [
 
 [[package]]
 name = "vmax-codec"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "lzfse",
  "plist",
@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "vmax-voxcore"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "branded-id",
  "serde",
@@ -3002,7 +3002,7 @@ dependencies = [
 
 [[package]]
 name = "voxconv"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "branded-id",
  "goxl-voxcore",
@@ -3020,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "voxcore"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -3028,7 +3028,7 @@ dependencies = [
 
 [[package]]
 name = "voxj"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "base64",
  "flate2",
@@ -3038,7 +3038,7 @@ dependencies = [
 
 [[package]]
 name = "voxj-codec"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "flate2",
  "serde_json",
@@ -3058,7 +3058,7 @@ dependencies = [
 
 [[package]]
 name = "voxrender"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -3125,7 +3125,7 @@ dependencies = [
 
 [[package]]
 name = "voxsmith"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "branded-id",
  "meshdoc",
@@ -3147,7 +3147,7 @@ dependencies = [
 
 [[package]]
 name = "voxsurface"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -3156,7 +3156,7 @@ dependencies = [
 
 [[package]]
 name = "vxl"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "branded-id",
  "clap",

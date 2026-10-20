@@ -1,6 +1,6 @@
 [package]
 name = "voxsmith"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -18,7 +18,7 @@ meshdoc = "0.3.0"
 pathspec = "0.3.0"
 png = { version = "0.18.1", optional = true }
 rayon = { version = "1.12.0", optional = true }
-sdfcore = { version = "0.2.0", optional = true }
+sdfcore = { version = "0.3.0", optional = true }
 serde_json = { version = "1", optional = true }
 treegrid = { version = "0.4.0", features = [
     "json",
@@ -28,7 +28,7 @@ treeselect = { version = "0.2.0", optional = true }
 ty-math = "0.4.0"
 vox-value-language = { version = "0.2.0", optional = true }
 voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
-voxrender = { version = "0.4.0", optional = true }
+voxrender = { version = "0.5.0", optional = true }
 voxrender-cpu = { version = "0.1.0", default-features = false, optional = true }
 voxsurface = { version = "0.3.0", optional = true }
 zune-jpeg = { version = "0.5", optional = true }

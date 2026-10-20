@@ -1,6 +1,6 @@
 [package]
 name = "sdfconv"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -12,8 +12,8 @@ categories = ["encoding", "game-development", "graphics"]
 independent = true
 
 [dependencies]
-sdfcore = "0.2.0"
-sdfj-sdfcore = { version = "0.2.0", default-features = false, optional = true }
+sdfcore = "0.3.0"
+sdfj-sdfcore = { version = "0.3.0", default-features = false, optional = true }
 
 [dev-dependencies]
 branded-id = "0.2.0"

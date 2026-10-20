@@ -1,6 +1,6 @@
 [package]
 name = "tyt"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -28,8 +28,8 @@ tyt-material = { version = "0.5.0" }
 tyt-meshy = { version = "0.4.0" }
 tyt-meta = { version = "0.5.0" }
 tyt-oai = { version = "0.4.0" }
-tyt-vmax = { version = "0.5.0" }
-vxl = { version = "0.6.0" }
+tyt-vmax = { version = "0.6.0" }
+vxl = { version = "0.7.0" }
 
 [features]
 default = ["impl"]

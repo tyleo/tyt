@@ -1,6 +1,6 @@
 [package]
 name = "sdfj-sdfcore"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -13,13 +13,13 @@ independent = true
 
 [dependencies]
 branded-id = "0.2.0"
-sdfcore = "0.2.0"
-sdfj = { version = "0.2.0", default-features = false }
-sdfj-codec = { version = "0.2.0", default-features = false, optional = true }
+sdfcore = "0.3.0"
+sdfj = { version = "0.3.0", default-features = false }
+sdfj-codec = { version = "0.3.0", default-features = false, optional = true }
 ty-math = { version = "0.4.0", default-features = false }
 
 [dev-dependencies]
-sdfj-codec = { version = "0.2.0", features = ["impl"] }
+sdfj-codec = { version = "0.3.0", features = ["impl"] }
 
 [features]
 default = ["codec"]

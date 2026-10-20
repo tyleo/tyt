@@ -17,7 +17,7 @@ branded-id = "0.2.0"
 rayon = { version = "1.12.0", optional = true }
 ty-math = { version = "0.4.0", default-features = false, features = ["color"] }
 voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
-voxrender = "0.4.0"
+voxrender = "0.5.0"
 voxsurface = "0.3.0"
 
 [features]
@@ -27,4 +27,4 @@ impl = ["dep:rayon"]
 
 [dev-dependencies]
 png = "0.18"
-voxrender = { version = "0.4.0", features = ["fixtures"] }
+voxrender = { version = "0.5.0", features = ["fixtures"] }
