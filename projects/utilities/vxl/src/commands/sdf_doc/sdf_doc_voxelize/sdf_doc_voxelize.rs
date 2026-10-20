@@ -10,6 +10,7 @@ use voxconv::{
     voxj::{EditStateMode, VoxjWriteFormat, VoxjWriteOptions},
 };
 use voxsmith::{
+    dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
     operations::sdf_doc::{SdfSampleOptions, SdfVoxMainOptions, report, sample, to_vox_main},
     utilities::{FillMode, FlattenMode, GridResolution, VoxelFrame},
 };
@@ -107,7 +108,7 @@ impl SdfDocVoxelize {
         };
 
         let main = load(&dependencies, ReadFormat::Sdfj, &self.input)?;
-        let sampling = sample(&main, &settings.sample)?;
+        let sampling = sample(&VoxsmithDependenciesImpl, &main, &settings.sample)?;
         let document = to_vox_main(&sampling, &settings.vox_main)?;
 
         save(
@@ -127,6 +128,7 @@ impl SdfDocVoxelize {
                 VoxelFrame::World => sampling,
 
                 VoxelFrame::Local => sample(
+                    &VoxsmithDependenciesImpl,
                     &main,
                     &SdfSampleOptions {
                         frame: VoxelFrame::World,

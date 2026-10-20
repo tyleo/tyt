@@ -1,5 +1,6 @@
 use crate::{
     Error, Result,
+    dependencies::sdf_doc::MapCells,
     operations::sdf_doc::{
         EntryPaths, SdfSampleOptions, SdfSampling, SdfShapes, check_document, check_shape_boxes,
         collect_places, resolve_materials, sample_grid, sample_voxel_size,
@@ -11,8 +12,13 @@ use std::collections::HashMap;
 use ty_math::TyVector3F64;
 
 /// Samples the model `main` into grids under `options` by model evaluation.
-/// Errors on the first failed check.
-pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling> {
+/// `dependencies` spreads each step's cells across threads. Errors on the
+/// first failed check.
+pub fn sample<D: MapCells>(
+    dependencies: &D,
+    main: &SdfMain,
+    options: &SdfSampleOptions,
+) -> Result<SdfSampling> {
     let state = main.state();
     let mut places = collect_places(state);
     let paths = EntryPaths::new(state, &places);
@@ -32,6 +38,7 @@ pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling>
             let grid_index = match options.frame {
                 VoxelFrame::World => {
                     grids.push(sample_grid(
+                        dependencies,
                         state,
                         &shapes,
                         object_id,
@@ -48,6 +55,7 @@ pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling>
 
                     None => {
                         grids.push(sample_grid(
+                            dependencies,
                             state,
                             &shapes,
                             object_id,
@@ -86,9 +94,10 @@ pub fn sample(main: &SdfMain, options: &SdfSampleOptions) -> Result<SdfSampling>
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
+        dependencies::DependenciesImpl,
         operations::sdf_doc::{
             SdfSampleOptions, SdfSampling, sample, shared_leaf_main, single_part_main,
         },
@@ -144,7 +153,9 @@ mod tests {
     }
 
     fn error(main: &SdfMain, options: SdfSampleOptions) -> String {
-        sample(main, &options).unwrap_err().to_string()
+        sample(&DependenciesImpl, main, &options)
+            .unwrap_err()
+            .to_string()
     }
 
     #[test]
@@ -159,7 +170,7 @@ mod tests {
             ),
         ] {
             let main = single_part_main(vec![cuboid(min, max)], vec![add("block", 0, 0)]);
-            let cells = live_cells(&sample(&main, &at_size(0.025)).unwrap());
+            let cells = live_cells(&sample(&DependenciesImpl, &main, &at_size(0.025)).unwrap());
 
             let first = TyVector3I32::from_array(first);
             let last = TyVector3I32::from_array(last);
@@ -210,7 +221,7 @@ mod tests {
             ],
         );
 
-        let sampling = sample(&main, &at_size(1.0)).unwrap();
+        let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
         let grid = &sampling.grids[0];
 
         let written: Vec<usize> = grid
@@ -270,7 +281,7 @@ mod tests {
                 ],
             );
 
-            let sampling = sample(&main, &at_size(1.0)).unwrap();
+            let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
             assert_eq!(sampling.grids[0].steps[1].written.len(), written);
         }
     }
@@ -300,7 +311,7 @@ mod tests {
                 coat(0.5),
             ],
         );
-        let sampling = sample(&main, &at_size(0.5)).unwrap();
+        let sampling = sample(&DependenciesImpl, &main, &at_size(0.5)).unwrap();
         let grid = &sampling.grids[0];
         let steps: Vec<Option<u32>> = (0..4)
             .map(|y| grid.cell(TyVector3I32::new(0, y, 0)).unwrap().step)
@@ -353,7 +364,7 @@ mod tests {
             ],
         );
 
-        let sampling = sample(&main, &at_size(1.0)).unwrap();
+        let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
         let grid = &sampling.grids[0];
         let steps: Vec<Option<u32>> = (0..6)
             .map(|x| grid.cell(TyVector3I32::new(x, 0, 0)).unwrap().step)
@@ -435,7 +446,7 @@ mod tests {
         state.objects.as_mut_vec()[0].step_ids = vec![U32Id::from_u32(0), U32Id::from_u32(1)];
         let main = SdfMain::new(state).unwrap();
 
-        let sampling = sample(&main, &at_size(1.0)).unwrap();
+        let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
         let material = |x, y| {
             sampling.grids[0]
                 .cell(TyVector3I32::new(x, y, 0))
@@ -491,7 +502,7 @@ mod tests {
         })
         .unwrap();
 
-        let sampling = sample(&main, &at_size(1.0)).unwrap();
+        let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
         let cell = sampling.grids[0].cell(TyVector3I32::new(1, 0, 0)).unwrap();
 
         assert_eq!(cell.material, Some(U32Id::from_u32(0)));
@@ -499,7 +510,7 @@ mod tests {
 
     #[test]
     fn each_place_samples_moved_by_its_offsets_under_the_world_frame() {
-        let sampling = sample(&shared_leaf_main(), &at_size(1.0)).unwrap();
+        let sampling = sample(&DependenciesImpl, &shared_leaf_main(), &at_size(1.0)).unwrap();
 
         let paths: Vec<String> = sampling
             .places
@@ -534,7 +545,7 @@ mod tests {
             frame: VoxelFrame::Local,
             ..at_size(1.0)
         };
-        let sampling = sample(&shared_leaf_main(), &options).unwrap();
+        let sampling = sample(&DependenciesImpl, &shared_leaf_main(), &options).unwrap();
 
         assert_eq!(sampling.grids.len(), 1);
         assert_eq!(sampling.places[2].grid_indices, [0]);
@@ -558,7 +569,9 @@ mod tests {
                 frame: VoxelFrame::World,
                 record_writes: false,
             };
-            sample(&main, &options).unwrap().voxel_size
+            sample(&DependenciesImpl, &main, &options)
+                .unwrap()
+                .voxel_size
         };
 
         assert_eq!(voxel_size(ResolutionReference::LongestWorld, 4), 0.5);
@@ -566,6 +579,7 @@ mod tests {
         assert_eq!(voxel_size(ResolutionReference::WorldY, 2), 0.5);
 
         let world = sample(
+            &DependenciesImpl,
             &shared_leaf_main(),
             &SdfSampleOptions {
                 resolution: GridResolution::ReferenceCount {

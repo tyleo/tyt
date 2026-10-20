@@ -1,5 +1,6 @@
 use crate::{
     Error, Result,
+    dependencies::sdf_doc::MapCells,
     operations::sdf_doc::{
         ArgumentCheck, Bounds3d, LatticeShapes, SdfCell, SdfEvaluation, SdfGrid, SdfShapes,
         SdfStepRecord, ShapeSource, meters, pattern_material, side_direction,
@@ -16,6 +17,10 @@ use ty_math::{TyVector3F64, TyVector3I32, TyVector3U32};
 /// The most cells one part's grid holds.
 const MOST_CELLS: f64 = (1 << 27) as f64;
 
+/// The most cells a step decides before it writes them. The cap limits the
+/// decisions held in memory.
+const CHUNK_CELLS: usize = 1 << 16;
+
 /// The sides a `coat` reads when the model leaves them out.
 const ALL_SIDES: [SdfSide; 6] = [
     SdfSide::NegativeX,
@@ -29,8 +34,14 @@ const ALL_SIDES: [SdfSide; 6] = [
 /// Runs the steps of the object at `object_id` over its grid on the lattice of
 /// cells `voxel_size` across, with the object's shapes moved by `shift`.
 /// `place_path` holds the part names of the place an error reports. Each
-/// step's record holds its writes under `record_writes`.
-pub fn sample_grid(
+/// step's record holds its writes under `record_writes`. `dependencies`
+/// spreads each step's cells across threads.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "sampling reads the document, the place, and the lattice"
+)]
+pub fn sample_grid<D: MapCells>(
+    dependencies: &D,
     state: &SdfState,
     shapes: &SdfShapes,
     object_id: U32Id<BSdfObject>,
@@ -138,7 +149,7 @@ pub fn sample_grid(
             record: SdfStepRecord::default(),
         };
 
-        run.run(step)
+        run.run(dependencies, step)
             .map_err(|message| Error::invalid(format!("{path}/{}: {message}", step.name())))?;
 
         let record = run.record;
@@ -180,29 +191,30 @@ struct StepRun<'a, 'b> {
 }
 
 impl StepRun<'_, '_> {
-    fn run(&mut self, step: &SdfStep) -> StdResult<(), String> {
+    fn run<D: MapCells>(&mut self, dependencies: &D, step: &SdfStep) -> StdResult<(), String> {
         match step {
             SdfStep::Add {
                 shape_id, material, ..
             } => {
-                for cell in self.cells_within(self.lattice.cells(*shape_id)) {
-                    let evaluation = self.evaluate(*shape_id, cell)?;
+                let cells = self.cells_within(self.lattice.cells(*shape_id));
 
-                    if evaluation.distance <= 0.0 {
-                        let material_id = self.pick(*material, evaluation.frame_position, cell);
-                        self.write(cell, Some(material_id));
-                        self.own(cell, Some(self.step_id));
-                    }
-                }
+                self.write_cells(dependencies, &cells, true, |run, cell| {
+                    let evaluation = run.evaluate(*shape_id, cell)?;
+
+                    Ok((evaluation.distance <= 0.0)
+                        .then(|| Some(run.pick(*material, evaluation.frame_position, cell))))
+                })?;
             }
 
             SdfStep::Carve { shape_id, .. } => {
-                for cell in self.cells_within(self.lattice.cells(*shape_id)) {
-                    if self.is_live(cell) && self.evaluate(*shape_id, cell)?.distance <= 0.0 {
-                        self.write(cell, None);
-                        self.own(cell, None);
-                    }
-                }
+                let cells = self.cells_within(self.lattice.cells(*shape_id));
+
+                self.write_cells(dependencies, &cells, true, |run, cell| {
+                    Ok(
+                        (run.is_live(cell) && run.evaluate(*shape_id, cell)?.distance <= 0.0)
+                            .then_some(None),
+                    )
+                })?;
             }
 
             SdfStep::Coat {
@@ -222,10 +234,11 @@ impl StepRun<'_, '_> {
 
                 let sides = sides.as_deref().unwrap_or(&ALL_SIDES);
                 let bounds = within_id.and_then(|within_id| self.lattice.cells(within_id));
+                let cells = self.cells_within(bounds);
 
-                for cell in self.cells_within(bounds) {
-                    if !self.is_live(cell) || !self.is_onto(onto_ids.as_deref(), cell) {
-                        continue;
+                self.write_cells(dependencies, &cells, false, |run, cell| {
+                    if !run.is_live(cell) || !run.is_onto(onto_ids.as_deref(), cell) {
+                        return Ok(None);
                     }
 
                     let mut reaches_outside = false;
@@ -235,22 +248,20 @@ impl StepRun<'_, '_> {
                         let mut offset = TyVector3F64::ZERO;
                         offset[axis.index()] = sign * depth;
 
-                        if !self.is_solid(self.center(cell) + offset)? {
+                        if !run.is_solid(run.center(cell) + offset)? {
                             reaches_outside = true;
                             break;
                         }
                     }
 
                     let within = match within_id {
-                        Some(within_id) => self.evaluate(*within_id, cell)?.distance <= 0.0,
+                        Some(within_id) => run.evaluate(*within_id, cell)?.distance <= 0.0,
                         None => true,
                     };
 
-                    if reaches_outside && within {
-                        let material_id = self.pick(*material, self.center(cell), cell);
-                        self.write(cell, Some(material_id));
-                    }
-                }
+                    Ok((reaches_outside && within)
+                        .then(|| Some(run.pick(*material, run.center(cell), cell))))
+                })?;
             }
 
             SdfStep::Paint {
@@ -259,18 +270,18 @@ impl StepRun<'_, '_> {
                 onto_ids,
                 ..
             } => {
-                for cell in self.cells_within(self.lattice.cells(*shape_id)) {
-                    if !self.is_live(cell) || !self.is_onto(onto_ids.as_deref(), cell) {
-                        continue;
+                let cells = self.cells_within(self.lattice.cells(*shape_id));
+
+                self.write_cells(dependencies, &cells, false, |run, cell| {
+                    if !run.is_live(cell) || !run.is_onto(onto_ids.as_deref(), cell) {
+                        return Ok(None);
                     }
 
-                    let evaluation = self.evaluate(*shape_id, cell)?;
+                    let evaluation = run.evaluate(*shape_id, cell)?;
 
-                    if evaluation.distance <= 0.0 {
-                        let material_id = self.pick(*material, evaluation.frame_position, cell);
-                        self.write(cell, Some(material_id));
-                    }
-                }
+                    Ok((evaluation.distance <= 0.0)
+                        .then(|| Some(run.pick(*material, evaluation.frame_position, cell))))
+                })?;
             }
 
             SdfStep::Set {
@@ -280,6 +291,40 @@ impl StepRun<'_, '_> {
                     let cell = ((*point + self.shift) / self.voxel_size).floor().as_ivec3();
                     let material_id = self.pick(*material, self.center(cell), cell);
                     self.write(cell, Some(material_id));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Writes into each of `cells` the material `decide` picks. A cell that
+    /// `decide` picks nothing for keeps its value. `dependencies` spreads the
+    /// `decide` calls across threads. The writes land in cell order and stop
+    /// at the first error. Under `owns`, each write also makes the step the
+    /// cell's owner, or clears the owner of an emptied cell.
+    fn write_cells<D, F>(
+        &mut self,
+        dependencies: &D,
+        cells: &[TyVector3I32],
+        owns: bool,
+        decide: F,
+    ) -> StdResult<(), String>
+    where
+        D: MapCells,
+        F: Fn(&Self, TyVector3I32) -> StdResult<Option<Option<U32Id<BSdfMaterial>>>, String> + Sync,
+    {
+        for chunk in cells.chunks(CHUNK_CELLS) {
+            let run = &*self;
+            let decisions = dependencies.map_cells(chunk, |cell| decide(run, cell));
+
+            for (&cell, decision) in chunk.iter().zip(decisions) {
+                if let Some(material) = decision? {
+                    self.write(cell, material);
+
+                    if owns {
+                        self.own(cell, material.map(|_| self.step_id));
+                    }
                 }
             }
         }

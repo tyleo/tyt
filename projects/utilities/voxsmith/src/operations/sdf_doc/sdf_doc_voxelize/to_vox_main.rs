@@ -433,9 +433,10 @@ fn surface_cells(grid: &SdfGrid, see_through: &IdSlice<BSdfMaterial, bool>) -> V
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
+        dependencies::DependenciesImpl,
         operations::sdf_doc::{
             SdfSampleOptions, SdfVoxMainOptions, parts_main, sample, shared_leaf_main,
             single_part_main, to_vox_main,
@@ -458,6 +459,7 @@ mod tests {
         flatten: FlattenMode,
     ) -> VoxMain {
         let sampling = sample(
+            &DependenciesImpl,
             main,
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
@@ -646,6 +648,7 @@ mod tests {
     #[test]
     fn flattening_a_rotated_part_errors() {
         let sampling = sample(
+            &DependenciesImpl,
             &rotated_lid_main(),
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
@@ -710,6 +713,7 @@ mod tests {
     #[test]
     fn flattening_needs_the_world_frame() {
         let sampling = sample(
+            &DependenciesImpl,
             &parts_main(),
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
@@ -767,6 +771,7 @@ mod tests {
         .unwrap();
 
         let sampling = sample(
+            &DependenciesImpl,
             &main,
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),

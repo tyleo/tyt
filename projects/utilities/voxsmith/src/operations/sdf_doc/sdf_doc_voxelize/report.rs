@@ -704,9 +704,10 @@ fn layout(lines: &[ReportLine]) -> String {
     text
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
+        dependencies::DependenciesImpl,
         operations::sdf_doc::{
             SdfSampleOptions, parts_main, report, sample, shared_leaf_main, single_part_main,
         },
@@ -729,6 +730,7 @@ mod tests {
     /// The report on `main` sampled at `voxel_size` under the world frame.
     fn report_on(main: &SdfMain, voxel_size: f64, fill_mode: FillMode) -> String {
         let sampling = sample(
+            &DependenciesImpl,
             main,
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(voxel_size),
@@ -994,6 +996,7 @@ model.voxj  2 voxels of 1 m  2 pieces  3x1x1  [0, 0, 0] .. [3, 1, 1]
     fn the_report_needs_the_writes_recorded() {
         let main = parts_main();
         let sampling = sample(
+            &DependenciesImpl,
             &main,
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
@@ -1015,6 +1018,7 @@ model.voxj  2 voxels of 1 m  2 pieces  3x1x1  [0, 0, 0] .. [3, 1, 1]
     fn the_report_needs_the_world_frame() {
         let main = parts_main();
         let sampling = sample(
+            &DependenciesImpl,
             &main,
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),

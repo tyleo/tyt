@@ -17,6 +17,7 @@ mod tests {
     use sdfj_sdfcore::from_sdfj_file;
     use serde_json::{Value, json};
     use voxsmith::{
+        dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
         operations::sdf_doc::{SdfSampleOptions, sample},
         utilities::{GridResolution, VoxelFrame},
     };
@@ -127,7 +128,12 @@ mod tests {
             frame: VoxelFrame::World,
             record_writes: false,
         };
-        let sampling = sample(&from_sdfj_file(&file).unwrap(), &options).unwrap();
+        let sampling = sample(
+            &VoxsmithDependenciesImpl,
+            &from_sdfj_file(&file).unwrap(),
+            &options,
+        )
+        .unwrap();
 
         assert_eq!(sampling.materials.len(), count * 4);
     }

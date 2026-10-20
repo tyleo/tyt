@@ -1748,6 +1748,7 @@ mod tests {
         let file: SdfjFile = serde_json::from_value(file).unwrap();
 
         let sampling = sample(
+            &VoxsmithDependenciesImpl,
             &from_sdfj_file(&file).unwrap(),
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(0.025),

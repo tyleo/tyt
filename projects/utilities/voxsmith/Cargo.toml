@@ -17,6 +17,7 @@ branded-id = "0.2.0"
 meshdoc = "0.3.0"
 pathspec = "0.3.0"
 png = { version = "0.18.1", optional = true }
+rayon = { version = "1.12.0", optional = true }
 sdfcore = { version = "0.2.0", optional = true }
 serde_json = { version = "1", optional = true }
 treegrid = { version = "0.4.0", features = [
@@ -54,7 +55,13 @@ render = ["object", "dep:voxrender"]
 sdf_doc = ["dep:sdfcore"]
 vox_doc = ["_treegrid"]
 
-impl = ["dep:png", "dep:zune-jpeg", "dep:voxrender-cpu", "voxrender-cpu/impl"]
+impl = [
+    "dep:png",
+    "dep:rayon",
+    "dep:voxrender-cpu",
+    "dep:zune-jpeg",
+    "voxrender-cpu/impl",
+]
 
 _treegrid = ["dep:treegrid"]
 
