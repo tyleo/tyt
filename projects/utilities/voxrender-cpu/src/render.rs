@@ -1,6 +1,6 @@
 use crate::{
-    RenderGrid, RenderHit, RenderRayWalk, apply_bloom, material_pass, normal_reflectance,
-    shadow_origin, shadow_rays, transmitted_reflectance,
+    Dependencies, RenderGrid, RenderHit, RenderRayWalk, apply_bloom, material_pass,
+    normal_reflectance, shadow_origin, shadow_rays, transmitted_reflectance,
 };
 use branded_id::U32Id;
 use std::{
@@ -37,11 +37,12 @@ const WHITE: TyLinSrgbF64 = TyLinSrgbF64::new(1.0, 1.0, 1.0);
 /// occlusion darkens the hemisphere light. Each pixel walks its ray front
 /// to back, adding each hit's shade at its coverage and passing the rest
 /// through by the material's pass. A pixel no ray hits carries no light and
-/// full transmittance until `bloom`'s halo reaches it. Errors if the view
-/// is not one of the scene's, a side is zero, a bloom value is out of
-/// range, or a ray or light lies out of a grid's
-/// [range](crate::GRID_RANGE_BITS).
-pub fn render(
+/// full transmittance until `bloom`'s halo reaches it. `dependencies` maps
+/// the rows to their shades. Errors if the view is not one of the scene's, a
+/// side is zero, a bloom value is out of range, or a ray or light lies out of
+/// a grid's [range](crate::GRID_RANGE_BITS).
+pub fn render<D: Dependencies>(
+    dependencies: &D,
     scene: &RenderScene,
     view_id: U32Id<BRenderView>,
     occlusion: RenderOcclusion,
@@ -64,11 +65,18 @@ pub fn render(
     let mut image = RenderImage::new(width, height);
     let mut emission = vec![TyLinSrgbF32::new(0.0, 0.0, 0.0); width as usize * height as usize];
 
-    for y in 0..height {
-        for x in 0..width {
-            let walk = RenderRayWalk::new(scene, grid_rays.iter().map(|rays| rays.ray(x, y)));
-            let shade = shade_ray(scene, occlusion, &rays.ray(x, y), walk)?;
+    let rows = dependencies.map_rows(height, |y| {
+        (0..width)
+            .map(|x| {
+                let walk = RenderRayWalk::new(scene, grid_rays.iter().map(|rays| rays.ray(x, y)));
 
+                shade_ray(scene, occlusion, &rays.ray(x, y), walk)
+            })
+            .collect::<Result<Vec<_>>>()
+    });
+
+    for (y, row) in (0..height).zip(rows) {
+        for (x, shade) in (0..width).zip(row?) {
             image.set_pixel(
                 x,
                 y,
@@ -567,10 +575,10 @@ where
         })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        RenderHit, RenderRayWalk, cast_ray, material_pass, render,
+        DependenciesImpl, RenderHit, RenderRayWalk, cast_ray, material_pass, render,
         render::{
             BLACK, RayShade, WHITE, bilinear, check_bloom, cone_attenuation, direct_radiance,
             hemisphere_radiance, point_attenuation, shade_hit, shade_ray, shadow_factor,
@@ -643,6 +651,7 @@ mod tests {
             .unwrap();
 
         let image = render(
+            &DependenciesImpl,
             &scene,
             view_id,
             RenderOcclusion::Corner,
@@ -660,6 +669,7 @@ mod tests {
 
         assert_eq!(
             render(
+                &DependenciesImpl,
                 &scene,
                 U32Id::from_u32(9),
                 RenderOcclusion::Corner,
@@ -674,6 +684,7 @@ mod tests {
         );
         assert_eq!(
             render(
+                &DependenciesImpl,
                 &scene,
                 view_id,
                 RenderOcclusion::Corner,
@@ -731,6 +742,7 @@ mod tests {
             let (view_id, _) = scene.iter_views().next().unwrap();
 
             render(
+                &DependenciesImpl,
                 scene,
                 view_id,
                 RenderOcclusion::None,
@@ -1771,7 +1783,18 @@ mod tests {
     fn bloom_off_or_under_the_threshold_leaves_the_image_and_the_halo_spills_past_the_silhouette() {
         let scene = glow_scene(RenderShadow::None);
         let (view_id, _) = scene.iter_views().next().unwrap();
-        let draw = |bloom| render(&scene, view_id, RenderOcclusion::Corner, bloom, 64, 64).unwrap();
+        let draw = |bloom| {
+            render(
+                &DependenciesImpl,
+                &scene,
+                view_id,
+                RenderOcclusion::Corner,
+                bloom,
+                64,
+                64,
+            )
+            .unwrap()
+        };
 
         // The strip's emission peaks at 4 in its red channel.
         let off = draw(RenderBloom::default());

@@ -62,6 +62,10 @@ surface it meets. A red pane throws a red shadow. `RenderShadow` casts it per
 pixel, per face, or per corner, and blends the corner results across the face
 per channel.
 
+`render` takes its `Dependencies` first, which map the image's rows to their
+shades. `DependenciesImpl`, behind the default `impl` feature, spreads the rows
+across `rayon`'s thread pool.
+
 A `RenderBloom` adds a halo over the emissive term before the tonemap. The
 part of each hit's emission whose brightest channel passes the threshold
 blurs out to the radius, scales by the strength, and lands on every pixel.
@@ -77,6 +81,7 @@ slab.
 
 ```rust
 let image = render(
+    &DependenciesImpl,
     &scene,
     view_id,
     RenderOcclusion::Corner,

@@ -7,16 +7,28 @@
 // Public API
 
 mod cast_ray;
+mod dependencies;
+mod map_rows;
 mod render;
 mod render_hit;
 mod render_ray_walk;
 mod shadow_rays;
 
 pub use cast_ray::*;
+pub use dependencies::*;
+pub use map_rows::*;
 pub use render::*;
 pub use render_hit::*;
 pub use render_ray_walk::*;
 pub use shadow_rays::*;
+
+// Optional API
+
+#[cfg(feature = "impl")]
+mod dependencies_impl;
+
+#[cfg(feature = "impl")]
+pub use dependencies_impl::*;
 
 // Internal API
 

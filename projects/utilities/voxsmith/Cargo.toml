@@ -28,7 +28,7 @@ ty-math = "0.4.0"
 vox-value-language = { version = "0.2.0", optional = true }
 voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
 voxrender = { version = "0.4.0", optional = true }
-voxrender-cpu = { version = "0.1.0", optional = true }
+voxrender-cpu = { version = "0.1.0", default-features = false, optional = true }
 voxsurface = { version = "0.3.0", optional = true }
 zune-jpeg = { version = "0.5", optional = true }
 
@@ -54,7 +54,7 @@ render = ["object", "dep:voxrender"]
 sdf_doc = ["dep:sdfcore"]
 vox_doc = ["_treegrid"]
 
-impl = ["dep:png", "dep:zune-jpeg", "dep:voxrender-cpu"]
+impl = ["dep:png", "dep:zune-jpeg", "dep:voxrender-cpu", "voxrender-cpu/impl"]
 
 _treegrid = ["dep:treegrid"]
 

@@ -1,4 +1,4 @@
-use crate::render;
+use crate::{DependenciesImpl, render};
 use png::{BitDepth, ColorType, Decoder, Encoder};
 use std::{env, fs, io::Cursor, path::Path};
 use voxrender::{RenderBloom, RenderOcclusion, RenderOutput, RenderScene, RenderShadow};
@@ -42,7 +42,16 @@ pub fn check_goldens(
 
         let (view_id, _) = scene.iter_views().next().expect("a fixture holds one view");
 
-        let image = render(&scene, view_id, occlusion, bloom, SIZE, SIZE).unwrap();
+        let image = render(
+            &DependenciesImpl,
+            &scene,
+            view_id,
+            occlusion,
+            bloom,
+            SIZE,
+            SIZE,
+        )
+        .unwrap();
 
         let output = RenderOutput::from_image(&image, None);
 

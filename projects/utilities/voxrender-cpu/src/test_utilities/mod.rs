@@ -1,7 +1,13 @@
+// Optional API
+
+#[cfg(feature = "impl")]
+mod check_goldens;
+
+#[cfg(feature = "impl")]
+pub(crate) use check_goldens::*;
+
 // Internal API
 
 mod bar_scene;
-mod check_goldens;
 
 pub(crate) use bar_scene::*;
-pub(crate) use check_goldens::*;
