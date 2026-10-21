@@ -1,18 +1,25 @@
 use crate::{Error, Result};
-use voxrender_bench::{B1Timer, Gpu};
+use voxrender_bench::{Gpu, PassTimer, TimedBench};
 use wgpu::{CommandEncoderDescriptor, PollType};
 
-/// Submits B1's timed passes over `width` by `height` eyes one at a time
-/// until `windows` windows report, and returns the reports.
-pub fn time_b1(gpu: &Gpu, width: u32, height: u32, windows: usize) -> Result<String> {
-    let mut timer = B1Timer::new(&gpu.device, &gpu.queue, width, height).map_err(Error::Bench)?;
+/// Submits `bench`'s timed passes over `width` by `height` eyes one at a
+/// time until `windows` windows report, and returns the reports.
+pub fn time_passes(
+    gpu: &Gpu,
+    bench: TimedBench,
+    width: u32,
+    height: u32,
+    windows: usize,
+) -> Result<String> {
+    let mut timer =
+        PassTimer::new(&gpu.device, &gpu.queue, bench, width, height).map_err(Error::Bench)?;
     let mut reports = Vec::new();
 
     while reports.len() < windows {
         let mut encoder = gpu
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("b1 times"),
+                label: Some("timed passes"),
             });
 
         timer

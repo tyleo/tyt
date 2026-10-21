@@ -9,7 +9,8 @@ its report in Markdown.
 ```sh
 cargo run --release -p voxrender-bench-desktop -- b1 --size 256
 cargo run --release -p voxrender-bench-desktop -- b1-times
+cargo run --release -p voxrender-bench-desktop -- b2-times
 ```
 
-`b1-times` waits for each submit to finish before the next, as a display's
-frames do. It needs an adapter with timestamp queries.
+`b1-times` and `b2-times` wait for each submit to finish before the next, as
+a display's frames do. They need an adapter with timestamp queries.

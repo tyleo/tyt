@@ -112,6 +112,18 @@ code-level choices in
          tree walk, which must meet B1's line on every scene
 - [ ] **S8. B2 on Quest.** The run measures ray rate and step cost with B2's
       setup. The rate decides which B3 arms get built.
+      1. A fixed-N-step loop reads a storage buffer, a 3D texture, a 2D
+         array, and u32-pair masks. Each pass times one layout at one N over
+         both eyes. The report regresses ms against N per layout. The desktop
+         runs the loops through `b2-times`
+      2. The tree walk traces S1 and S5 at 1680x1760x2. Both eyes trace the
+         scene's view. The report gives the ray rate and iterations per ray
+      3. Hardware ray query traces the same scenes over a TLAS of
+         placements. Each object's BLAS holds one AABB per non-empty brick,
+         at 4^3 and at 16^3. A candidate marches its brick to the first hit.
+         B1's ids check the hits against the reference
+      4. One worn run times all three. The report lands in benchmarks.md.
+         R picks the B3 arms
 
 ## Later
 

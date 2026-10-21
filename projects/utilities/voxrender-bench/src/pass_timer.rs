@@ -1,19 +1,14 @@
-use crate::{ChainKernel, Error, Result, Walk, far_wall_scene};
+use crate::{BenchKernels, Error, KernelWork, Result, TimedBench, b1_kernels, b2_kernels};
 use std::{
     result::Result as StdResult,
     sync::mpsc::{self, Receiver, Sender},
 };
-use voxrender_wgpu::HitTrace;
 use wgpu::{
     Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, CommandEncoder,
-    CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePassTimestampWrites,
-    Device, Features, MapMode, PollType, QUERY_RESOLVE_BUFFER_ALIGNMENT, QuerySet,
-    QuerySetDescriptor, QueryType, Queue,
+    CommandEncoderDescriptor, ComputePassDescriptor, ComputePassTimestampWrites, Device, Features,
+    MapMode, PollType, QUERY_RESOLVE_BUFFER_ALIGNMENT, QuerySet, QuerySetDescriptor, QueryType,
+    Queue,
 };
-
-/// The far wall's depths in cells. The walks' growth between them is the
-/// steps' cost alone.
-const DEPTHS: [u32; 2] = [8, 16];
 
 /// The passes before the timer keeps samples.
 const WARM_UP: u32 = 300;
@@ -27,9 +22,13 @@ const SLOTS: u32 = 8;
 /// The bytes of one pass's two timestamps.
 const SLOT_BYTES: u64 = 16;
 
-/// B1's timing over both eyes, one kernel per pass.
-pub struct B1Timer {
+/// A benchmark's timing over both eyes, one kernel per pass.
+pub struct PassTimer {
+    title: &'static str,
+
     kernels: Vec<Kernel>,
+
+    summary: fn(&[f64], f64) -> Vec<String>,
 
     query_set: QuerySet,
 
@@ -60,18 +59,11 @@ pub struct B1Timer {
     windows: u32,
 }
 
-/// What one timed pass runs.
-enum Work {
-    Walk(HitTrace),
-
-    Chain(ChainKernel),
-}
-
 /// A kernel and its window's samples in milliseconds.
 struct Kernel {
     label: String,
 
-    work: Work,
+    work: KernelWork,
 
     samples: Vec<f64>,
 }
@@ -94,36 +86,28 @@ enum Progress {
     Mapped(usize, StdResult<(), BufferAsyncError>),
 }
 
-impl B1Timer {
-    /// Builds the kernels for a `width` by `height` eye image. Errors unless
-    /// the device has timestamp queries.
-    pub fn new(device: &Device, queue: &Queue, width: u32, height: u32) -> Result<Self> {
+impl PassTimer {
+    /// Builds `bench`'s kernels for a `width` by `height` eye image. Errors
+    /// unless the device has timestamp queries.
+    pub fn new(
+        device: &Device,
+        queue: &Queue,
+        bench: TimedBench,
+        width: u32,
+        height: u32,
+    ) -> Result<Self> {
         if !device.features().contains(Features::TIMESTAMP_QUERY) {
             return Err(Error::NoTimestampQuery);
         }
 
-        let mut kernels = Vec::new();
-
-        for depth in DEPTHS {
-            let scene = far_wall_scene(depth);
-            let (view_id, _) = scene
-                .iter_views()
-                .next()
-                .expect("the far wall scene has a view");
-
-            for (name, walk) in [("integer", Walk::Integer), ("float", Walk::Float)] {
-                let trace = walk.trace(device, &scene, view_id, width, height)?;
-
-                kernels.push((format!("{name} walk, {depth} deep"), Work::Walk(trace)));
-            }
-        }
-
-        for (name, float) in [("i32", false), ("f32", true)] {
-            kernels.push((
-                format!("{name} chain"),
-                Work::Chain(ChainKernel::new(device, width, height, float)),
-            ));
-        }
+        let BenchKernels {
+            title,
+            kernels,
+            summary,
+        } = match bench {
+            TimedBench::B1 => b1_kernels(device, width, height)?,
+            TimedBench::B2 => b2_kernels(device, queue, width, height),
+        };
 
         let kernels = kernels
             .into_iter()
@@ -135,13 +119,13 @@ impl B1Timer {
             .collect();
 
         let query_set = device.create_query_set(&QuerySetDescriptor {
-            label: Some("b1 timestamps"),
+            label: Some("pass timestamps"),
             ty: QueryType::Timestamp,
             count: SLOTS * 2,
         });
 
         let resolved = device.create_buffer(&BufferDescriptor {
-            label: Some("b1 resolved timestamps"),
+            label: Some("resolved pass timestamps"),
             size: u64::from(SLOTS) * QUERY_RESOLVE_BUFFER_ALIGNMENT,
             usage: BufferUsages::QUERY_RESOLVE | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
@@ -150,7 +134,7 @@ impl B1Timer {
         let slots = (0..SLOTS)
             .map(|_| Slot {
                 buffer: device.create_buffer(&BufferDescriptor {
-                    label: Some("b1 timestamp readback"),
+                    label: Some("pass timestamp readback"),
                     size: SLOT_BYTES,
                     usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
                     mapped_at_creation: false,
@@ -161,8 +145,10 @@ impl B1Timer {
 
         let (sender, receiver) = mpsc::channel();
 
-        Ok(B1Timer {
+        Ok(PassTimer {
+            title,
             kernels,
+            summary,
             query_set,
             resolved,
             slots,
@@ -228,7 +214,7 @@ impl B1Timer {
             });
 
             for _ in 0..2 {
-                dispatch(&self.kernels[kernel].work, &mut pass);
+                self.kernels[kernel].work.dispatch(&mut pass);
             }
         }
 
@@ -267,8 +253,8 @@ impl B1Timer {
 
         let mut lines = vec![
             format!(
-                "B1 times, window {}: {MEASURED} passes per kernel over two {} by {} eyes",
-                self.windows, self.width, self.height
+                "{}, window {}: {MEASURED} passes per kernel over two {} by {} eyes",
+                self.title, self.windows, self.width, self.height
             ),
             String::new(),
             "| Kernel | p50 ms | p99 ms |".to_owned(),
@@ -292,14 +278,10 @@ impl B1Timer {
             kernel.samples.clear();
         }
 
-        let [near, far] = DEPTHS;
-
         lines.push(String::new());
-        lines.push(format!(
-            "Integer step over float step, from the walks' growth between {near} and {far} \
-             cells deep: {:.3}x. i32 chain over f32 chain: {:.3}x.",
-            (medians[2] - medians[0]) / (medians[3] - medians[1]),
-            medians[4] / medians[5]
+        lines.extend((self.summary)(
+            &medians,
+            2.0 * f64::from(self.width) * f64::from(self.height),
         ));
         lines.push(String::new());
 
@@ -335,7 +317,7 @@ impl B1Timer {
         // Metal shows a pass's timestamps to a resolve only once the pass's
         // command buffer completes.
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("b1 timestamps"),
+            label: Some("pass timestamps"),
         });
 
         encoder.resolve_query_set(
@@ -393,14 +375,6 @@ impl B1Timer {
         }
 
         Ok(())
-    }
-}
-
-/// Records `work` over one eye into `pass`.
-fn dispatch(work: &Work, pass: &mut ComputePass<'_>) {
-    match work {
-        Work::Walk(trace) => trace.dispatch(pass),
-        Work::Chain(chain) => chain.dispatch(pass),
     }
 }
 

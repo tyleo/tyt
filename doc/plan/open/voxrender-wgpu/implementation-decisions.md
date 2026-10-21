@@ -305,3 +305,26 @@ they land.
      because a cell on the ray keeps them within i32
 - The bench builds each object's tree twice per trace: once to report a
   build error, and once inside `with_walk`, whose `cells` cannot fail
+
+## S8. B2 on Quest
+
+- The ray-query BLAS holds one AABB per 4^3 brick or per 16^3 tile. The run
+  times both, and the faster and steadier one wins
+- `B1Timer` became `PassTimer`, which times B1's or B2's kernels. The desktop
+  runs B2 through `b2-times`. The Quest app now times B2. It still runs B1's
+  ids before the session opens
+- B2's step loop reads a 256^3 grid in one of four layouts:
+  1. A storage buffer of u32 cells in raster order
+  2. A 3D texture and a 2D array of R32Uint, the array with one layer per x
+  3. u32-pair masks, one pair per 4^3 brick. A step reads the mask word and
+     its bit's rank as `tree_walk.wgsl` does
+- Each step adds the last read, masked by a zero the compiler cannot see, to
+  its address. A read of a value no cell holds would end the loop, as a hit
+  ends a walk
+- Hashed cell values keep the data from compressing. The steps run along
+  the diagonal a DDA takes, one axis per step. The image's x runs along the
+  buffer's contiguous axis
+- The loops run 8, 16, and 32 steps. The report fits a least-squares line of
+  p50 against the count per layout and gives its slope as ms per step and
+  Gsteps/s. On Quest, B1's walk took about 0.8 ms per step over both eyes,
+  so 32 steps keep a pass near 25 ms

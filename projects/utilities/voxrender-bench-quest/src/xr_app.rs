@@ -8,7 +8,7 @@ use openxr::{
     ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
 };
 use std::num::NonZeroU32;
-use voxrender_bench::B1Timer;
+use voxrender_bench::{PassTimer, TimedBench};
 use wgpu::{
     Color, CommandEncoderDescriptor, LoadOp, Operations, RenderPassColorAttachment,
     RenderPassDescriptor, StoreOp,
@@ -29,7 +29,7 @@ const CLEAR: Color = Color {
 };
 
 /// An OpenXR session that clears both eyes each frame, runs B0's session
-/// probes, and times B1's kernels.
+/// probes, and times B2's kernels.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
@@ -37,7 +37,7 @@ pub struct XrApp {
 
     frame_times: Option<FrameTimes>,
 
-    b1_timer: B1Timer,
+    pass_timer: PassTimer,
 
     space: Space,
 
@@ -101,9 +101,10 @@ impl XrApp {
         let frame_times = FrameTimes::new(&xr, &session)?;
         let swapchain = EyeSwapchain::new(&xr, &gpu, &session)?;
 
-        let b1_timer = B1Timer::new(
+        let pass_timer = PassTimer::new(
             &gpu.device,
             &gpu.queue,
+            TimedBench::B2,
             u32::try_from(swapchain.extent.width).expect("an eye's width is positive"),
             u32::try_from(swapchain.extent.height).expect("an eye's height is positive"),
         )
@@ -112,7 +113,7 @@ impl XrApp {
         Ok(XrApp {
             swapchain,
             frame_times,
-            b1_timer,
+            pass_timer,
             space,
             frame_stream,
             frame_waiter,
@@ -243,19 +244,19 @@ impl XrApp {
             ..RenderPassDescriptor::default()
         });
 
-        self.b1_timer
+        self.pass_timer
             .record(&self.gpu.device, &self.gpu.queue, &mut encoder)
             .map_err(Error::Bench)?;
 
         self.gpu.queue.submit([encoder.finish()]);
 
         if let Some(report) = self
-            .b1_timer
+            .pass_timer
             .collect(&self.gpu.device, &self.gpu.queue)
             .map_err(Error::Bench)?
         {
             for line in report.lines() {
-                log::info!("b1 {line}");
+                log::info!("b2 {line}");
             }
         }
 
