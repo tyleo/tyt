@@ -8,7 +8,7 @@ use crate::{Format, ReadFormat, ReadFormatVisitor, WriteFormatVisitor};
 /// visitor.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WriteFormat {
-    /// SDF Json, a `.sdfj` document.
+    /// SDF Json, a `.sdfj` or `.sdfjz` document.
     #[cfg(feature = "sdfj")]
     Sdfj(SdfjSerialization),
 }

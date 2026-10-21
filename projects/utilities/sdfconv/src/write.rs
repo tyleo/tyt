@@ -31,7 +31,11 @@ mod tests {
 
     #[test]
     fn each_serialization_round_trips() {
-        for serialization in [SdfjSerialization::Compact, SdfjSerialization::Pretty] {
+        for serialization in [
+            SdfjSerialization::Compact,
+            SdfjSerialization::Pretty,
+            SdfjSerialization::Zip,
+        ] {
             let format = WriteFormat::Sdfj(serialization);
 
             let bytes = write(&DependenciesImpl, &format, &test_main()).unwrap();

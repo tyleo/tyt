@@ -6,8 +6,8 @@
 //! [`SdfMain`](sdfcore::SdfMain), and [`to_sdfj_file()`] encodes one back.
 //! Each entry keeps its place in its table, so a document reads back as the
 //! same state. The `codec` module, behind the default `codec` feature, goes
-//! straight to and from `.sdfj` bytes and takes the codec's dependencies.
-//! `sdfj_codec::DependenciesImpl` supplies them.
+//! straight to and from `.sdfj` / `.sdfjz` bytes and takes the codec's
+//! dependencies. `sdfj_codec::DependenciesImpl` supplies them.
 
 // Public API
 

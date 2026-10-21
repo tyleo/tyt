@@ -6,6 +6,34 @@ the document, and `vxl sdf-doc voxelize` reads it. The
 [Model evaluation](../../../../doc/ref/sdf-doc/model-evaluation.md) sets what
 each entry computes.
 
+## File Extensions
+
+An SDF Json file is a single JSON document. It is stored in one of two
+interchangeable forms with identical content, differing only in whether the
+document is packaged in a zip archive.
+
+| Form         | Extension | Contents                                                  | MIME type                   |
+| ------------ | --------- | --------------------------------------------------------- | --------------------------- |
+| Uncompressed | `.sdfj`   | The JSON document as UTF-8 text, read and edited directly | `application/vnd.sdfj+json` |
+| Compressed   | `.sdfjz`  | A zip archive containing the document                     | `application/vnd.sdfj+zip`  |
+
+1. `.sdfj` is the canonical working form. It is plain UTF-8 JSON whose
+   top-level value is the object in [Structure](#structure), openable in any
+   JSON-aware editor. Tools that key off the `.json` suffix may also accept
+   `.sdfj.json`.
+2. `.sdfjz` is the canonical shipping form. It is a standard zip archive holding
+   exactly one `.sdfj` member, conventionally named `main.sdfj`, compressed with
+   the deflate method. The archive may carry additional resource members;
+   consumers ignore members they do not recognize. Reading a `.sdfjz` means
+   opening the archive and parsing its `.sdfj` member, which is byte-identical
+   to a standalone `.sdfj`. Tools that key off the `.zip` suffix may also accept
+   `.sdfjz.zip`.
+3. Packaging is a transport concern and never changes the document. Recognize
+   the form by leading bytes, not extension. An uncompressed file's first
+   non-whitespace byte is `{`. A zip archive begins with `PK`, the bytes
+   `0x50 0x4B`. Consumers accept either form wherever an SDF Json file is
+   expected.
+
 ## Structure
 
 ```jsonc

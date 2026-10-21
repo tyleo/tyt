@@ -7,6 +7,6 @@ pub enum SdfDocLibrary {
     /// A document a layer holds.
     Embedded(Box<SdfjFile>),
 
-    /// An `.sdfj` file at a path resolved against its `.vxlconfig`.
+    /// An `.sdfj` or `.sdfjz` file at a path resolved against its `.vxlconfig`.
     File(PathBuf),
 }

@@ -126,6 +126,7 @@ A few shared crates support the architecture:
 | `ty-preferences`  | Loads `.tytconfig` preferences from user home and git root                |
 | `ty-math`         | Math types shared across crates                                           |
 | `ty-math-serde`   | Serde support for `ty-math` types                                         |
+| `ty-zip`          | Single-member zip framing for the `.voxjz` and `.sdfjz` forms             |
 | `tyt-meta`        | Scaffolding tools for adding new crates and commands (see below)          |
 
 ### Adding new crates and commands with `tyt-meta`

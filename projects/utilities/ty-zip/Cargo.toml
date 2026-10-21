@@ -1,0 +1,12 @@
+[package]
+name = "ty-zip"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Frames a deflate stream as a single-member zip archive and reads it back."
+keywords = ["zip", "archive", "deflate"]
+categories = ["compression", "encoding"]
+
+[package.metadata.workspaces]
+independent = true

@@ -7,7 +7,7 @@ use crate::{Format, ReadFormatVisitor};
 /// [`with`](ReadFormat::with) hands that marker to a visitor.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReadFormat {
-    /// SDF Json, the `.sdfj` file.
+    /// SDF Json, the `.sdfj` and `.sdfjz` documents.
     #[cfg(feature = "sdfj")]
     Sdfj,
 }
@@ -75,6 +75,8 @@ mod tests {
         assert_eq!(ReadFormat::from_extension("sdfj"), Some(ReadFormat::Sdfj));
 
         assert_eq!(ReadFormat::from_extension("SDFJ"), Some(ReadFormat::Sdfj));
+
+        assert_eq!(ReadFormat::from_extension("sdfjz"), Some(ReadFormat::Sdfj));
 
         assert_eq!(ReadFormat::from_extension("voxj"), None);
 

@@ -1,7 +1,8 @@
 # sdfj
 
-Core Rust types for the SDF Json (`.sdfj`) format. A document records a
-model's calls as JSON tables whose entries reference each other by index.
+Core Rust types for the SDF Json (`.sdfj` / `.sdfjz`) format. A document
+records a model's calls as JSON tables whose entries reference each other by
+index.
 
 The types are the data model, with optional `serde` support behind the default
 `serde` feature. A parse checks the keys and kinds each entry holds:

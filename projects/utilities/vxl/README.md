@@ -247,6 +247,8 @@ vxl node link scene.voxj --select house/door --select-parent garage
 
 `vxl sdf-doc build` records a voxel model written in TypeScript as an `.sdfj` document. `vxl sdf-doc voxelize` samples the document into Voxel Json. The [modeling API](docs/modeling-api.md) lists every call a model file can make. [Modeling with Claude Code](#modeling-with-claude-code) sets up the skill that runs these commands for you.
 
+A build output named `.sdfjz` holds the document zipped, the way `.voxjz` holds Voxel Json. `voxelize` accepts either form, as does a library file a `.vxlconfig` lists.
+
 ```sh
 # Records table.ts as table.sdfj with the built-in materials.
 vxl sdf-doc build table.ts --library materials

@@ -3,7 +3,7 @@ use crate::{
     commands::{SdfDocLibrary, load_sdf_doc_libraries},
 };
 use sdfj::SdfjFile;
-use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, from_sdfj_file_bytes};
+use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, from_sdfj_or_sdfjz_file_bytes};
 use sdfj_sdfcore::from_sdfj_file;
 use serde::Serialize;
 use std::{
@@ -49,9 +49,9 @@ pub fn sdfj_builder_libraries(
                     };
                     let bytes = ReadFile::read_file(dependencies, path)
                         .map_err(|error| IOError::new(error.kind(), failed(error.to_string())))?;
-                    from_sdfj_file_bytes(&SdfjCodecDependencies, &bytes).map_err(|error| {
-                        IOError::new(ErrorKind::InvalidData, failed(error.to_string()))
-                    })?
+                    from_sdfj_or_sdfjz_file_bytes(&SdfjCodecDependencies, &bytes).map_err(
+                        |error| IOError::new(ErrorKind::InvalidData, failed(error.to_string())),
+                    )?
                 }
 
                 None => return Err(undefined(origin, name, &defined)),

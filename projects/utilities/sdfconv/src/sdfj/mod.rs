@@ -1,5 +1,5 @@
-//! SDF Json: the [`Sdfj`] format and [`SdfjSerialization`] picking how the
-//! JSON is laid out.
+//! SDF Json: the [`Sdfj`] format and [`SdfjSerialization`] picking the
+//! container.
 
 // Public API
 

@@ -13,6 +13,8 @@ Load and save leave each object's position and sample blocks encoded.
   form.
 - `from_voxj_or_voxjz_file_bytes`: either form, detected by its leading bytes.
 - `to_voxj_pretty_file_bytes`: pretty-printed `.voxj` JSON.
+- `wrap_voxjz` / `unwrap_voxjz`: `.voxj` bytes into a `.voxjz` archive and
+  back, leaving the JSON as it is.
 
 A save errors when the file holds a NaN, an infinity outside a `float` value
 pool, or a repeated object key.

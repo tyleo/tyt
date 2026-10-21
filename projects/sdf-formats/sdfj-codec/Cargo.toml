@@ -4,7 +4,7 @@ version = "0.3.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Encodes sdfj types into .sdfj documents."
+description = "Encodes sdfj types into .sdfj / .sdfjz documents."
 keywords = ["sdf", "sdfj", "json", "3d", "codec"]
 categories = ["encoding", "game-development", "graphics", "parser-implementations"]
 
@@ -12,12 +12,14 @@ categories = ["encoding", "game-development", "graphics", "parser-implementation
 independent = true
 
 [dependencies]
+flate2 = { version = "1", optional = true }
 serde_json = { version = "1", features = [
     "float_roundtrip",
     "preserve_order",
 ], optional = true }
 sdfj = { version = "0.3.0", default-features = false }
+ty-zip = "0.1.0"
 
 [features]
 default = ["impl"]
-impl = ["dep:serde_json", "sdfj/serde"]
+impl = ["dep:flate2", "dep:serde_json", "sdfj/serde"]

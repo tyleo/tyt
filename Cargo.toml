@@ -27,6 +27,7 @@ members = [
     "projects/utilities/ty-math",
     "projects/utilities/ty-math-serde",
     "projects/utilities/ty-preferences",
+    "projects/utilities/ty-zip",
     "projects/utilities/voxconv",
     "projects/utilities/voxcore",
     "projects/utilities/voxrender",
@@ -94,6 +95,7 @@ ty-clap = { path = "projects/utilities/ty-clap" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
 ty-preferences = { path = "projects/utilities/ty-preferences" }
+ty-zip = { path = "projects/utilities/ty-zip" }
 voxconv = { path = "projects/utilities/voxconv" }
 voxcore = { path = "projects/utilities/voxcore" }
 voxrender = { path = "projects/utilities/voxrender" }

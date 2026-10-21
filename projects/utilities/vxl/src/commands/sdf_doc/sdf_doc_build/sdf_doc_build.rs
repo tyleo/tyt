@@ -17,8 +17,9 @@ pub struct SdfDocBuild {
     #[arg(value_name = "model")]
     model: PathBuf,
 
-    /// The output `.sdfj` document to write. Defaults to the model's path with
-    /// an `.sdfj` extension.
+    /// The output `.sdfj` or `.sdfjz` document to write. Defaults to the
+    /// model's path with an `.sdfj` extension. An `.sdfjz` path writes the
+    /// document zipped.
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
 

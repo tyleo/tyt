@@ -19,7 +19,7 @@ use voxsmith::{
 #[derive(Clone, Debug, Parser)]
 #[command(name = "voxelize")]
 pub struct SdfDocVoxelize {
-    /// The input `.sdfj` document.
+    /// The input `.sdfj` or `.sdfjz` document.
     #[arg(value_name = "input")]
     input: PathBuf,
 

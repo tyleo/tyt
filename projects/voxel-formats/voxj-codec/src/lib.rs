@@ -10,6 +10,8 @@ mod result;
 mod to_voxj_file_bytes;
 mod to_voxj_pretty_file_bytes;
 mod to_voxjz_file_bytes;
+mod unwrap_voxjz;
+mod wrap_voxjz;
 
 pub use dependencies::*;
 pub use error::*;
@@ -20,8 +22,5 @@ pub use result::*;
 pub use to_voxj_file_bytes::*;
 pub use to_voxj_pretty_file_bytes::*;
 pub use to_voxjz_file_bytes::*;
-
-// Internal API
-
-mod internal;
-pub(crate) use internal::*;
+pub use unwrap_voxjz::*;
+pub use wrap_voxjz::*;

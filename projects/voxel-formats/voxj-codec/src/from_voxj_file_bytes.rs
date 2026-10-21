@@ -11,7 +11,9 @@ mod tests {
     use crate::{
         DependenciesImpl, Error, from_voxj_file_bytes, from_voxj_or_voxjz_file_bytes,
         from_voxjz_file_bytes, to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes,
+        unwrap_voxjz,
     };
+    use flate2::Crc;
     use serde_json::{Value, json};
     use voxj::{
         VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjMapEntry, VoxjObject,
@@ -102,6 +104,21 @@ mod tests {
     }
 
     #[test]
+    fn voxjz_stores_the_compact_document_as_main_voxj() {
+        let file = document();
+        let member = to_voxj_file_bytes(&DependenciesImpl, &file).unwrap();
+        let zip = to_voxjz_file_bytes(&DependenciesImpl, &file).unwrap();
+
+        // The archive's CRC matches flate2's.
+        let mut crc = Crc::new();
+        crc.update(&member);
+        assert_eq!(zip[14..18], crc.sum().to_le_bytes());
+        assert_eq!(&zip[30..39], b"main.voxj");
+
+        assert_eq!(unwrap_voxjz(&DependenciesImpl, &zip).unwrap(), member);
+    }
+
+    #[test]
     fn voxjz_round_trips_and_detection_dispatches() {
         let file = document_with_ext(json!({ "k": 1 }));
         let zip = to_voxjz_file_bytes(&DependenciesImpl, &file).unwrap();
@@ -120,6 +137,21 @@ mod tests {
             from_voxj_or_voxjz_file_bytes(&DependenciesImpl, &json).unwrap(),
             file
         );
+    }
+
+    #[test]
+    fn a_malformed_voxjz_archive_is_invalid() {
+        // A truncated local header, then a whole header over a broken stream.
+        let mut broken_stream = b"PK\x03\x04".to_vec();
+        broken_stream.resize(30, 0);
+        broken_stream.extend_from_slice(&[0xFF, 0xFF, 0xFF]);
+
+        for bytes in [&b"PK\x03\x04short"[..], &broken_stream] {
+            assert!(matches!(
+                from_voxjz_file_bytes(&DependenciesImpl, bytes),
+                Err(Error::Invalid(_))
+            ));
+        }
     }
 
     #[test]

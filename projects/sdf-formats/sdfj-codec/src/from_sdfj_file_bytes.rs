@@ -9,9 +9,11 @@ pub fn from_sdfj_file_bytes<D: DecodeSdfjJson>(dependencies: &D, bytes: &[u8]) -
 #[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        DependenciesImpl, Error, from_sdfj_file_bytes, to_sdfj_file_bytes,
-        to_sdfj_pretty_file_bytes,
+        DependenciesImpl, Error, from_sdfj_file_bytes, from_sdfj_or_sdfjz_file_bytes,
+        from_sdfjz_file_bytes, to_sdfj_file_bytes, to_sdfj_pretty_file_bytes, to_sdfjz_file_bytes,
+        unwrap_sdfjz,
     };
+    use flate2::Crc;
     use sdfj::{
         SDFJ_VERSION, SdfjFile, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode,
         SdfjObject, SdfjPropertyValue, SdfjShape3d, SdfjStep, SdfjTaggedValue, SdfjValue,
@@ -71,6 +73,57 @@ mod tests {
                 from_sdfj_file_bytes(&DependenciesImpl, &bytes).unwrap(),
                 file
             );
+        }
+    }
+
+    #[test]
+    fn sdfjz_stores_the_compact_document_as_main_sdfj() {
+        let file = document();
+        let member = to_sdfj_file_bytes(&DependenciesImpl, &file).unwrap();
+        let zip = to_sdfjz_file_bytes(&DependenciesImpl, &file).unwrap();
+
+        // The archive's CRC matches flate2's.
+        let mut crc = Crc::new();
+        crc.update(&member);
+        assert_eq!(zip[14..18], crc.sum().to_le_bytes());
+        assert_eq!(&zip[30..39], b"main.sdfj");
+
+        assert_eq!(unwrap_sdfjz(&DependenciesImpl, &zip).unwrap(), member);
+    }
+
+    #[test]
+    fn sdfjz_round_trips_and_detection_dispatches() {
+        let file = document();
+        let zip = to_sdfjz_file_bytes(&DependenciesImpl, &file).unwrap();
+        assert_eq!(
+            from_sdfjz_file_bytes(&DependenciesImpl, &zip).unwrap(),
+            file
+        );
+
+        // Detection: leading PK -> sdfjz, leading { -> sdfj.
+        assert_eq!(
+            from_sdfj_or_sdfjz_file_bytes(&DependenciesImpl, &zip).unwrap(),
+            file
+        );
+        let json = to_sdfj_file_bytes(&DependenciesImpl, &file).unwrap();
+        assert_eq!(
+            from_sdfj_or_sdfjz_file_bytes(&DependenciesImpl, &json).unwrap(),
+            file
+        );
+    }
+
+    #[test]
+    fn a_malformed_sdfjz_archive_is_invalid() {
+        // A truncated local header, then a whole header over a broken stream.
+        let mut broken_stream = b"PK\x03\x04".to_vec();
+        broken_stream.resize(30, 0);
+        broken_stream.extend_from_slice(&[0xFF, 0xFF, 0xFF]);
+
+        for bytes in [&b"PK\x03\x04short"[..], &broken_stream] {
+            assert!(matches!(
+                from_sdfjz_file_bytes(&DependenciesImpl, bytes),
+                Err(Error::Invalid(_))
+            ));
         }
     }
 

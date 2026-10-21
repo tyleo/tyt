@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-/// A library a `.vxlconfig` layer reads from an `.sdfj` file.
+/// A library a `.vxlconfig` layer reads from an `.sdfj` or `.sdfjz` file.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct SdfDocFileLibrary {

@@ -1,13 +1,15 @@
 use crate::{CreateTempDir, ReadFile, Result, RunProgram, WriteFile};
+use sdfconv::sdfj::SdfjSerialization;
 use sdfj_builder::{JavaScriptRuntime, SDFJ_BUILDER_FILES, SDFJ_BUILDER_LIBRARIES_PATH};
+use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, wrap_sdfjz};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
 
-/// Builds `model` under `runtime` into the document at `output`. The builder
-/// reads its libraries from the JSON `libraries`. A failed run leaves `output`
-/// untouched.
+/// Builds `model` under `runtime` into the document at `output`, zipped when
+/// `output` takes the `.sdfjz` extension. The builder reads its libraries from
+/// the JSON `libraries`. A failed run leaves `output` untouched.
 pub fn run_sdfj_builder(
     dependencies: &(impl CreateTempDir + ReadFile + RunProgram + WriteFile),
     runtime: JavaScriptRuntime,
@@ -54,7 +56,13 @@ pub fn run_sdfj_builder(
         }
     }
 
-    Ok(dependencies.write_file(output, &dependencies.read_file(&document)?)?)
+    let mut bytes = dependencies.read_file(&document)?;
+    let extension = output.extension().and_then(|extension| extension.to_str());
+    if extension.and_then(SdfjSerialization::from_extension) == Some(SdfjSerialization::Zip) {
+        bytes = wrap_sdfjz(&SdfjCodecDependencies, &bytes);
+    }
+
+    Ok(dependencies.write_file(output, &bytes)?)
 }
 
 #[cfg(test)]
@@ -64,6 +72,7 @@ mod tests {
         commands::run_sdfj_builder,
     };
     use sdfj_builder::{JavaScriptRuntime, SDFJ_BUILDER_FILES, SDFJ_BUILDER_LIBRARIES_PATH};
+    use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, unwrap_sdfjz};
     use std::{
         cell::RefCell,
         ffi::OsString,
@@ -135,11 +144,15 @@ mod tests {
     }
 
     fn build_chair(stand_in: &StandIn, out: &TempDir) -> Option<String> {
+        build_chair_to(stand_in, &out.path().join("models/chair.sdfj"))
+    }
+
+    fn build_chair_to(stand_in: &StandIn, output: &Path) -> Option<String> {
         run_sdfj_builder(
             stand_in,
             JavaScriptRuntime::Node,
             Path::new("chair.ts"),
-            &out.path().join("models/chair.sdfj"),
+            output,
             LIBRARIES.as_bytes(),
         )
         .err()
@@ -156,6 +169,22 @@ mod tests {
         let output = fs::read_to_string(out.path().join("models/chair.sdfj"));
         assert_eq!(output.unwrap(), DOCUMENT);
         assert!(!stand_in.directory.borrow().as_ref().unwrap().exists());
+    }
+
+    #[test]
+    fn an_sdfjz_output_holds_the_document_zipped() {
+        let stand_in = StandIn::new(|| Ok(Some(0)));
+        let out = TempDir::new().unwrap();
+        let output = out.path().join("models/chair.SDFJZ");
+
+        assert_eq!(build_chair_to(&stand_in, &output), None);
+
+        let zip = fs::read(output).unwrap();
+        assert!(zip.starts_with(b"PK"));
+        assert_eq!(
+            unwrap_sdfjz(&SdfjCodecDependencies, &zip).unwrap(),
+            DOCUMENT.as_bytes()
+        );
     }
 
     #[test]

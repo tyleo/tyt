@@ -21,9 +21,11 @@ state.
 The `codec` module, behind the default `codec` feature, goes straight to and
 from file bytes over `sdfj-codec`:
 
-- `codec::from_sdfj_bytes`: `.sdfj` bytes into an `SdfMain`
+- `codec::from_sdfj_bytes`: `.sdfj` or `.sdfjz` bytes into an `SdfMain`,
+  detecting the form by its leading bytes
 - `codec::to_sdfj_bytes` / `codec::to_sdfj_pretty_bytes`: an `SdfMain` to
   compact or pretty-printed `.sdfj` JSON
+- `codec::to_sdfjz_bytes`: an `SdfMain` to a `.sdfjz` zip archive
 
-Each takes the codec's dependencies: `DecodeSdfjJson` to load and
-`EncodeSdfjJson` to write. `sdfj_codec::DependenciesImpl` supplies both.
+Each takes the codec's dependencies, which `sdfj_codec::DependenciesImpl`
+supplies.
