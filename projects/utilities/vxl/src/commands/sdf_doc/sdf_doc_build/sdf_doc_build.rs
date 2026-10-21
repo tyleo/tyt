@@ -5,7 +5,7 @@ use crate::{
         sdfj_builder_libraries,
     },
 };
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use sdfj_builder::JavaScriptRuntime;
 use std::path::PathBuf;
 
@@ -39,6 +39,18 @@ pub struct SdfDocBuild {
     )]
     runtime: Option<JavaScriptRuntime>,
 
+    /// Writes one entry per distinct entry text, so a value the model builds
+    /// twice reads once. `--intern false` writes an entry per value instead.
+    /// Defaults to `true`.
+    #[arg(
+        value_name = "intern",
+        long,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        action = ArgAction::Set
+    )]
+    intern: Option<bool>,
+
     /// Applies saved build flags. A flag given here overrides the element it
     /// mirrors. The profiles come from every `.vxlconfig`'s
     /// `sdfDoc.build.profiles`, the user's `~/.vxlconfig` first and then each
@@ -68,6 +80,7 @@ impl SdfDocBuild {
             &self.model,
             &self.output(),
             &libraries,
+            self.intern(&profile),
         )
     }
 
@@ -84,6 +97,10 @@ impl SdfDocBuild {
         self.runtime
             .or(profile.runtime.map(|named| named.0))
             .unwrap_or(JavaScriptRuntime::Node)
+    }
+
+    fn intern(&self, profile: &SdfDocBuildProfile) -> bool {
+        self.intern.or(profile.intern).unwrap_or(true)
     }
 
     fn output(&self) -> PathBuf {
@@ -119,6 +136,18 @@ mod tests {
 
         let deno = parse(&["chair.ts", "--runtime", "deno"]);
         assert_eq!(deno.runtime(&bun), JavaScriptRuntime::Deno);
+    }
+
+    #[test]
+    fn the_intern_flag_overrides_the_profile_and_defaults_to_true() {
+        let off: SdfDocBuildProfile = serde_json::from_str(r#"{ "intern": false }"#).unwrap();
+
+        let none = parse(&["chair.ts"]);
+        assert!(none.intern(&SdfDocBuildProfile::default()));
+        assert!(!none.intern(&off));
+
+        assert!(parse(&["chair.ts", "--intern"]).intern(&off));
+        assert!(!parse(&["chair.ts", "--intern", "false"]).intern(&SdfDocBuildProfile::default()));
     }
 
     #[test]

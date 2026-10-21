@@ -9,13 +9,15 @@ use std::{
 
 /// Builds `model` under `runtime` into the document at `output`, zipped when
 /// `output` takes the `.sdfjz` extension. The builder reads its libraries from
-/// the JSON `libraries`. A failed run leaves `output` untouched.
+/// the JSON `libraries` and interns entries by content when `intern` holds. A
+/// failed run leaves `output` untouched.
 pub fn run_sdfj_builder(
     dependencies: &(impl CreateTempDir + ReadFile + RunProgram + WriteFile),
     runtime: JavaScriptRuntime,
     model: &Path,
     output: &Path,
     libraries: &[u8],
+    intern: bool,
 ) -> Result<()> {
     let directory = dependencies.create_temp_dir()?;
     let directory = directory.path();
@@ -27,7 +29,7 @@ pub fn run_sdfj_builder(
     let program = runtime.program();
     let document = directory.join("document.sdfj");
     let code = dependencies
-        .run_program(program, &runtime.args(directory, model, &document))
+        .run_program(program, &runtime.args(directory, model, &document, intern))
         .map_err(|error| match error.kind() {
             ErrorKind::NotFound => IOError::new(
                 ErrorKind::NotFound,
@@ -154,6 +156,7 @@ mod tests {
             Path::new("chair.ts"),
             output,
             LIBRARIES.as_bytes(),
+            true,
         )
         .err()
         .map(|error| error.to_string())

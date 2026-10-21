@@ -351,14 +351,8 @@ Built with the `materials` library, `chair.sdfj` holds:
     { "kind": "shade", "shades": 0, "index": 0 },
     { "kind": "shade", "shades": 0, "index": 1 },
     { "kind": "shade", "shades": 0, "index": 2 },
-    { "kind": "shade", "shades": 1, "index": 0 },
-    { "kind": "shade", "shades": 1, "index": 1 },
-    { "kind": "shade", "shades": 1, "index": 2 },
   ],
-  "shades": [
-    { "base": 0, "count": 3 },
-    { "base": 0, "count": 3 },
-  ],
+  "shades": [{ "base": 0, "count": 3 }],
   "patterns": [
     {
       "kind": "grain",
@@ -369,7 +363,7 @@ Built with the `materials` library, `chair.sdfj` holds:
     },
     {
       "kind": "grain",
-      "materials": [4, 5, 6],
+      "materials": [1, 2, 3],
       "axis": "x",
       "period": 0.05,
       "seed": 2,

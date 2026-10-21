@@ -1,5 +1,6 @@
 import * as check from "./check.ts";
 import { type Entry, entry } from "./entry.ts";
+import { jsonText } from "./json_text.ts";
 import { libraryNames } from "./library.ts";
 import { Material } from "./material.ts";
 import { Part } from "./part.ts";
@@ -75,16 +76,17 @@ export type NamedValue = Material | Part | Pattern | Shape2d | Shape3d | Step;
 
 /**
  * The document of the model `name` whose default export is `list` and whose
- * named exports are `exports`. A value met again reuses its entry. Each entry
- * takes the names of the exports holding it and the names it holds in its
- * library.
+ * named exports are `exports`. A value met again reuses its entry, and with
+ * `intern` so does a value whose entry writes the same text. Each entry takes
+ * the names of the exports holding it and the names it holds in its library.
  */
 export function sdfjDocument(
   name: string,
   list: readonly (Step | Part)[],
   exports: readonly (readonly [string, NamedValue])[] = [],
+  intern = true,
 ): SdfjDocument {
-  const writer = new SdfjWriter();
+  const writer = new SdfjWriter(intern);
   writer.document.rootNodes.push(
     writer.node(name, undefined, undefined, undefined, list),
   );
@@ -124,6 +126,13 @@ class SdfjWriter {
   };
 
   readonly #indices = new Map<TableValue | Part, number>();
+
+  /** Each table's entry indices by entry text, when the writer interns. */
+  readonly #textIndices: Map<Entry[], Map<string, number>> | undefined;
+
+  constructor(intern: boolean) {
+    this.#textIndices = intern ? new Map() : undefined;
+  }
 
   /** Writes the entry `value` holds. */
   named(value: NamedValue): void {
@@ -231,8 +240,27 @@ class SdfjWriter {
     let index = this.#indices.get(value);
     if (index === undefined) {
       const [table, fields] = this.#tableEntry(value);
-      index = table.push(this.#write(fields) as Entry) - 1;
+      index = this.#push(table, this.#write(fields) as Entry);
       this.#indices.set(value, index);
+    }
+    return index;
+  }
+
+  /** The index `entry` takes in `table`, reusing an entry of the same text. */
+  #push(table: Entry[], entry: Entry): number {
+    if (this.#textIndices === undefined) {
+      return table.push(entry) - 1;
+    }
+    let indices = this.#textIndices.get(table);
+    if (indices === undefined) {
+      indices = new Map();
+      this.#textIndices.set(table, indices);
+    }
+    const text = jsonText(entry);
+    let index = indices.get(text);
+    if (index === undefined) {
+      index = table.push(entry) - 1;
+      indices.set(text, index);
     }
     return index;
   }

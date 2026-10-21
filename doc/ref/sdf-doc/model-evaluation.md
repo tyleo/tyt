@@ -49,8 +49,8 @@ does.
    load. The cascade holds no built-in profiles. A name reads from the last file
    supplying it.
 2. A profile holds the flags by camel-case name with their command-line values.
-   A build profile holds `runtime` and `libraries` as an array of library
-   names. A voxelize profile holds `resolution` as an
+   A build profile holds `runtime`, `intern`, and `libraries` as an array of
+   library names. A voxelize profile holds `resolution` as an
    object of `reference` and `count`, `voxelSize`, `frame`, `fillMode`,
    `flatten`, and `report`. A voxelize profile sets at most one of `resolution`
    and `voxelSize`. Either profile can also hold a one-line `description`. An

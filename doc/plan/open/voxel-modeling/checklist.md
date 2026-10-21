@@ -187,7 +187,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   6. tyt-assets' models move to the new arguments
   7. The owner can move models in other repositories, such as the voxel art
      repository, to the new arguments
-- [ ] **S23. Content interning.** sdfj-builder writes one table entry per
+- [x] **S23. Content interning.** sdfj-builder writes one table entry per
       distinct content, so a value a model builds twice reads once:
   1. Entries key on their written fields, children first
   2. A vxl flag turns it off and keeps one entry per JS object

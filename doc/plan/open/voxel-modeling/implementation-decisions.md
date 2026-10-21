@@ -421,3 +421,16 @@ land.
    of one voxel picks per cell as before
 6. tyt-assets' models write the old defaults out at their voxel sizes. They
    voxelize byte for byte as before, so their `.vmax` files stand
+
+## S23. Content interning
+
+1. Entries match on their compact JSON text. Two entries that list the same
+   keys in another order, or write `0` and `-0`, stay apart
+2. `--intern false` or a build profile's `"intern": false` turns interning off.
+   vxl then passes `--intern false` to `main.ts`, and otherwise passes no flag
+3. Equal values share one entry, and their names can reference one index
+4. The sdfj format's chair writes its `shades` entry and its three shade
+   materials once each
+5. tyt-assets' models voxelize byte for byte as before. A model of 400 parts
+   that rebuild 60 profiles each shrinks from 3.9 MB to 51 KB, and its build
+   takes 0.19 s either way, so multithreading waits

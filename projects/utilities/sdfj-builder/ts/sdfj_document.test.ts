@@ -4,6 +4,7 @@ import { material } from "./material.ts";
 import { modelList } from "./model_list.ts";
 import { part } from "./part.ts";
 import { putApiInScope } from "./put_api_in_scope.ts";
+import { sphere } from "./primitives.ts";
 import { sdfjDocument, type SdfjNames } from "./sdfj_document.ts";
 import { sdfjJson } from "./sdfj_json.ts";
 import { add } from "./step.ts";
@@ -54,14 +55,11 @@ Deno.test("the chair writes the sdfj format's chair", async () => {
       { kind: "shade", shades: 0, index: 0 },
       { kind: "shade", shades: 0, index: 1 },
       { kind: "shade", shades: 0, index: 2 },
-      { kind: "shade", shades: 1, index: 0 },
-      { kind: "shade", shades: 1, index: 1 },
-      { kind: "shade", shades: 1, index: 2 },
     ],
-    shades: [{ base: 0, count: 3 }, { base: 0, count: 3 }],
+    shades: [{ base: 0, count: 3 }],
     patterns: [
       { kind: "grain", materials: [1, 2, 3], axis: "y", period: 0.05, seed: 1 },
-      { kind: "grain", materials: [4, 5, 6], axis: "x", period: 0.05, seed: 2 },
+      { kind: "grain", materials: [1, 2, 3], axis: "x", period: 0.05, seed: 2 },
     ],
     steps: [
       { kind: "add", name: "legs", shape: 2, pattern: 0 },
@@ -153,6 +151,32 @@ Deno.test("a shape feeding several steps writes one entry", () => {
     { kind: "add", name: "first", shape: 0, material: 0 },
     { kind: "add", name: "second", shape: 0, material: 0 },
   ]);
+});
+
+Deno.test("a value built twice writes one entry", () => {
+  const leg = () => part("leg", {}, [add("leg", sphere([0, 0, 0], 1), white)]);
+  const { shapes3d, steps, objects } = document([leg(), leg()]);
+  assert.deepStrictEqual(shapes3d, [BALL_ENTRY]);
+  assert.deepStrictEqual(steps, [
+    { kind: "add", name: "leg", shape: 0, material: 0 },
+  ]);
+  assert.deepStrictEqual(objects, [
+    { name: "leg", steps: [0] },
+    { name: "leg", steps: [0] },
+  ]);
+});
+
+Deno.test("without interning a value built twice writes two entries", () => {
+  const { shapes3d } = sdfjDocument(
+    "model",
+    [
+      add("first", sphere([0, 0, 0], 1), white),
+      add("second", sphere([0, 0, 0], 1), white),
+    ],
+    [],
+    false,
+  );
+  assert.deepStrictEqual(shapes3d, [BALL_ENTRY, BALL_ENTRY]);
 });
 
 Deno.test("an empty model writes only its root node", () => {

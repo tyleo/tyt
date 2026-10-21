@@ -24,8 +24,15 @@ impl JavaScriptRuntime {
     }
 
     /// The arguments that start the builder written under `directory` to record
-    /// `model` as the document at `output`.
-    pub fn args(self, directory: &Path, model: &Path, output: &Path) -> Vec<OsString> {
+    /// `model` as the document at `output`. Without `intern` the document keeps
+    /// an entry per value.
+    pub fn args(
+        self,
+        directory: &Path,
+        model: &Path,
+        output: &Path,
+        intern: bool,
+    ) -> Vec<OsString> {
         let mut args: Vec<OsString> = match self {
             JavaScriptRuntime::Bun => vec!["run".into()],
 
@@ -46,6 +53,9 @@ impl JavaScriptRuntime {
             model.into(),
             output.into(),
         ]);
+        if !intern {
+            args.extend(["--intern".into(), "false".into()]);
+        }
         args
     }
 }
@@ -60,6 +70,7 @@ mod tests {
             Path::new("/run"),
             Path::new("chair.ts"),
             Path::new("/out/chair.sdfj"),
+            true,
         )
     }
 
@@ -85,6 +96,26 @@ mod tests {
         assert_eq!(
             args(JavaScriptRuntime::Node),
             ["/run/ts/main.ts", "chair.ts", "/out/chair.sdfj"]
+        );
+    }
+
+    #[test]
+    fn a_build_without_interning_ends_on_the_flag() {
+        let args = JavaScriptRuntime::Node.args(
+            Path::new("/run"),
+            Path::new("chair.ts"),
+            Path::new("/out/chair.sdfj"),
+            false,
+        );
+        assert_eq!(
+            args,
+            [
+                "/run/ts/main.ts",
+                "chair.ts",
+                "/out/chair.sdfj",
+                "--intern",
+                "false",
+            ]
         );
     }
 

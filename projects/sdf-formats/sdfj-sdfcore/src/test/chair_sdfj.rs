@@ -12,18 +12,12 @@ pub const CHAIR_SDFJ: &str = r##"{
     { "kind": "material", "properties": { "baseColor": "#8A5A2B", "roughness": 0.8 } },
     { "kind": "shade", "shades": 0, "index": 0 },
     { "kind": "shade", "shades": 0, "index": 1 },
-    { "kind": "shade", "shades": 0, "index": 2 },
-    { "kind": "shade", "shades": 1, "index": 0 },
-    { "kind": "shade", "shades": 1, "index": 1 },
-    { "kind": "shade", "shades": 1, "index": 2 }
+    { "kind": "shade", "shades": 0, "index": 2 }
   ],
-  "shades": [
-    { "base": 0, "count": 3 },
-    { "base": 0, "count": 3 }
-  ],
+  "shades": [{ "base": 0, "count": 3 }],
   "patterns": [
     { "kind": "grain", "materials": [1, 2, 3], "axis": "y", "period": 0.05, "seed": 1 },
-    { "kind": "grain", "materials": [4, 5, 6], "axis": "x", "period": 0.05, "seed": 2 }
+    { "kind": "grain", "materials": [1, 2, 3], "axis": "x", "period": 0.05, "seed": 2 }
   ],
   "steps": [
     { "kind": "add", "name": "legs", "shape": 2, "pattern": 0 },
