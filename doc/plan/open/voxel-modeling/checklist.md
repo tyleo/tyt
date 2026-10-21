@@ -194,10 +194,10 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   3. A part stays its own object, whatever its steps hold
   4. The build time of a large scene gets measured, and multithreading follows
      if interning slows it
-- [ ] **S24. Build variables.** A model reads build variables through `vars`,
+- [x] **S24. Build variables.** A model reads build variables through `vars`,
       which `vxl sdf-doc build` fills from `--var <name>=<value>` and a build
       profile's `vars`. Reading a variable the build lacks errors. The `.sdfj`
-      document holds only the numbers the variables gave. No variable stands
+      document holds only the values the variables gave. No variable stands
       for the voxel size
 - [ ] **S25. Rotation.** Rotated shapes for finding 22:
   1. Under `--flatten`, vxl samples a rotated part at its angle on the root

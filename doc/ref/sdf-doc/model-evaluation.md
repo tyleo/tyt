@@ -49,15 +49,16 @@ does.
    load. The cascade holds no built-in profiles. A name reads from the last file
    supplying it.
 2. A profile holds the flags by camel-case name with their command-line values.
-   A build profile holds `runtime`, `intern`, and `libraries` as an array of
-   library names. A voxelize profile holds `resolution` as an
-   object of `reference` and `count`, `voxelSize`, `frame`, `fillMode`,
-   `flatten`, and `report`. A voxelize profile sets at most one of `resolution`
-   and `voxelSize`. Either profile can also hold a one-line `description`. An
-   unknown key or value errors when the profiles load.
-3. A flag on the command line replaces the value the profile sets. Either
-   `--resolution` or `--voxel-size` replaces the profile's `resolution` and
-   `voxelSize` alike.
+   A build profile holds `runtime`, `intern`, `libraries` as an array of
+   library names, and `vars` as an object of JSON values by name. A voxelize
+   profile holds `resolution` as an object of `reference` and `count`,
+   `voxelSize`, `frame`, `fillMode`, `flatten`, and `report`. A voxelize profile
+   sets at most one of `resolution` and `voxelSize`. Either profile can also
+   hold a one-line `description`. An unknown key or value errors when the
+   profiles load.
+3. A flag on the command line replaces the value the profile sets. Each `--var`
+   replaces only the profile's variable of its name. Either `--resolution` or
+   `--voxel-size` replaces the profile's `resolution` and `voxelSize` alike.
 4. The output paths and the voxelize encoding flags stay on the command line.
    The encoding flags default as they do for `mesh-doc voxelize`.
 

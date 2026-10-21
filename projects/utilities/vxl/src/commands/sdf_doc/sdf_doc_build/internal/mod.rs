@@ -1,5 +1,6 @@
 // Internal API
 
+mod build_var;
 mod javascript_runtime;
 mod load_sdf_doc_build_profile_set;
 mod load_sdf_doc_libraries;
@@ -12,6 +13,7 @@ mod sdf_doc_libraries_config;
 mod sdf_doc_library;
 mod sdfj_builder_libraries;
 
+pub(crate) use build_var::*;
 pub(crate) use load_sdf_doc_build_profile_set::*;
 pub(crate) use load_sdf_doc_libraries::*;
 pub(crate) use run_sdfj_builder::*;

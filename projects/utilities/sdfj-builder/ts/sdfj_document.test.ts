@@ -37,7 +37,7 @@ function names(names: Partial<SdfjNames>): SdfjNames {
 }
 
 Deno.test("the chair writes the sdfj format's chair", async () => {
-  putApiInScope([library("materials", [["oak", material(OAK)]])]);
+  putApiInScope([library("materials", [["oak", material(OAK)]])], {});
   const chair = await import("./test/chair.ts");
   assert.deepStrictEqual(sdfjJson(sdfjDocument("chair", modelList(chair))), {
     version: 1,
@@ -78,7 +78,7 @@ Deno.test("the forest writes the sdfj format's forest", async () => {
       ["bark", material(BARK)],
       ["leaf", material(LEAF)],
     ]),
-  ]);
+  ], {});
   const forest = await import("./test/forest.ts");
   assert.deepStrictEqual(sdfjJson(sdfjDocument("forest", modelList(forest))), {
     version: 1,

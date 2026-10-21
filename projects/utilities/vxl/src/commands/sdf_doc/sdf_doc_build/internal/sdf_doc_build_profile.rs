@@ -1,6 +1,8 @@
 use crate::{NamedCliValue, Profile, ProfileDescription};
 use sdfj_builder::JavaScriptRuntime;
 use serde::Deserialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// An `sdf-doc build` profile, whose elements each mirror a flag.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -17,6 +19,9 @@ pub struct SdfDocBuildProfile {
 
     /// Mirrors `--runtime`.
     pub(crate) runtime: Option<NamedCliValue<JavaScriptRuntime>>,
+
+    /// Mirrors `--var`.
+    pub(crate) vars: BTreeMap<String, Value>,
 }
 
 impl Profile for SdfDocBuildProfile {
@@ -29,6 +34,8 @@ impl Profile for SdfDocBuildProfile {
 mod tests {
     use crate::{NamedCliValue, commands::SdfDocBuildProfile};
     use sdfj_builder::JavaScriptRuntime;
+    use serde_json::json;
+    use std::collections::BTreeMap;
 
     #[test]
     fn every_key_reads_into_its_element() {
@@ -37,7 +44,8 @@ mod tests {
                 "description": "Models under Bun",
                 "intern": false,
                 "libraries": ["materials", "props"],
-                "runtime": "bun"
+                "runtime": "bun",
+                "vars": { "legs": 4, "wood": "oak" }
             }"#,
         )
         .unwrap();
@@ -46,6 +54,13 @@ mod tests {
         assert_eq!(profile.intern, Some(false));
         assert_eq!(profile.libraries, ["materials", "props"]);
         assert_eq!(profile.runtime, Some(NamedCliValue(JavaScriptRuntime::Bun)));
+        assert_eq!(
+            profile.vars,
+            BTreeMap::from([
+                ("legs".to_owned(), json!(4)),
+                ("wood".to_owned(), json!("oak"))
+            ])
+        );
     }
 
     #[test]
@@ -56,6 +71,7 @@ mod tests {
             r#"{ "profile": "bun" }"#,
             r#"{ "libraries": "materials" }"#,
             r#"{ "intern": "no" }"#,
+            r#"{ "vars": [4] }"#,
         ] {
             assert!(
                 serde_json::from_str::<SdfDocBuildProfile>(json).is_err(),

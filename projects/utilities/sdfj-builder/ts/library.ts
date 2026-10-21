@@ -8,6 +8,7 @@ import { Shades } from "./shades.ts";
 import { Shape2d } from "./shape2d.ts";
 import { Shape3d } from "./shape3d.ts";
 import { Step } from "./step.ts";
+import { strictRecord } from "./strict_record.ts";
 import type { Axis, AxisRotation, Vec3 } from "./types.ts";
 
 /** A library vxl hands the builder. */
@@ -82,32 +83,6 @@ export function libraryGlobals(
     ) as Lib,
     mat: table("mat", "materials", "material"),
   };
-}
-
-/**
- * A frozen record of `getters`, where a later getter wins a name. Reading a
- * name the record lacks throws the error `missing` describes.
- */
-function strictRecord<T>(
-  getters: readonly (readonly [string, () => T])[],
-  missing: (name: string) => string,
-): Readonly<Record<string, T>> {
-  const record: Record<string, T> = Object.create(null);
-  for (const [name, get] of getters) {
-    Object.defineProperty(record, name, {
-      configurable: true,
-      enumerable: true,
-      get,
-    });
-  }
-  return new Proxy(Object.freeze(record), {
-    get(target, key) {
-      if (typeof key === "string" && !Object.hasOwn(target, key)) {
-        throw new Error(missing(key));
-      }
-      return Reflect.get(target, key);
-    },
-  });
 }
 
 /** A table of a document whose entries read as values. */

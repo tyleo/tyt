@@ -2,6 +2,7 @@
 // the type of the API export it holds.
 import type * as api from "./api.ts";
 import type { Lib } from "./library.ts";
+import type { Vars } from "./vars.ts";
 
 declare global {
   type Axes = api.Axes;
@@ -76,5 +77,6 @@ declare global {
   var sweep: typeof api.sweep;
   var torus: typeof api.torus;
   var union: typeof api.union;
+  var vars: Vars;
   var vesica: typeof api.vesica;
 }

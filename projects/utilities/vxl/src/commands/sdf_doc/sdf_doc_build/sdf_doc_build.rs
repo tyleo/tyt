@@ -1,13 +1,17 @@
 use crate::{
-    Dependencies, Result, cli_value_parser,
+    Dependencies, Error, Result, cli_value_parser,
     commands::{
-        SdfDocBuildProfile, load_sdf_doc_build_profile_set, run_sdfj_builder,
+        BuildVar, SdfDocBuildProfile, load_sdf_doc_build_profile_set, run_sdfj_builder,
         sdfj_builder_libraries,
     },
 };
 use clap::{ArgAction, Parser};
 use sdfj_builder::JavaScriptRuntime;
-use std::path::PathBuf;
+use serde_json::Value;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 /// Records a TypeScript model as an `.sdfj` document.
 #[derive(Clone, Debug, Parser)]
@@ -29,6 +33,12 @@ pub struct SdfDocBuild {
     /// wins a name.
     #[arg(value_name = "library", long)]
     library: Vec<String>,
+
+    /// Sets the build variable the model reads as `vars.<name>` to a JSON
+    /// value. A string takes quotes, as in `wood='"oak"'`. The flag replaces
+    /// the profile's variable of that name. Repeatable, once per name.
+    #[arg(value_name = "name=value", long)]
+    var: Vec<BuildVar>,
 
     /// The runtime that runs the model, which has to be installed. Defaults to
     /// `node`.
@@ -73,6 +83,7 @@ impl SdfDocBuild {
 
         let (origin, libraries) = self.libraries(&profile);
         let libraries = sdfj_builder_libraries(&dependencies, origin, libraries)?;
+        let vars = serde_json::to_vec(&self.vars(&profile)?).expect("JSON values serialize");
 
         run_sdfj_builder(
             &dependencies,
@@ -80,6 +91,7 @@ impl SdfDocBuild {
             &self.model,
             &self.output(),
             &libraries,
+            &vars,
             self.intern(&profile),
         )
     }
@@ -91,6 +103,19 @@ impl SdfDocBuild {
         } else {
             ("--library", &self.library)
         }
+    }
+
+    /// The profile's `vars` with each `--var` replacing the entry of its name.
+    fn vars(&self, profile: &SdfDocBuildProfile) -> Result<BTreeMap<String, Value>> {
+        let mut vars = profile.vars.clone();
+        let mut flagged = BTreeSet::new();
+        for var in &self.var {
+            if !flagged.insert(&var.name) {
+                return Err(Error::usage(format!("--var sets `{}` twice", var.name)));
+            }
+            vars.insert(var.name.clone(), var.value.clone());
+        }
+        Ok(vars)
     }
 
     fn runtime(&self, profile: &SdfDocBuildProfile) -> JavaScriptRuntime {
@@ -107,5 +132,49 @@ impl SdfDocBuild {
         self.output
             .clone()
             .unwrap_or_else(|| self.model.with_extension("sdfj"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::commands::{SdfDocBuild, SdfDocBuildProfile};
+    use clap::Parser;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    fn build(vars: &[&str]) -> SdfDocBuild {
+        let vars = vars.iter().flat_map(|var| ["--var", var]);
+        SdfDocBuild::try_parse_from(["build", "chair.ts"].into_iter().chain(vars)).unwrap()
+    }
+
+    #[test]
+    fn a_var_flag_replaces_only_the_profile_var_of_its_name() {
+        let profile = SdfDocBuildProfile {
+            vars: BTreeMap::from([
+                ("height".to_owned(), json!(1)),
+                ("legs".to_owned(), json!(4)),
+            ]),
+            ..SdfDocBuildProfile::default()
+        };
+
+        let vars = build(&["legs=3", "wood=\"oak\""]).vars(&profile).unwrap();
+
+        assert_eq!(
+            vars,
+            BTreeMap::from([
+                ("height".to_owned(), json!(1)),
+                ("legs".to_owned(), json!(3)),
+                ("wood".to_owned(), json!("oak")),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_var_flagged_twice_errors() {
+        let error = build(&["legs=3", "legs=4"])
+            .vars(&SdfDocBuildProfile::default())
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "error: --var sets `legs` twice\n");
     }
 }

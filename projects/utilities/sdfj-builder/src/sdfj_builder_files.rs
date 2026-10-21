@@ -37,7 +37,9 @@ pub const SDFJ_BUILDER_FILES: &[SdfjBuilderFile] = &[
     builder_file!("ts/shape2d.ts"),
     builder_file!("ts/shape3d.ts"),
     builder_file!("ts/step.ts"),
+    builder_file!("ts/strict_record.ts"),
     builder_file!("ts/types.ts"),
+    builder_file!("ts/vars.ts"),
 ];
 
 #[cfg(test)]

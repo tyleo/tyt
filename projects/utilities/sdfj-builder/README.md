@@ -11,8 +11,9 @@ node ts/main.ts chair.ts chair.sdfj
 
 The builder runs under Node 24, Bun, and Deno with no dependencies. It reads the
 libraries from `libraries.json` beside `main.ts`. The file holds an array of
-each library's `name` and `.sdfj` `document`. `globals.d.ts` declares the API
-for type-checking model files.
+each library's `name` and `.sdfj` `document`. `vars.json` beside `main.ts` holds
+the build variables as an object of JSON values by name. `globals.d.ts` declares
+the API for type-checking model files.
 
 A call errors on an argument the document cannot hold. vxl checks the arguments'
 values when it voxelizes. The tests run under `deno test`.

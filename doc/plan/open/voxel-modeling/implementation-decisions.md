@@ -434,3 +434,14 @@ land.
 5. tyt-assets' models voxelize byte for byte as before. A model of 400 parts
    that rebuild 60 profiles each shrinks from 3.9 MB to 51 KB, and its build
    takes 0.19 s either way, so multithreading waits
+
+## S24. Build variables
+
+1. A variable holds any JSON value. `--var` reads the text after its first `=`
+   as JSON, so a string value takes quotes
+2. Each `--var` replaces the profile's variable of its name and keeps the
+   others. A name given to `--var` twice errors
+3. vxl writes the variables to `vars.json` beside `main.ts`, as it writes
+   `libraries.json`
+4. `vars` types its values as `any` because each model knows the shape of its
+   variables

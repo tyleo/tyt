@@ -62,6 +62,16 @@ voxel. Shapes, steps, and patterns only describe what vxl samples later. A model
 holds no voxel size. A variable named like a call on this page hides the call. A
 material held in `const paint` breaks every `paint` step.
 
+`vars` holds the build variables that `--var <name>=<value>` sets to JSON
+values. Reading a variable the build does not set errors:
+
+```ts
+// vxl sdf-doc build stool.ts --var legs=3
+export default Array.from({ length: vars.legs }, (_, i) =>
+  add(`leg${i}`, cylinder([i * 0.1, 0, 0], [i * 0.1, 0.4, 0], 0.02), mat.oak),
+);
+```
+
 A larger model can split across files. A file imports another by its relative
 path with the `.ts` extension. Every file sees the names on this page.
 

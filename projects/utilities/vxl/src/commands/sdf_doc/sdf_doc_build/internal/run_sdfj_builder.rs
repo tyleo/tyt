@@ -1,6 +1,8 @@
 use crate::{CreateTempDir, ReadFile, Result, RunProgram, WriteFile};
 use sdfconv::sdfj::SdfjSerialization;
-use sdfj_builder::{JavaScriptRuntime, SDFJ_BUILDER_FILES, SDFJ_BUILDER_LIBRARIES_PATH};
+use sdfj_builder::{
+    JavaScriptRuntime, SDFJ_BUILDER_FILES, SDFJ_BUILDER_LIBRARIES_PATH, SDFJ_BUILDER_VARS_PATH,
+};
 use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, wrap_sdfjz};
 use std::{
     io::{Error as IOError, ErrorKind},
@@ -8,15 +10,15 @@ use std::{
 };
 
 /// Builds `model` under `runtime` into the document at `output`, zipped when
-/// `output` takes the `.sdfjz` extension. The builder reads its libraries from
-/// the JSON `libraries` and interns entries by content when `intern` holds. A
-/// failed run leaves `output` untouched.
+/// `output` takes the `.sdfjz` extension. The builder reads `libraries` and
+/// `vars` as JSON. A failed run leaves `output` untouched.
 pub fn run_sdfj_builder(
     dependencies: &(impl CreateTempDir + ReadFile + RunProgram + WriteFile),
     runtime: JavaScriptRuntime,
     model: &Path,
     output: &Path,
     libraries: &[u8],
+    vars: &[u8],
     intern: bool,
 ) -> Result<()> {
     let directory = dependencies.create_temp_dir()?;
@@ -25,6 +27,7 @@ pub fn run_sdfj_builder(
         dependencies.write_file(&directory.join(file.path), file.text.as_bytes())?;
     }
     dependencies.write_file(&directory.join(SDFJ_BUILDER_LIBRARIES_PATH), libraries)?;
+    dependencies.write_file(&directory.join(SDFJ_BUILDER_VARS_PATH), vars)?;
 
     let program = runtime.program();
     let document = directory.join("document.sdfj");
@@ -73,7 +76,9 @@ mod tests {
         CreateTempDir, DependenciesImpl, ReadFile, RunProgram, WriteFile,
         commands::run_sdfj_builder,
     };
-    use sdfj_builder::{JavaScriptRuntime, SDFJ_BUILDER_FILES, SDFJ_BUILDER_LIBRARIES_PATH};
+    use sdfj_builder::{
+        JavaScriptRuntime, SDFJ_BUILDER_FILES, SDFJ_BUILDER_LIBRARIES_PATH, SDFJ_BUILDER_VARS_PATH,
+    };
     use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, unwrap_sdfjz};
     use std::{
         cell::RefCell,
@@ -87,6 +92,8 @@ mod tests {
     const DOCUMENT: &str = "{\"version\":1}\n";
 
     const LIBRARIES: &str = "[{\"name\":\"materials\",\"document\":{}}]";
+
+    const VARS: &str = "{\"legs\":4}";
 
     /// Real files and a stand-in for `node`.
     struct StandIn {
@@ -138,6 +145,8 @@ mod tests {
             }
             let libraries = fs::read_to_string(directory.join(SDFJ_BUILDER_LIBRARIES_PATH));
             assert_eq!(libraries.unwrap(), LIBRARIES);
+            let vars = fs::read_to_string(directory.join(SDFJ_BUILDER_VARS_PATH));
+            assert_eq!(vars.unwrap(), VARS);
 
             fs::write(document, DOCUMENT).unwrap();
             *self.directory.borrow_mut() = Some(directory.to_owned());
@@ -156,6 +165,7 @@ mod tests {
             Path::new("chair.ts"),
             output,
             LIBRARIES.as_bytes(),
+            VARS.as_bytes(),
             true,
         )
         .err()
