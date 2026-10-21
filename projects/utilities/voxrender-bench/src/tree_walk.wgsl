@@ -1,12 +1,16 @@
 // The integer walk over each object's `Tree64`. It crosses a region of one
 // value in a single jump to the first cell past it, landing on the cell and
 // the error terms the walk would reach one step at a time.
+// `plain_tree_walk.wgsl` or `counted_tree_walk.wgsl` defines `walk` over it.
 
 const TILE: u32 = 16u;
 const TAG_SHIFT: u32 = 29u;
 const PAYLOAD: u32 = 0x1fffffffu;
 const UNIFORM: u32 = 0u;
 const LEAF: u32 = 2u;
+
+// The loop iterations of every walk in this invocation so far.
+var<private> iterations: u32;
 
 // A cell's value, and the side of the aligned cube around it that holds only
 // that value.
@@ -141,7 +145,7 @@ fn leave(origin: vec3<i32>, direction: vec3<i32>, cell: vec3<i32>, high: vec3<i3
     return Exit(exit, axis);
 }
 
-fn walk(placement: Placement, ray: Ray) -> Hit {
+fn tree_walk(placement: Placement, ray: Ray) -> Hit {
     let mirrored = enter(placement, ray);
 
     if !mirrored.found {
@@ -191,6 +195,8 @@ fn walk(placement: Placement, ray: Ray) -> Hit {
     let steps = bounds.x + bounds.y + bounds.z + 3;
 
     for (var n = 0; n < steps; n++) {
+        iterations += 1u;
+
         var axis = 0;
 
         if region.size == 1 {

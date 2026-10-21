@@ -4,6 +4,7 @@ pub enum TimedBench {
     /// B1's walks over the far wall and its dependent chains.
     B1,
 
-    /// B2's fixed-step loops over each memory layout.
+    /// B2's fixed-step loops over each memory layout and its tree walks over
+    /// S1 and S5.
     B2,
 }

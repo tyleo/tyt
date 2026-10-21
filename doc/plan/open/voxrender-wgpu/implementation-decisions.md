@@ -328,3 +328,12 @@ they land.
   p50 against the count per layout and gives its slope as ms per step and
   Gsteps/s. On Quest, B1's walk took about 0.8 ms per step over both eyes,
   so 32 steps keep a pass near 25 ms
+- B2's tree walk traces S1 and S5 without their lights, because B2 asks for
+  the primary ray rate. Each pixel walks every placement, as in B1
+- A counted variant of the tree walk gives the iterations per ray. Each call
+  returns a hit nearer than the last, with the running sum of loop
+  iterations as its voxel id. The pixel's hit then carries the total over
+  every placement. The bench reads the counts once before timing. The timed
+  walk keeps the unread increment
+- The report gives each scene's Grays/s, iterations per ray, and
+  Giterations/s. Giterations/s compares with the step loops' Gsteps/s

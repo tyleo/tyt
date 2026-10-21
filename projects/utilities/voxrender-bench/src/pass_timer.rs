@@ -1,4 +1,6 @@
-use crate::{BenchKernels, Error, KernelWork, Result, TimedBench, b1_kernels, b2_kernels};
+use crate::{
+    BenchKernels, BenchSummary, Error, KernelWork, Result, TimedBench, b1_kernels, b2_kernels,
+};
 use std::{
     result::Result as StdResult,
     sync::mpsc::{self, Receiver, Sender},
@@ -28,7 +30,7 @@ pub struct PassTimer {
 
     kernels: Vec<Kernel>,
 
-    summary: fn(&[f64], f64) -> Vec<String>,
+    summary: BenchSummary,
 
     query_set: QuerySet,
 
@@ -106,7 +108,7 @@ impl PassTimer {
             summary,
         } = match bench {
             TimedBench::B1 => b1_kernels(device, width, height)?,
-            TimedBench::B2 => b2_kernels(device, queue, width, height),
+            TimedBench::B2 => b2_kernels(device, queue, width, height)?,
         };
 
         let kernels = kernels

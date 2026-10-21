@@ -46,7 +46,8 @@ enum Command {
     #[command(name = "b1-times")]
     B1Times(Times),
 
-    /// B2: times fixed-step loops over each memory layout on this GPU.
+    /// B2: times fixed-step loops over each memory layout and the tree
+    /// walk's ray rate on this GPU.
     #[command(name = "b2-times")]
     B2Times(Times),
 }
