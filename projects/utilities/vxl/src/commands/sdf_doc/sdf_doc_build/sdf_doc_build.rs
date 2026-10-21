@@ -1,8 +1,8 @@
 use crate::{
-    Dependencies, Error, Result, cli_value_parser,
+    Dependencies, Error, ProfileSet, Result, cli_value_parser,
     commands::{
-        BuildVar, SdfDocBuildProfile, load_sdf_doc_build_profile_set, run_sdfj_builder,
-        sdfj_builder_libraries,
+        BuildVar, SdfDocBuildProfile, land_profile_vars, load_sdf_doc_build_profile_set,
+        run_sdfj_builder, sdfj_builder_libraries,
     },
 };
 use clap::{ArgAction, Parser};
@@ -36,9 +36,15 @@ pub struct SdfDocBuild {
 
     /// Sets the build variable the model reads as `vars.<name>` to a JSON
     /// value. A string takes quotes, as in `wood='"oak"'`. The flag replaces
-    /// the profile's variable of that name. Repeatable, once per name.
+    /// any profile's variable of that name. Repeatable, once per name.
     #[arg(value_name = "name=value", long)]
     var: Vec<BuildVar>,
+
+    /// Imports a profile's build variables after its `varsFrom` imports,
+    /// replacing the variables of `--profile` and earlier flags by name. Every
+    /// other element the profile holds stays behind. Repeatable.
+    #[arg(value_name = "profile", long)]
+    vars_from: Vec<String>,
 
     /// The runtime that runs the model, which has to be installed. Defaults to
     /// `node`.
@@ -73,17 +79,20 @@ pub struct SdfDocBuild {
 impl SdfDocBuild {
     /// Runs the command.
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let profile = match &self.profile {
-            Some(name) => load_sdf_doc_build_profile_set(&dependencies)?
-                .get("--profile", name)?
-                .clone(),
+        let profiles = if self.profile.is_some() || !self.vars_from.is_empty() {
+            load_sdf_doc_build_profile_set(&dependencies)?
+        } else {
+            ProfileSet::layered(BTreeMap::new(), [])
+        };
 
+        let profile = match &self.profile {
+            Some(name) => profiles.get("--profile", name)?.clone(),
             None => SdfDocBuildProfile::default(),
         };
 
         let (origin, libraries) = self.libraries(&profile);
         let libraries = sdfj_builder_libraries(&dependencies, origin, libraries)?;
-        let vars = serde_json::to_vec(&self.vars(&profile)?).expect("JSON values serialize");
+        let vars = serde_json::to_vec(&self.vars(&profiles)?).expect("JSON values serialize");
 
         run_sdfj_builder(
             &dependencies,
@@ -105,9 +114,19 @@ impl SdfDocBuild {
         }
     }
 
-    /// The profile's `vars` with each `--var` replacing the entry of its name.
-    fn vars(&self, profile: &SdfDocBuildProfile) -> Result<BTreeMap<String, Value>> {
-        let mut vars = profile.vars.clone();
+    fn vars(&self, profiles: &ProfileSet<SdfDocBuildProfile>) -> Result<BTreeMap<String, Value>> {
+        let mut vars = BTreeMap::new();
+        if let Some(name) = &self.profile {
+            land_profile_vars(profiles, "--profile", name, &mut vars)?;
+        }
+
+        for (position, name) in (0..).zip(&self.vars_from) {
+            if self.vars_from[..position].contains(name) {
+                return Err(Error::usage(format!("--vars-from lists `{name}` twice")));
+            }
+            land_profile_vars(profiles, "--vars-from", name, &mut vars)?;
+        }
+
         let mut flagged = BTreeSet::new();
         for var in &self.var {
             if !flagged.insert(&var.name) {
@@ -137,44 +156,79 @@ impl SdfDocBuild {
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::{SdfDocBuild, SdfDocBuildProfile};
+    use crate::{
+        ProfileSet,
+        commands::{SdfDocBuild, SdfDocBuildProfile},
+        profile_set_from_json,
+    };
     use clap::Parser;
     use serde_json::json;
     use std::collections::BTreeMap;
 
-    fn build(vars: &[&str]) -> SdfDocBuild {
-        let vars = vars.iter().flat_map(|var| ["--var", var]);
-        SdfDocBuild::try_parse_from(["build", "chair.ts"].into_iter().chain(vars)).unwrap()
+    fn build(flags: &[&str]) -> SdfDocBuild {
+        SdfDocBuild::try_parse_from(["build", "chair.ts"].iter().chain(flags)).unwrap()
+    }
+
+    fn profiles() -> ProfileSet<SdfDocBuildProfile> {
+        profile_set_from_json(&[
+            ("table", r#"{ "vars": { "height": 0.75, "legs": 4 } }"#),
+            (
+                "tall",
+                r#"{ "varsFrom": ["table"], "vars": { "height": 1.1 } }"#,
+            ),
+            (
+                "short-oak",
+                r#"{ "vars": { "height": 0.5, "legs": 3, "wood": "oak" } }"#,
+            ),
+        ])
     }
 
     #[test]
-    fn a_var_flag_replaces_only_the_profile_var_of_its_name() {
-        let profile = SdfDocBuildProfile {
-            vars: BTreeMap::from([
-                ("height".to_owned(), json!(1)),
-                ("legs".to_owned(), json!(4)),
-            ]),
-            ..SdfDocBuildProfile::default()
-        };
-
-        let vars = build(&["legs=3", "wood=\"oak\""]).vars(&profile).unwrap();
+    fn the_command_line_replaces_the_profile_s_vars_by_name() {
+        let vars = build(&[
+            "--profile",
+            "tall",
+            "--vars-from",
+            "short-oak",
+            "--var",
+            "wood=\"pine\"",
+        ])
+        .vars(&profiles())
+        .unwrap();
 
         assert_eq!(
             vars,
             BTreeMap::from([
-                ("height".to_owned(), json!(1)),
+                ("height".to_owned(), json!(0.5)),
                 ("legs".to_owned(), json!(3)),
-                ("wood".to_owned(), json!("oak")),
+                ("wood".to_owned(), json!("pine")),
             ])
         );
     }
 
     #[test]
-    fn a_var_flagged_twice_errors() {
-        let error = build(&["legs=3", "legs=4"])
-            .vars(&SdfDocBuildProfile::default())
-            .unwrap_err();
+    fn vars_from_lands_a_profile_the_profile_imported_again() {
+        let vars = build(&["--profile", "tall", "--vars-from", "table"])
+            .vars(&profiles())
+            .unwrap();
 
-        assert_eq!(error.to_string(), "error: --var sets `legs` twice\n");
+        assert_eq!(vars["height"], json!(0.75));
+    }
+
+    #[test]
+    fn a_name_flagged_twice_errors() {
+        for (flags, message) in [
+            (
+                ["--var", "legs=3", "--var", "legs=4"],
+                "--var sets `legs` twice",
+            ),
+            (
+                ["--vars-from", "table", "--vars-from", "table"],
+                "--vars-from lists `table` twice",
+            ),
+        ] {
+            let error = build(&flags).vars(&profiles()).unwrap_err();
+            assert_eq!(error.to_string(), format!("error: {message}\n"));
+        }
     }
 }

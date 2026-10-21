@@ -50,16 +50,24 @@ does.
    supplying it.
 2. A profile holds the flags by camel-case name with their command-line values.
    A build profile holds `runtime`, `intern`, `libraries` as an array of
-   library names, and `vars` as an object of JSON values by name. A voxelize
+   library names, `vars` as an object of JSON values by name, and `varsFrom` as
+   an array of profile names. A voxelize
    profile holds `resolution` as an object of `reference` and `count`,
    `voxelSize`, `frame`, `fillMode`, `flatten`, and `report`. A voxelize profile
    sets at most one of `resolution` and `voxelSize`. Either profile can also
    hold a one-line `description`. An unknown key or value errors when the
    profiles load.
-3. A flag on the command line replaces the value the profile sets. Each `--var`
-   replaces only the profile's variable of its name. Either `--resolution` or
-   `--voxel-size` replaces the profile's `resolution` and `voxelSize` alike.
-4. The output paths and the voxelize encoding flags stay on the command line.
+3. A flag on the command line replaces the value the profile sets. Either
+   `--resolution` or `--voxel-size` replaces the profile's `resolution` and
+   `voxelSize` alike.
+4. The build variables land in this order, a later variable replacing an
+   earlier one of its name:
+   1. The profile's `varsFrom` imports in list order, each after its own
+      imports
+   2. The profile's `vars`
+   3. Each `--vars-from` profile, after its imports
+   4. Each `--var`
+5. The output paths and the voxelize encoding flags stay on the command line.
    The encoding flags default as they do for `mesh-doc voxelize`.
 
 ## The `.sdfj` document

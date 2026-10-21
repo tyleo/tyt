@@ -22,6 +22,9 @@ pub struct SdfDocBuildProfile {
 
     /// Mirrors `--var`.
     pub(crate) vars: BTreeMap<String, Value>,
+
+    /// Mirrors `--vars-from`.
+    pub(crate) vars_from: Vec<String>,
 }
 
 impl Profile for SdfDocBuildProfile {
@@ -45,7 +48,8 @@ mod tests {
                 "intern": false,
                 "libraries": ["materials", "props"],
                 "runtime": "bun",
-                "vars": { "legs": 4, "wood": "oak" }
+                "vars": { "legs": 4, "wood": "oak" },
+                "varsFrom": ["table"]
             }"#,
         )
         .unwrap();
@@ -61,6 +65,7 @@ mod tests {
                 ("wood".to_owned(), json!("oak"))
             ])
         );
+        assert_eq!(profile.vars_from, ["table"]);
     }
 
     #[test]
@@ -72,6 +77,7 @@ mod tests {
             r#"{ "libraries": "materials" }"#,
             r#"{ "intern": "no" }"#,
             r#"{ "vars": [4] }"#,
+            r#"{ "varsFrom": "table" }"#,
         ] {
             assert!(
                 serde_json::from_str::<SdfDocBuildProfile>(json).is_err(),

@@ -445,3 +445,13 @@ land.
    `libraries.json`
 4. `vars` types its values as `any` because each model knows the shape of its
    variables
+
+## S25. Variable imports
+
+1. The command line lands after the profile, so a `--vars-from` or `--var`
+   always takes effect
+2. A profile lands once per `--profile` or `--vars-from`, at its first arrival,
+   so a diamond import cannot undo an override. `--profile tall --vars-from
+table` lands `table` again over `tall`
+3. An import cycle, an unknown import, and a profile that `--vars-from` lists
+   twice each error

@@ -199,11 +199,15 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       profile's `vars`. Reading a variable the build lacks errors. The `.sdfj`
       document holds only the values the variables gave. No variable stands
       for the voxel size
-- [ ] **S25. Rotation.** Rotated shapes for finding 22:
+- [x] **S25. Variable imports.** A build profile's `varsFrom` and
+      `--vars-from` import other profiles' build variables. The variables land
+      from the profile's imports, its `vars`, each `--vars-from`, and each
+      `--var` in turn, a later variable replacing an earlier one of its name
+- [ ] **S26. Rotation.** Rotated shapes for finding 22:
   1. Under `--flatten`, vxl samples a rotated part at its angle on the root
      part's grid. The sampling takes the part's rotation and offset as inputs
   2. `flip` reflects a shape across axes without keeping the original
-- [ ] **S26. Shared nodes.** A node the `.sdfj` document shares stays one voxj
+- [ ] **S27. Shared nodes.** A node the `.sdfj` document shares stays one voxj
       node with several parents, along with its subtree and objects:
   1. Under `--frame world`, places whose shifts differ by whole voxels share
      the node. Places that would sample differently error. The error suggests
@@ -212,12 +216,12 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   3. `--flatten` still expands every place
   4. The report keeps a line per place
   5. Decision 18 drops "Each place writes a node"
-- [ ] **S27. Slash warnings.** A voxcore check lists the nodes and objects
+- [ ] **S28. Slash warnings.** A voxcore check lists the nodes and objects
       whose names hold `/`, which makes their joined paths ambiguous. vxl runs
       the check after every conversion into voxcore, from a file read or from a
       voxelize, and warns with a pointer to `--select-index`. Names pass
       through unchanged
-- [ ] **S28. New calls.** More calls the rounds built by hand:
+- [ ] **S29. New calls.** More calls the rounds built by hand:
   1. `text` lays out a string as a 2D shape for finding 47. The font comes
      from a file or an installed font that a flag or `.vxlconfig` provides,
      never from vxl. The build stores each glyph used as an exact outline of
@@ -225,7 +229,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   2. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
   3. `random` gives the model a seeded generator for placements and sizes for
      findings 26 and 91
-- [ ] **S29. Round 7 fixes.** Answer round 7's
+- [ ] **S30. Round 7 fixes.** Answer round 7's
       [findings](trials-round-7.md#findings) before the next round:
   1. The review sheet keeps `<stem>.png` whatever views the command adds for
      finding 126
@@ -237,5 +241,5 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   4. `coat` takes a slope limit for finding 135, and `gradient` takes its range
      in either order for finding 136
   5. The library's `oak` stays apart from `pine` for finding 13
-- [ ] **S30. Round 8.** Run the prompts after S20 to S29 and log the round
+- [ ] **S31. Round 8.** Run the prompts after S20 to S30 and log the round
       beside round 7.
