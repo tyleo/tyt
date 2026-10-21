@@ -120,6 +120,18 @@ impl RenderViewRays {
         }
     }
 
+    /// Pixel (0, 0)'s ray origin, then the steps to the next pixel along a
+    /// row and down a column.
+    pub fn origin_steps(&self) -> [TyVector3F64; 3] {
+        [self.origin, self.origin_x, self.origin_y]
+    }
+
+    /// Pixel (0, 0)'s ray direction before [`ray`](Self::ray) normalizes it,
+    /// then the steps to the next pixel along a row and down a column.
+    pub fn direction_steps(&self) -> [TyVector3F64; 3] {
+        [self.direction, self.direction_x, self.direction_y]
+    }
+
     /// These rays in the grid of `bounds` of a placement under `transform`,
     /// or `None` when a pixel's origin lies out of the grid's
     /// [range](crate::GRID_RANGE_BITS). The direction scale leaves room under
@@ -262,5 +274,38 @@ mod tests {
             tall.origin,
             TyVector3F64::new(3.0, 1.5, 0.0) + turned * TyVector3F64::new(-0.5, 0.0, 0.0)
         ));
+    }
+
+    #[test]
+    fn the_steps_sum_to_each_pixels_ray() {
+        let projections = [
+            RenderProjection::Perspective { fov: 1.2 },
+            RenderProjection::Orthographic { scale: 3.0 },
+        ];
+
+        for projection in projections {
+            let view = RenderView {
+                pose: TyPoseF64::new(
+                    TyVector3F64::new(1.0, 2.0, 3.0),
+                    TyQuaternionF64::from_axis_angle(TyVector3F64::Y, 0.3),
+                ),
+                projection,
+            };
+
+            let rays = RenderViewRays::new(&view, 5, 3);
+            let [origin, origin_x, origin_y] = rays.origin_steps();
+            let [direction, direction_x, direction_y] = rays.direction_steps();
+
+            for (x, y) in [(0, 0), (4, 0), (2, 1), (4, 2)] {
+                let ray = rays.ray(x, y);
+                let (x, y) = (f64::from(x), f64::from(y));
+
+                assert!(close(ray.origin, origin + origin_x * x + origin_y * y));
+                assert!(close(
+                    ray.direction,
+                    (direction + direction_x * x + direction_y * y).normalize()
+                ));
+            }
+        }
     }
 }

@@ -1,9 +1,12 @@
 use crate::{Error, Result};
 use voxrender_bench::Gpu;
-use wgpu::{DeviceDescriptor, Features, Instance, PowerPreference, RequestAdapterOptions};
+use wgpu::{
+    DeviceDescriptor, ExperimentalFeatures, Features, Instance, Limits, PowerPreference,
+    RequestAdapterOptions,
+};
 
 /// The high-performance adapter's device with default limits, and with
-/// timestamp queries when the adapter has them.
+/// timestamp queries and ray queries when the adapter has them.
 pub fn headless_gpu() -> Result<Gpu> {
     let instance = Instance::default();
 
@@ -13,9 +16,22 @@ pub fn headless_gpu() -> Result<Gpu> {
     }))
     .map_err(Error::Adapter)?;
 
+    let features =
+        adapter.features() & (Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY);
+
+    let limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
+        Limits::default().using_acceleration_structure_values(adapter.limits())
+    } else {
+        Limits::default()
+    };
+
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("voxrender-bench-desktop"),
-        required_features: adapter.features() & Features::TIMESTAMP_QUERY,
+        required_features: features,
+        required_limits: limits,
+        // SAFETY: the bench accepts ray queries' experimental status. Its ids
+        // check their hits against the reference.
+        experimental_features: unsafe { ExperimentalFeatures::enabled() },
         ..DeviceDescriptor::default()
     }))
     .map_err(Error::Device)?;

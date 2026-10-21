@@ -145,14 +145,22 @@ fn leave(origin: vec3<i32>, direction: vec3<i32>, cell: vec3<i32>, high: vec3<i3
     return Exit(exit, axis);
 }
 
-fn tree_walk(placement: Placement, ray: Ray) -> Hit {
-    let mirrored = enter(placement, ray);
+// The walk over the box of `extent` cells from `corner` in the placement's
+// grid. The cell before a box's entry face, when it is in the grid, decides
+// whether the first cell is a hit, as it would on a walk over the whole grid.
+fn tree_walk(placement: Placement, ray: Ray, corner: vec3<i32>, extent: vec3<i32>) -> Hit {
+    var box = placement;
+    box.bounds = vec4<i32>(extent, 0);
+
+    let shifted = Ray(ray.origin - corner * ONE, ray.direction, ray.end - corner, ray.ends);
+    let mirrored = enter(box, shifted);
 
     if !mirrored.found {
         return miss();
     }
 
-    let bounds = placement.bounds.xyz;
+    let grid = placement.bounds.xyz;
+    let bounds = extent;
     let origin = mirrored.origin;
     let direction = mirrored.direction;
     let flip = mirrored.flip;
@@ -161,17 +169,21 @@ fn tree_walk(placement: Placement, ray: Ray) -> Hit {
 
     var cell = mirrored.cell;
 
-    // A ray entering the grid takes one step in.
+    // The start cell, or the cell before the entry face. A ray entering the
+    // box takes one step in.
+    let start_cell = select(cell, bounds - vec3<i32>(1) - cell, flip) + corner;
     var region = Region(0u, 1);
 
     if entry < 0 {
-        region = region_at(placement, select(cell, bounds - vec3<i32>(1) - cell, flip));
+        region = region_at(placement, start_cell);
+    } else if all(start_cell >= vec3<i32>(0)) && all(start_cell < grid) {
+        region = Region(region_at(placement, start_cell).value, 1);
     }
 
     var inside = region.value;
 
     var start = miss();
-    start.starts_inside = inside != 0u;
+    start.starts_inside = entry < 0 && inside != 0u;
 
     if all(direction == vec3<i32>(0)) {
         return start;
@@ -206,10 +218,12 @@ fn tree_walk(placement: Placement, ray: Ray) -> Hit {
             cell += select(vec3<i32>(0), vec3<i32>(1), axis_mask(axis));
             error += select(select(x_change, y_change, axis == 1), z_change, axis == 2);
         } else {
-            // The region's cube in mirrored cells, cut to the grid.
+            // The region's cube in mirrored cells, cut to the box. The cube
+            // aligns in the grid.
             let size = vec3<i32>(region.size);
             let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
-            let low = position - position % size;
+            let at = position + corner;
+            let low = at - at % size - corner;
             let high = min(select(low + size, bounds - low, flip), bounds);
             let exit = leave(origin, direction, cell, high);
 
@@ -222,7 +236,7 @@ fn tree_walk(placement: Placement, ray: Ray) -> Hit {
             return start;
         }
 
-        let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
+        let position = select(cell, bounds - vec3<i32>(1) - cell, flip) + corner;
 
         region = region_at(placement, position);
 

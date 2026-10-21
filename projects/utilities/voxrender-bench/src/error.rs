@@ -19,13 +19,16 @@ pub enum Error {
     /// The device lacks timestamp queries, which a timed benchmark needs.
     NoTimestampQuery,
 
+    /// The device lacks ray queries, which the ray-query trace needs.
+    NoRayQuery,
+
     /// Waiting on the GPU failed.
     Poll(PollError),
 
-    /// A timestamp readback would not map.
+    /// A readback would not map.
     Map(BufferAsyncError),
 
-    /// A mapped timestamp range was not available.
+    /// A mapped readback range was not available.
     MapRange(MapRangeError),
 
     /// A pass's end timestamp came before its start.
@@ -44,9 +47,10 @@ impl Display for Error {
             Error::Render(error) => write!(f, "the reference failed: {error}"),
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),
+            Error::NoRayQuery => write!(f, "the device lacks ray queries"),
             Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
-            Error::Map(error) => write!(f, "a timestamp readback would not map: {error}"),
-            Error::MapRange(error) => write!(f, "a timestamp range was unavailable: {error}"),
+            Error::Map(error) => write!(f, "a readback would not map: {error}"),
+            Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
             Error::TimestampOrder => write!(f, "a pass ended before it began"),
             Error::TreeMaterial { material_id } => {
                 write!(f, "material {material_id} is past what a tree's slot holds")

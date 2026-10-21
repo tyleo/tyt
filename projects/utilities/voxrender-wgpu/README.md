@@ -14,7 +14,9 @@ corner shadow bits for each light that casts shadows.
 `HitTrace::new` runs `voxrender`'s integer DDA in i32 over the shared
 quantized rays. Its hits match `voxrender-cpu`'s. `HitTrace::with_walk`
 takes another walk in WGSL and the words it reads per object, so a
-benchmark can trace a candidate through the same harness.
+benchmark can trace a candidate through the same harness. A benchmark's own
+shader can walk the same placements over `GRID_WALK_WGSL`, the walks' shared
+types and helpers, and the bytes `placement_bytes` packs.
 
 ```rust
 let trace = HitTrace::new(&device, &scene, view_id, 256, 256)?;

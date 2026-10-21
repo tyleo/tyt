@@ -5,7 +5,7 @@
 var<private> calls: i32;
 
 fn walk(placement: Placement, ray: Ray) -> Hit {
-    _ = tree_walk(placement, ray);
+    _ = tree_walk(placement, ray, vec3<i32>(0), placement.bounds.xyz);
     calls += 1;
 
     return Hit(true, false, -f32(calls), vec3<i32>(0, 0, i32(iterations)), 0, false);

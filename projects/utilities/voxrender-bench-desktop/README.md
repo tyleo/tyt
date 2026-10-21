@@ -13,4 +13,5 @@ cargo run --release -p voxrender-bench-desktop -- b2-times
 ```
 
 `b1-times` and `b2-times` wait for each submit to finish before the next, as
-a display's frames do. They need an adapter with timestamp queries.
+a display's frames do. They need an adapter with timestamp queries. `b1` and
+`b2-times` also need ray queries.

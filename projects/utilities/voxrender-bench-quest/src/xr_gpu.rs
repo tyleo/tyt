@@ -11,8 +11,8 @@ use openxr::{
 };
 use std::mem;
 use wgpu::{
-    Adapter, Device, DeviceDescriptor, Features, Instance, InstanceFlags, MemoryBudgetThresholds,
-    MemoryHints, Queue,
+    Adapter, Device, DeviceDescriptor, ExperimentalFeatures, Features, Instance, InstanceFlags,
+    MemoryBudgetThresholds, MemoryHints, Queue,
     hal::{api::Vulkan, vulkan::Instance as HalInstance},
 };
 
@@ -153,7 +153,8 @@ impl XrGpu {
             .expose_adapter(physical_device)
             .ok_or(Error::NoAdapter)?;
 
-        let features = Features::MULTIVIEW | Features::TIMESTAMP_QUERY;
+        let features =
+            Features::MULTIVIEW | Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY;
 
         if !exposed.features.contains(features) {
             return Err(Error::MissingFeatures(features - exposed.features));
@@ -222,6 +223,10 @@ impl XrGpu {
         // SAFETY: `exposed` came from `hal_instance`.
         let adapter = unsafe { instance.create_adapter_from_hal(exposed) };
 
+        // SAFETY: the bench accepts ray queries' experimental status. Its ids
+        // check their hits against the reference.
+        let experimental_features = unsafe { ExperimentalFeatures::enabled() };
+
         // SAFETY: `open_device` came from `adapter` with `features`.
         let (device, queue) = unsafe {
             adapter.create_device_from_hal(
@@ -230,6 +235,7 @@ impl XrGpu {
                     label: Some("voxrender-bench-quest"),
                     required_features: features,
                     required_limits: limits,
+                    experimental_features,
                     ..DeviceDescriptor::default()
                 },
             )

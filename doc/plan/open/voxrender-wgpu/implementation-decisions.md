@@ -337,3 +337,25 @@ they land.
   walk keeps the unread increment
 - The report gives each scene's Grays/s, iterations per ray, and
   Giterations/s. Giterations/s compares with the step loops' Gsteps/s
+- A ray-query candidate marches its brick two ways, and the run times both:
+  1. The integer march runs the tree walk, cut to the brick, along the
+     placement's integer pixel ray
+  2. The float march runs an f32 DDA along the hardware's ray in the grid.
+     It crosses a region of one value in a single jump, as the tree walk does
+- The faster march that keeps B1's line wins. Both stay in the bench, so the
+  choice can rerun. B1 judges the integer marches and counts the float
+  marches' flips for the record, as with the float walk. A float march over
+  the line can win only through a logged change to the line
+- A brick's first cell is a hit only when its value differs from the cell
+  before the entry face, as on a walk over the whole grid. Each AABB reaches
+  1/64 cell past its brick, so a brick that the f32 world ray only grazes
+  still reaches the integer march
+- The ray-query trace casts primary rays only. Shadow rays through it wait
+  for B5 or B3
+- `voxrender-wgpu` exports `GRID_WALK_WGSL`, the walks' shared WGSL, and
+  `placement_bytes`, so the ray-query shader walks the same placements.
+  `RenderViewRays` exposes its pixel steps for the world ray
+- The desktop and Quest devices request `EXPERIMENTAL_RAY_QUERY` through
+  wgpu's experimental token
+- Naga 30 places a `rayQueryGenerateIntersection` argument's evaluation
+  after the call. The shader evaluates the distance before its `if`

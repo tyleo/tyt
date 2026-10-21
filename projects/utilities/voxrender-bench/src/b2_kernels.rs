@@ -1,6 +1,6 @@
 use crate::{
-    BenchKernels, Error, KernelWork, Result, StepGrid, StepKernel, StepLayout, Walk,
-    art_room_scene, grazing_floor_scene,
+    BenchKernels, Error, KernelWork, RayQueryArm, RayQueryTrace, Result, StepGrid, StepKernel,
+    StepLayout, Walk, art_room_scene, grazing_floor_scene,
 };
 use voxrender::RenderScene;
 use wgpu::{Device, Queue};
@@ -23,8 +23,9 @@ pub fn b2_kernels(device: &Device, queue: &Queue, width: u32, height: u32) -> Re
         }
     }
 
-    // Each scene's mean loop iterations per ray.
-    let mut walks = Vec::new();
+    // Each trace's label and, for the tree walk, its mean loop iterations
+    // per ray.
+    let mut traces = Vec::new();
 
     for (name, scene) in [
         ("S1 art room", art_room_scene()),
@@ -50,23 +51,32 @@ pub fn b2_kernels(device: &Device, queue: &Queue, width: u32, height: u32) -> Re
             })
             .sum();
 
-        walks.push((name, total as f64 / counts.len() as f64));
+        let label = format!("tree walk, {name}");
 
+        traces.push((label.clone(), Some(total as f64 / counts.len() as f64)));
         kernels.push((
-            format!("tree walk, {name}"),
+            label,
             KernelWork::Walk(Walk::Tree.trace(device, &scene, view_id, width, height)?),
         ));
+
+        for arm in RayQueryArm::ALL {
+            let label = format!("{}, {name}", arm.label());
+            let trace = RayQueryTrace::new(device, queue, &scene, view_id, width, height, arm)?;
+
+            traces.push((label.clone(), None));
+            kernels.push((label, KernelWork::RayQuery(trace)));
+        }
     }
 
     Ok(BenchKernels {
         title: "B2 times",
         kernels,
         summary: Box::new(move |medians, rays| {
-            let (steps, walk_medians) = medians.split_at(StepLayout::ALL.len() * COUNTS.len());
+            let (steps, trace_medians) = medians.split_at(StepLayout::ALL.len() * COUNTS.len());
             let mut lines = step_lines(steps, rays);
 
             lines.push(String::new());
-            lines.extend(walk_lines(&walks, walk_medians, rays));
+            lines.extend(trace_lines(&traces, trace_medians, rays));
 
             lines
         }),
@@ -126,21 +136,25 @@ fn step_lines(medians: &[f64], rays: f64) -> Vec<String> {
     lines
 }
 
-/// Each scene's row from its walk's `medians` and its mean iterations per
-/// ray in `walks`, over `rays` rays a pass.
-fn walk_lines(walks: &[(&str, f64)], medians: &[f64], rays: f64) -> Vec<String> {
+/// Each trace's row from its `medians` and its mean iterations per ray in
+/// `traces`, over `rays` rays a pass.
+fn trace_lines(traces: &[(String, Option<f64>)], medians: &[f64], rays: f64) -> Vec<String> {
     let mut lines = vec![
-        "| Scene | Grays/s | Iterations per ray | Giterations/s |".to_owned(),
+        "| Trace | Grays/s | Iterations per ray | Giterations/s |".to_owned(),
         "| --- | ---: | ---: | ---: |".to_owned(),
     ];
 
-    for ((name, iterations), median) in walks.iter().zip(medians) {
+    for ((label, iterations), median) in traces.iter().zip(medians) {
         let rate = rays / median / 1e6;
 
-        lines.push(format!(
-            "| {name} | {rate:.3} | {iterations:.1} | {:.2} |",
-            rate * iterations
-        ));
+        lines.push(match iterations {
+            Some(iterations) => format!(
+                "| {label} | {rate:.3} | {iterations:.1} | {:.2} |",
+                rate * iterations
+            ),
+
+            None => format!("| {label} | {rate:.3} | | |"),
+        });
     }
 
     lines

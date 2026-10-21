@@ -1,4 +1,4 @@
-use crate::{ChainKernel, StepKernel};
+use crate::{ChainKernel, RayQueryTrace, StepKernel};
 use voxrender_wgpu::HitTrace;
 use wgpu::ComputePass;
 
@@ -12,6 +12,9 @@ pub enum KernelWork {
 
     /// B2's fixed-step loop.
     Steps(StepKernel),
+
+    /// A ray query over a view's rays.
+    RayQuery(RayQueryTrace),
 }
 
 impl KernelWork {
@@ -21,6 +24,7 @@ impl KernelWork {
             KernelWork::Walk(trace) => trace.dispatch(pass),
             KernelWork::Chain(chain) => chain.dispatch(pass),
             KernelWork::Steps(steps) => steps.dispatch(pass),
+            KernelWork::RayQuery(trace) => trace.dispatch(pass),
         }
     }
 }
