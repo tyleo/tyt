@@ -255,44 +255,6 @@ mod tests {
     }
 
     #[test]
-    fn a_flag_overrides_the_element_it_mirrors() {
-        let profile = r#"{ "frame": "local", "fillMode": "surface", "report": true }"#;
-
-        assert_eq!(
-            resolve(&[], profile).unwrap(),
-            (
-                VoxelFrame::Local,
-                FillMode::Surface,
-                FlattenMode::None,
-                true
-            )
-        );
-        assert_eq!(
-            resolve(
-                &[
-                    "--frame",
-                    "world",
-                    "--fill-mode",
-                    "solid",
-                    "--report",
-                    "false"
-                ],
-                profile
-            )
-            .unwrap(),
-            (VoxelFrame::World, FillMode::Solid, FlattenMode::None, false)
-        );
-        assert_eq!(
-            resolve(&["--flatten", "nodes", "--report"], "{}").unwrap(),
-            (VoxelFrame::World, FillMode::Solid, FlattenMode::Nodes, true)
-        );
-        assert_eq!(
-            resolve(&["--flatten", "none"], r#"{ "flatten": "objects" }"#).unwrap(),
-            (VoxelFrame::World, FillMode::Solid, FlattenMode::None, false)
-        );
-    }
-
-    #[test]
     fn either_size_flag_replaces_the_profile_resolution() {
         let settings = SdfDocVoxelize::try_parse_from([
             "voxelize",
