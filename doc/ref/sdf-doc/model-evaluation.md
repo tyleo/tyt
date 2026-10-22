@@ -117,11 +117,15 @@ inside. The sampling sets the voxel size `g` from the settings.
 
 The lattice anchors at the origin. The cell `[i, j, k]` spans from
 `[i, j, k] * g` to `[i + 1, j + 1, k + 1] * g`. vxl samples each part's shapes
-moved by a shift `o`. Under `--frame world`, `o` adds up the offsets on a
-place's path, and vxl samples each place separately. Under `--frame local`, `o`
-reads zero, and vxl samples a part once for all its places. A cell belongs to a
-shape when `d` at the point `[i + 0.5, j + 0.5, k + 0.5] * g - o` reads zero or
-less, and a point exactly on the surface counts as inside. Only the sign decides
+posed onto the lattice by a rigid map `P`. Under `--frame world`, `P` moves a
+place by the offsets on its path, and vxl samples each place separately. Under
+`--flatten nodes` or `--flatten objects`, `P` also applies each rotation on the
+place's path below the nearest root part or joint, about that part's pivot. A
+`set` cube turns with its place, and a joint samples unturned. Under
+`--frame local`, `P` leaves the shapes in place, and vxl samples a part once for
+all its places. A cell belongs to a shape when `d` at the point
+`P^-1([i + 0.5, j + 0.5, k + 0.5] * g)` reads zero or less, and a point exactly
+on the surface counts as inside. Only the sign decides
 membership. A shape whose `d` bounds the true distance therefore voxelizes
 exactly as an exact one does.
 
@@ -583,18 +587,20 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
 2. Under `--frame world`, each place of a part writes one object holding the
    place's live cells. Under `--frame local`, each part writes one object
    holding the part's live cells, and every place shares the object. Under
-   `--flatten objects`, each root part writes one object holding every live cell
-   at or below the root part instead. Where two parts cover one cell, the part
-   placed later wins. An object takes its part's name. The object's `bounds`
-   wrap its cells tightly. A grid with no live cell writes no object.
+   `--flatten objects`, each root part and joint instead writes one object
+   holding the live cells of every part at or below it that no lower joint
+   claims. Where two parts cover one cell, the part placed later wins. An object
+   takes its part's name. The object's `bounds` wrap its cells tightly. A grid
+   with no live cell writes no object.
 3. Each place of a part writes a node named after the part, and the nodes nest
    as the places do. Every node below a root node takes the position
    `(pivot - parentPivot) / g` and a scale of 1. Each pivot there sits where the
    offsets on its path move it. Every node takes its part's `rotation`, whose
    axis rotations apply about the parent's axes in list order. Under
-   `--flatten nodes` or `--flatten objects`, only the root parts write nodes. A
-   root part's node then places every object at or below the root part as the
-   root part's own. Flattening a rotated part below a root part errors.
+   `--flatten nodes` or `--flatten objects`, only the root parts and joints
+   write nodes. Each such node holds the objects of the parts it claims. A
+   joint's node nests under the node above it and takes every rotation between
+   the two.
 4. With `f = -(pivot + o) / g` and the pivot in the part's frame, a part's node
    places the part's object with an `origin` of the object's min cell index plus
    `f` when `f` is whole on every axis. Otherwise a child node named `voxels` at

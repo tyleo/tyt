@@ -126,6 +126,7 @@ mod tests {
         let options = SdfSampleOptions {
             resolution: GridResolution::VoxelSize(0.5),
             frame: VoxelFrame::World,
+            posed: false,
             record_writes: false,
         };
         let sampling = sample(

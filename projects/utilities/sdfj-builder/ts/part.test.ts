@@ -52,6 +52,20 @@ Deno.test("an axis rotation takes an axis and finite degrees", () => {
   });
 });
 
+Deno.test("a joint writes only when it holds true", () => {
+  const { nodes } = document([
+    part("lid", { joint: true }, [add("lid", ball, white)]),
+    part("base", { joint: false }, [add("base", ball, white)]),
+  ]);
+  assert.deepStrictEqual(nodes.slice(0, 2), [
+    { name: "lid", joint: true, childObjects: [0], childNodes: [] },
+    { name: "base", childObjects: [1], childNodes: [] },
+  ]);
+  assert.throws(() => part("lid", { joint: "yes" } as never, []), {
+    message: 'part "lid" joint must be true or false, not "yes"',
+  });
+});
+
 Deno.test("a step in several lists writes one entry", () => {
   const shared = add("shared", ball, white);
   const { steps, objects } = document([

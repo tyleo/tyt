@@ -51,6 +51,7 @@ mod tests {
                 pivot: None,
                 offset: None,
                 rotation: Vec::new(),
+                joint: false,
                 child_objects: vec![0],
                 child_nodes: Vec::new(),
             }],

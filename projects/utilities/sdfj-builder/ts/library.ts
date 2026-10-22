@@ -150,6 +150,7 @@ interface NodeEntry {
     readonly axis: Axis;
     readonly degrees: number;
   }[];
+  readonly joint?: boolean;
   readonly childObjects: readonly number[];
   readonly childNodes: readonly number[];
 }
@@ -269,6 +270,7 @@ class LibraryReader {
       rotation: node.rotation?.map((
         { axis, degrees },
       ): AxisRotation => [axis, degrees]),
+      joint: node.joint,
       list: [...steps, ...parts],
     });
   }

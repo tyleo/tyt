@@ -32,6 +32,7 @@ pub fn test_main() -> SdfMain {
             pivot: None,
             offset: None,
             rotation: Vec::new(),
+            joint: false,
             child_object_ids: vec![U32Id::from_u32(0)],
             child_node_ids: Vec::new(),
         }]),

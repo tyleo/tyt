@@ -44,6 +44,7 @@ pub fn parts_main() -> SdfMain {
         pivot: Some(TyVector3F64::from_array(pivot)),
         offset: None,
         rotation: Vec::new(),
+        joint: false,
         child_object_ids: vec![U32Id::from_u32(object)],
         child_node_ids: nodes.into_iter().map(U32Id::from_u32).collect(),
     };

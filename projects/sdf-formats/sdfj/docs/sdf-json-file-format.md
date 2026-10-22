@@ -243,10 +243,11 @@ A step that takes a material or a pattern holds exactly one of the two keys.
 A part writes one node named after it and, when its list holds steps, one object
 of the same name. An object holds `name` and `steps`, the indices of its steps
 in list order. Each object voxelizes on its own grid. A node holds `name`,
-`pivot?`, `offset?`, `rotation?`, `childObjects`, and `childNodes`. The part's
-object goes in `childObjects` and its child parts' nodes in `childNodes`.
-`rotation` lists the part's axis rotations in order. Each holds an `axis` and
-`degrees`.
+`pivot?`, `offset?`, `rotation?`, `joint?`, `childObjects`, and `childNodes`.
+The part's object goes in `childObjects` and its child parts' nodes in
+`childNodes`. `rotation` lists the part's axis rotations in order. Each holds an
+`axis` and `degrees`. `joint: true` marks a part that keeps its node when the
+hierarchy flattens. The builder writes `joint` only when it holds `true`.
 
 ```jsonc
 // part("tree.1", { offset: [-0.75, 0, 0], rotation: [["y", 30]] }, [tree])

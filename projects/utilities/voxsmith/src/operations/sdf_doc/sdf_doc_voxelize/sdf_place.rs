@@ -25,6 +25,9 @@ pub struct SdfPlace {
     /// The part's rotation about its pivot on the parent's axes.
     pub rotation: TyQuaternionF64,
 
+    /// Whether the part keeps its node when the hierarchy flattens.
+    pub joint: bool,
+
     /// The indices in the sampling's `grids` of the grids of the part's objects
     /// at this place.
     pub grid_indices: Vec<usize>,

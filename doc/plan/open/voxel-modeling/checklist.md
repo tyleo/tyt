@@ -207,6 +207,8 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   1. Under `--flatten`, vxl samples a rotated part at its angle on the root
      part's grid. The sampling takes the part's rotation and offset as inputs
   2. `flip` reflects a shape across axes without keeping the original
+  3. A part marked `joint` keeps its node under `--flatten` and voxelizes
+     unrotated, leaving an animation a node to turn
 - [ ] **S27. Shared nodes.** A node the `.sdfj` document shares stays one voxj
       node with several parents, along with its subtree and objects:
   1. Under `--frame world`, places whose shifts differ by whole voxels share

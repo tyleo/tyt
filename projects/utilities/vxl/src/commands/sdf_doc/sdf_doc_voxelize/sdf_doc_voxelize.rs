@@ -195,6 +195,7 @@ impl SdfDocVoxelize {
             sample: SdfSampleOptions {
                 resolution,
                 frame,
+                posed: flatten != FlattenMode::None,
                 record_writes: report && frame == VoxelFrame::World,
             },
             vox_main: SdfVoxMainOptions {

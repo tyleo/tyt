@@ -49,6 +49,7 @@ fn visit(
                 )
             },
         ),
+        joint: node.joint,
         grid_indices: Vec::new(),
     });
 

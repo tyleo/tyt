@@ -12,7 +12,9 @@ use sdfcore::{
     SdfStep, SdfStepMaterial,
 };
 use std::result::Result as StdResult;
-use ty_math::{TyVector3F64, TyVector3I32, TyVector3U32};
+use ty_math::{
+    TyPoseF64, TyQuaternionExt, TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32,
+};
 
 /// The most cells one part's grid holds.
 const MOST_CELLS: f64 = (1 << 27) as f64;
@@ -32,7 +34,8 @@ const ALL_SIDES: [SdfSide; 6] = [
 ];
 
 /// Runs the steps of the object at `object_id` over its grid on the lattice of
-/// cells `voxel_size` across, with the object's shapes moved by `shift`.
+/// cells `voxel_size` across, with the object's shapes posed by `pose`, which
+/// takes a shape's point to its lattice point in meters.
 /// `place_path` holds the part names of the place an error reports. Each
 /// step's record holds its writes under `record_writes`. `dependencies`
 /// spreads each step's cells across threads.
@@ -47,10 +50,10 @@ pub fn sample_grid<D: MapCells>(
     object_id: U32Id<BSdfObject>,
     place_path: &[String],
     voxel_size: f64,
-    shift: TyVector3F64,
+    pose: TyPoseF64,
     record_writes: bool,
 ) -> Result<SdfGrid> {
-    let lattice = LatticeShapes::new(shapes, voxel_size, shift);
+    let lattice = LatticeShapes::new(shapes, voxel_size, pose);
     let object = &state.objects[object_id.to_usize_id()];
     let path = place_path.join("/");
 
@@ -64,7 +67,7 @@ pub fn sample_grid<D: MapCells>(
 
             SdfStep::Set { points, size, .. } => points
                 .iter()
-                .map(|point| set_cells(*point, *size, voxel_size, shift))
+                .map(|point| set_cells(*point, *size, voxel_size, pose))
                 .collect(),
 
             SdfStep::Carve { .. } | SdfStep::Coat { .. } | SdfStep::Paint { .. } => Vec::new(),
@@ -139,7 +142,7 @@ pub fn sample_grid<D: MapCells>(
             step_id: *step_id,
             step: index as u32,
             voxel_size,
-            shift,
+            pose,
             record_writes,
             record: SdfStepRecord::default(),
         };
@@ -178,7 +181,7 @@ struct StepRun<'a, 'b> {
 
     voxel_size: f64,
 
-    shift: TyVector3F64,
+    pose: TyPoseF64,
 
     record_writes: bool,
 
@@ -286,9 +289,13 @@ impl StepRun<'_, '_> {
                 ..
             } => {
                 for point in points {
-                    let cells = set_cells(*point, *size, self.voxel_size, self.shift);
+                    let cells = set_cells(*point, *size, self.voxel_size, self.pose);
 
                     for cell in self.cells_within(Some(cells)) {
+                        if !self.set_covers(*point, *size, cell) {
+                            continue;
+                        }
+
                         let material_id = self.pick(*material, self.center(cell), cell);
                         self.write(cell, Some(material_id));
                     }
@@ -388,7 +395,7 @@ impl StepRun<'_, '_> {
     /// Whether `point` lies inside the part's shapes so far. The last `add` or
     /// `carve` whose shape holds `point` decides.
     fn is_solid(&self, point: TyVector3F64) -> StdResult<bool, String> {
-        let lattice_point = (point + self.shift) / self.voxel_size;
+        let lattice_point = (self.pose.position + self.pose.rotation * point) / self.voxel_size;
 
         for &(shape3d_id, fills) in self.solids.iter().rev() {
             let outside_box = self.lattice.cells(shape3d_id).is_some_and(|cells| {
@@ -403,10 +410,25 @@ impl StepRun<'_, '_> {
         Ok(false)
     }
 
-    /// The center of `cell` where the shapes evaluate, moved back by the
-    /// shift.
+    /// The center of `cell` where the shapes evaluate, posed back into the
+    /// shapes' frame.
     fn center(&self, cell: TyVector3I32) -> TyVector3F64 {
-        (cell.as_dvec3() + 0.5) * self.voxel_size - self.shift
+        self.pose.rotation.inverse()
+            * ((cell.as_dvec3() + 0.5) * self.voxel_size - self.pose.position)
+    }
+
+    /// Whether the `set` cube `size` wide around `point` covers the center of
+    /// `cell`. An unturned cube covers its whole cell box.
+    fn set_covers(&self, point: TyVector3F64, size: f64, cell: TyVector3I32) -> bool {
+        if self.pose.rotation == TyQuaternionF64::IDENTITY {
+            return true;
+        }
+
+        let half = size / 2.0;
+        let from_point = self.center(cell) - point;
+
+        from_point.cmpge(TyVector3F64::splat(-half)).all()
+            && from_point.cmplt(TyVector3F64::splat(half)).all()
     }
 
     /// The material `material` writes into `cell` at the frame position
@@ -481,11 +503,16 @@ impl StepRun<'_, '_> {
     }
 }
 
-/// The cell box of a `set` cube `size` wide around `point`. A center on the
-/// cube's min face lies inside it, and a center on its max face outside.
-fn set_cells(point: TyVector3F64, size: f64, voxel_size: f64, shift: TyVector3F64) -> Bounds3d {
-    let center = (point + shift) / voxel_size;
-    let half = size / voxel_size / 2.0;
+/// The cell box of a `set` cube `size` wide around `point` posed by `pose`. A
+/// center on the cube's min face lies inside it, and a center on its max face
+/// outside.
+fn set_cells(point: TyVector3F64, size: f64, voxel_size: f64, pose: TyPoseF64) -> Bounds3d {
+    let center = (pose.position + pose.rotation * point) / voxel_size;
+    // A turned cube's half extents on the lattice's axes bound it. Cell `i`
+    // holds its center `i + 0.5` within `[center - half, center + half)`.
+    let half = pose
+        .rotation
+        .rotate_extents_abs(TyVector3F64::splat(size / voxel_size / 2.0));
 
     Bounds3d {
         min: (center - half - 0.5).ceil(),

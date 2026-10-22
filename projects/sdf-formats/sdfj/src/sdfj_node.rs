@@ -45,6 +45,13 @@ pub struct SdfjNode {
     )]
     pub rotation: Vec<SdfjAxisRotation>,
 
+    /// Whether the part keeps its node when the hierarchy flattens.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "crate::is_false")
+    )]
+    pub joint: bool,
+
     /// Indices into [`SdfjFile::objects`](crate::SdfjFile::objects).
     pub child_objects: Vec<usize>,
 

@@ -735,6 +735,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(voxel_size),
                 frame: VoxelFrame::World,
+                posed: false,
                 record_writes: true,
             },
         )
@@ -1001,6 +1002,7 @@ model.voxj  2 voxels of 1 m  2 pieces  3x1x1  [0, 0, 0] .. [3, 1, 1]
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::World,
+                posed: false,
                 record_writes: false,
             },
         )
@@ -1023,6 +1025,7 @@ model.voxj  2 voxels of 1 m  2 pieces  3x1x1  [0, 0, 0] .. [3, 1, 1]
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::Local,
+                posed: false,
                 record_writes: true,
             },
         )

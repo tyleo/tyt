@@ -182,7 +182,12 @@ use the name. A part's grid grows to hold every `add` and `set`, and `carve`,
 ```ts
 function part(
   name: string,
-  options: { pivot?: Vec3; offset?: Vec3; rotation?: AxisRotation[] },
+  options: {
+    pivot?: Vec3;
+    offset?: Vec3;
+    rotation?: AxisRotation[];
+    joint?: boolean;
+  },
   list: (Step | Part)[],
 ): Part;
 ```
@@ -205,7 +210,11 @@ lids take parts when the prompt asks for pieces that move or separate objects.
 6. `rotation` poses the part. Each `[axis, degrees]` in list order rotates the
    part about its pivot on an axis of the parent's frame. The part voxelizes
    unrotated. Its node takes the rotation
-7. A step or a part can sit in several lists. A part writes a node at each
+7. `joint: true` marks a part that an animation turns, such as a lid or a door.
+   Under `vxl sdf-doc voxelize --flatten`, a joint keeps its node and voxelizes
+   unrotated. Every other part there voxelizes at its pose on the grid of the
+   joint or root part it flattens into
+8. A step or a part can sit in several lists. A part writes a node at each
    place, and under `--frame local` the nodes share one object.
 
 Every part takes a name no other part in its list shares. A function builds

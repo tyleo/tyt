@@ -16,6 +16,9 @@ export interface PartEntry {
   /** The rotations of the part about its pivot, in order. */
   readonly rotation?: readonly AxisRotation[];
 
+  /** Whether the part keeps its node when the hierarchy flattens. */
+  readonly joint?: boolean;
+
   /** The part's steps and child parts in list order. */
   readonly list: readonly (Step | Part)[];
 }
@@ -39,7 +42,12 @@ export class Part {
 /** The part `name` that voxelizes `list` and turns about `pivot`. */
 export function part(
   name: string,
-  options: { pivot?: Vec3; offset?: Vec3; rotation?: AxisRotation[] },
+  options: {
+    pivot?: Vec3;
+    offset?: Vec3;
+    rotation?: AxisRotation[];
+    joint?: boolean;
+  },
   list: (Step | Part)[],
 ): Part {
   const path = `part ${JSON.stringify(check.text("part name", name))}`;
@@ -47,6 +55,7 @@ export function part(
     "pivot",
     "offset",
     "rotation",
+    "joint",
   ]);
   return new Part({
     name,
@@ -63,6 +72,7 @@ export function part(
           check.axisRotation,
         ),
     ),
+    joint: check.optional(`${path} joint`, option.joint, check.boolean),
     list: stepsAndParts(`${path} list`, list),
   });
 }

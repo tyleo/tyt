@@ -3,13 +3,12 @@ import { type Entry, entry } from "./entry.ts";
 import { jsonText } from "./json_text.ts";
 import { libraryNames } from "./library.ts";
 import { Material } from "./material.ts";
-import { Part } from "./part.ts";
+import { Part, type PartEntry } from "./part.ts";
 import { Pattern } from "./pattern.ts";
 import { Shades } from "./shades.ts";
 import { Shape2d } from "./shape2d.ts";
 import { Shape3d } from "./shape3d.ts";
 import { Step } from "./step.ts";
-import type { AxisRotation, Vec3 } from "./types.ts";
 
 /** The sdfj format version the builder writes. */
 const SDFJ_VERSION = 1;
@@ -88,7 +87,7 @@ export function sdfjDocument(
 ): SdfjDocument {
   const writer = new SdfjWriter(intern);
   writer.document.rootNodes.push(
-    writer.node(name, undefined, undefined, undefined, list),
+    writer.node({ name, list }),
   );
   for (const [, value] of exports) {
     writer.named(value);
@@ -188,14 +187,9 @@ class SdfjWriter {
     };
   }
 
-  /** Writes a node, and an object when `list` holds steps. */
-  node(
-    name: string,
-    pivot: Vec3 | undefined,
-    offset: Vec3 | undefined,
-    rotation: readonly AxisRotation[] | undefined,
-    list: readonly (Step | Part)[],
-  ): number {
+  /** Writes the node of `part`, and an object when its list holds steps. */
+  node(part: PartEntry): number {
+    const { name, pivot, offset, rotation, joint, list } = part;
     const steps: number[] = [];
     const childNodes: number[] = [];
     const listed = new Set<Step>();
@@ -218,6 +212,7 @@ class SdfjWriter {
       rotation: rotation?.length
         ? rotation.map(([axis, degrees]) => ({ axis, degrees }))
         : undefined,
+      joint: joint === true ? true : undefined,
       childObjects,
       childNodes,
     });
@@ -228,8 +223,7 @@ class SdfjWriter {
   #part(part: Part): number {
     let index = this.#indices.get(part);
     if (index === undefined) {
-      const { name, pivot, offset, rotation, list } = Part.entry(part);
-      index = this.node(name, pivot, offset, rotation, list);
+      index = this.node(Part.entry(part));
       this.#indices.set(part, index);
     }
     return index;

@@ -14,6 +14,10 @@ pub struct SdfSampling {
     /// The frame the grids were sampled in.
     pub frame: VoxelFrame,
 
+    /// Whether each place was sampled at its pose on the lattice of the nearest
+    /// root part or joint above it.
+    pub posed: bool,
+
     /// Whether each step's record holds the cells it wrote and the steps it
     /// wrote over.
     pub writes_recorded: bool,

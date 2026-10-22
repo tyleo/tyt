@@ -43,6 +43,14 @@ export function text(path: string, value: unknown): string {
   return value;
 }
 
+/** `value` as a boolean. */
+export function boolean(path: string, value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    fail(path, "true or false", value);
+  }
+  return value;
+}
+
 /** A copy of `value` as a `Vec2`. */
 export function vec2(path: string, value: unknown): Vec2 {
   const [u, v] = numbers(path, value, 2, "a Vec2 of 2 finite numbers");

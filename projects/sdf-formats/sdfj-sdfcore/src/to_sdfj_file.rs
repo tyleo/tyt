@@ -897,6 +897,7 @@ fn sdfj_node_from_sdf_node(node: &SdfNode) -> SdfjNode {
                 degrees: axis_rotation.degrees,
             })
             .collect(),
+        joint: node.joint,
         child_objects: wire_indices(&node.child_object_ids),
         child_nodes: wire_indices(&node.child_node_ids),
     }

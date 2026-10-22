@@ -920,6 +920,7 @@ fn sdf_node_from_sdfj_node(node: &SdfjNode) -> StdResult<SdfNode, String> {
                 degrees: axis_rotation.degrees,
             })
             .collect(),
+        joint: node.joint,
         child_object_ids: wire_ids(&node.child_objects)?,
         child_node_ids: wire_ids(&node.child_nodes)?,
     })

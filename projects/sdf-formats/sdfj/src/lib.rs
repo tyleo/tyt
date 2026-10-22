@@ -67,11 +67,15 @@ mod find_non_finite;
 #[cfg(feature = "serde")]
 mod finite;
 #[cfg(feature = "serde")]
+mod is_false;
+#[cfg(feature = "serde")]
 mod present;
 
 #[cfg(feature = "serde")]
 pub(crate) use find_non_finite::*;
 #[cfg(feature = "serde")]
 pub(crate) use finite::*;
+#[cfg(feature = "serde")]
+pub(crate) use is_false::*;
 #[cfg(feature = "serde")]
 pub(crate) use present::*;

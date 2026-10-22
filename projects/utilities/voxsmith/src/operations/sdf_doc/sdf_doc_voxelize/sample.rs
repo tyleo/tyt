@@ -2,14 +2,14 @@ use crate::{
     Error, Result,
     dependencies::sdf_doc::MapCells,
     operations::sdf_doc::{
-        EntryPaths, SdfSampleOptions, SdfSampling, SdfShapes, check_document, check_shape_boxes,
-        collect_places, resolve_materials, sample_grid, sample_voxel_size,
+        EntryPaths, PlaceFrame, SdfSampleOptions, SdfSampling, SdfShapes, check_document,
+        check_shape_boxes, collect_places, resolve_materials, sample_grid, sample_voxel_size,
     },
     utilities::VoxelFrame,
 };
 use sdfcore::SdfMain;
 use std::collections::HashMap;
-use ty_math::TyVector3F64;
+use ty_math::TyPoseF64;
 
 /// Samples the model `main` into grids under `options` by model evaluation.
 /// `dependencies` spreads each step's cells across threads. Errors on the
@@ -19,6 +19,12 @@ pub fn sample<D: MapCells>(
     main: &SdfMain,
     options: &SdfSampleOptions,
 ) -> Result<SdfSampling> {
+    if options.posed && options.frame == VoxelFrame::Local {
+        return Err(Error::invalid(
+            "posed sampling must sample under the world frame, not the local frame",
+        ));
+    }
+
     let state = main.state();
     let mut places = collect_places(state);
     let paths = EntryPaths::new(state, &places);
@@ -33,7 +39,15 @@ pub fn sample<D: MapCells>(
     let mut grids = Vec::new();
     let mut shared_grids = HashMap::new();
 
-    for place in &mut places {
+    let frames = PlaceFrame::of_places(&places, options.posed);
+
+    for (place, frame) in places.iter_mut().zip(frames) {
+        let frame = frame.sampling();
+        let pose = TyPoseF64::new(
+            frame.position + frame.rotation * place.offset,
+            frame.rotation,
+        );
+
         for &object_id in &state.nodes[place.node_id.to_usize_id()].child_object_ids {
             let grid_index = match options.frame {
                 VoxelFrame::World => {
@@ -44,7 +58,7 @@ pub fn sample<D: MapCells>(
                         object_id,
                         &place.path,
                         voxel_size,
-                        place.offset,
+                        pose,
                         options.record_writes,
                     )?);
                     grids.len() - 1
@@ -61,7 +75,7 @@ pub fn sample<D: MapCells>(
                             object_id,
                             &place.path,
                             voxel_size,
-                            TyVector3F64::ZERO,
+                            TyPoseF64::IDENTITY,
                             options.record_writes,
                         )?);
                         shared_grids.insert(object_id, grids.len() - 1);
@@ -87,6 +101,7 @@ pub fn sample<D: MapCells>(
     Ok(SdfSampling {
         voxel_size,
         frame: options.frame,
+        posed: options.posed,
         writes_recorded: options.record_writes,
         places,
         grids,
@@ -105,8 +120,8 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use sdfcore::{
-        SdfMain, SdfMaterial, SdfNode, SdfObject, SdfPattern, SdfShape3d, SdfSide, SdfState,
-        SdfStep, SdfStepMaterial,
+        SdfAxisRotation, SdfMain, SdfMaterial, SdfNode, SdfObject, SdfPattern, SdfShape3d, SdfSide,
+        SdfState, SdfStep, SdfStepMaterial,
     };
     use std::f64::consts::PI;
     use ty_math::{TyAxis3, TyVector3F64, TyVector3I32};
@@ -135,6 +150,7 @@ mod tests {
         SdfSampleOptions {
             resolution: GridResolution::VoxelSize(voxel_size),
             frame: VoxelFrame::World,
+            posed: false,
             record_writes: true,
         }
     }
@@ -519,6 +535,7 @@ mod tests {
                     pivot: None,
                     offset: Some(TyVector3F64::new(1.0, 0.0, 0.0)),
                     rotation: Vec::new(),
+                    joint: false,
                     child_object_ids: vec![U32Id::from_u32(0)],
                     child_node_ids: Vec::new(),
                 },
@@ -527,6 +544,7 @@ mod tests {
                     pivot: None,
                     offset: None,
                     rotation: Vec::new(),
+                    joint: false,
                     child_object_ids: Vec::new(),
                     child_node_ids: vec![U32Id::from_u32(0)],
                 },
@@ -573,6 +591,133 @@ mod tests {
         );
     }
 
+    /// A part's name, pivot, offset, and rotation.
+    type Link<'a> = (&'a str, [f64; 3], [f64; 3], Vec<SdfAxisRotation>);
+
+    /// A model whose root part `model` holds the chain of parts `chain`, each
+    /// holding the next. The last part runs `steps` over `shapes`.
+    fn chain_main(shapes: Vec<SdfShape3d>, steps: Vec<SdfStep>, chain: &[Link]) -> SdfMain {
+        // A node lists only earlier nodes, so the chain lands leaf first.
+        let mut nodes: Vec<SdfNode> = chain
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(index, (name, pivot, offset, rotation))| SdfNode {
+                name: name.to_string(),
+                pivot: Some(TyVector3F64::from_array(*pivot)),
+                offset: Some(TyVector3F64::from_array(*offset)),
+                rotation: rotation.clone(),
+                joint: false,
+                child_object_ids: if index == 0 {
+                    vec![U32Id::from_u32(0)]
+                } else {
+                    Vec::new()
+                },
+                child_node_ids: if index == 0 {
+                    Vec::new()
+                } else {
+                    vec![U32Id::from_u32(index as u32 - 1)]
+                },
+            })
+            .collect();
+        nodes.push(SdfNode {
+            name: "model".to_string(),
+            pivot: None,
+            offset: None,
+            rotation: Vec::new(),
+            joint: false,
+            child_object_ids: Vec::new(),
+            child_node_ids: vec![U32Id::from_u32(chain.len() as u32 - 1)],
+        });
+
+        SdfMain::new(SdfState {
+            shapes3d: IdVec::from_vec(shapes),
+            materials: IdVec::from_vec(vec![SdfMaterial::Material {
+                properties: Vec::new(),
+            }]),
+            objects: IdVec::from_vec(vec![SdfObject {
+                name: "leaf".to_string(),
+                step_ids: (0..steps.len() as u32).map(U32Id::from_u32).collect(),
+            }]),
+            steps: IdVec::from_vec(steps),
+            root_node_ids: vec![U32Id::from_u32(nodes.len() as u32 - 1)],
+            nodes: IdVec::from_vec(nodes),
+            ..SdfState::default()
+        })
+        .unwrap()
+    }
+
+    fn turn(axis: TyAxis3, degrees: f64) -> Vec<SdfAxisRotation> {
+        vec![SdfAxisRotation { axis, degrees }]
+    }
+
+    fn posed() -> SdfSampleOptions {
+        SdfSampleOptions {
+            posed: true,
+            ..at_size(1.0)
+        }
+    }
+
+    #[test]
+    fn a_posed_place_samples_through_every_turn_below_the_root_part() {
+        let main = chain_main(
+            vec![cuboid([1.0, 0.0, 0.0], [2.0, 1.0, 2.0])],
+            vec![add("hand", 0, 0)],
+            &[
+                ("arm", [0.0; 3], [0.0; 3], turn(TyAxis3::Z, 90.0)),
+                (
+                    "hand",
+                    [1.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    turn(TyAxis3::Y, 90.0),
+                ),
+            ],
+        );
+
+        // The hand's quarter turn about y at [2, 0, 0] carries its box to x 2
+        // to 4 and z -1 to 0, and the arm's quarter turn about z then carries
+        // that onto x -1 to 0 and y 2 to 4.
+        assert_eq!(
+            live_cells(&sample(&DependenciesImpl, &main, &posed()).unwrap()),
+            [TyVector3I32::new(-1, 2, -1), TyVector3I32::new(-1, 3, -1)]
+        );
+    }
+
+    #[test]
+    fn a_turned_set_cube_fills_the_cells_whose_centers_it_covers() {
+        let main = chain_main(
+            Vec::new(),
+            vec![SdfStep::Set {
+                name: "stud".to_string(),
+                points: vec![TyVector3F64::ZERO],
+                size: 2.0,
+                material: material(0),
+            }],
+            &[("turned", [0.0; 3], [0.0; 3], turn(TyAxis3::Y, 45.0))],
+        );
+
+        let cells = live_cells(&sample(&DependenciesImpl, &main, &posed()).unwrap());
+        assert_eq!(cells.len(), 8);
+        assert!(
+            cells
+                .iter()
+                .all(|cell| (-1..=0).contains(&cell.x) && (-1..=0).contains(&cell.z))
+        );
+    }
+
+    #[test]
+    fn posed_sampling_needs_the_world_frame() {
+        let options = SdfSampleOptions {
+            frame: VoxelFrame::Local,
+            ..posed()
+        };
+
+        assert_eq!(
+            error(&shared_leaf_main(), options),
+            "posed sampling must sample under the world frame, not the local frame"
+        );
+    }
+
     #[test]
     fn each_part_samples_once_for_all_its_places_under_the_local_frame() {
         let options = SdfSampleOptions {
@@ -601,6 +746,7 @@ mod tests {
             let options = SdfSampleOptions {
                 resolution: GridResolution::ReferenceCount { reference, count },
                 frame: VoxelFrame::World,
+                posed: false,
                 record_writes: false,
             };
             sample(&DependenciesImpl, &main, &options)
@@ -621,6 +767,7 @@ mod tests {
                     count: 3,
                 },
                 frame: VoxelFrame::World,
+                posed: false,
                 record_writes: false,
             },
         )

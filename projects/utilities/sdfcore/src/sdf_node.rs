@@ -18,6 +18,9 @@ pub struct SdfNode {
     /// The rotations of the part about its pivot, in order.
     pub rotation: Vec<SdfAxisRotation>,
 
+    /// Whether the part keeps its node when the hierarchy flattens.
+    pub joint: bool,
+
     /// The part's object, when its list holds steps.
     pub child_object_ids: Vec<U32Id<BSdfObject>>,
 

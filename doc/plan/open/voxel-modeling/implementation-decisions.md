@@ -455,3 +455,22 @@ land.
 table` lands `table` again over `tall`
 3. An import cycle, an unknown import, and a profile that `--vars-from` lists
    twice each error
+
+## S26. Rotation
+
+1. Posed sampling places each part on its root part's lattice, turned by every
+   rotation on the path between them. `--flatten nodes` and `--flatten objects`
+   sample posed. Flattening errors on grids sampled otherwise
+2. A `coat` side follows its part's axes. A `set` cube turns with its part and
+   fills the cells whose centers it covers
+3. A turned box's lattice corner within 1e-9 cells of a cell corner snaps to
+   that corner, so a quarter turn adds no empty layer. An unturned place skips
+   the snap and samples bit for bit as before
+4. tyt-assets' models voxelize byte for byte as before unflattened, and so do
+   `lantern` and `table` flattened. `birch`, `island`, `robot`, and `tavern`
+   now flatten
+5. A part's `joint: true` keeps its node under `--flatten`, even unturned,
+   because an animation needs the node. Posed sampling stops at a joint, and
+   the joint's node takes every turn between it and the node above it
+6. With its lid marked a joint, `tavern` flattens into one object beside the
+   lid's node, and the lid voxelizes as it does unflattened

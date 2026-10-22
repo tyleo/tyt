@@ -1753,6 +1753,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(0.025),
                 frame: VoxelFrame::World,
+                posed: false,
                 record_writes: false,
             },
         )

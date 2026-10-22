@@ -1,15 +1,15 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfVoxMainOptions, is_exposed, retain_sdf_palette,
-        see_through_materials,
+        PlaceFrame, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfVoxMainOptions, is_exposed,
+        retain_sdf_palette, see_through_materials,
     },
     utilities::{FillMode, FlattenMode, VoxelFrame},
 };
 use branded_id::{IdSlice, IdVec, IteratorExt, U32Id};
 use sdfcore::BSdfMaterial;
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
+use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMain, VoxObject};
 
 /// How far a node's offset to its object can sit from a whole number of voxels
@@ -17,12 +17,21 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMai
 const WHOLE_TOLERANCE: f64 = 1e-9;
 
 /// The voxj document of the grids in `sampling` under `options` by model
-/// evaluation. Errors on flattening grids sampled under the local frame.
+/// evaluation. Errors on flattening grids sampled under the local frame or
+/// unposed.
 pub fn to_vox_main(sampling: &SdfSampling, options: &SdfVoxMainOptions) -> Result<VoxMain> {
-    if options.flatten != FlattenMode::None && sampling.frame == VoxelFrame::Local {
-        return Err(Error::invalid(
-            "flatten must read grids sampled under the world frame, not the local frame",
-        ));
+    if options.flatten != FlattenMode::None {
+        if sampling.frame == VoxelFrame::Local {
+            return Err(Error::invalid(
+                "flatten must read grids sampled under the world frame, not the local frame",
+            ));
+        }
+
+        if !sampling.posed {
+            return Err(Error::invalid(
+                "flatten must read grids sampled posed, which carry each part's rotation",
+            ));
+        }
     }
 
     let see_through = see_through_materials(&sampling.materials);
@@ -224,44 +233,45 @@ fn placed(sampling: &SdfSampling, kept: &[Vec<SdfCell>]) -> (Vec<ObjectCells>, V
     (objects, nodes)
 }
 
-/// One node for each root part on the root part's grid. Under
-/// [`FlattenMode::Nodes`] the node holds the object of each place at or below
-/// the root part. Under [`FlattenMode::Objects`] the node holds one object of
-/// those places' live cells, and a part placed later wins a cell.
+/// One node for each kept place, nested under the node of the nearest kept
+/// place above it. Under [`FlattenMode::Nodes`] the node holds an object for
+/// the place and each place flattened into it. Under [`FlattenMode::Objects`]
+/// it holds one object of their live cells, where a part placed later wins a
+/// cell.
 fn flattened(
     sampling: &SdfSampling,
     kept: &[Vec<SdfCell>],
     flatten: FlattenMode,
 ) -> Result<(Vec<ObjectCells>, Vec<PlaceNode>)> {
-    let mut roots: Vec<usize> = Vec::with_capacity(sampling.places.len());
+    let frames = PlaceFrame::of_places(&sampling.places, sampling.posed);
+
+    // The index of the kept place each place flattens into.
+    let mut owners: Vec<usize> = Vec::with_capacity(sampling.places.len());
 
     for (index, place) in sampling.places.iter().enumerate() {
-        if place.parent.is_some() && place.rotation != TyQuaternionF64::IDENTITY {
-            return Err(Error::invalid(format!(
-                "{}: flattening drops the part's node, which carries its rotation",
-                place.path.join("/"),
-            )));
-        }
-
-        roots.push(place.parent.map_or(index, |parent| roots[parent]));
+        owners.push(match place.parent {
+            Some(parent) if !frames[index].kept => owners[parent],
+            Some(_) | None => index,
+        });
     }
 
     let mut objects = Vec::new();
-    let mut nodes = Vec::new();
+    let mut nodes: Vec<PlaceNode> = Vec::new();
+    let mut place_nodes: HashMap<usize, usize> = HashMap::new();
 
-    for (root, place) in sampling.places.iter().enumerate() {
-        if place.parent.is_some() {
+    for (owner, place) in sampling.places.iter().enumerate() {
+        if !frames[owner].kept {
             continue;
         }
 
-        let name = place.path[0].clone();
+        let name = place.path.last().expect("a place has a part").clone();
         let lattice_offset = -place.pivot / sampling.voxel_size;
 
         let below: Vec<(&String, Vec<LiveCell>)> = sampling
             .places
             .iter()
             .enumerate()
-            .filter(|(index, _)| roots[*index] == root)
+            .filter(|(index, _)| owners[*index] == owner)
             .flat_map(|(_, place)| {
                 let part = place.path.last().expect("a place has a part");
 
@@ -284,7 +294,8 @@ fn flattened(
 
                 if volume > VoxObject::MAX_GRID_CELLS {
                     return Err(Error::invalid(format!(
-                        "{name}: flattened object must hold at most {} cells, not {volume}",
+                        "{}: flattened object must hold at most {} cells, not {volume}",
+                        place.path.join("/"),
                         VoxObject::MAX_GRID_CELLS,
                     )));
                 }
@@ -299,10 +310,31 @@ fn flattened(
             );
         }
 
+        let (parent, transform) = match place.parent {
+            Some(parent) => {
+                let holder = &sampling.places[owners[parent]];
+                let to_kept = frames[owner].to_kept;
+
+                (
+                    Some(place_nodes[&owners[parent]]),
+                    TyTransformF64 {
+                        position: (to_kept.position + to_kept.rotation * place.pivot
+                            - holder.pivot)
+                            / sampling.voxel_size,
+                        rotation: to_kept.rotation,
+                        ..TyTransformF64::IDENTITY
+                    },
+                )
+            }
+
+            None => (None, node_transform(sampling, place)),
+        };
+
+        place_nodes.insert(owner, nodes.len());
         nodes.push(PlaceNode {
             name,
-            parent: None,
-            transform: node_transform(sampling, place),
+            parent,
+            transform,
             object_indices: (first_object..objects.len()).collect(),
             lattice_offset,
         });
@@ -464,6 +496,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame,
+                posed: flatten != FlattenMode::None,
                 record_writes: false,
             },
         )
@@ -646,13 +679,68 @@ mod tests {
     }
 
     #[test]
-    fn flattening_a_rotated_part_errors() {
+    fn flattening_samples_a_rotated_part_at_its_pose_on_the_root_part_grid() {
+        let document = write(
+            &rotated_lid_main(),
+            VoxelFrame::World,
+            FillMode::Solid,
+            FlattenMode::Nodes,
+        );
+
+        // The turns carry the lid's 2x1x2 box from [1, 2, 1] about the pivot
+        // [2, 2, 2] onto x and y 1 to 3 and z 2 to 3.
+        assert_eq!(
+            objects(&document)[1],
+            "lid from [1, 1, 2] across 2x2x1: 4 voxels"
+        );
+    }
+
+    #[test]
+    fn a_flattened_joint_keeps_its_node_and_its_own_grid() {
+        let mut state = rotated_lid_main().into_state();
+        state.nodes[U32Id::from_u32(0).to_usize_id()].joint = true;
+        let main = SdfMain::new(state).unwrap();
+
+        let unflattened = write(&main, VoxelFrame::World, FillMode::Solid, FlattenMode::None);
+
+        for flatten in [FlattenMode::Nodes, FlattenMode::Objects] {
+            let document = write(&main, VoxelFrame::World, FillMode::Solid, flatten);
+            let lid = |document: &VoxMain| {
+                let (_, lid) = document
+                    .iter_hierarchy_nodes()
+                    .find(|(_, node)| node.name == "lid")
+                    .unwrap();
+                lid.transform
+            };
+
+            assert_eq!(lid(&document), lid(&unflattened), "{flatten:?}");
+            assert!(
+                objects(&document)
+                    .contains(&"lid from [-1, 0, -1] across 2x1x2: 4 voxels".to_owned()),
+                "{flatten:?}"
+            );
+        }
+
+        assert_eq!(
+            nodes(&write(
+                &main,
+                VoxelFrame::World,
+                FillMode::Solid,
+                FlattenMode::Objects
+            ))[0],
+            r#"model at [0, 0, 0] by 1: nodes ["lid"], objects ["model"]"#
+        );
+    }
+
+    #[test]
+    fn flattening_needs_posed_grids() {
         let sampling = sample(
             &DependenciesImpl,
-            &rotated_lid_main(),
+            &parts_main(),
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::World,
+                posed: false,
                 record_writes: false,
             },
         )
@@ -664,7 +752,7 @@ mod tests {
 
         assert_eq!(
             to_vox_main(&sampling, &options).unwrap_err().to_string(),
-            "model/lid: flattening drops the part's node, which carries its rotation"
+            "flatten must read grids sampled posed, which carry each part's rotation"
         );
     }
 
@@ -718,6 +806,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::Local,
+                posed: false,
                 record_writes: false,
             },
         )
@@ -746,6 +835,7 @@ mod tests {
             pivot: None,
             offset: None,
             rotation: Vec::new(),
+            joint: false,
             child_object_ids: vec![U32Id::from_u32(object)],
             child_node_ids: nodes.into_iter().map(U32Id::from_u32).collect(),
         };
@@ -777,6 +867,7 @@ mod tests {
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(1.0),
                 frame: VoxelFrame::World,
+                posed: true,
                 record_writes: false,
             },
         )
