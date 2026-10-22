@@ -359,11 +359,7 @@ impl Shape2dField {
                     factor: *factor,
                     pivot: pivot.unwrap_or(TyVector2F64::ZERO),
                 },
-                distance_factor: if factor.x == factor.y {
-                    factor.x
-                } else {
-                    factor.min_element()
-                },
+                distance_factor: factor.abs().min_element(),
             },
 
             SdfShape2d::Sector {

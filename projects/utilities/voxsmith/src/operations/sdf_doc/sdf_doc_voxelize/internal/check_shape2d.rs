@@ -117,9 +117,9 @@ pub fn check_shape2d(shape: &SdfShape2d) -> StdResult<(), String> {
         SdfShape2d::Scale { factor, .. } => {
             let check = ArgumentCheck::new("scale");
             check.expect(
-                factor.cmpgt(TyVector2F64::ZERO).all(),
+                factor.cmpne(TyVector2F64::ZERO).all(),
                 "factor",
-                "above zero on each axis",
+                "nonzero on each axis",
                 format!("[{}, {}]", factor.x, factor.y),
             )
         }

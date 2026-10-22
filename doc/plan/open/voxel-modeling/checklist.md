@@ -203,10 +203,11 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       `--vars-from` import other profiles' build variables. The variables land
       from the profile's imports, its `vars`, each `--vars-from`, and each
       `--var` in turn, a later variable replacing an earlier one of its name
-- [ ] **S26. Rotation.** Rotated shapes for finding 22:
+- [x] **S26. Rotation.** Rotated shapes for finding 22:
   1. Under `--flatten`, vxl samples a rotated part at its angle on the root
      part's grid. The sampling takes the part's rotation and offset as inputs
-  2. `flip` reflects a shape across axes without keeping the original
+  2. A negative `scale` factor reflects a shape across its axis without
+     keeping the original
   3. A part marked `joint` keeps its node under `--flatten` and voxelizes
      unrotated, leaving an animation a node to turn
 - [ ] **S27. Shared nodes.** A node the `.sdfj` document shares stays one voxj

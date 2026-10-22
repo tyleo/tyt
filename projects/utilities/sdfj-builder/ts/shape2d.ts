@@ -39,7 +39,10 @@ export class Shape2d {
     });
   }
 
-  /** Scales the shape by `factor` about `pivot`. */
+  /**
+   * Scales the shape by `factor` about `pivot`. A negative factor reflects its
+   * axis.
+   */
   scale(factor: number | Vec2, pivot?: Vec2): Shape2d {
     return new Shape2d({
       kind: "scale",

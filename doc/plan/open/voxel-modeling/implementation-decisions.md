@@ -474,3 +474,7 @@ table` lands `table` again over `tall`
    the joint's node takes every turn between it and the node above it
 6. With its lid marked a joint, `tavern` flattens into one object beside the
    lid's node, and the lid voxelizes as it does unflattened
+7. A reflection alone takes a negative `scale` factor instead of a `flip` call.
+   Sessions in four trial rounds tried `scale([-1, 1, 1])`. In a test of both
+   spellings, only `flip` left doubt about what `"xz"` reflects. A scale's
+   distance takes its factors' least magnitude

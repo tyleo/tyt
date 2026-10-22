@@ -589,11 +589,7 @@ impl Shape3dField {
                     factor: *factor,
                     pivot: pivot.unwrap_or(TyVector3F64::ZERO),
                 },
-                distance_factor: if factor.x == factor.y && factor.y == factor.z {
-                    factor.x
-                } else {
-                    factor.min_element()
-                },
+                distance_factor: factor.abs().min_element(),
             },
 
             SdfShape3d::Shell {
@@ -1893,6 +1889,22 @@ mod tests {
             GRID,
             1e-15,
             |point| 0.5 * ((point / factor).distance(TyVector3F64::new(0.2, 0.0, 0.0)) - 0.3),
+        );
+
+        // A negative factor reflects its axis and keeps the distance's sign.
+        assert_shape3d(
+            Vec::new(),
+            vec![
+                sphere(0.2, 0.0, 0.0, 0.15),
+                SdfShape3d::Scale {
+                    shape_id: id(0),
+                    factor: TyVector3F64::new(-2.0, 2.0, 2.0),
+                    pivot: None,
+                },
+            ],
+            GRID,
+            1e-15,
+            |point| point.distance(TyVector3F64::new(-0.4, 0.0, 0.0)) - 0.3,
         );
     }
 

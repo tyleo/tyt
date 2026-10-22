@@ -48,7 +48,10 @@ export class Shape3d {
     });
   }
 
-  /** Scales the shape by `factor` about `pivot`. */
+  /**
+   * Scales the shape by `factor` about `pivot`. A negative factor reflects its
+   * axis.
+   */
   scale(factor: number | Vec3, pivot?: Vec3): Shape3d {
     return new Shape3d({
       kind: "scale",

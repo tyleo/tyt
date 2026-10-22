@@ -482,15 +482,18 @@ interface Shape3d {
    default to `[0, 0, 0]`.
 2. `orient` turns the shape about `pivot` until the direction `from` points
    along `to`. A `torus` or a `lathe` can then point along any line.
-3. `mirror` adds the shape's reflection across `center` along each axis in
+3. `scale` multiplies the shape's offset from `pivot` by `factor` on each axis.
+   A negative factor reflects that axis and keeps only the reflection:
+   `scale([-1, 1, 1])` turns a left side into a right one.
+4. `mirror` adds the shape's reflection across `center` along each axis in
    `axes`. Each letter flips one axis. `"x"` copies a left side to the right,
    and `leg.mirror("xz")` makes four legs from one. A shape crossing a mirror
-   plane keeps both halves.
-4. `repeat` makes `count` copies along each axis and offsets the copy at
+   plane keeps both halves. A reflection alone takes a negative `scale`.
+5. `repeat` makes `count` copies along each axis and offsets the copy at
    `[i, j, k]` by `[i * step[0], j * step[1], k * step[2]]`. The copy at
    `[0, 0, 0]` stays put. Five posts along z take
    `repeat([0, 0, s], [1, 1, 5])`.
-5. `repeatPolar` makes `count` copies turned evenly around `axis` through
+6. `repeatPolar` makes `count` copies turned evenly around `axis` through
    `center`.
 
 A `Shape2d` takes the same methods in the plane, plus the

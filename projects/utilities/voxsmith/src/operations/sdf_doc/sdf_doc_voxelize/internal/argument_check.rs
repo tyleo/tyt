@@ -57,6 +57,16 @@ impl ArgumentCheck {
         )
     }
 
+    /// Errors when a component of `value` reads zero.
+    pub fn each_nonzero(&self, argument: &str, value: TyVector3F64) -> StdResult<(), String> {
+        self.expect(
+            value.cmpne(TyVector3F64::ZERO).all(),
+            argument,
+            "nonzero on each axis",
+            vector(value),
+        )
+    }
+
     /// Errors unless `value` reads zero or more.
     pub fn at_least_zero(&self, argument: &str, value: f64) -> StdResult<(), String> {
         self.expect(value >= 0.0, argument, "zero or more", value)

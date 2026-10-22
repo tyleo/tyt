@@ -213,7 +213,7 @@ pub fn check_shape3d(
         }
 
         SdfShape3d::Scale { factor, .. } => {
-            ArgumentCheck::new("scale").each_above_zero("factor", *factor)
+            ArgumentCheck::new("scale").each_nonzero("factor", *factor)
         }
 
         SdfShape3d::Shell { thickness, .. } => {

@@ -307,9 +307,9 @@ where `abs(a - b) >= r`.
 ### Transforms
 
 A transform evaluates its child at the point mapped back through its inverse.
-Translation, rotation, and `orient` keep the distance exact. A uniform scale `s`
-returns `s * d(p / s)`. A non-uniform scale returns `min(s) * d(p / s)` and
-reads short.
+Translation, rotation, and `orient` keep the distance exact. A scale `s` returns
+`min(|s|) * d(p / s)`. The result reads exact when every factor shares one
+magnitude and short otherwise. A negative factor reflects its axis.
 
 `orient` normalizes its two directions once and builds its rotation from them
 with the trig-free alignment from
