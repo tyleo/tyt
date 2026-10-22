@@ -70,7 +70,6 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
             brick.extent.xyz,
             origin,
             direction,
-            candidate,
         );
 
         // Naga places a `rayQueryGenerateIntersection` argument's

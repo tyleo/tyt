@@ -110,7 +110,7 @@ code-level choices in
          skips an empty node by an f32 guess of its exit cell, which wrapping
          multiply-adds and an exact sign check correct. B1's ids gain the
          tree walk, which must meet B1's line on every scene
-- [ ] **S8. B2 on Quest.** The run measures ray rate and step cost with B2's
+- [x] **S8. B2 on Quest.** The run measures ray rate and step cost with B2's
       setup. The rate decides which B3 arms get built.
       1. A fixed-N-step loop reads a storage buffer, a 3D texture, a 2D
          array, and u32-pair masks. Each pass times one layout at one N over

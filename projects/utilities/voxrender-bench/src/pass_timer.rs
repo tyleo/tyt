@@ -15,9 +15,6 @@ use wgpu::{
 /// The passes before the timer keeps samples.
 const WARM_UP: u32 = 300;
 
-/// Each kernel's samples in a window.
-const MEASURED: usize = 600;
-
 /// The passes whose timestamps can be in flight at once.
 const SLOTS: u32 = 8;
 
@@ -31,6 +28,8 @@ pub struct PassTimer {
     kernels: Vec<Kernel>,
 
     summary: BenchSummary,
+
+    measured: usize,
 
     query_set: QuerySet,
 
@@ -105,6 +104,7 @@ impl PassTimer {
         let BenchKernels {
             title,
             kernels,
+            measured,
             summary,
         } = match bench {
             TimedBench::B1 => b1_kernels(device, width, height)?,
@@ -116,7 +116,7 @@ impl PassTimer {
             .map(|(label, work)| Kernel {
                 label,
                 work,
-                samples: Vec::with_capacity(MEASURED),
+                samples: Vec::with_capacity(measured),
             })
             .collect();
 
@@ -151,6 +151,7 @@ impl PassTimer {
             title,
             kernels,
             summary,
+            measured,
             query_set,
             resolved,
             slots,
@@ -248,15 +249,15 @@ impl PassTimer {
         if self
             .kernels
             .iter()
-            .any(|kernel| kernel.samples.len() < MEASURED)
+            .any(|kernel| kernel.samples.len() < self.measured)
         {
             return Ok(None);
         }
 
         let mut lines = vec![
             format!(
-                "{}, window {}: {MEASURED} passes per kernel over two {} by {} eyes",
-                self.title, self.windows, self.width, self.height
+                "{}, window {}: {} passes per kernel over two {} by {} eyes",
+                self.title, self.windows, self.measured, self.width, self.height
             ),
             String::new(),
             "| Kernel | p50 ms | p99 ms |".to_owned(),
@@ -372,7 +373,7 @@ impl PassTimer {
             .expect("a mapped slot is in flight");
         let samples = &mut self.kernels[kernel].samples;
 
-        if counts && samples.len() < MEASURED {
+        if counts && samples.len() < self.measured {
             samples.push(ticks as f64 * self.period / 1e6);
         }
 

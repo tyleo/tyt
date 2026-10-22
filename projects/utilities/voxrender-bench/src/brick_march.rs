@@ -4,7 +4,7 @@ pub enum BrickMarch {
     /// The tree walk over the brick along the placement's integer pixel ray.
     Integer,
 
-    /// An f32 DDA over the brick along the hardware's ray.
+    /// An f32 DDA over the brick along the world ray.
     Float,
 }
 

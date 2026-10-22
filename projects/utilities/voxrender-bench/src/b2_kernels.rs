@@ -71,6 +71,8 @@ pub fn b2_kernels(device: &Device, queue: &Queue, width: u32, height: u32) -> Re
     Ok(BenchKernels {
         title: "B2 times",
         kernels,
+        // Keeps a worn run short. Most kernels take longer than a frame.
+        measured: 120,
         summary: Box::new(move |medians, rays| {
             let (steps, trace_medians) = medians.split_at(StepLayout::ALL.len() * COUNTS.len());
             let mut lines = step_lines(steps, rays);

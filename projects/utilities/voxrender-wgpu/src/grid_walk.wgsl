@@ -216,3 +216,9 @@ fn error_at(cell: vec3<i32>, origin: vec3<i32>, direction: vec3<i32>) -> vec3<i3
         next.y * direction.z - next.z * direction.y,
     );
 }
+
+fn rotate(rotation: vec4<f32>, vector: vec3<f32>) -> vec3<f32> {
+    let twice = 2.0 * cross(rotation.xyz, vector);
+
+    return vector + rotation.w * twice + cross(rotation.xyz, twice);
+}

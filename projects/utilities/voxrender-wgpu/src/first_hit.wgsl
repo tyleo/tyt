@@ -109,12 +109,6 @@ fn toward(origin: vec3<i32>, point: vec3<i32>) -> Ray {
     return Ray(origin, direction, end, true);
 }
 
-fn rotate(rotation: vec4<f32>, vector: vec3<f32>) -> vec3<f32> {
-    let twice = 2.0 * cross(rotation.xyz, vector);
-
-    return vector + rotation.w * twice + cross(rotation.xyz, twice);
-}
-
 // The fixed point `origin` in the grid of `source`, carried through world
 // space into the grid of `destination` in f32.
 fn carry(origin: vec3<i32>, source: Placement, destination: Placement) -> vec3<i32> {

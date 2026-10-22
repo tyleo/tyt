@@ -9,7 +9,6 @@ fn march(
     extent: vec3<i32>,
     world_origin: vec3<f32>,
     world_direction: vec3<f32>,
-    candidate: RayIntersection,
 ) -> Hit {
     let placement = placements[index];
 

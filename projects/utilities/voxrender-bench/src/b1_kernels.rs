@@ -36,6 +36,7 @@ pub fn b1_kernels(device: &Device, width: u32, height: u32) -> Result<BenchKerne
     Ok(BenchKernels {
         title: "B1 times",
         kernels,
+        measured: 600,
         summary: Box::new(summary),
     })
 }

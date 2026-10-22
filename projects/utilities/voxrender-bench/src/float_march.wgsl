@@ -1,5 +1,5 @@
-// A candidate's march: an f32 DDA over the brick along the hardware's ray in
-// the placement's grid. It crosses a region of one value in a single jump. Its
+// A candidate's march: an f32 DDA over the brick along the world ray in the
+// placement's grid. It crosses a region of one value in a single jump. Its
 // distances are in the world ray's units.
 
 fn march(
@@ -10,12 +10,14 @@ fn march(
     extent: vec3<i32>,
     world_origin: vec3<f32>,
     world_direction: vec3<f32>,
-    candidate: RayIntersection,
 ) -> Hit {
     let placement = placements[index];
     let grid = placement.bounds.xyz;
-    let origin = candidate.world_to_object * vec4<f32>(world_origin, 1.0);
-    let direction = candidate.world_to_object * vec4<f32>(world_direction, 0.0);
+    // Adreno's `world_to_object` gives grid rays that miss, so the march
+    // carries the world ray through the placement's transform.
+    let inverse = vec4<f32>(-placement.rotation.xyz, placement.rotation.w);
+    let origin = rotate(inverse, world_origin - placement.position.xyz) / placement.scale.xyz;
+    let direction = rotate(inverse, world_direction) / placement.scale.xyz;
     let far_corner = corner + extent;
 
     // The span of the ray inside the brick, and the axis it enters across, or

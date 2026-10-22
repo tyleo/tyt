@@ -48,7 +48,7 @@ about 22 seconds, and the session opens after it. The session starts only
 while someone wears the headset. The app logs B0's visibility mask once the
 session has focus. The app logs the first window of frame times about ten
 seconds after the session starts, then another every seven seconds. A window
-of B2's times takes 600 timed passes per kernel after a warm-up of 300, and
+of B2's times takes 120 timed passes per kernel after a warm-up of 300, and
 the kernels slow the frame rate while they run.
 
 ## Lint

@@ -216,3 +216,125 @@ vectors by a computed axis.
    research's doubt about integer throughput on Adreno does not apply to
    this walk
 4. B1's NVIDIA, AMD, and phone runs wait for those devices
+
+## B2 Quest 3, 2026-10-22
+
+The step cost of four memory layouts and the primary ray rates of the tree
+walk and hardware ray query, on the headset and on this Mac.
+
+- Device, GPU, wgpu, and openxr: as in B0
+- Command: the run steps in `voxrender-bench-quest`'s README. B1's ids run
+  before the session opens. The times run worn. The slowest trace holds a
+  frame for about 160 ms
+- GPU level: 4. The run sampled no clock
+- Temperature: 35 C on the SoC sensor right after the window
+- This Mac: the device of B1 desktop, through
+  `cargo run --release -p voxrender-bench-desktop -- b2-times` and
+  `cargo run --release -p voxrender-bench-desktop -- b1 --size 256`
+
+**Ids.** B1 gained the ray query's integer and float marches over 4^3 and
+16^3 bricks. A TLAS of placements finds the candidate bricks that each march
+walks. The float march carries the world ray into the grid through
+the placement's transform. The counts are Quest's.
+
+| Scene | Tree id mismatches | Tree shadow mismatches | Integer 4^3 id mismatches | Integer 16^3 id mismatches | Float 4^3 id flips | Float 16^3 id flips |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| cube | 0 | 0 | 0 | 0 | 3 | 3 |
+| glass | 0 | 0 | 0 | 0 | 5 | 5 |
+| glow | 0 | 0 | 0 | 0 | 5 | 5 |
+| l-shape | 0 | 0 | 0 | 0 | 8 | 8 |
+| room | 0 | 0 | 0 | 0 | 6 | 6 |
+| spot-room | 0 | 0 | 0 | 0 | 6 | 6 |
+| two-placements | 0 | 0 | 0 | 0 | 1 | 1 |
+| precision views | 0 | 0 | 0 | 0 | 176 | 170 |
+| precision shadows, sparse | 0 | 0 | 0 | 0 | 55 | 54 |
+| precision shadows, dense | 0 | 0 | 0 | 0 | 55 | 55 |
+| precision shadows, stairs | 0 | 0 | 0 | 0 | 38 | 38 |
+| S1 art room | 0 | 0 | 0 | 0 | 130 | 130 |
+| S2 city | 0 | 1 | 0 | 0 | 312 | 312 |
+| S3 greenhouse | 0 | 0 | 0 | 0 | 326 | 326 |
+| S4 foliage | 0 | 0 | 0 | 0 | 96 | 96 |
+| S5 grazing floor | 0 | 0 | 0 | 0 | 715 | 715 |
+
+The integer marches match the reference on every pixel of every scene. The
+float marches flip 0.10% of S1's pixels, 0.24% of S2's, 0.17% of S3's, and
+0.55% of S5's. This Mac's float counts fall within 1.2% of Quest's. Its
+integer and tree counts match Quest's except on S2.
+
+On Quest, one of S2's shadow samples mismatches for the integer, float, and
+tree walks alike. The three walks see corner 3 of pixel (111, 114) in view 1
+shadowed, where the reference rendered on the headset sees it lit. This Mac's
+walks and reference agree there. The share stays far under B1's line.
+
+**Step loops.** Each pass times one layout at one step count over two 1680
+by 1760 eyes. 300 passes warm up, and a window holds 120 per kernel. Times
+are in ms, from one window on each device.
+
+| Kernel | Quest p50 | Quest p99 | Mac p50 | Mac p99 |
+| --- | ---: | ---: | ---: | ---: |
+| storage buffer, 8 steps | 4.616 | 6.861 | 0.589 | 0.726 |
+| storage buffer, 16 steps | 11.282 | 12.719 | 1.159 | 1.327 |
+| storage buffer, 32 steps | 22.372 | 23.471 | 2.299 | 2.555 |
+| 3D texture, 8 steps | 6.760 | 7.036 | 0.571 | 0.574 |
+| 3D texture, 16 steps | 11.929 | 12.924 | 1.119 | 1.259 |
+| 3D texture, 32 steps | 28.090 | 28.923 | 2.214 | 2.489 |
+| 2D array, 8 steps | 5.401 | 8.006 | 0.573 | 0.709 |
+| 2D array, 16 steps | 14.217 | 15.885 | 1.121 | 1.281 |
+| 2D array, 32 steps | 26.068 | 28.595 | 2.219 | 2.363 |
+| u32-pair masks, 8 steps | 9.494 | 9.747 | 0.691 | 0.828 |
+| u32-pair masks, 16 steps | 16.208 | 18.819 | 1.361 | 1.634 |
+| u32-pair masks, 32 steps | 35.889 | 37.789 | 2.708 | 2.867 |
+
+Each layout's least-squares line through its p50s against the step count:
+
+| Layout | Quest ms per step | Quest Gsteps/s | Mac ms per step | Mac Gsteps/s |
+| --- | ---: | ---: | ---: | ---: |
+| storage buffer | 0.7332 | 8.07 | 0.0712 | 83.01 |
+| 3D texture | 0.9061 | 6.53 | 0.0685 | 86.36 |
+| 2D array | 0.8439 | 7.01 | 0.0686 | 86.20 |
+| u32-pair masks | 1.1184 | 5.29 | 0.0840 | 70.37 |
+
+Each Quest line's intercept falls between -1.3 and -0.3 ms because 8 steps
+cost less per step than 16 or 32.
+
+**Traces.** The tree walk and the four ray query arms trace S1 and S5 without
+their lights. Both eyes trace the scene's view. The traces share the step
+loops' window.
+
+| Trace | Quest p50 | Quest Grays/s | Mac p50 | Mac Grays/s |
+| --- | ---: | ---: | ---: | ---: |
+| tree walk, S1 | 161.725 | 0.037 | 11.171 | 0.529 |
+| ray query, integer march, 4^3, S1 | 83.260 | 0.071 | 8.888 | 0.665 |
+| ray query, integer march, 16^3, S1 | 103.242 | 0.057 | 10.287 | 0.575 |
+| ray query, float march, 4^3, S1 | 78.567 | 0.075 | 7.156 | 0.826 |
+| ray query, float march, 16^3, S1 | 75.778 | 0.078 | 6.755 | 0.875 |
+| tree walk, S5 | 19.469 | 0.304 | 1.288 | 4.592 |
+| ray query, integer march, 4^3, S5 | 51.982 | 0.114 | 8.366 | 0.707 |
+| ray query, integer march, 16^3, S5 | 33.703 | 0.175 | 4.330 | 1.366 |
+| ray query, float march, 4^3, S5 | 53.033 | 0.112 | 7.084 | 0.835 |
+| ray query, float march, 16^3, S5 | 38.138 | 0.155 | 3.862 | 1.531 |
+
+The tree walk takes 18.6 loop iterations per ray on S1 and 2.7 on S5. That
+is 0.68 and 0.83 Giterations/s on Quest, and 9.83 and 12.49 on this Mac. One
+iteration costs about 12 storage-buffer steps on Quest and 8.4 on this Mac.
+The Quest p99s sit within 6% of the p50s.
+
+**Outcomes.**
+
+1. R falls under 0.25 Grays/s on S1 and between 0.25 and 0.5 on S5. The best
+   S1 rate is 0.078 Grays/s, from the ray query's float march over 16^3
+   bricks. The best S5 rate is 0.304, from the tree walk. Under B2's
+   threshold, the march serves only glass and shadows
+2. At those rates, 3.5 ms marches about 4.6% of the default frame's 5.91 M
+   pixels on S1 and 18% on S5
+3. B3 builds (d), the greedy mesh, and (c), the hybrid, which reports its
+   marched pixel share. Arms (a), (b), and (e) march every pixel, so B3 drops
+   them
+4. Risk 2 holds. A storage-buffer step costs about 104 lane-cycles at
+   545 MHz over 1536 lanes, where the research's ALU figure allowed 100 to
+   170 for a whole hierarchical step
+5. Bricks stay in storage buffers. They lead the 2D array by 15% and the 3D
+   texture by 24% on Quest. A u32-pair mask step costs 1.5x a
+   storage-buffer step
+6. On Quest the ray query beats the tree walk by 2.1x on S1 and loses by
+   1.7x on S5. Both stay candidates for the shadow march B5 measures

@@ -340,7 +340,7 @@ they land.
 - A ray-query candidate marches its brick two ways, and the run times both:
   1. The integer march runs the tree walk, cut to the brick, along the
      placement's integer pixel ray
-  2. The float march runs an f32 DDA along the hardware's ray in the grid.
+  2. The float march runs an f32 DDA along the world ray in the grid.
      It crosses a region of one value in a single jump, as the tree walk does
 - The faster march that keeps B1's line wins. Both stay in the bench, so the
   choice can rerun. B1 judges the integer marches and counts the float
@@ -359,3 +359,8 @@ they land.
   wgpu's experimental token
 - Naga 30 places a `rayQueryGenerateIntersection` argument's evaluation
   after the call. The shader evaluates the distance before its `if`
+- The float march carries the world ray into the grid through the
+  placement's transform. On Quest, the grid ray from the candidate's
+  `world_to_object` missed 15 to 84% of each scene's pixels
+- B2's window holds 120 passes per kernel, where B1's holds 600, to keep a
+  worn run short. Most of B2's 22 kernels take longer than a frame

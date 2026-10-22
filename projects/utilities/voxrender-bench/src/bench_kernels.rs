@@ -8,6 +8,9 @@ pub struct BenchKernels {
     /// Each kernel's label and work, in pass order.
     pub kernels: Vec<(String, KernelWork)>,
 
+    /// Each kernel's timed passes in a window.
+    pub measured: usize,
+
     /// The report's closing lines.
     pub summary: BenchSummary,
 }
