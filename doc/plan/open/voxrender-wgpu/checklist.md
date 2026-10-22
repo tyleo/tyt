@@ -122,12 +122,26 @@ code-level choices in
          placements. Each object's BLAS holds one AABB per non-empty brick,
          at 4^3 and at 16^3. A candidate marches its brick to the first hit.
          B1's ids check the hits against the reference
-      4. One worn run times all three. The report lands in benchmarks.md.
-         R picks the B3 arms
+      4. One worn run times all three. The report lands in benchmarks.md
+- [ ] **S9. A faster march on Quest.** B2's first rates come from
+      first-draft code. S9 raises them as far as it can before R picks the
+      B3 arms.
+      1. Industry research finds the levers that cut each ray's cost or the
+         rays a frame needs. The research ranks the levers into an ordered
+         list of experiments. The report lands in `reference/`
+      2. Profiles of the tree walk and the step loop on the desktop and on
+         Quest show where the time goes
+      3. The experiments rework the tree walk, the 64-tree, and the ray
+         query march, one change at a time. Each change is timed on the
+         desktop through `b2-times`. A change that wins stays. One short worn
+         run confirms a batch on Quest. B1's ids check every change against
+         the reference
+      4. A final worn run re-times B2 with the improved code. The report
+         lands in benchmarks.md. R picks the B3 arms
 
 ## Later
 
-The steps after S8 get their detail when S8 lands. They run in this order:
+The steps after S9 get their detail when S9 lands. They run in this order:
 
 1. The stereo view in the reference: two off-axis frusta and a head pose
 2. S6, the moving scene, joins the bench scenes. Its motion is a scripted

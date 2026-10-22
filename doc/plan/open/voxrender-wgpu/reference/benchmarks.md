@@ -327,9 +327,9 @@ The Quest p99s sit within 6% of the p50s.
    threshold, the march serves only glass and shadows
 2. At those rates, 3.5 ms marches about 4.6% of the default frame's 5.91 M
    pixels on S1 and 18% on S5
-3. B3 builds (d), the greedy mesh, and (c), the hybrid, which reports its
-   marched pixel share. Arms (a), (b), and (e) march every pixel, so B3 drops
-   them
+3. R picks B3's arms after S9 tries to raise these rates. At the rates
+   above, B3 would build only (d), the greedy mesh, and (c), the hybrid,
+   because (a), (b), and (e) march every pixel
 4. Risk 2 holds. A storage-buffer step costs about 104 lane-cycles at
    545 MHz over 1536 lanes, where the research's ALU figure allowed 100 to
    170 for a whole hierarchical step
