@@ -44,11 +44,12 @@ Three pages specify the pipeline:
    lists every call a model file can make, with its signature and its effect in
    a line or two. It stands alone as the context an agent loads before writing a
    model.
-2. [Model evaluation](../../../ref/sdf-doc/model-evaluation.md) sets exactly
-   what each call computes, for the implementations to follow.
-3. The
+2. The
    [sdfj format](../../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md)
-   sets the document the builder writes and vxl reads.
+   sets the document the builder writes and what each entry computes at a
+   point.
+3. [Model evaluation](../../../ref/sdf-doc/model-evaluation.md) sets how vxl
+   builds the document and samples it onto voxels.
 
 ## Shapes
 
@@ -230,9 +231,9 @@ solves them ahead of time rather than a fix at a time:
    closed set keeps the output vetted and lets vxl evaluate every operator in
    Rust.
 5. Patterns pick among materials and never blend colors.
-6. The API splits across two pages. The modeling API serves the agent writing a
-   model, and model evaluation serves the implementations. The agent loads only
-   the first.
+6. The modeling API serves the agent writing a model, and the sdfj format and
+   model evaluation serve the implementations. The agent loads only the modeling
+   API.
 7. Mesh CSG stays out. Building a `.glb` for `vxl mesh-doc voxelize` works today
    but cannot write per-voxel patterns and loses detail through the mesh.
 8. The builder only records. A model's calls become an `.sdfj` document, which

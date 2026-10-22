@@ -6,9 +6,9 @@ use branded_id::IteratorExt;
 use sdfcore::{SdfShape3d, SdfState, SdfStep};
 use std::f64::consts::PI;
 
-/// Runs model evaluation's checks that read the boxes in `shapes`. An error
-/// starts with the path of the first step in `paths` that reaches the failing
-/// entry.
+/// Runs the sdfj format's validation rules that read the boxes in `shapes`.
+/// An error starts with the path of the first step in `paths` that reaches the
+/// failing entry.
 pub fn check_shape_boxes(state: &SdfState, shapes: &SdfShapes, paths: &EntryPaths) -> Result<()> {
     for (shape3d_id, shape) in state.shapes3d.iter().enumerate_ids() {
         let checked = match shape {

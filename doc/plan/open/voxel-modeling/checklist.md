@@ -7,7 +7,9 @@ Code-level choices go in an `implementation-decisions.md` beside this file.
 
 - The builder only records the model. Every check the `.sdfj` document can carry
   runs in vxl. Every voxj document vxl writes passes `vxl vox-doc validate`.
-- The [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md)
+- The [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md),
+  the
+  [sdfj format](../../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md),
   and [model evaluation](../../../ref/sdf-doc/model-evaluation.md) lead. A
   change to the commands' surface or behavior lands in them in the same step.
 - The builder has no dependencies and no install step. The builder runs under
@@ -219,7 +221,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   3. `--flatten` still expands every place
   4. The report keeps a line per place
   5. Decision 18 drops "Each place writes a node"
-- [ ] **S28. Neutral sdfj spec.** `sdf-json-file-format.md` sets the format
+- [x] **S28. Neutral sdfj spec.** `sdf-json-file-format.md` sets the format
       for any tool, in the style of the voxel json spec:
   1. The spec opens with its design objectives and coordinate system and
      mentions neither vxl nor the builder
@@ -233,12 +235,19 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   5. The builder's writing rules move to the builder's README. Model
      evaluation keeps vxl's settings, libraries, sampling, arithmetic, bounds,
      grid, voxj document, report, and checks
-- [ ] **S29. Slash warnings.** A voxcore check lists the nodes and objects
+- [ ] **S29. Builder API.** The sdfj-builder README becomes the official
+      reference for the TypeScript API:
+  1. The README states how the builder takes a TypeScript model and writes an
+     `.sdfj` document
+  2. The README lists every call with its signature and effect. A reference
+     to the calls that sits elsewhere moves there, and the other docs point to
+     it
+- [ ] **S30. Slash warnings.** A voxcore check lists the nodes and objects
       whose names hold `/`, which makes their joined paths ambiguous. vxl runs
       the check after every conversion into voxcore, from a file read or from a
       voxelize, and warns with a pointer to `--select-index`. Names pass
       through unchanged
-- [ ] **S30. New calls.** More calls the rounds built by hand:
+- [ ] **S31. New calls.** More calls the rounds built by hand:
   1. `text` lays out a string as a 2D shape for finding 47. The font comes
      from a file or an installed font that a flag or `.vxlconfig` provides,
      never from vxl. The build stores each glyph used as an exact outline of
@@ -246,7 +255,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   2. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
   3. `random` gives the model a seeded generator for placements and sizes for
      findings 26 and 91
-- [ ] **S31. Round 7 fixes.** Answer round 7's
+- [ ] **S32. Round 7 fixes.** Answer round 7's
       [findings](trials-round-7.md#findings) before the next round:
   1. The review sheet keeps `<stem>.png` whatever views the command adds for
      finding 126
@@ -258,5 +267,5 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   4. `coat` takes a slope limit for finding 135, and `gradient` takes its range
      in either order for finding 136
   5. The library's `oak` stays apart from `pine` for finding 13
-- [ ] **S32. Round 8.** Run the prompts after S20 to S31 and log the round
+- [ ] **S33. Round 8.** Run the prompts after S20 to S32 and log the round
       beside round 7.

@@ -9,9 +9,9 @@ use branded_id::{IdVec, IteratorExt, U32Id};
 use sdfcore::{BSdfShape3d, BSdfStep, SdfShape3d, SdfState, SdfStep};
 use std::collections::HashSet;
 
-/// Runs model evaluation's checks of the entries' arguments and of the names
-/// over `state`, whose places are `places`. An error starts with the path of
-/// the first step in `paths` that reaches the failing entry.
+/// Runs the sdfj format's validation of the entries' arguments and of the
+/// names over `state`, whose places are `places`. An error starts with the
+/// path of the first step in `paths` that reaches the failing entry.
 pub fn check_document(state: &SdfState, places: &[SdfPlace], paths: &EntryPaths) -> Result<()> {
     let at = |path: String| move |message: String| Error::invalid(format!("{path}: {message}"));
 

@@ -5,8 +5,8 @@ measured in meters. Its code runs once and returns a list of steps.
 `vxl sdf-doc build` records the steps as an `.sdfj` document.
 `vxl sdf-doc voxelize` samples the `.sdfj` document on a voxel grid and writes
 voxj. This page lists everything a model file can use and stands alone as the
-context for writing one.
-[Model evaluation](https://github.com/tyleo/tyt/blob/main/doc/ref/sdf-doc/model-evaluation.md)
+context for writing one. The
+[sdfj format](https://github.com/tyleo/tyt/blob/main/projects/sdf-formats/sdfj/docs/sdf-json-file-format.md)
 sets exactly what each call computes.
 
 ## Running

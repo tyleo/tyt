@@ -31,8 +31,8 @@ impl BendMap {
     ///
     /// # Panics
     ///
-    /// When `along` and `toward` lie on one axis, which model evaluation's
-    /// checks rule out.
+    /// When `along` and `toward` lie on one axis, which the sdfj format's
+    /// validation rules out.
     pub fn new(
         along: TyAxis3,
         toward: SdfSide,

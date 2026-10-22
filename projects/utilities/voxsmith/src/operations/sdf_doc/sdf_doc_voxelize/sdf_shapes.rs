@@ -5,7 +5,7 @@ use branded_id::{IdVec, U32Id};
 use sdfcore::{BSdfShape2d, BSdfShape3d, SdfMain};
 use ty_math::{TyVector2F64, TyVector3F64};
 
-/// A model's shapes, ready to evaluate at any point by model evaluation's
+/// A model's shapes, ready to evaluate at any point by the sdfj format's
 /// distances.
 #[derive(Clone, Debug)]
 pub struct SdfShapes {
@@ -24,7 +24,7 @@ impl SdfShapes {
     ///
     /// # Panics
     ///
-    /// When a shape's arguments fail model evaluation's checks.
+    /// When a shape's arguments fail the sdfj format's validation.
     pub fn new(main: &SdfMain) -> Self {
         let state = main.state();
 
