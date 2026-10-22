@@ -584,23 +584,24 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
 1. Each root part writes a root node at its pivot, in meters, that scales by `g`
    on every axis. Coordinates under a root node count voxels, and the placed
    document therefore measures meters.
-2. Under `--frame world`, each place of a part writes one object holding the
-   place's live cells. Under `--frame local`, each part writes one object
-   holding the part's live cells, and every place shares the object. Under
-   `--flatten objects`, each root part and joint instead writes one object
-   holding the live cells of every part at or below it that no lower joint
-   claims. Where two parts cover one cell, the part placed later wins. An object
-   takes its part's name. The object's `bounds` wrap its cells tightly. A grid
-   with no live cell writes no object.
-3. Each place of a part writes a node named after the part, and the nodes nest
-   as the places do. Every node below a root node takes the position
+2. Each part writes one object holding the live cells of its first place, and
+   every place shares the object. Under `--flatten nodes`, each place writes an
+   object holding the place's live cells. Under `--flatten objects`, each root
+   part and joint instead writes one object holding the live cells of every part
+   at or below it that no lower joint claims. Where two parts cover one cell,
+   the part placed later wins. An object takes its part's name. The object's
+   `bounds` wrap its cells tightly. A grid with no live cell writes no object.
+3. Each part writes one node named after the part. The node of each part holding
+   it lists the node. Every node below a root node takes the position
    `(pivot - parentPivot) / g` and a scale of 1. Each pivot there sits where the
    offsets on its path move it. Every node takes its part's `rotation`, whose
-   axis rotations apply about the parent's axes in list order. Under
-   `--flatten nodes` or `--flatten objects`, only the root parts and joints
-   write nodes. Each such node holds the objects of the parts it claims. A
-   joint's node nests under the node above it and takes every rotation between
-   the two.
+   axis rotations apply about the parent's axes in list order. voxelize errors
+   on a part in several places unless each place sits as far from its parent's
+   pivot as the first. Under `--frame world`, each place also has to sit a whole
+   number of voxels from the first. Under `--flatten nodes` or
+   `--flatten objects`, only the root parts and joints write nodes, one for each
+   place. Each such node holds the objects of the parts it claims. A joint's
+   node nests under the node above it and takes every rotation between the two.
 4. With `f = -(pivot + o) / g` and the pivot in the part's frame, a part's node
    places the part's object with an `origin` of the object's min cell index plus
    `f` when `f` is whole on every axis. Otherwise a child node named `voxels` at
@@ -616,7 +617,7 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
    distinct values. The palette's materials follow the order a raster scan first
    meets them, object by object, with x outermost and z innermost.
 7. Nodes and objects follow the order the places run in, from the first root
-   part. A shared object comes at its part's first place.
+   part. A shared node and its object come at the part's first place.
 8. The document carries no `editState` and no `ext`.
 
 ## The report

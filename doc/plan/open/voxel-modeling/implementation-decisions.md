@@ -478,3 +478,17 @@ table` lands `table` again over `tall`
    Sessions in four trial rounds tried `scale([-1, 1, 1])`. In a test of both
    spellings, only `flip` left doubt about what `"xz"` reflects. A scale's
    distance takes its factors' least magnitude
+
+## S27. Shared nodes
+
+1. A shared part's parents share one pivot because a voxj node takes one
+   position from its parent's pivot. voxelize errors on parents whose pivots
+   differ. The hint suggests one pivot or a fresh part per place
+2. Under `--frame world`, a place a whole number of voxels from its part's
+   first place takes the first place's grids moved by those voxels instead of
+   sampling again. A place a fraction of a voxel off samples on its own
+3. The fractional place errors only as voxelize writes the voxj. The report
+   under `--frame local` samples again under the world frame and has to read
+   such places. The pivot error comes at the same point
+4. The hint reads "sample under the local frame" because voxsmith's errors
+   mention no vxl flag

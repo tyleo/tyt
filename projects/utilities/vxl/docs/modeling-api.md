@@ -35,9 +35,8 @@ writes a `.voxj` document:
 3. `--fill-mode surface` keeps only the cells that show: a hollow shell one
    cell thick, plus the opaque cells seen through glass or water. The default
    `--fill-mode solid` keeps every filled cell
-4. `--frame local` voxelizes each [part](#parts) once, and every place shares
-   the part's object. The default `--frame world` samples every part on one
-   lattice and writes an object for each place
+4. The default `--frame world` samples every [part](#parts) on one lattice.
+   `--frame local` samples each part in its own frame
 5. `--report` prints the [report](#report) and writes it to `table-report.txt`
 
 ### Profiles
@@ -214,8 +213,8 @@ lids take parts when the prompt asks for pieces that move or separate objects.
    Under `vxl sdf-doc voxelize --flatten`, a joint keeps its node and voxelizes
    unrotated. Every other part there voxelizes at its pose on the grid of the
    joint or root part it flattens into
-8. A step or a part can sit in several lists. A part writes a node at each
-   place, and under `--frame local` the nodes share one object.
+8. A step or a part can sit in several lists. A part in several lists writes
+   one node that every parent's node lists
 
 Every part takes a name no other part in its list shares. A function builds
 symmetric parts:

@@ -66,6 +66,8 @@ mod spline_points;
 mod sweep_sample;
 mod vesica_distance;
 mod whole_count;
+mod whole_tolerance;
+mod whole_voxels;
 
 pub(crate) use align_rotation::*;
 pub(crate) use arc_distance::*;
@@ -133,6 +135,8 @@ pub(crate) use spline_points::*;
 pub(crate) use sweep_sample::*;
 pub(crate) use vesica_distance::*;
 pub(crate) use whole_count::*;
+pub(crate) use whole_tolerance::*;
+pub(crate) use whole_voxels::*;
 
 // Test support
 

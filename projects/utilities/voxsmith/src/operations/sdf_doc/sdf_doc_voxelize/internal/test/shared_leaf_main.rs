@@ -6,8 +6,8 @@ use ty_math::TyVector3F64;
 
 /// A model whose root part `model` holds the parts `a` and `b`, which both
 /// place the part `leaf` and its unit box. Every part turns about
-/// `[0.5, 0, 0]`, `a` moves by `[2, 0, 0]`, and `b` moves by `[0, 0.25, 0]`.
-pub fn shared_leaf_main() -> SdfMain {
+/// `[0.5, 0, 0]`, `a` moves by `[2, 0, 0]`, and `b` moves by `[0, b_y, 0]`.
+pub fn shared_leaf_main(b_y: f64) -> SdfMain {
     let node = |name: &str, offset: Option<[f64; 3]>, objects: Vec<u32>, nodes: Vec<u32>| SdfNode {
         name: name.to_string(),
         pivot: Some(TyVector3F64::new(0.5, 0.0, 0.0)),
@@ -39,7 +39,7 @@ pub fn shared_leaf_main() -> SdfMain {
         nodes: IdVec::from_vec(vec![
             node("leaf", None, vec![0], Vec::new()),
             node("a", Some([2.0, 0.0, 0.0]), Vec::new(), vec![0]),
-            node("b", Some([0.0, 0.25, 0.0]), Vec::new(), vec![0]),
+            node("b", Some([0.0, b_y, 0.0]), Vec::new(), vec![0]),
             node("model", None, Vec::new(), vec![1, 2]),
         ]),
         root_node_ids: vec![U32Id::from_u32(3)],

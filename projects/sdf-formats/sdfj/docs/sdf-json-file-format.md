@@ -496,7 +496,8 @@ Built with the `materials` library, `forest.sdfj` holds:
 }
 ```
 
-Voxelizing writes a voxj node for each place.
+Voxelizing writes a voxj node for each node, under the same parents.
 [Model evaluation](../../../../doc/ref/sdf-doc/model-evaluation.md#the-voxj-document)
-sets which places share an object. Offsets add up: the rabbit under `tree.1`
-lands at `[-0.6, 0, 0.15]` with the path `forest/tree.1/rabbit.1/rabbit`.
+sets where a shared node's places can sit. Offsets add up: the rabbit under
+`tree.1` lands at `[-0.6, 0, 0.15]` with the path
+`forest/tree.1/rabbit.1/rabbit`.

@@ -210,7 +210,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
      keeping the original
   3. A part marked `joint` keeps its node under `--flatten` and voxelizes
      unrotated, leaving an animation a node to turn
-- [ ] **S27. Shared nodes.** A node the `.sdfj` document shares stays one voxj
+- [x] **S27. Shared nodes.** A node the `.sdfj` document shares stays one voxj
       node with several parents, along with its subtree and objects:
   1. Under `--frame world`, places whose shifts differ by whole voxels share
      the node. Places that would sample differently error. The error suggests
@@ -219,12 +219,26 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   3. `--flatten` still expands every place
   4. The report keeps a line per place
   5. Decision 18 drops "Each place writes a node"
-- [ ] **S28. Slash warnings.** A voxcore check lists the nodes and objects
+- [ ] **S28. Neutral sdfj spec.** `sdf-json-file-format.md` sets the format
+      for any tool, in the style of the voxel json spec:
+  1. The spec opens with its design objectives and coordinate system and
+     mentions neither vxl nor the builder
+  2. Each table takes annotated JSONC that gives every key's meaning. The
+     spec sets what each entry computes at a point, and the distances,
+     booleans, transforms, modifiers, noise, patterns, steps, and material
+     decoding move there from model evaluation
+  3. A validation section states the rules every reader applies, the argument
+     checks included
+  4. The examples hold plain JSONC
+  5. The builder's writing rules move to the builder's README. Model
+     evaluation keeps vxl's settings, libraries, sampling, arithmetic, bounds,
+     grid, voxj document, report, and checks
+- [ ] **S29. Slash warnings.** A voxcore check lists the nodes and objects
       whose names hold `/`, which makes their joined paths ambiguous. vxl runs
       the check after every conversion into voxcore, from a file read or from a
       voxelize, and warns with a pointer to `--select-index`. Names pass
       through unchanged
-- [ ] **S29. New calls.** More calls the rounds built by hand:
+- [ ] **S30. New calls.** More calls the rounds built by hand:
   1. `text` lays out a string as a 2D shape for finding 47. The font comes
      from a file or an installed font that a flag or `.vxlconfig` provides,
      never from vxl. The build stores each glyph used as an exact outline of
@@ -232,7 +246,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   2. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
   3. `random` gives the model a seeded generator for placements and sizes for
      findings 26 and 91
-- [ ] **S30. Round 7 fixes.** Answer round 7's
+- [ ] **S31. Round 7 fixes.** Answer round 7's
       [findings](trials-round-7.md#findings) before the next round:
   1. The review sheet keeps `<stem>.png` whatever views the command adds for
      finding 126
@@ -244,5 +258,5 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   4. `coat` takes a slope limit for finding 135, and `gradient` takes its range
      in either order for finding 136
   5. The library's `oak` stays apart from `pine` for finding 13
-- [ ] **S31. Round 8.** Run the prompts after S20 to S30 and log the round
+- [ ] **S32. Round 8.** Run the prompts after S20 to S31 and log the round
       beside round 7.

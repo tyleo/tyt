@@ -1,26 +1,29 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        PlaceFrame, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfVoxMainOptions, is_exposed,
-        retain_sdf_palette, see_through_materials,
+        PlaceFrame, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfVoxMainOptions, WHOLE_TOLERANCE,
+        is_exposed, meters, retain_sdf_palette, see_through_materials, whole_voxels,
     },
     utilities::{FillMode, FlattenMode, VoxelFrame},
 };
 use branded_id::{IdSlice, IdVec, IteratorExt, U32Id};
-use sdfcore::BSdfMaterial;
+use sdfcore::{BSdfMaterial, BSdfNode};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMain, VoxObject};
 
-/// How far a node's offset to its object can sit from a whole number of voxels
-/// and still count as whole. The division by the voxel size rounds.
-const WHOLE_TOLERANCE: f64 = 1e-9;
-
 /// The voxj document of the grids in `sampling` under `options` by model
 /// evaluation. Errors on flattening grids sampled under the local frame or
-/// unposed.
+/// unposed, on keeping the nodes of grids sampled posed, and on a part whose
+/// places cannot share one node.
 pub fn to_vox_main(sampling: &SdfSampling, options: &SdfVoxMainOptions) -> Result<VoxMain> {
-    if options.flatten != FlattenMode::None {
+    if options.flatten == FlattenMode::None {
+        if sampling.posed {
+            return Err(Error::invalid(
+                "unflattened nodes must read grids sampled unposed, which hold each part unturned",
+            ));
+        }
+    } else {
         if sampling.frame == VoxelFrame::Local {
             return Err(Error::invalid(
                 "flatten must read grids sampled under the world frame, not the local frame",
@@ -46,7 +49,7 @@ pub fn to_vox_main(sampling: &SdfSampling, options: &SdfVoxMainOptions) -> Resul
         .collect();
 
     let (objects, nodes) = match options.flatten {
-        FlattenMode::None => placed(sampling, &kept),
+        FlattenMode::None => placed(sampling, &kept)?,
         FlattenMode::Nodes | FlattenMode::Objects => flattened(sampling, &kept, options.flatten)?,
     };
 
@@ -133,16 +136,15 @@ pub fn to_vox_main(sampling: &SdfSampling, options: &SdfVoxMainOptions) -> Resul
 
     for (index, (mut child_node_ids, child_object_ids)) in children.into_iter().enumerate() {
         child_node_ids.extend(
-            nodes
+            nodes[index]
+                .child_indices
                 .iter()
-                .enumerate()
-                .filter(|(_, child)| child.parent == Some(index))
-                .map(|(child_index, _)| node_ids[child_index]),
+                .map(|&child_index| node_ids[child_index]),
         );
 
         main.set_hierarchy_node_children(node_ids[index], child_node_ids, child_object_ids)?;
 
-        if nodes[index].parent.is_none() {
+        if nodes[index].root {
             main.push_root_hierarchy_node_id(node_ids[index])?;
         }
     }
@@ -173,14 +175,16 @@ struct ObjectCells {
     base: TyVector3I32,
 }
 
-/// One node the document holds for a place.
+/// One node the document holds for a part.
 struct PlaceNode {
     /// The part's name.
     name: String,
 
-    /// The index of the node of the place this one sits under, or `None` for a
-    /// root node.
-    parent: Option<usize>,
+    /// Whether the node is a root node.
+    root: bool,
+
+    /// The indices of the nodes under this one.
+    child_indices: Vec<usize>,
 
     transform: TyTransformF64,
 
@@ -192,14 +196,32 @@ struct PlaceNode {
     lattice_offset: TyVector3F64,
 }
 
-/// The objects and nodes of each place under the frame `sampling` was sampled
-/// in.
-fn placed(sampling: &SdfSampling, kept: &[Vec<SdfCell>]) -> (Vec<ObjectCells>, Vec<PlaceNode>) {
+/// The objects and nodes of each part under the frame `sampling` was sampled
+/// in. A part writes one node for all its places, under each parent's node.
+/// Errors on a part whose places cannot share one node.
+fn placed(
+    sampling: &SdfSampling,
+    kept: &[Vec<SdfCell>],
+) -> Result<(Vec<ObjectCells>, Vec<PlaceNode>)> {
     let mut objects = Vec::new();
     let mut grid_objects: HashMap<usize, Option<usize>> = HashMap::new();
-    let mut nodes = Vec::with_capacity(sampling.places.len());
+    let mut nodes: Vec<PlaceNode> = Vec::new();
 
-    for place in &sampling.places {
+    // The index in `nodes` of each part's node beside the index of the part's
+    // first place.
+    let mut part_nodes: HashMap<U32Id<BSdfNode>, (usize, usize)> = HashMap::new();
+
+    // The index in `nodes` of each place's node, and whether the place wrote it.
+    let mut place_nodes: Vec<(usize, bool)> = Vec::with_capacity(sampling.places.len());
+
+    for (index, place) in sampling.places.iter().enumerate() {
+        if let Some(&(node_index, first)) = part_nodes.get(&place.node_id) {
+            check_shared_place(sampling, first, index)?;
+            place_nodes.push((node_index, false));
+            add_child(&mut nodes, &place_nodes, place.parent, node_index);
+            continue;
+        }
+
         let shift = match sampling.frame {
             VoxelFrame::World => place.offset,
             VoxelFrame::Local => TyVector3F64::ZERO,
@@ -221,16 +243,96 @@ fn placed(sampling: &SdfSampling, kept: &[Vec<SdfCell>]) -> (Vec<ObjectCells>, V
             })
             .collect();
 
+        let node_index = nodes.len();
+        part_nodes.insert(place.node_id, (node_index, index));
+        place_nodes.push((node_index, true));
+
         nodes.push(PlaceNode {
             name,
-            parent: place.parent,
+            root: place.parent.is_none(),
+            child_indices: Vec::new(),
             transform: node_transform(sampling, place),
             object_indices,
             lattice_offset,
         });
+        add_child(&mut nodes, &place_nodes, place.parent, node_index);
     }
 
-    (objects, nodes)
+    Ok((objects, nodes))
+}
+
+/// Errors unless the place at `index` can share the node of its part's first
+/// place at `first`. One node takes one position from its parent's pivot, and
+/// under the world frame one object holds the cells of both places.
+fn check_shared_place(sampling: &SdfSampling, first: usize, index: usize) -> Result<()> {
+    let places = &sampling.places;
+    let first_path = places[first].path.join("/");
+    let fail = |message: String| {
+        Error::invalid(format!(
+            "{}: part must sit {message}",
+            places[index].path.join("/")
+        ))
+    };
+
+    // A root part sits in one place, so every later place sits under a part.
+    let spot = |index: usize| {
+        let place = &places[index];
+        let parent = place
+            .parent
+            .expect("a part in several places sits under parts");
+
+        place.pivot - places[parent].pivot
+    };
+    let (first_spot, spot) = (spot(first), spot(index));
+
+    if whole_voxels((spot - first_spot) / sampling.voxel_size) != Some(TyVector3I32::ZERO) {
+        return Err(fail(format!(
+            "{} from its parent's pivot as at {first_path}, not {}; give its parents one pivot \
+             or build a fresh part for each place",
+            listed(first_spot),
+            listed(spot),
+        )));
+    }
+
+    if sampling.frame == VoxelFrame::World {
+        let voxels = (places[index].offset - places[first].offset) / sampling.voxel_size;
+
+        if whole_voxels(voxels).is_none() {
+            return Err(fail(format!(
+                "a whole number of voxels from {first_path}, not {} voxels; give it \
+                 whole-voxel offsets, sample under the local frame, or build a fresh part for \
+                 each place",
+                listed(voxels),
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// `value` as an error message shows it.
+fn listed(value: TyVector3F64) -> String {
+    format!(
+        "[{}, {}, {}]",
+        meters(value.x),
+        meters(value.y),
+        meters(value.z)
+    )
+}
+
+/// Lists the node at `node_index` under the node of the place at `parent` when
+/// that place wrote its node. Every place of a part lists the same children.
+fn add_child(
+    nodes: &mut [PlaceNode],
+    place_nodes: &[(usize, bool)],
+    parent: Option<usize>,
+    node_index: usize,
+) {
+    if let Some(parent) = parent
+        && let (parent_index, true) = place_nodes[parent]
+    {
+        nodes[parent_index].child_indices.push(node_index);
+    }
 }
 
 /// One node for each kept place, nested under the node of the nearest kept
@@ -330,10 +432,17 @@ fn flattened(
             None => (None, node_transform(sampling, place)),
         };
 
-        place_nodes.insert(owner, nodes.len());
+        let node_index = nodes.len();
+
+        if let Some(parent) = parent {
+            nodes[parent].child_indices.push(node_index);
+        }
+
+        place_nodes.insert(owner, node_index);
         nodes.push(PlaceNode {
             name,
-            parent,
+            root: parent.is_none(),
+            child_indices: Vec::new(),
             transform,
             object_indices: (first_object..objects.len()).collect(),
             lattice_offset,
@@ -588,14 +697,16 @@ mod tests {
     }
 
     #[test]
-    fn a_pivot_off_the_lattice_places_the_object_through_a_voxels_node() {
+    fn a_shared_part_writes_one_node_and_voxels_node_under_each_parent() {
         let world = write(
-            &shared_leaf_main(),
+            &shared_leaf_main(2.0),
             VoxelFrame::World,
             FillMode::Solid,
             FlattenMode::None,
         );
 
+        // The pivot at x 0.5 sits off the lattice, so a `voxels` node places
+        // the object.
         assert_eq!(
             nodes(&world),
             [
@@ -603,40 +714,70 @@ mod tests {
                 r#"a at [2, 0, 0] by 1: nodes ["leaf"], objects []"#,
                 r#"leaf at [0, 0, 0] by 1: nodes ["voxels"], objects []"#,
                 r#"voxels at [0.5, 0, 0] by 1: nodes [], objects ["leaf"]"#,
-                r#"b at [0, 0.25, 0] by 1: nodes ["leaf"], objects []"#,
-                r#"leaf at [0, 0, 0] by 1: nodes ["voxels"], objects []"#,
-                r#"voxels at [0.5, 0.75, 0] by 1: nodes [], objects ["leaf"]"#,
+                r#"b at [0, 2, 0] by 1: nodes ["leaf"], objects []"#,
             ]
         );
         assert_eq!(
             objects(&world),
-            [
-                "leaf from [-1, 0, 0] across 1x1x1: 1 voxels",
-                "leaf from [-1, -1, 0] across 1x1x1: 1 voxels",
-            ]
+            ["leaf from [-1, 0, 0] across 1x1x1: 1 voxels"]
         );
     }
 
     #[test]
-    fn every_place_shares_its_part_object_under_the_local_frame() {
+    fn a_part_errors_unless_its_places_can_share_one_node() {
+        let error = |main: &SdfMain| {
+            let sample_options = SdfSampleOptions {
+                resolution: GridResolution::VoxelSize(1.0),
+                frame: VoxelFrame::World,
+                posed: false,
+                record_writes: false,
+            };
+            let options = SdfVoxMainOptions {
+                fill_mode: FillMode::Solid,
+                flatten: FlattenMode::None,
+            };
+            let sampling = sample(&DependenciesImpl, main, &sample_options).unwrap();
+
+            to_vox_main(&sampling, &options).unwrap_err().to_string()
+        };
+
+        assert_eq!(
+            error(&shared_leaf_main(0.25)),
+            "model/b/leaf: part must sit a whole number of voxels from model/a/leaf, not \
+             [-2, 0.25, 0] voxels; give it whole-voxel offsets, sample under the local frame, \
+             or build a fresh part for each place"
+        );
+
+        let mut state = shared_leaf_main(2.0).into_state();
+        state.nodes[U32Id::from_u32(1).to_usize_id()].pivot = None;
+        assert_eq!(
+            error(&SdfMain::new(state).unwrap()),
+            "model/b/leaf: part must sit [0.5, 0, 0] from its parent's pivot as at \
+             model/a/leaf, not [0, 0, 0]; give its parents one pivot or build a fresh part for \
+             each place"
+        );
+    }
+
+    #[test]
+    fn the_local_frame_shares_a_part_off_the_lattice() {
         let local = write(
-            &shared_leaf_main(),
+            &shared_leaf_main(0.25),
             VoxelFrame::Local,
             FillMode::Solid,
             FlattenMode::None,
         );
 
         assert_eq!(
+            nodes(&local)[2..],
+            [
+                r#"leaf at [0, 0, 0] by 1: nodes ["voxels"], objects []"#,
+                r#"voxels at [0.5, 0, 0] by 1: nodes [], objects ["leaf"]"#,
+                r#"b at [0, 0.25, 0] by 1: nodes ["leaf"], objects []"#,
+            ]
+        );
+        assert_eq!(
             objects(&local),
             ["leaf from [-1, 0, 0] across 1x1x1: 1 voxels"]
-        );
-        assert_eq!(
-            nodes(&local)[3],
-            r#"voxels at [0.5, 0, 0] by 1: nodes [], objects ["leaf"]"#
-        );
-        assert_eq!(
-            nodes(&local)[6],
-            r#"voxels at [0.5, 0, 0] by 1: nodes [], objects ["leaf"]"#
         );
     }
 
@@ -753,6 +894,30 @@ mod tests {
         assert_eq!(
             to_vox_main(&sampling, &options).unwrap_err().to_string(),
             "flatten must read grids sampled posed, which carry each part's rotation"
+        );
+    }
+
+    #[test]
+    fn unflattened_nodes_need_unposed_grids() {
+        let sampling = sample(
+            &DependenciesImpl,
+            &parts_main(),
+            &SdfSampleOptions {
+                resolution: GridResolution::VoxelSize(1.0),
+                frame: VoxelFrame::World,
+                posed: true,
+                record_writes: false,
+            },
+        )
+        .unwrap();
+        let options = SdfVoxMainOptions {
+            fill_mode: FillMode::Solid,
+            flatten: FlattenMode::None,
+        };
+
+        assert_eq!(
+            to_vox_main(&sampling, &options).unwrap_err().to_string(),
+            "unflattened nodes must read grids sampled unposed, which hold each part unturned"
         );
     }
 

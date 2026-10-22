@@ -979,15 +979,15 @@ model.voxj  26 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
     #[test]
     fn a_part_in_several_places_shows_its_steps_under_the_first() {
         assert_eq!(
-            report_on(&shared_leaf_main(), 1.0, FillMode::Solid),
+            report_on(&shared_leaf_main(2.0), 1.0, FillMode::Solid),
             "\
-model.voxj  2 voxels of 1 m  2 pieces  3x1x1  [0, 0, 0] .. [3, 1, 1]
+model.voxj  2 voxels of 1 m  2 pieces  3x3x1  [0, 0, 0] .. [3, 3, 1]
   part  a  0 voxels  pivot [2.5, 0, 0]
     part  leaf  1 voxel  1x1x1  [2, 0, 0] .. [3, 1, 1]  pivot [2.5, 0, 0]
       add  cube  1 cell  1 kept  1 exposed  1x1x1  [2, 0, 0] .. [3, 1, 1]
-  part  b  0 voxels  pivot [0.5, 0.25, 0]
-    part  leaf  1 voxel  1x1x1  [0, 0, 0] .. [1, 1, 1]  pivot [0.5, 0.25, 0]  repeats a/leaf
-  piece 1  1 voxel  1x1x1  [0, 0, 0] .. [1, 1, 1]  from b/leaf/cube
+  part  b  0 voxels  pivot [0.5, 2, 0]
+    part  leaf  1 voxel  1x1x1  [0, 2, 0] .. [1, 3, 1]  pivot [0.5, 2, 0]  repeats a/leaf
+  piece 1  1 voxel  1x1x1  [0, 2, 0] .. [1, 3, 1]  from b/leaf/cube
   piece 2  1 voxel  1x1x1  [2, 0, 0] .. [3, 1, 1]  from a/leaf/cube
 "
         );

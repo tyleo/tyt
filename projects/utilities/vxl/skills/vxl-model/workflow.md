@@ -43,8 +43,7 @@ The API already does much of what a model would build by hand:
    because nested shapes bury each other
 4. A `coat` or a `paint` recolors every live cell in its reach, a neighbor's
    included. `onto` keeps it on the cells of the listed `add` steps
-5. Repeated props place one part at each spot. Under `--frame local` the places
-   share one object
+5. Repeated props place one part at each spot
 
 ## Checks
 

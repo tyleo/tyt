@@ -297,7 +297,7 @@ solves them ahead of time rather than a fix at a time:
        When two listed libraries hold one name, the later library wins. A build
        with neither reads no library
 18. A step or a part can sit in several lists, as a voxj node can sit under
-    several parents. Each place writes a node. `--frame world` moves each
+    several parents. `--frame world` moves each
     place's shapes by its offsets before sampling and keeps every part on one
     lattice. `--frame local` voxelizes each part once, and every place shares
     the part's object. Unique names within each list keep every voxj path

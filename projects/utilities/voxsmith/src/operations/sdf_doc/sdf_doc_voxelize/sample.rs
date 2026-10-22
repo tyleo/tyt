@@ -2,14 +2,15 @@ use crate::{
     Error, Result,
     dependencies::sdf_doc::MapCells,
     operations::sdf_doc::{
-        EntryPaths, PlaceFrame, SdfSampleOptions, SdfSampling, SdfShapes, check_document,
-        check_shape_boxes, collect_places, resolve_materials, sample_grid, sample_voxel_size,
+        EntryPaths, PlaceFrame, SdfCellBounds, SdfGrid, SdfSampleOptions, SdfSampling, SdfShapes,
+        SdfStepRecord, check_document, check_shape_boxes, collect_places, resolve_materials,
+        sample_grid, sample_voxel_size, whole_voxels,
     },
     utilities::VoxelFrame,
 };
 use sdfcore::SdfMain;
 use std::collections::HashMap;
-use ty_math::TyPoseF64;
+use ty_math::{TyPoseF64, TyVector3I32};
 
 /// Samples the model `main` into grids under `options` by model evaluation.
 /// `dependencies` spreads each step's cells across threads. Errors on the
@@ -41,7 +42,31 @@ pub fn sample<D: MapCells>(
 
     let frames = PlaceFrame::of_places(&places, options.posed);
 
-    for (place, frame) in places.iter_mut().zip(frames) {
+    // The index of the first place of each part.
+    let mut first_places = HashMap::new();
+
+    for (index, frame) in frames.into_iter().enumerate() {
+        let first = *first_places.entry(places[index].node_id).or_insert(index);
+
+        // Unposed under the world frame, a later place a whole number of
+        // voxels from its part's first place takes the first place's grids
+        // moved by those voxels.
+        if options.frame == VoxelFrame::World
+            && !options.posed
+            && first != index
+            && let Some(shift) =
+                whole_voxels((places[index].offset - places[first].offset) / voxel_size)
+        {
+            for grid_index in places[first].grid_indices.clone() {
+                let grid = shifted_grid(&grids[grid_index], shift);
+                grids.push(grid);
+                places[index].grid_indices.push(grids.len() - 1);
+            }
+
+            continue;
+        }
+
+        let place = &mut places[index];
         let frame = frame.sampling();
         let pose = TyPoseF64::new(
             frame.position + frame.rotation * place.offset,
@@ -107,6 +132,25 @@ pub fn sample<D: MapCells>(
         grids,
         materials,
     })
+}
+
+/// `grid` moved by `shift` whole cells.
+fn shifted_grid(grid: &SdfGrid, shift: TyVector3I32) -> SdfGrid {
+    SdfGrid {
+        min: grid.min + shift,
+        steps: grid
+            .steps
+            .iter()
+            .map(|step| SdfStepRecord {
+                written_bounds: step.written_bounds.map(|bounds| SdfCellBounds {
+                    min: bounds.min + shift,
+                    max: bounds.max + shift,
+                }),
+                ..step.clone()
+            })
+            .collect(),
+        ..grid.clone()
+    }
 }
 
 #[cfg(all(test, feature = "impl"))]
@@ -562,7 +606,7 @@ mod tests {
 
     #[test]
     fn each_place_samples_moved_by_its_offsets_under_the_world_frame() {
-        let sampling = sample(&DependenciesImpl, &shared_leaf_main(), &at_size(1.0)).unwrap();
+        let sampling = sample(&DependenciesImpl, &shared_leaf_main(2.0), &at_size(1.0)).unwrap();
 
         let paths: Vec<String> = sampling
             .places
@@ -587,7 +631,7 @@ mod tests {
 
         assert_eq!(
             live_cells(&sampling),
-            [TyVector3I32::new(2, 0, 0), TyVector3I32::ZERO]
+            [TyVector3I32::new(2, 0, 0), TyVector3I32::new(0, 2, 0)]
         );
     }
 
@@ -713,7 +757,7 @@ mod tests {
         };
 
         assert_eq!(
-            error(&shared_leaf_main(), options),
+            error(&shared_leaf_main(0.25), options),
             "posed sampling must sample under the world frame, not the local frame"
         );
     }
@@ -724,7 +768,7 @@ mod tests {
             frame: VoxelFrame::Local,
             ..at_size(1.0)
         };
-        let sampling = sample(&DependenciesImpl, &shared_leaf_main(), &options).unwrap();
+        let sampling = sample(&DependenciesImpl, &shared_leaf_main(0.25), &options).unwrap();
 
         assert_eq!(sampling.grids.len(), 1);
         assert_eq!(sampling.places[2].grid_indices, [0]);
@@ -760,7 +804,7 @@ mod tests {
 
         let world = sample(
             &DependenciesImpl,
-            &shared_leaf_main(),
+            &shared_leaf_main(0.25),
             &SdfSampleOptions {
                 resolution: GridResolution::ReferenceCount {
                     reference: ResolutionReference::WorldX,
