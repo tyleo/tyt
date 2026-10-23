@@ -50,15 +50,18 @@ The API already does much of what a model would build by hand:
 
 The report reads more reliably than the PNGs:
 
-1. The bounds on the model's line match the prompt's real size in meters
+1. The bounds on the model's line match the prompt's real size in meters. They
+   read each posed part unrotated
 2. A step at `0 cells` missed every cell center, and a step at `0 kept` lost
    every cell to the steps after `lost to`
-3. A detail at `0 exposed` sits buried inside another form
+3. A detail at `0 exposed` sits buried inside another form. A see-through
+   detail inside glass or water reads `0 exposed` and still shows
 4. A step reading more pieces than the forms it draws broke on the grid or under
    a later cut. A `paint` or a `coat` spilled when it reads `over` a step it
    should miss
 5. A second piece means a shape floats, and a part reading `detached` has a gap
-   at its joint
+   at its joint. Forms meant to stay apart, such as chain links, need a cell of
+   clearance or they fuse into one piece
 
 `front`, `right`, `back`, and `top` draw without perspective and show heights,
 widths, symmetry, and alignment true to scale. `hero` shows whether the model
@@ -69,9 +72,12 @@ reads as the prompt. Color goes wrong in a few known ways:
    sides strata
 2. Neighboring materials need colors far apart in lightness or hue. Two dark
    tones or two metals side by side merge
-3. Glass and water read faintly. A darker rim outlines clear glass, and tinted
-   glass tints what sits behind it
-4. A glow that reads pale where the prompt wants color takes a lower
+3. A thin pane of glass or sheet of water reads faintly. A darker rim outlines
+   clear glass, and tinted glass tints what sits behind it
+4. A tank-deep body of water reads dark and hides what sits in it, and clear
+   glass over a dark backdrop hazes it pale. A low `baseColor` alpha such as
+   `#B8E6F030` keeps either faint
+5. A glow that reads pale where the prompt wants color takes a lower
    `emissiveStrength` or a darker `baseColor`
 
 The model is done when every view shows the prompt with no flaw a review can

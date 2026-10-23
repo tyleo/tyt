@@ -133,12 +133,20 @@ wherever two steps reach the same cell.
 3. `within` limits the coat to a shape's cells
 
 `set` places detail too small for a shape. A `size` of `v` around a cell center,
-`(i + 0.5) * v`, fills that one cell.
+`(i + 0.5) * v`, fills that one cell. A `set` lists each point once.
 
 `onto` keeps a `paint` or a `coat` on the cells the listed `add` steps own:
 
 1. A cell belongs to the last `add` that filled it until a `carve` empties it
 2. Each step in `onto` has to be an `add` earlier in the same list
+
+```ts
+const crest = add("crest", box([-0.2, 0.9, -0.03], [0.2, 1, 0.03]), mat.oak);
+export default [
+  crest,
+  coat("gilt", mat.gold, 0.02, { sides: ["+y"], onto: [crest] }),
+];
+```
 
 Every step takes a name no other step in its list shares. The report and errors
 use the name.
@@ -270,15 +278,18 @@ function halfSpace(side: Side, at: number): Shape3d;
 ```
 
 1. `box` spans its two corners in either order on each axis. `round` rounds its
-   edges and corners by that radius inside the same corners
+   edges and corners by that radius inside the same corners and takes at most
+   half the shortest side
 2. `boxFrame` keeps the twelve edges of the box between its corners as square
    bars `thickness` across. The bars stay inside the corners. Crates, cages, bed
    frames, and lantern frames start from a `boxFrame`
 3. `cylinder`, `cone`, `capsule`, and `roundCone` run from `a` to `b` at any
    angle
-4. `cylinder` takes `round` to round its rims
+4. `cylinder` takes `round` to round its rims, at most the radius and half the
+   length
 5. `cone` takes `radiusA` at `a` and `radiusB` at `b`. A radius of 0 makes a
-   point
+   point, which can break off as floating specks. A spike or claw keeps a tip
+   radius near one voxel
 6. `roundCone` caps each end with a sphere of that end's radius and tapers
    between the spheres. Limbs, branches, horns, and bottle necks suit a
    `roundCone`
@@ -289,8 +300,8 @@ function halfSpace(side: Side, at: number): Shape3d;
    angles run as an `arc`'s do in the plane `extrude` maps across `axis`. A cut
    torus makes handles, hooks, and horseshoes
 9. `octahedron` reaches `radius` along each axis from its center. From a radius
-   of about 3 voxels it makes a cut-gem silhouette. A smaller one reads as a
-   plus sign
+   of about 5 voxels it makes a cut-gem silhouette. A smaller one reads as a
+   plus sign or a clover
 10. `pyramid` stands on a square base `width` across centered on `baseCenter`.
     Its apex sits `height` above the base along +Y
 11. `halfSpace` covers everything past `at` toward `side`.
@@ -407,7 +418,8 @@ tails, horns, and rails:
 2. Facing along the curve, v points as near `up` as the curve allows and u
    points right
 3. `up` defaults to +y
-4. The curve may never run along `up`, so a rising trunk passes another `up`
+4. Seen along `up`, the curve may never point straight at the viewer or turn
+   sharply back on itself. A rising trunk or a hairpin takes another `up`
 5. `scales` sets the profile's scale at each point for tapers
 6. The ends cut flat
 
@@ -554,8 +566,15 @@ interface Shape3d {
 7. A second `bend` keeps only its own pivot's slice in place and moves the rest
    of the first bend's arc
 8. `displace` roughens the surface with fractal noise up to `amplitude` deep
-   whose features run about `scale` across. `octaves` sets how many layers the
-   noise sums and defaults to 4
+   whose coarsest features run about `scale` across. `octaves` sets how many
+   layers the noise sums and defaults to 4. Each layer runs about half as large
+   as the one before
+9. A finest layer, about `scale / 2 ** (octaves - 1)`, under about 5 voxels
+   breaks off as floating specks that read as extra pieces. A larger `scale`,
+   fewer `octaves`, or a lower `amplitude` keeps the surface whole
+10. Sharp tips, cut ends, and thin edges shed specks at any `scale`. A lower
+    `amplitude`, one octave, or a blunted tip keeps them attached, and a new
+    `seed` only moves them
 
 #### True thickness
 

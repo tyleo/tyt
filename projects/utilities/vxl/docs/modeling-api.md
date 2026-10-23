@@ -76,15 +76,15 @@ at the cell's center.
 
 vxl defines the `materials` library with these materials:
 
-| Group  | Names                                                                   | Traits                                                  |
-| ------ | ----------------------------------------------------------------------- | ------------------------------------------------------- |
-| Wood   | `bark`, `birch`, `ebony`, `mahogany`, `oak`, `pine`, `walnut`           |                                                         |
-| Stone  | `brick`, `clay`, `granite`, `marble`, `sandstone`, `slate`, `stone`     |                                                         |
-| Metal  | `brass`, `bronze`, `copper`, `gold`, `iron`, `silver`, `steel`          | Fully metallic                                          |
-| Gem    | `amethyst`, `diamond`, `emerald`, `ruby`, `sapphire`, `topaz`           | Smooth and saturated. Transmit light at their own `ior` |
-| Nature | `bone`, `dirt`, `grass`, `ice`, `leaf`, `moss`, `sand`, `snow`, `water` | `ice` and `water` transmit light at their own `ior`     |
-| Craft  | `leather`, `rope`, `straw`                                              |                                                         |
-| Light  | `ember`, `flame`, `glow`, `lava`                                        | Glow                                                    |
+| Group  | Names                                                                   | Traits                                                                            |
+| ------ | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Wood   | `bark`, `birch`, `ebony`, `mahogany`, `oak`, `pine`, `walnut`           |                                                                                   |
+| Stone  | `brick`, `clay`, `granite`, `marble`, `sandstone`, `slate`, `stone`     |                                                                                   |
+| Metal  | `brass`, `bronze`, `copper`, `gold`, `iron`, `silver`, `steel`          | Fully metallic                                                                    |
+| Gem    | `amethyst`, `diamond`, `emerald`, `ruby`, `sapphire`, `topaz`           | Smooth and saturated but for a clear `diamond`. Transmit light at their own `ior` |
+| Nature | `bone`, `dirt`, `grass`, `ice`, `leaf`, `moss`, `sand`, `snow`, `water` | `ice` and `water` transmit light at their own `ior`                               |
+| Craft  | `leather`, `rope`, `straw`                                              |                                                                                   |
+| Light  | `ember`, `flame`, `glow`, `lava`                                        | `glow` glows cool white and the rest orange                                       |
 
 Velvet, painted wood, and anything else the library lacks take a custom
 `material`.
@@ -230,9 +230,9 @@ shapes the smallest features:
    with `x` and `z` on multiples of `v`
 3. A tilted or curved member, a stroke, and a torus tube need about 2 voxels
    across or they break into pieces
-4. A sphere, cylinder, cone, octahedron, or rounded corner under a radius of
-   about 3 voxels reads as a plus sign, a rod, or a block. Small round details
-   read better as boxes or `set` cells
+4. A sphere, cylinder, cone, or rounded corner under a radius of about 3
+   voxels, or an octahedron under about 5, reads as a plus sign, a rod, or a
+   block. Small round details read better as boxes or `set` cells
 5. A large `add` placed after a detail buries it because later steps win. Large
    forms go first and details after
 6. Nested shapes of one feature bury each other in any order

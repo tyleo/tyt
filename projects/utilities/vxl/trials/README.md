@@ -41,7 +41,8 @@ sh projects/utilities/vxl/trials/archive.sh 2026-10-04
    records the round. It takes the model and the effort, `claude-opus-5-5` and
    `high` by default. A `vxl-model` skill under `~/.claude/skills` replaces each
    slot's copy, and `setup.sh` errors when that skill differs from the installed
-   vxl's
+   vxl's. A skill file as the third argument goes into each `-2` slot in place
+   of the installed vxl's, so a round can compare two skill texts
 3. A Claude Code session in this repository runs `workflow.js` with the
    contents of `prompts.json` as its `trials` argument. The workflow runs 12
    sessions at a time, analyzes both runs of each prompt, and synthesizes the

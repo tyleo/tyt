@@ -11,6 +11,9 @@ dest=$root/rounds/$1
 [ ! -e "$dest" ] || { echo "$dest exists" >&2; exit 1; }
 mkdir -p "$dest/slots"
 cp "$root/chair/.claude/skills/vxl-model/SKILL.md" "$dest/SKILL.md"
+if ! cmp -s "$root/chair/.claude/skills/vxl-model/SKILL.md" "$root/chair-2/.claude/skills/vxl-model/SKILL.md"; then
+  cp "$root/chair-2/.claude/skills/vxl-model/SKILL.md" "$dest/SKILL-2.md"
+fi
 
 for dir in $(jq -r '.[].dir' "$here/prompts.json"); do
   for run in "$dir" "$dir-2"; do

@@ -237,7 +237,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   5. The builder's writing rules move to the builder's README. Model
      evaluation keeps vxl's settings, libraries, sampling, arithmetic, bounds,
      grid, voxj document, report, and checks
-- [ ] **S29. Builder API.** The TypeScript API moves into sdfj-builder:
+- [x] **S29. Builder API.** The TypeScript API moves into sdfj-builder:
   1. sdfj-builder's `docs/typescript-api.md` lists every call with its
      signature and effect. The vxl-model skill embeds it between the workflow
      and the modeling API
