@@ -129,14 +129,24 @@ code-level choices in
       1. Industry research finds the levers that cut each ray's cost or the
          rays a frame needs. The research ranks the levers into an ordered
          list of experiments. The report lands in `reference/`
-      2. Profiles of the tree walk and the step loop on the desktop and on
-         Quest show where the time goes
-      3. The experiments rework the tree walk, the 64-tree, and the ray
-         query march, one change at a time. Each change is timed on the
-         desktop through `b2-times`. A change that wins stays. One short worn
-         run confirms a batch on Quest. B1's ids check every change against
-         the reference
-      4. A final worn run re-times B2 with the improved code. The report
+      2. A re-baseline shows where the time goes. B2's kernels move to
+         trusted shader modules. The step loop gains variants that split
+         load cost from ALU cost. Profilers time the tree walk and the step
+         loop on the desktop and on Quest
+      3. A bare greedy-mesh raster of S1 and S5 on Quest gives the march a
+         rate to beat
+      4. The experiments follow the research's
+         [ladder](reference/speedup-research.md#5-experiment-ladder). They
+         rework the tree walk, the 64-tree, and the ray query march, one
+         change at a time. Each change is timed on the desktop through
+         `b2-times`. A change that wins stays. One short worn run confirms a
+         batch on Quest. B1's ids check every change against the reference
+      5. Lossy cuts run as tests: the lens-matched grid, stereo reuse, and
+         iteration caps. Each test reports its gain and how many pixels it
+         changes on every scene. It also writes three images per scene: the
+         full trace, the cut, and a map of the changed pixels. A cut stays
+         when the project lead accepts its tradeoff from the images
+      6. A final worn run re-times B2 with the improved code. The report
          lands in benchmarks.md. R picks the B3 arms
 
 ## Later
