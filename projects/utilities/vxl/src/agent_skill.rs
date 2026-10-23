@@ -1,4 +1,5 @@
 use clap::ValueEnum;
+use sdfj_builder::SDFJ_BUILDER_TYPESCRIPT_API;
 
 /// A skill vxl prints as a `SKILL.md` for an agent to load.
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -30,6 +31,7 @@ impl AgentSkill {
                  .sdfj, .voxj, glTF, or .glb file of one.",
                 [
                     include_str!("../skills/vxl-model/workflow.md"),
+                    SDFJ_BUILDER_TYPESCRIPT_API,
                     include_str!("../docs/modeling-api.md"),
                 ],
             ),
@@ -48,6 +50,7 @@ impl AgentSkill {
 mod tests {
     use crate::AgentSkill;
     use clap::ValueEnum;
+    use sdfj_builder::SDFJ_BUILDER_TYPESCRIPT_API;
     use std::collections::HashSet;
 
     /// The anchor GitHub gives a heading reading `text`.
@@ -101,14 +104,18 @@ mod tests {
     }
 
     #[test]
-    fn the_vxl_model_skill_holds_the_workflow_then_the_modeling_api() {
+    fn the_vxl_model_skill_holds_the_workflow_the_typescript_api_then_the_modeling_api() {
         let skill_md = AgentSkill::VxlModel.skill_md();
 
         let headings: Vec<_> = prose_lines(&skill_md)
             .into_iter()
             .filter(|line| line.starts_with("# "))
             .collect();
-        assert_eq!(headings, ["# Voxel modeling", "# Modeling API"]);
+        assert_eq!(
+            headings,
+            ["# Voxel modeling", "# TypeScript API", "# Modeling API"]
+        );
+        assert!(skill_md.contains(SDFJ_BUILDER_TYPESCRIPT_API));
         assert!(skill_md.ends_with(include_str!("../docs/modeling-api.md")));
     }
 

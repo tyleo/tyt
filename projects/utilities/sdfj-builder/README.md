@@ -1,22 +1,18 @@
 # sdfj-builder
 
 Records a voxel model written in TypeScript as an SDF Json (`.sdfj`) document.
-The builder puts the modeling API in scope, imports the model file, and writes
-the steps and parts the model's default export lists. Each named export writes a
-name. The document can then serve as a library.
+The [TypeScript API](docs/typescript-api.md) lists every call a model file can
+make. The [sdfj format](../../sdf-formats/sdfj/docs/sdf-json-file-format.md)
+sets what each entry of the document computes.
 
 ```sh
 node ts/main.ts chair.ts chair.sdfj
 ```
 
-The builder runs under Node 24, Bun, and Deno with no dependencies. It reads the
-libraries from `libraries.json` beside `main.ts`. The file holds an array of
-each library's `name` and `.sdfj` `document`. `vars.json` beside `main.ts` holds
-the build variables as an object of JSON values by name. `globals.d.ts` declares
-the API for type-checking model files.
-
-A call errors on an argument the document cannot hold. vxl checks the arguments'
-values when it voxelizes. The tests run under `deno test`.
+The builder puts the TypeScript API in scope and imports the model file. Each
+call returns a value that records its arguments, and the model's default export
+lists the steps and parts those values build. The builder then writes every
+value the exports reach as an entry of the document.
 
 ## Writing
 
@@ -47,6 +43,34 @@ The builder writes five shorthands in full:
 4. A `grain` with one `base` writes the materials of `shades(base)`
 5. A `shades` call writes `count` even when the model leaves it out
 
+## Errors
+
+A call errors on an argument the document cannot hold, and the error shows the
+call, the argument, and the value. The builder checks:
+
+1. The default export is an array of steps and parts
+2. Each argument has the type the TypeScript API declares, and an options object
+   holds only its call's options
+3. Numbers are finite, and `json` holds only JSON values
+4. `lib` and `mat` read only names the libraries hold
+5. `shades` takes a whole count above zero, and a boolean takes at least one
+   shape
+6. Each named export holds a material, a pattern, a shape, a step, a part, or a
+   function, and no two different entries of one kind share a name
+7. A library part's node holds at most one object, which takes the node's name,
+   lists at least one step, and belongs to no other node
+
+The sdfj format's validation checks the values the document holds.
+
+## Running
+
+The builder runs under Node 24, Bun, and Deno with no dependencies. It reads the
+libraries from `libraries.json` beside `main.ts`. The file holds an array of
+each library's `name` and `.sdfj` `document`. `vars.json` beside `main.ts` holds
+the build variables as an object of JSON values by name. `globals.d.ts` declares
+the API for type-checking model files. The tests run under `deno test`.
+
 The folder is also the `sdfj-builder` crate, with its Rust in `src/`.
-`SDFJ_BUILDER_FILES` embeds the files a run needs. `JavaScriptRuntime` holds the
-arguments that start the builder under each runtime.
+`SDFJ_BUILDER_FILES` embeds the files a run needs, and
+`SDFJ_BUILDER_TYPESCRIPT_API` embeds the TypeScript API. `JavaScriptRuntime`
+holds the arguments that start the builder under each runtime.

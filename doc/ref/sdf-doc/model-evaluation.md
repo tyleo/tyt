@@ -6,8 +6,8 @@ This page sets how vxl builds a model file into an `.sdfj` document and how it
 voxelizes that document into voxj. The
 [sdfj format](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md)
 sets what each entry computes at a point. The
-[modeling API](../../../projects/utilities/vxl/docs/modeling-api.md) lists the
-calls.
+[TypeScript API](../../../projects/utilities/sdfj-builder/docs/typescript-api.md)
+lists the calls.
 
 ## Building
 
@@ -293,21 +293,9 @@ live cell, shows in the report and stops nothing.
    passes the sdfj format's validation
 3. A runtime that fails to start stops the build with the system's message
 
-While the model runs, the builder checks what the document cannot hold:
-
-1. The default export is an array of steps and parts
-2. Each argument has the type the modeling API declares, and an options object
-   holds only its call's options
-3. Numbers are finite, and `json` holds only JSON values
-4. `lib` and `mat` read only names the libraries hold
-5. `shades` takes a whole count above zero, and a boolean takes at least one
-   shape
-6. Each named export holds a material, a pattern, a shape, a step, a part, or a
-   function, and no two different entries of one kind share a name
-7. A library part's node holds at most one object, which takes the node's name,
-   lists at least one step, and belongs to no other node
-
-An error the model throws stops the build with its message.
+While the model runs, the builder makes the
+[checks](../../../projects/utilities/sdfj-builder/README.md#errors) its README
+lists. An error the model throws stops the build with its message.
 
 ### Voxelize
 

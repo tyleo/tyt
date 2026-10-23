@@ -334,12 +334,12 @@ fn ends(check: ArgumentCheck, a: TyVector3F64, b: TyVector3F64) -> StdResult<(),
     check.expect(a != b, "b", "another point than a", vector(b))
 }
 
-/// `value` as the modeling API writes it.
+/// `value` as the TypeScript API writes it.
 fn vector(value: TyVector3F64) -> String {
     format!("[{}, {}, {}]", value.x, value.y, value.z)
 }
 
-/// `side` as the modeling API writes it.
+/// `side` as the TypeScript API writes it.
 fn side_name(side: SdfSide) -> &'static str {
     match side {
         SdfSide::NegativeX => "-x",

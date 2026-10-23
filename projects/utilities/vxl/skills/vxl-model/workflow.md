@@ -2,7 +2,8 @@
 
 A voxel model starts as a TypeScript model file of shapes and materials in
 meters. Each pass builds the model file, voxelizes it with a report, and renders
-a review sheet. The modeling API below lists every call a model file can make.
+a review sheet. The TypeScript API below lists every call a model file can
+make.
 
 ## A pass
 

@@ -7,7 +7,9 @@ Code-level choices go in an `implementation-decisions.md` beside this file.
 
 - The builder only records the model. Every check the `.sdfj` document can carry
   runs in vxl. Every voxj document vxl writes passes `vxl vox-doc validate`.
-- The [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md),
+- The
+  [TypeScript API](../../../../projects/utilities/sdfj-builder/docs/typescript-api.md),
+  the [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md),
   the
   [sdfj format](../../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md),
   and [model evaluation](../../../ref/sdf-doc/model-evaluation.md) lead. A
@@ -235,13 +237,17 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   5. The builder's writing rules move to the builder's README. Model
      evaluation keeps vxl's settings, libraries, sampling, arithmetic, bounds,
      grid, voxj document, report, and checks
-- [ ] **S29. Builder API.** The sdfj-builder README becomes the official
-      reference for the TypeScript API:
-  1. The README states how the builder takes a TypeScript model and writes an
-     `.sdfj` document
-  2. The README lists every call with its signature and effect. A reference
-     to the calls that sits elsewhere moves there, and the other docs point to
-     it
+- [ ] **S29. Builder API.** The TypeScript API moves into sdfj-builder:
+  1. sdfj-builder's `docs/typescript-api.md` lists every call with its
+     signature and effect. The vxl-model skill embeds it between the workflow
+     and the modeling API
+  2. The sdfj-builder README states how the builder takes a TypeScript model
+     and writes an `.sdfj` document, with the builder's writing rules and checks
+  3. The modeling API keeps how vxl runs a model and how the model lands on the
+     grid, and the other docs point to the TypeScript API for the calls
+  4. A doc review asks questions the old docs answer, trick questions included,
+     and scores rewrites of the new docs on them
+  5. A trial round of 30 shows each model beside its image from the last round
 - [ ] **S30. Slash warnings.** A voxcore check lists the nodes and objects
       whose names hold `/`, which makes their joined paths ambiguous. vxl runs
       the check after every conversion into voxcore, from a file read or from a

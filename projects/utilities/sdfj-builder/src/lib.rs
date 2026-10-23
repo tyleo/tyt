@@ -12,10 +12,12 @@ mod javascript_runtime;
 mod sdfj_builder_file;
 mod sdfj_builder_files;
 mod sdfj_builder_libraries_path;
+mod sdfj_builder_typescript_api;
 mod sdfj_builder_vars_path;
 
 pub use javascript_runtime::*;
 pub use sdfj_builder_file::*;
 pub use sdfj_builder_files::*;
 pub use sdfj_builder_libraries_path::*;
+pub use sdfj_builder_typescript_api::*;
 pub use sdfj_builder_vars_path::*;

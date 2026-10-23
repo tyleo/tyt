@@ -165,7 +165,7 @@ fn custom_value(
     })
 }
 
-/// `value` as the modeling API writes it.
+/// `value` as the TypeScript API writes it.
 fn shown(value: &SdfPropertyValue) -> String {
     let list = |numbers: &[f64]| {
         let numbers: Vec<String> = numbers.iter().map(f64::to_string).collect();

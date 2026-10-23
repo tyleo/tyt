@@ -14,7 +14,7 @@ person can run the same loop by hand.
 
 ## The loop
 
-1. **Author.** Claude writes a model file against the modeling API.
+1. **Author.** Claude writes a model file against the TypeScript API.
 2. **Voxelize.** `vxl sdf-doc build` records the model as an `.sdfj` document.
    `vxl sdf-doc voxelize` samples the document into voxj and prints a report.
 3. **Review.** `vxl object render` draws the review views onto one sheet.
@@ -38,17 +38,19 @@ the loop hands back.
 
 ## Reference
 
-Three pages specify the pipeline:
+Four pages specify the pipeline:
 
-1. The [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md)
+1. The
+   [TypeScript API](../../../../projects/utilities/sdfj-builder/docs/typescript-api.md)
    lists every call a model file can make, with its signature and its effect in
-   a line or two. It stands alone as the context an agent loads before writing a
-   model.
-2. The
+   a line or two.
+2. The [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md)
+   sets how vxl runs a model file and how the model lands on the grid.
+3. The
    [sdfj format](../../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md)
    sets the document the builder writes and what each entry computes at a
    point.
-3. [Model evaluation](../../../ref/sdf-doc/model-evaluation.md) sets how vxl
+4. [Model evaluation](../../../ref/sdf-doc/model-evaluation.md) sets how vxl
    builds the document and samples it onto voxels.
 
 ## Shapes
@@ -137,14 +139,14 @@ exists. vxl installs the skill as one `SKILL.md`:
 vxl integration skill vxl-model install claude
 ```
 
-`SKILL.md` holds the workflow, then the modeling API with its example model. One
-file loses nothing because Claude reads the whole API every pass. `install
-claude` writes `.claude/skills/vxl-model/SKILL.md`, and `install agents` writes
-it under the `.agents` that Codex reads. The install works at the git root, or
-under the home directory for every project with `--user`.
-`vxl integration agents-link` links `.claude` to `.agents` so both agents share
-one folder. `SKILL.md` records the vxl version that installed it. Upgrading vxl
-takes a reinstall.
+`SKILL.md` holds the workflow, the TypeScript API, and the modeling API with its
+example model. One file loses nothing because Claude reads both APIs every pass.
+`install claude` writes `.claude/skills/vxl-model/SKILL.md`, and
+`install agents` writes it under the `.agents` that Codex reads. The install
+works at the git root, or under the home directory for every project with
+`--user`. `vxl integration agents-link` links `.claude` to `.agents` so both
+agents share one folder. `SKILL.md` records the vxl version that installed it.
+Upgrading vxl takes a reinstall.
 
 `vxl integration` gathers the commands that set up other tools to work with vxl.
 `vxl integration completion <shell> print` takes over from `vxl completion`.
@@ -231,9 +233,9 @@ solves them ahead of time rather than a fix at a time:
    closed set keeps the output vetted and lets vxl evaluate every operator in
    Rust.
 5. Patterns pick among materials and never blend colors.
-6. The modeling API serves the agent writing a model, and the sdfj format and
-   model evaluation serve the implementations. The agent loads only the modeling
-   API.
+6. The TypeScript API and the modeling API serve the agent writing a model, and
+   the sdfj format and model evaluation serve the implementations. The agent
+   loads only the two APIs.
 7. Mesh CSG stays out. Building a `.glb` for `vxl mesh-doc voxelize` works today
    but cannot write per-voxel patterns and loses detail through the mesh.
 8. The builder only records. A model's calls become an `.sdfj` document, which
@@ -278,8 +280,9 @@ solves them ahead of time rather than a fix at a time:
     4. voxsmith evaluates and samples the sdfcore state under an `sdf_doc`
        feature beside `mesh_doc`
     5. `sdfj-builder` at `projects/utilities/sdfj-builder` holds the builder as
-       a TypeScript package. vxl embeds the builder's `.ts` files and holds the
-       skill's workflow and the modeling API
+       a TypeScript package with the TypeScript API. vxl embeds the builder's
+       `.ts` files and the TypeScript API, and holds the skill's workflow and
+       the modeling API
 17. A library shares named entries between models. A library holds an `.sdfj`
     document whose `names` table maps names to the document's entries.
     1. The builder writes a name for each of the model's named exports. Every
