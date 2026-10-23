@@ -141,12 +141,22 @@ code-level choices in
          change at a time. Each change is timed on the desktop through
          `b2-times`. A change that wins stays. One short worn run confirms a
          batch on Quest. B1's ids check every change against the reference
-      5. Lossy cuts run as tests: the lens-matched grid, stereo reuse, and
-         iteration caps. Each test reports its gain and how many pixels it
+      5. Conservative start bounds join the experiments. A bound tells a
+         march where it can start without skipping a hit, so the hits stay
+         exact. Three bounds run:
+         1. The second eye from the first: the left eye, then the right eye
+         2. Crossed halves: the left half of the left eye with the right
+            half of the right eye, then the other two halves
+         3. The previous frame, reprojected through a scripted head move.
+            Each scene renders two frames with a turn at 100 degrees per
+            second and a step at 1 m/s between them. Moving placements
+            wait for the moving scene in Later
+      6. Lossy cuts run as tests: the lens-matched grid, stereo hit copying,
+         and iteration caps. Each test reports its gain and how many pixels it
          changes on every scene. It also writes three images per scene: the
          full trace, the cut, and a map of the changed pixels. A cut stays
          when the project lead accepts its tradeoff from the images
-      6. A final worn run re-times B2 with the improved code. The report
+      7. A final worn run re-times B2 with the improved code. The report
          lands in benchmarks.md. R picks the B3 arms
 
 ## Later

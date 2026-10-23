@@ -419,12 +419,16 @@ decision the third. Numbers are Quest p50 rates unless marked.
       as case 2
 7. **Ray-count cuts and caps.** Each runs as a test that measures its gain
    and its image cost. The tests cover the lens-matched grid with its
-   resample timed alone, the conservative second-eye start, stereo
-   visibility reuse, and iteration caps of 6, 8, and 12 on primary rays.
-   B1's ids count the pixels each test changes on every scene. Its report
-   shows where those pixels fall: thin features, disocclusions, grazing
-   floors, or the periphery. A cut stays when the lead accepts its tradeoff.
-   Stop: if the resample costs over 1 ms, keep the planar grid
+   resample timed alone, stereo visibility reuse, and iteration caps of 6,
+   8, and 12 on primary rays. B1's ids count the pixels each test changes
+   on every scene. The test's report shows where those pixels fall: thin
+   features, disocclusions, grazing floors, or the periphery. A cut stays
+   when the lead accepts its tradeoff. Stop: if the resample costs over
+   1 ms, keep the planar grid. Conservative start bounds keep hits exact
+   and run under B1's line instead:
+   1. The second eye from the first, one eye after the other
+   2. Each eye's halves crossed with the other eye's
+   3. The previous frame, reprojected through a scripted head move
 8. **The ray-query arm** runs on Quest only because wgpu ray query does not
    run on this Mac. Cheaper candidates, tight boxes, and flags first, then the
    opaque triangle BLAS. Stop: if the triangle BLAS stays under 0.3 Grays/s
