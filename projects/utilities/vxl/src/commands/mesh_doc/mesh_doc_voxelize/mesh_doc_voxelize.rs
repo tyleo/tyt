@@ -2,6 +2,7 @@ use crate::{
     CliValue, Dependencies, Error, MeshInput, NoneOr, Result, Rgba, VoxjEncodingOptions,
     cli_value_parser,
     commands::{GridResolutionOptions, MeshDocVoxelizeProfile, load_mesh_doc_voxelize_profile_set},
+    warn_slashed_names,
 };
 use clap::Parser;
 use meshconv::load;
@@ -132,6 +133,8 @@ impl MeshDocVoxelize {
         let document = load(&dependencies, from, &self.input.path)?;
 
         let main = voxelize(&VoxsmithDependenciesImpl, &document, &options)?;
+
+        warn_slashed_names(&dependencies, main.state())?;
 
         Ok(save(
             &dependencies,

@@ -1,7 +1,6 @@
-use crate::{Dependencies, Error, Result, VoxelInput, cli_value_parser};
+use crate::{Dependencies, Error, Result, VoxelInput, cli_value_parser, load_vox_main};
 use clap::Parser;
 use std::io::{Error as IOError, ErrorKind};
-use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::operations::node::{
     NodeListLayout, NodeListOptions, NodeListViews, OriginView, PatternView, TransformView,
@@ -145,7 +144,7 @@ impl NodeList {
 
         let from = self.input.resolve_format()?;
 
-        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load_vox_main(&dependencies, from, &self.input.path)?;
 
         let options = NodeListOptions {
             pattern,

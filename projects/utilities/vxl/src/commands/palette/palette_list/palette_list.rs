@@ -1,6 +1,5 @@
-use crate::{Dependencies, Result, VoxelInput, cli_value_parser, parse_id_selector};
+use crate::{Dependencies, Result, VoxelInput, cli_value_parser, load_vox_main, parse_id_selector};
 use clap::{ArgAction, Parser};
-use voxconv::load;
 use voxcore::{BVoxPalette, VoxMain};
 use voxsmith::{
     operations::palette::{PaletteListFields, PaletteListLayout, palette_list},
@@ -74,7 +73,7 @@ impl PaletteList {
 
         let from = self.input.resolve_format()?;
 
-        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load_vox_main(&dependencies, from, &self.input.path)?;
 
         let output = palette_list(&main, &self.filters, fields, self.layout)?;
 

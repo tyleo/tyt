@@ -1,13 +1,13 @@
 use crate::{
     Dependencies, ParentSelection, RequiredSelection, Result, VoxelInput, VoxjOutput,
-    cli_value_parser, edit_document,
+    cli_value_parser, edit_document, load_vox_main,
 };
 use clap::Parser;
 use std::{
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
-use voxconv::{ReadFormat, load};
+use voxconv::ReadFormat;
 use voxcore::{BVoxObject, VoxMain};
 use voxsmith::operations::object::add_objects;
 
@@ -45,7 +45,7 @@ impl ObjectAdd {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let source_from = self.source_format()?;
 
-        let source: VoxMain = load(&dependencies, source_from, &self.source)?;
+        let source: VoxMain = load_vox_main(&dependencies, source_from, &self.source)?;
 
         let object_ids = self.selection.resolve_objects(&source)?;
 

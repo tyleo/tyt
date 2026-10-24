@@ -6,7 +6,7 @@ use crate::{
         OutputKind, ProjectionKind, RenderProfile, RenderProfileStack, SrgbColor, TransformFrame,
         ViewTable, load_render_profile_set,
     },
-    flag_occurrences, parse_flag_index, parse_flag_value,
+    flag_occurrences, load_vox_main, parse_flag_index, parse_flag_value,
 };
 use branded_id::{IdVec, IteratorExt, U32Id};
 use clap::{ArgAction, Parser};
@@ -20,7 +20,6 @@ use std::{
     str::FromStr,
 };
 use ty_math::{TyAngleUnit, TyAxis3, TyQuaternionF64, TySrgbU8, TyVector3F64};
-use voxconv::load;
 use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::{
     Error as VoxsmithError,
@@ -522,7 +521,7 @@ impl ObjectRender {
 
         let from = input.resolve_format()?;
 
-        let mut main: VoxMain = load(&dependencies, from, &input.path)?;
+        let mut main: VoxMain = load_vox_main(&dependencies, from, &input.path)?;
 
         apply_rotate_flags(&mut main, &self.rotate)?;
 

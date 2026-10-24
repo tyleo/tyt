@@ -248,7 +248,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   4. A doc review asks questions the old docs answer, trick questions included,
      and scores rewrites of the new docs on them
   5. A trial round of 30 shows each model beside its image from the last round
-- [ ] **S30. Slash warnings.** A voxcore check lists the nodes and objects
+- [x] **S30. Slash warnings.** A voxcore check lists the nodes and objects
       whose names hold `/`, which makes their joined paths ambiguous. vxl runs
       the check after every conversion into voxcore, from a file read or from a
       voxelize, and warns with a pointer to `--select-index`. Names pass

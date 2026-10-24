@@ -1,9 +1,6 @@
-use crate::{Dependencies, ObjectSelection, Result};
+use crate::{Dependencies, ObjectSelection, Result, load_vox_main_with_ext};
 use std::path::Path;
-use voxconv::{
-    ReadFormat, WriteFormat,
-    ext::{load_with_ext, save_with_ext},
-};
+use voxconv::{ReadFormat, WriteFormat, ext::save_with_ext};
 use voxsmith::{
     Error as VoxsmithError,
     operations::vox_doc::{keep_objects, scale_scene},
@@ -24,7 +21,7 @@ pub fn convert<D: Dependencies>(
     selection: &ObjectSelection,
     scene_scale: Option<f64>,
 ) -> Result<()> {
-    let mut main = load_with_ext(dependencies, from, input)?;
+    let mut main = load_vox_main_with_ext(dependencies, from, input)?;
 
     // Without a selector the state rides through untouched. With one, the
     // pruned state is compacted because the writers index by id.

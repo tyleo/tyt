@@ -4,10 +4,10 @@ use crate::{
         PaletteShowLayoutEntry, PaletteShowProfile, PropertyFlag, PropertyFlags,
         PropertySelectorBuilder, load_palette_show_profile_set, parse_property_selector,
     },
+    load_vox_main,
 };
 use clap::{ArgAction, Parser};
 use std::num::NonZeroU8;
-use voxconv::load;
 use voxcore::VoxMain;
 use voxsmith::operations::palette::{
     PaletteShowLabel, PaletteShowLayout, PaletteShowOptions, PaletteShowTableShape,
@@ -87,7 +87,7 @@ impl PaletteShow {
 
         let from = self.input.resolve_format()?;
 
-        let main: VoxMain = load(&dependencies, from, &self.input.path)?;
+        let main: VoxMain = load_vox_main(&dependencies, from, &self.input.path)?;
 
         // Only `text-rows` wraps, so it alone resolves the `terminal` default.
         let width = match display.layout {

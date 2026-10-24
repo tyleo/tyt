@@ -1,4 +1,7 @@
-use crate::{Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser, file_name};
+use crate::{
+    Dependencies, ObjectSelection, Result, VoxelInput, cli_value_parser, file_name,
+    warn_slashed_names,
+};
 use clap::Parser;
 use voxconv::{
     ReadFormat,
@@ -39,6 +42,8 @@ impl VoxDocShow {
         // The boxed ext keeps any source's ext, so the report can say whether
         // the document carries entries.
         let main = read_with_ext(&dependencies, from, &files)?;
+
+        warn_slashed_names(&dependencies, main.state())?;
 
         let format_version = match from {
             ReadFormat::Voxj => {

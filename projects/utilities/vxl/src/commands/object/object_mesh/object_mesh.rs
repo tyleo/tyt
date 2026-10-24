@@ -5,7 +5,7 @@ use crate::{
         ExtraEntry, MaterialTable, MeshProfile, MeshRun, PrimitiveTable, ProgramBuilder, SlotEntry,
         load_mesh_profile_set, parse_texture_shape,
     },
-    flag_occurrences, parse_flag_index, parse_flag_value,
+    flag_occurrences, load_vox_main, parse_flag_index, parse_flag_value,
 };
 use branded_id::U32Id;
 use clap::{ArgAction, Parser};
@@ -19,7 +19,6 @@ use std::{
     path::{Path, PathBuf},
     result::Result as StdResult,
 };
-use voxconv::load;
 use voxcore::{BVoxObject, VoxExt, VoxMain};
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
@@ -368,7 +367,7 @@ impl ObjectMesh {
 
         let from = input.resolve_format()?;
 
-        let main: VoxMain = load(&dependencies, from, &input.path)?;
+        let main: VoxMain = load_vox_main(&dependencies, from, &input.path)?;
 
         let object_ids = select_mesh_objects(&main, &self.selection)?;
 

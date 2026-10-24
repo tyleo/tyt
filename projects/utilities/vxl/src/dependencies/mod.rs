@@ -1,6 +1,6 @@
 //! The side effects the commands perform, injected so they run over any
 //! filesystem and output. [`DependenciesImpl`] binds std's filesystem and
-//! standard output.
+//! standard output and error.
 
 // Public API
 
@@ -18,6 +18,7 @@ mod rename_path;
 mod resolve_prefs_paths;
 mod run_program;
 mod terminal_columns;
+mod write_stderr;
 mod write_stdout;
 
 pub use create_dir_all::*;
@@ -33,6 +34,7 @@ pub use rename_path::*;
 pub use resolve_prefs_paths::*;
 pub use run_program::*;
 pub use terminal_columns::*;
+pub use write_stderr::*;
 pub use write_stdout::*;
 
 // Re-exported so a caller can name every trait `Dependencies` requires.

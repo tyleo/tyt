@@ -1,7 +1,7 @@
 use crate::{
     CreateDirAll, CreateDirLink, CreateTempDir, DirectoryEntry, DisplayImage, ListDir, PathKind,
     ReadFile, ReadPathKind, RemoveDir, RenamePath, ResolvePrefsPaths, RunProgram, TerminalColumns,
-    WriteFile, WriteStdout,
+    WriteFile, WriteStderr, WriteStdout,
 };
 use crossterm::{
     event::{poll, read},
@@ -233,6 +233,12 @@ impl WriteFile for DependenciesImpl {
         }
 
         fs::write(path, bytes)
+    }
+}
+
+impl WriteStderr for DependenciesImpl {
+    fn write_stderr(&self, contents: &[u8]) -> IOResult<()> {
+        io::stderr().write_all(contents)
     }
 }
 

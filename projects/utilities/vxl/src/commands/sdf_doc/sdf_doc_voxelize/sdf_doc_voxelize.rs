@@ -1,6 +1,7 @@
 use crate::{
     CliValue, Dependencies, Error, Result, VoxjEncodingOptions, WriteFile, cli_value_parser,
     commands::{GridResolutionOptions, SdfDocVoxelizeProfile, load_sdf_doc_voxelize_profile_set},
+    warn_slashed_names,
 };
 use clap::{ArgAction, Parser};
 use sdfconv::{ReadFormat, load};
@@ -110,6 +111,8 @@ impl SdfDocVoxelize {
         let main = load(&dependencies, ReadFormat::Sdfj, &self.input)?;
         let sampling = sample(&VoxsmithDependenciesImpl, &main, &settings.sample)?;
         let document = to_vox_main(&sampling, &settings.vox_main)?;
+
+        warn_slashed_names(&dependencies, document.state())?;
 
         save(
             &dependencies,
