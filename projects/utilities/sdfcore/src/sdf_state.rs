@@ -861,6 +861,27 @@ fn check_pattern(check: &EntryCheck, pattern: &SdfPattern) -> Result<()> {
             check.optional_numbers([*warp, *seed])
         }
 
+        SdfPattern::Bricks {
+            material_ids,
+            length,
+            height,
+            seed,
+            border,
+            ..
+        } => {
+            check.material_ids(
+                material_ids
+                    .iter()
+                    .copied()
+                    .chain(border.map(|border| border.material_id)),
+            )?;
+            check.numbers(
+                [*length, *height, *seed]
+                    .into_iter()
+                    .chain(border.map(|border| border.width)),
+            )
+        }
+
         SdfPattern::Cells {
             material_ids,
             size,

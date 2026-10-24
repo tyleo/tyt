@@ -126,6 +126,36 @@ export function cells(
   });
 }
 
+/**
+ * Courses `height` tall of bricks `length` long that each pick a random
+ * material, with an optional `border` seam `width` wide between them.
+ */
+export function bricks(
+  materials: Material[],
+  length: number,
+  height: number,
+  options: {
+    seed: number;
+    axis?: Axis;
+    border?: { material: Material; width: number };
+  },
+): Pattern {
+  const option = check.knownOptions("bricks", options, [
+    "seed",
+    "axis",
+    "border",
+  ]);
+  return new Pattern({
+    kind: "bricks",
+    materials: materialList("bricks materials", materials),
+    length: check.finite("bricks length", length),
+    height: check.finite("bricks height", height),
+    axis: check.optional("bricks axis", option.axis, check.axis),
+    seed: check.finite("bricks seed", option.seed),
+    border: check.optional("bricks border", option.border, border),
+  });
+}
+
 /** `base` with a `density` chance per cube `size` wide of a random accent. */
 export function speckle(
   base: Material,
@@ -155,7 +185,7 @@ export function checker(materials: Material[], size: number): Pattern {
   });
 }
 
-/** The `cells` border `value`. */
+/** The `bricks` or `cells` border `value`. */
 function border(
   path: string,
   value: unknown,

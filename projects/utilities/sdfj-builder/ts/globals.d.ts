@@ -31,6 +31,7 @@ declare global {
   var bands: typeof api.bands;
   var box: typeof api.box;
   var boxFrame: typeof api.boxFrame;
+  var bricks: typeof api.bricks;
   var capsule: typeof api.capsule;
   var carve: typeof api.carve;
   var cells: typeof api.cells;

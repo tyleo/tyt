@@ -3,6 +3,7 @@ import type { Entry } from "./entry.ts";
 import { material } from "./material.ts";
 import {
   bands,
+  bricks,
   cells,
   checker,
   gradient,
@@ -27,6 +28,24 @@ const CASES: [string, () => Pattern, Entry][] = [
       period: 0.1,
       warp: 0.05,
       seed: 1,
+    },
+  ],
+  [
+    "bricks",
+    () =>
+      bricks([white, black], 0.2, 0.05, {
+        seed: 9,
+        axis: "z",
+        border: { material: gray, width: 0.01 },
+      }),
+    {
+      kind: "bricks",
+      materials: [0, 1],
+      length: 0.2,
+      height: 0.05,
+      axis: "z",
+      seed: 9,
+      border: { material: 2, width: 0.01 },
     },
   ],
   [

@@ -21,6 +21,7 @@ export { type Part, part } from "./part.ts";
 export { helix } from "./paths.ts";
 export {
   bands,
+  bricks,
   cells,
   checker,
   gradient,

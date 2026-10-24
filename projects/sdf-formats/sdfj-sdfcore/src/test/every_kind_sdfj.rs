@@ -93,7 +93,8 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
     { "kind": "noise", "materials": [0, 1], "scale": 0.5, "octaves": 3, "seed": 6 },
     { "kind": "cells", "materials": [0, 2], "size": 0.15, "seed": 7, "border": { "material": 1, "width": 0.02 } },
     { "kind": "speckle", "base": 0, "accents": [1, 2], "size": 0.1, "density": 0.2, "seed": 8 },
-    { "kind": "checker", "materials": [0, 1], "size": 0.1 }
+    { "kind": "checker", "materials": [0, 1], "size": 0.1 },
+    { "kind": "bricks", "materials": [0, 2], "length": 0.2, "height": 0.05, "axis": "z", "seed": 9, "border": { "material": 1, "width": 0.01 } }
   ],
   "steps": [
     { "kind": "add", "name": "add", "shape": 0, "material": 0 },

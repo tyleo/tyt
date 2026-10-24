@@ -1077,6 +1077,20 @@ A pattern picks one of its materials per point and never blends them.
     "border": { "material": 3, "width": 0.02 },
   },
 
+  // bricks: courses `height` tall along `axis` of bricks `length` long, each
+  // a random pick; `axis` defaults to "y"
+  {
+    "kind": "bricks",
+    "materials": [0, 1],
+    "length": 0.215,
+    "height": 0.065,
+    "seed": 4,
+
+    // optional: a seam `width` wide between the bricks, filled with
+    // `material`; defaults to none
+    "border": { "material": 3, "width": 0.01 },
+  },
+
   // speckle: cubes `size` across that each take a random accent from
   // `accents` at `density` odds and `base` otherwise
   {
@@ -1146,11 +1160,22 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
      derives this distance
    - Each offset adds its cube's offset and its jitter before subtracting the
      point's position within the point's cube
-6. `speckle` reads the point's sample position `x`: where the point sits in the
+6. `bricks` stacks courses along `axis`. The point's course reads
+   `k = floor(q[axis] / height)`, and each other axis `i` reads
+   `s[i] = q[i] / length - (1 + 2 * mod(k, 2)) / 4`
+   - The brick `b` holds `k` on `axis` and `floor(s[i])` on each other axis.
+     The point takes material `mod(hash(b[0], b[1], b[2]), n)`
+   - On `axis`, `t = q[axis] / height` and `size = height`. On each other axis,
+     `t = s[i]` and `size = length`
+   - With `f = t - floor(t)`, the border's material takes the point when
+     `size * f < 0.7 * width` or `size * (1 - f) <= 0.3 * width` on any axis.
+     The joint sits off center so that its edges miss the cell centers of a
+     grid that meets or centers on the joint
+7. `speckle` reads the point's sample position `x`: where the point sits in the
    frame a reader samples in. The cube `c = floor(x / size)` gives the point an
    accent when `unit(hash(c, 0))` reads below `density`. With `m` accents, the
    point takes accent `mod(hash(c, 1), m)`
-7. `checker` gives the point material
+8. `checker` gives the point material
    `mod(floor(q[0] / size) + floor(q[1] / size) + floor(q[2] / size), n)`
 
 ## Names

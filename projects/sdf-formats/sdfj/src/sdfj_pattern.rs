@@ -49,6 +49,41 @@ pub enum SdfjPattern {
         seed: Option<f64>,
     },
 
+    /// Courses of bricks that each take a random pick, with an optional border
+    /// between them.
+    Bricks {
+        materials: Vec<usize>,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        length: f64,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        height: f64,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        axis: Option<SdfjAxis>,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        seed: f64,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        border: Option<SdfjBorder>,
+    },
+
     /// Irregular cells that each take a random pick, with an optional border
     /// between them.
     Cells {

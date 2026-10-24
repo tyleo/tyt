@@ -20,6 +20,22 @@ pub enum SdfPattern {
         seed: Option<f64>,
     },
 
+    /// Courses of bricks that each take a random pick, with an optional border
+    /// between them.
+    Bricks {
+        material_ids: Vec<U32Id<BSdfMaterial>>,
+
+        length: f64,
+
+        height: f64,
+
+        axis: Option<TyAxis3>,
+
+        seed: f64,
+
+        border: Option<SdfBorder>,
+    },
+
     /// Irregular cells that each take a random pick, with an optional border
     /// between them.
     Cells {

@@ -1,7 +1,7 @@
 use crate::operations::sdf_doc::{fbm, lattice_hash, noise_seed, whole_count};
 use branded_id::U32Id;
 use sdfcore::{BSdfMaterial, SdfBorder, SdfPattern};
-use ty_math::{TyVector3F64, TyVector3I32};
+use ty_math::{TyAxis3, TyVector3F64, TyVector3I32};
 
 /// The octaves a pattern's noise sums when the model leaves them out.
 const DEFAULT_OCTAVES: u32 = 4;
@@ -40,6 +40,22 @@ pub fn pattern_material(
             );
             cycled(material_ids, (s / period).floor())
         }
+
+        SdfPattern::Bricks {
+            material_ids,
+            length,
+            height,
+            axis,
+            seed,
+            border,
+        } => bricks_material(
+            material_ids,
+            *border,
+            [*length, *height],
+            axis.unwrap_or(TyAxis3::Y),
+            noise_seed(*seed),
+            q,
+        ),
 
         SdfPattern::Cells {
             material_ids,
@@ -155,6 +171,47 @@ fn unit(hash: u32) -> f64 {
 /// hash reads.
 fn lattice_coordinate(value: f64) -> i32 {
     value as i64 as i32
+}
+
+/// The material a `bricks` pattern picks at the frame position `q`. The head
+/// joints sit a quarter brick off the multiples of `length`, so a face built at
+/// a whole or half brick misses them.
+fn bricks_material(
+    material_ids: &[U32Id<BSdfMaterial>],
+    border: Option<SdfBorder>,
+    [length, height]: [f64; 2],
+    axis: TyAxis3,
+    seed: u32,
+    q: TyVector3F64,
+) -> U32Id<BSdfMaterial> {
+    let course = (q[axis.index()] / height).floor();
+    let shift = 0.25 + 0.5 * course.rem_euclid(2.0);
+
+    let mut brick = [0; 3];
+    let mut in_joint = false;
+
+    for index in 0..3 {
+        let (s, size) = if index == axis.index() {
+            (q[index] / height, height)
+        } else {
+            (q[index] / length - shift, length)
+        };
+        let floor = s.floor();
+        let within = s - floor;
+
+        brick[index] = lattice_coordinate(floor);
+
+        // An off-center joint keeps both edges off the cell centers when the
+        // joint sits on a cell's face or its center.
+        if let Some(SdfBorder { width, .. }) = border {
+            in_joint |= size * within < 0.7 * width || size * (1.0 - within) <= 0.3 * width;
+        }
+    }
+
+    match border {
+        Some(SdfBorder { material_id, .. }) if in_joint => material_id,
+        _ => picked(material_ids, lattice_hash(seed, &brick)),
+    }
 }
 
 /// The material a `cells` pattern picks at the frame position `q`. Each
@@ -420,6 +477,90 @@ mod tests {
                 lattice_position
             )
         );
+    }
+
+    #[test]
+    fn bricks_stagger_each_course_by_half_a_brick() {
+        let bricks = SdfPattern::Bricks {
+            material_ids: materials(64),
+            length: 0.2,
+            height: 0.05,
+            axis: None,
+            seed: 2.0,
+            border: None,
+        };
+
+        // Even courses split at 0.05 and odd courses at 0.15.
+        let even = |x| pick_at(&bricks, x, 0.025, 0.1);
+        let odd = |x| pick_at(&bricks, x, 0.075, 0.1);
+        assert_eq!(even(0.06), even(0.24));
+        assert_ne!(even(0.04), even(0.06));
+        assert_eq!(odd(0.16), odd(0.34));
+        assert_ne!(odd(0.14), odd(0.16));
+        assert_ne!(even(0.1), pick_at(&bricks, 0.1, 0.125, 0.1));
+    }
+
+    #[test]
+    fn a_bricks_border_fills_the_joints_on_every_axis() {
+        let bricks = |axis| SdfPattern::Bricks {
+            material_ids: materials(4),
+            length: 0.2,
+            height: 0.05,
+            axis,
+            seed: 2.0,
+            border: Some(SdfBorder {
+                material_id: U32Id::from_u32(99),
+                width: 0.01,
+            }),
+        };
+
+        let upright = bricks(None);
+        assert_eq!(pick_at(&upright, 0.1, 0.051, 0.1), 99);
+        assert_eq!(pick_at(&upright, 0.052, 0.025, 0.1), 99);
+        assert_eq!(pick_at(&upright, 0.1, 0.025, 0.048), 99);
+        assert_ne!(pick_at(&upright, 0.1, 0.025, 0.1), 99);
+
+        // A face built at a whole or half brick stays brick.
+        assert_ne!(pick_at(&upright, 0.0, 0.025, 0.0), 99);
+        assert_ne!(pick_at(&upright, 0.1, 0.075, 0.2), 99);
+
+        let paving = bricks(Some(TyAxis3::Z));
+        assert_eq!(pick_at(&paving, 0.1, 0.1, 0.051), 99);
+        assert_ne!(pick_at(&paving, 0.1, 0.1, 0.025), 99);
+    }
+
+    #[test]
+    fn a_joint_on_a_cell_face_or_center_fills_one_cell() {
+        let bricks = |width| SdfPattern::Bricks {
+            material_ids: materials(4),
+            length: 0.2,
+            height: 0.06,
+            axis: None,
+            seed: 2.0,
+            border: Some(SdfBorder {
+                material_id: U32Id::from_u32(99),
+                width,
+            }),
+        };
+
+        // Cells 0.01 wide meet the joints at 0.06 and 1.2 on their faces.
+        let column = |width, y0: f64, count: u32| -> Vec<bool> {
+            (0..count)
+                .map(|cell| {
+                    let y = y0 + (f64::from(cell) + 0.5) * 0.01;
+                    pick_at(&bricks(width), 0.1, y, 0.1) == 99
+                })
+                .collect()
+        };
+        assert_eq!(column(0.01, 0.04, 4), [false, false, true, false]);
+        assert_eq!(column(0.01, 1.18, 2), [false, false]);
+
+        // Cells 0.02 wide center on the joint at 0.06.
+        let centered: Vec<bool> = [0.04, 0.06, 0.08]
+            .iter()
+            .map(|y| pick_at(&bricks(0.02), 0.1, *y, 0.1) == 99)
+            .collect();
+        assert_eq!(centered, [false, true, false]);
     }
 
     #[test]

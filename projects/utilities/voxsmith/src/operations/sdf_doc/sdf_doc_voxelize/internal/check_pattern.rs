@@ -19,6 +19,39 @@ pub fn check_pattern(pattern: &SdfPattern) -> StdResult<(), String> {
             optional_seed(check, *seed)
         }
 
+        SdfPattern::Bricks {
+            material_ids,
+            length,
+            height,
+            seed,
+            border,
+            ..
+        } => {
+            let check = ArgumentCheck::new("bricks");
+            check.count("materials", material_ids.len(), 1)?;
+            check.above_zero("length", *length)?;
+            check.above_zero("height", *height)?;
+
+            if let Some(border) = border {
+                // A border as wide as a brick fills the whole pattern.
+                check.above_zero("border width", border.width)?;
+                check.expect(
+                    border.width < *height,
+                    "border width",
+                    &format!("below height {height}"),
+                    border.width,
+                )?;
+                check.expect(
+                    border.width < *length,
+                    "border width",
+                    &format!("below length {length}"),
+                    border.width,
+                )?;
+            }
+
+            check.seed(*seed)
+        }
+
         SdfPattern::Cells {
             material_ids,
             size,
@@ -151,6 +184,31 @@ mod tests {
         assert_eq!(
             check_pattern(&speckle(0.1, 0.5, 0.5)),
             Err("speckle seed must be a whole number from -2^31 to 2^31 - 1, not 0.5".to_string())
+        );
+    }
+
+    #[test]
+    fn a_bricks_border_takes_a_width_above_zero_and_below_the_brick() {
+        let bricks = |width| SdfPattern::Bricks {
+            material_ids: vec![U32Id::from_u32(0)],
+            length: 0.2,
+            height: 0.06,
+            axis: None,
+            seed: 1.0,
+            border: Some(SdfBorder {
+                material_id: U32Id::from_u32(1),
+                width,
+            }),
+        };
+
+        assert!(check_pattern(&bricks(0.01)).is_ok());
+        assert_eq!(
+            check_pattern(&bricks(0.0)),
+            Err("bricks border width must be above zero, not 0".to_string())
+        );
+        assert_eq!(
+            check_pattern(&bricks(0.06)),
+            Err("bricks border width must be below height 0.06, not 0.06".to_string())
         );
     }
 

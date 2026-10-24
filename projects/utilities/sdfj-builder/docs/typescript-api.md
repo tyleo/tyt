@@ -739,6 +739,16 @@ function cells(
   size: number,
   options: { seed: number; border?: { material: Material; width: number } },
 ): Pattern;
+function bricks(
+  materials: Material[],
+  length: number,
+  height: number,
+  options: {
+    seed: number;
+    axis?: Axis;
+    border?: { material: Material; width: number };
+  },
+): Pattern;
 function speckle(
   base: Material,
   accents: Material | Material[],
@@ -768,10 +778,14 @@ A seed always gives the same picks. A seed left out reads 0.
    a random pick. `border` fills a seam `width` wide between the cells with its
    `material` for cobblestone and mortar. A `width` under the voxel size leaves
    gaps in the seam
-6. `speckle` gives each cube `size` wide on the grid a `density` chance of a
+6. `bricks` stacks courses `height` tall along `axis` and splits each course
+   into bricks `length` long that each take a random pick. Each course shifts by
+   half a brick. `axis` defaults to `"y"`, and a floor takes `"x"` or `"z"`.
+   `border` fills the joints with its `material`
+7. `speckle` gives each cube `size` wide on the grid a `density` chance of a
    random accent and leaves the rest `base`. Because `speckle` reads cubes fixed
    to the grid, its copies differ. A `size` of `v` accents single cells
-7. `checker` alternates its materials over cubes `size` wide
+8. `checker` alternates its materials over cubes `size` wide
 
 `warp` bends a pattern's divisions by up to that much noise:
 

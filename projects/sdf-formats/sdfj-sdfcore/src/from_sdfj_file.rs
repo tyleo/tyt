@@ -732,6 +732,29 @@ fn sdf_pattern_from_sdfj_pattern(pattern: &SdfjPattern) -> StdResult<SdfPattern,
             seed: *seed,
         },
 
+        SdfjPattern::Bricks {
+            materials,
+            length,
+            height,
+            axis,
+            seed,
+            border,
+        } => SdfPattern::Bricks {
+            material_ids: wire_ids(materials)?,
+            length: *length,
+            height: *height,
+            axis: axis.map(ty_axis3_from_sdfj_axis),
+            seed: *seed,
+            border: match border {
+                Some(SdfjBorder { material, width }) => Some(SdfBorder {
+                    material_id: wire_id(*material)?,
+                    width: *width,
+                }),
+
+                None => None,
+            },
+        },
+
         SdfjPattern::Cells {
             materials,
             size,

@@ -207,7 +207,12 @@ fn pattern_material_ids(pattern: &SdfPattern) -> Vec<U32Id<BSdfMaterial>> {
         | SdfPattern::Grain { material_ids, .. }
         | SdfPattern::Noise { material_ids, .. } => material_ids.clone(),
 
-        SdfPattern::Cells {
+        SdfPattern::Bricks {
+            material_ids,
+            border,
+            ..
+        }
+        | SdfPattern::Cells {
             material_ids,
             border,
             ..
