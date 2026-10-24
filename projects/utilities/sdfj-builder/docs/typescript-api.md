@@ -788,6 +788,37 @@ On a `grain`, faces that run along `axis` streak, and end faces show the rings:
    faces
 3. A board built in place far from the origin reads as one broad ring
 
+## Random numbers
+
+```ts
+function random(seed: number): Random;
+
+class Random {
+  range(min: number, max: number): number;
+  pick<T>(items: readonly T[]): T;
+}
+```
+
+`random` returns a generator for varying placements, sizes, and materials. A
+generator draws the same values from the same seed on every build:
+
+```ts
+const rand = random(7);
+const covers = shades(mat.leather, { count: 4 });
+const book = (i: number) => {
+  const x = i * 0.04;
+  const height = rand.range(0.18, 0.26);
+  const shape = box([x, 0, 0], [x + 0.03, height, 0.15]);
+  return add(`book${i}`, shape, rand.pick(covers));
+};
+```
+
+1. `range` draws a number from `min` up to `max`
+2. `pick` draws one of `items`
+3. Each draw advances the generator, so adding one shifts every later draw
+
+`Math.random` draws new values on every build.
+
 ## Libraries
 
 A library shares named entries between models. `lib` holds the entries of the

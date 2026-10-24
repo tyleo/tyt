@@ -15,6 +15,7 @@ declare global {
   type Part = api.Part;
   type Pattern = api.Pattern;
   type Properties = api.Properties;
+  type Random = api.Random;
   type Shape2d = api.Shape2d;
   type Shape3d = api.Shape3d;
   type Side = api.Side;
@@ -60,6 +61,7 @@ declare global {
   var polygon: typeof api.polygon;
   var polyline: typeof api.polyline;
   var pyramid: typeof api.pyramid;
+  var random: typeof api.random;
   var rect: typeof api.rect;
   var revolve: typeof api.revolve;
   var roundCone: typeof api.roundCone;

@@ -31,6 +31,7 @@ pub const SDFJ_BUILDER_FILES: &[SdfjBuilderFile] = &[
     builder_file!("ts/primitives2d.ts"),
     builder_file!("ts/profiles.ts"),
     builder_file!("ts/put_api_in_scope.ts"),
+    builder_file!("ts/random.ts"),
     builder_file!("ts/sdfj_document.ts"),
     builder_file!("ts/sdfj_json.ts"),
     builder_file!("ts/shades.ts"),

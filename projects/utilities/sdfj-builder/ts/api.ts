@@ -58,6 +58,7 @@ export {
   vesica,
 } from "./primitives2d.ts";
 export { extrude, lathe, revolve, sweep } from "./profiles.ts";
+export { type Random, random } from "./random.ts";
 export { shades } from "./shades.ts";
 export { type Shape2d } from "./shape2d.ts";
 export { type Shape3d } from "./shape3d.ts";
