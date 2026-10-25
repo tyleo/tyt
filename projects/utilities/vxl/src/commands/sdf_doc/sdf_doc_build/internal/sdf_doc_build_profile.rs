@@ -1,4 +1,4 @@
-use crate::{NamedCliValue, Profile, ProfileDescription};
+use crate::{NamedCliValue, Profile, ProfileDescription, commands::SdfDocBuildFont};
 use sdfj_builder::JavaScriptRuntime;
 use serde::Deserialize;
 use serde_json::Value;
@@ -10,6 +10,9 @@ use std::collections::BTreeMap;
 pub struct SdfDocBuildProfile {
     /// Printed beside the profile name in the profile listings.
     pub(crate) description: Option<ProfileDescription>,
+
+    /// Mirrors `--font`.
+    pub(crate) fonts: BTreeMap<String, SdfDocBuildFont>,
 
     /// Mirrors `--intern`.
     pub(crate) intern: Option<bool>,
@@ -35,7 +38,10 @@ impl Profile for SdfDocBuildProfile {
 
 #[cfg(test)]
 mod tests {
-    use crate::{NamedCliValue, commands::SdfDocBuildProfile};
+    use crate::{
+        NamedCliValue,
+        commands::{SdfDocBuildFont, SdfDocBuildProfile},
+    };
     use sdfj_builder::JavaScriptRuntime;
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -45,6 +51,10 @@ mod tests {
         let profile: SdfDocBuildProfile = serde_json::from_str(
             r#"{
                 "description": "Models under Bun",
+                "fonts": {
+                    "label": { "kind": "file", "path": "fonts/plex.otf" },
+                    "sign": { "kind": "installed", "font": "Futura" }
+                },
                 "intern": false,
                 "libraries": ["materials", "props"],
                 "runtime": "bun",
@@ -55,6 +65,23 @@ mod tests {
         .unwrap();
 
         assert_eq!(profile.description.unwrap().as_str(), "Models under Bun");
+        assert_eq!(
+            profile.fonts,
+            BTreeMap::from([
+                (
+                    "label".to_owned(),
+                    SdfDocBuildFont::File {
+                        path: "fonts/plex.otf".into()
+                    }
+                ),
+                (
+                    "sign".to_owned(),
+                    SdfDocBuildFont::Installed {
+                        font: "Futura".to_owned()
+                    }
+                ),
+            ])
+        );
         assert_eq!(profile.intern, Some(false));
         assert_eq!(profile.libraries, ["materials", "props"]);
         assert_eq!(profile.runtime, Some(NamedCliValue(JavaScriptRuntime::Bun)));
@@ -75,6 +102,8 @@ mod tests {
             r#"{ "output": "chair.sdfj" }"#,
             r#"{ "profile": "bun" }"#,
             r#"{ "libraries": "materials" }"#,
+            r#"{ "fonts": { "sign": { "kind": "system", "font": "Futura" } } }"#,
+            r#"{ "fonts": { "sign": { "kind": "file", "font": "Futura" } } }"#,
             r#"{ "intern": "no" }"#,
             r#"{ "vars": [4] }"#,
             r#"{ "varsFrom": "table" }"#,

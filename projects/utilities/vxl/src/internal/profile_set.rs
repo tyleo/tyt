@@ -69,9 +69,15 @@ impl<P> ProfileSet<P> {
 
     /// The profile `name`, which `origin` asks for.
     pub(crate) fn get(&self, origin: &str, name: &str) -> Result<&P> {
+        Ok(self.get_with_origin(origin, name)?.1)
+    }
+
+    /// The profile `name`, which `origin` asks for, with the origin supplying
+    /// it.
+    pub(crate) fn get_with_origin(&self, origin: &str, name: &str) -> Result<(&ProfileOrigin, &P)> {
         self.profiles
             .get(name)
-            .map(|(_, profile)| profile)
+            .map(|(supplier, profile)| (supplier, profile))
             .ok_or_else(|| {
                 let names: Vec<_> = self
                     .profiles

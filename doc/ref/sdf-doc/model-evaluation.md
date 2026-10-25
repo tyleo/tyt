@@ -14,8 +14,8 @@ lists the calls.
 `vxl sdf-doc build` runs in order:
 
 1. The flags and profile merge into the [settings](#settings)
-2. vxl writes the builder's files and the [libraries](#libraries) the settings
-   list to a temporary directory
+2. vxl writes the builder's files and the [libraries](#libraries) and
+   [fonts](#fonts) the settings list to a temporary directory
 3. The runtime runs the builder on the model. It shares vxl's standard output
    and error
 4. When the runtime exits with code 0, vxl copies the document to the output
@@ -53,14 +53,14 @@ line takes:
 
 | Profile  | Keys                                                                |
 | -------- | ------------------------------------------------------------------- |
-| build    | `runtime`, `intern`, `libraries`, `vars`, `varsFrom`                |
+| build    | `runtime`, `intern`, `libraries`, `fonts`, `vars`, `varsFrom`       |
 | voxelize | `resolution`, `voxelSize`, `frame`, `fillMode`, `flatten`, `report` |
 
-`libraries` lists library names, `vars` maps names to JSON values, and
-`varsFrom` lists profile names. `resolution` holds a `reference` and a `count`,
-and a voxelize profile sets `resolution` or `voxelSize` but not both. Either
-profile can add a one-line `description`. An unknown key or value errors when
-the profiles load.
+`libraries` lists library names, `fonts` maps names to [fonts](#fonts), `vars`
+maps names to JSON values, and `varsFrom` lists profile names. `resolution`
+holds a `reference` and a `count`, and a voxelize profile sets `resolution` or
+`voxelSize` but not both. Either profile can add a one-line `description`. An
+unknown key or value errors when the profiles load.
 
 A flag on the command line replaces the profile's value. Either size flag
 replaces both of the profile's sizes. The output paths and voxelize's encoding
@@ -116,6 +116,26 @@ name. The copy brings every entry it references, and later uses reuse the copy.
 A library part comes from a node. The node's object holds the part's steps, and
 its child nodes are the child parts. A copied entry keeps its library names and
 takes the name of each named export that holds it.
+
+## Fonts
+
+`--font <kind> <name=font>` sets the font a model's `text` reads by name, as in
+`--font installed sign=Futura`. A build profile's `fonts` holds the same fonts:
+
+```jsonc
+{
+  "fonts": {
+    // a path resolves against this file's directory
+    "label": { "kind": "file", "path": "fonts/plex.otf" },
+    "sign": { "kind": "installed", "font": "Futura" },
+  },
+}
+```
+
+A `--font` path resolves against the working directory. A `--font` replaces the
+profile's font of the same name. The document's
+[`fonts`](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#fonts)
+entry holds each path relative to the document's directory.
 
 ## Sampling
 
@@ -289,8 +309,8 @@ live cell, shows in the report and stops nothing.
 
 ### Build
 
-1. `--runtime` takes `node`, `bun`, or `deno`, and `--profile` names a profile
-   the cascade holds
+1. `--runtime` takes `node`, `bun`, or `deno`, `--font` takes `file` or
+   `installed`, and `--profile` names a profile the cascade holds
 2. `--library` and `libraries` name libraries the cascade defines, and each one
    passes the sdfj format's validation
 3. A runtime that fails to start stops the build with the system's message
