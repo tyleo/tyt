@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    operations::sdf_doc::{EntryPaths, OutlineSegment, text_outline},
+    operations::sdf_doc::{EntryPaths, OutlineContour, text_outline},
 };
 use branded_id::{IteratorExt, U32Id};
 use sdfcore::{BSdfShape2d, SdfMain, SdfShape2d, SdfTextAlign};
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 pub fn text_outlines(
     main: &SdfMain,
     paths: &EntryPaths,
-) -> Result<HashMap<U32Id<BSdfShape2d>, Vec<Vec<OutlineSegment>>>> {
+) -> Result<HashMap<U32Id<BSdfShape2d>, Vec<OutlineContour>>> {
     let state = main.state();
     let mut outlines = HashMap::new();
 

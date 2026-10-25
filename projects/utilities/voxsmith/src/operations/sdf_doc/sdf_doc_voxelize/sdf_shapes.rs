@@ -1,5 +1,5 @@
 use crate::operations::sdf_doc::{
-    Bounds2d, Bounds3d, OutlineSegment, SdfEvaluation, Shape2dField, Shape3dField, ShapeSource,
+    Bounds2d, Bounds3d, OutlineContour, SdfEvaluation, Shape2dField, Shape3dField, ShapeSource,
 };
 use branded_id::{IdVec, IteratorExt, U32Id};
 use sdfcore::{BSdfShape2d, BSdfShape3d, SdfMain, SdfShape2d};
@@ -29,7 +29,7 @@ impl SdfShapes {
     /// When a shape's arguments fail the sdfj format's validation.
     pub(crate) fn new(
         main: &SdfMain,
-        mut text_outlines: HashMap<U32Id<BSdfShape2d>, Vec<Vec<OutlineSegment>>>,
+        mut text_outlines: HashMap<U32Id<BSdfShape2d>, Vec<OutlineContour>>,
     ) -> Self {
         let state = main.state();
 

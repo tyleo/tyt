@@ -1,17 +1,32 @@
-use crate::operations::sdf_doc::OutlineSegment;
+use crate::operations::sdf_doc::{Bounds2d, OutlineContour, OutlineSegment};
 use std::f64::consts::TAU;
 use ty_math::TyVector2F64;
 
 /// The signed distance to `point` from the outline of `contours`. The sign
 /// follows the nonzero rule.
-pub fn outline_distance(contours: &[Vec<OutlineSegment>], point: TyVector2F64) -> f64 {
+pub fn outline_distance(contours: &[OutlineContour], point: TyVector2F64) -> f64 {
     let mut distance_squared = f64::INFINITY;
     let mut winding = 0;
 
-    for contour in contours {
-        let mut from = contour.last().expect("a contour holds segments").to();
+    // A contour lies inside its box, so it is never nearer than the box and
+    // winds around no point outside it. The loop visits the nearest boxes first
+    // and stops at a box outside the point that is no nearer than the nearest
+    // segment so far.
+    let mut nearest: Vec<_> = contours
+        .iter()
+        .map(|contour| (box_distance_squared(&contour.bounds, point), contour))
+        .collect();
+    nearest.sort_by(|(a, _), (b, _)| a.total_cmp(b));
 
-        for segment in contour {
+    for (box_squared, contour) in nearest {
+        if box_squared > 0.0 && box_squared >= distance_squared {
+            break;
+        }
+
+        let segments = &contour.segments;
+        let mut from = segments.last().expect("a contour holds segments").to();
+
+        for segment in segments {
             let to = segment.to();
 
             let (segment_winding, segment_squared) = match *segment {
@@ -34,6 +49,14 @@ pub fn outline_distance(contours: &[Vec<OutlineSegment>], point: TyVector2F64) -
     let distance = distance_squared.sqrt();
 
     if winding != 0 { -distance } else { distance }
+}
+
+/// The squared distance to `point` from `bounds`, which reads zero inside it.
+fn box_distance_squared(bounds: &Bounds2d, point: TyVector2F64) -> f64 {
+    let outside = (bounds.min - point)
+        .max(point - bounds.max)
+        .max(TyVector2F64::ZERO);
+    outside.length_squared()
 }
 
 /// How the line from `from` to `to` winds around `point`, counted where it
@@ -197,8 +220,10 @@ fn cubic_roots(c3: f64, c2: f64, c1: f64, c0: f64) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use crate::operations::sdf_doc::{
-        OutlineSegment, grid2d, outline_distance, polygon_distance, polygon_reference,
+        OutlineContour, OutlineSegment, grid2d, outline_distance, polygon_distance,
+        polygon_reference,
     };
+    use std::slice;
     use ty_math::TyVector2F64;
 
     fn line(u: f64, v: f64) -> OutlineSegment {
@@ -218,7 +243,7 @@ mod tests {
     /// `steps` points along each axis. Each distance lies within `tolerance` of
     /// `expected`.
     fn assert_outline(
-        contours: &[Vec<OutlineSegment>],
+        contours: &[OutlineContour],
         (min, max, steps): (TyVector2F64, TyVector2F64, u32),
         tolerance: f64,
         expected: impl Fn(TyVector2F64) -> f64,
@@ -234,20 +259,21 @@ mod tests {
         }
     }
 
-    fn square(min: f64, max: f64) -> Vec<OutlineSegment> {
-        vec![
+    fn square(min: f64, max: f64) -> OutlineContour {
+        OutlineContour::new(vec![
             line(max, min),
             line(max, max),
             line(min, max),
             line(min, min),
-        ]
+        ])
     }
 
     #[test]
     fn an_outline_of_lines_measures_as_its_polygon() {
         let points = [(0.2, -0.2), (0.9, 0.0), (0.2, 0.6), (-0.8, 0.2)]
             .map(|(u, v)| TyVector2F64::new(u, v));
-        let contour = points.iter().map(|point| line(point.x, point.y)).collect();
+        let contour =
+            OutlineContour::new(points.iter().map(|point| line(point.x, point.y)).collect());
         let grid = (TyVector2F64::splat(-1.0), TyVector2F64::splat(1.0), 17);
 
         assert_outline(&[contour], grid, 1e-12, |point| {
@@ -285,19 +311,19 @@ mod tests {
 
         let grid = (TyVector2F64::splat(-1.2), TyVector2F64::splat(1.2), 25);
 
-        assert_outline(&[contour], grid, 1e-6, |point| {
+        assert_outline(&[OutlineContour::new(contour)], grid, 1e-6, |point| {
             polygon_reference(&flattened, point)
         });
     }
 
     #[test]
     fn a_straight_curve_measures_as_its_line() {
-        let curved = vec![
+        let curved = OutlineContour::new(vec![
             line(1.0, 0.0),
             quadratic(1.0, 0.5, 1.0, 1.0),
             line(0.0, 1.0),
             line(0.0, 0.0),
-        ];
+        ]);
         let point = TyVector2F64::new(1.3, 0.4);
 
         assert!((outline_distance(&[curved], point) - 0.3).abs() <= 1e-12);
@@ -305,17 +331,31 @@ mod tests {
 
     #[test]
     fn the_sign_follows_the_nonzero_rule() {
-        let hole = vec![
+        let hole = OutlineContour::new(vec![
             line(-0.25, 0.25),
             line(0.25, 0.25),
             line(0.25, -0.25),
             line(-0.25, -0.25),
-        ];
+        ]);
         let ring = [square(-1.0, 1.0), hole];
         let overlap = [square(-1.0, 0.5), square(-0.5, 1.0)];
 
         assert!(outline_distance(&ring, TyVector2F64::ZERO) > 0.0);
         assert!(outline_distance(&ring, TyVector2F64::splat(0.5)) < 0.0);
         assert!(outline_distance(&overlap, TyVector2F64::ZERO) < 0.0);
+    }
+
+    #[test]
+    fn a_row_of_contours_measures_as_its_nearest() {
+        let row: Vec<_> = (0..6)
+            .map(|index| square(f64::from(index), f64::from(index) + 0.5))
+            .collect();
+        let grid = (TyVector2F64::splat(-1.0), TyVector2F64::new(7.0, 1.5), 41);
+
+        assert_outline(&row, grid, 0.0, |point| {
+            row.iter()
+                .map(|contour| outline_distance(slice::from_ref(contour), point))
+                .fold(f64::INFINITY, f64::min)
+        });
     }
 }

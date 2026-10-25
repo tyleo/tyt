@@ -1,5 +1,5 @@
 use crate::operations::sdf_doc::{
-    ArcSpan, Bounds2d, OutlineSegment, PointMap2d, ShapeSource, arc_distance, arch_distance,
+    ArcSpan, Bounds2d, OutlineContour, PointMap2d, ShapeSource, arc_distance, arch_distance,
     chamfer_rect_distance, ellipse_distance, exact_sin_cos, fold_to_direction, outline_distance,
     polygon_distance, polyline_distance, rect_distance, sector_distance, smooth_intersect_distance,
     smooth_union_distance, spline_points, vesica_distance, whole_count,
@@ -86,7 +86,7 @@ pub enum Shape2dField {
 
     /// Closed contours of lines and quadratic curves, filled by the nonzero
     /// rule.
-    Outline { contours: Vec<Vec<OutlineSegment>> },
+    Outline { contours: Vec<OutlineContour> },
 
     /// A closed outline.
     Polygon { points: Vec<TyVector2F64> },
@@ -690,9 +690,11 @@ impl Shape2dField {
                 of(shape_id).grow(TyVector2F64::splat(distance.max(0.0)))
             }
 
-            Shape2dField::Outline { contours } => {
-                Bounds2d::from_points(contours.iter().flatten().flat_map(OutlineSegment::points))
-            }
+            Shape2dField::Outline { contours } => contours
+                .iter()
+                .map(|contour| contour.bounds)
+                .reduce(|bounds, contour_bounds| bounds.union(&contour_bounds))
+                .expect("an outline holds contours"),
 
             Shape2dField::Polygon { points } => Bounds2d::from_points(points.iter().copied()),
 

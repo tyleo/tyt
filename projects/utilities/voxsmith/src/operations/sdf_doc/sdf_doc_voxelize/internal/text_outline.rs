@@ -1,4 +1,4 @@
-use crate::operations::sdf_doc::OutlineSegment;
+use crate::operations::sdf_doc::{OutlineContour, OutlineSegment};
 use sdfcore::{SdfFontData, SdfGlyphSegment, SdfTextAlign};
 use std::result::Result as StdResult;
 use ty_math::TyVector2F64;
@@ -12,7 +12,7 @@ pub fn text_outline(
     string: &str,
     size: f64,
     align: SdfTextAlign,
-) -> StdResult<Vec<Vec<OutlineSegment>>, String> {
+) -> StdResult<Vec<OutlineContour>, String> {
     let cap_height = font.cap_height.ok_or_else(|| {
         format!("the font `{font_name}` gives no cap height and has no `H` to measure")
     })?;
@@ -79,7 +79,7 @@ pub fn text_outline(
     Ok(contours
         .into_iter()
         .map(|contour| {
-            contour
+            let segments = contour
                 .into_iter()
                 .map(|segment| match segment {
                     OutlineSegment::Line { to } => OutlineSegment::Line { to: place(to) },
@@ -89,7 +89,8 @@ pub fn text_outline(
                         to: place(to),
                     },
                 })
-                .collect()
+                .collect();
+            OutlineContour::new(segments)
         })
         .collect())
 }
@@ -170,7 +171,7 @@ impl ContourBuilder {
 #[cfg(test)]
 mod tests {
     use super::ContourBuilder;
-    use crate::operations::sdf_doc::{OutlineSegment, text_outline};
+    use crate::operations::sdf_doc::{OutlineContour, OutlineSegment, text_outline};
     use sdfcore::{SdfFontData, SdfGlyph, SdfGlyphContour, SdfGlyphSegment, SdfTextAlign};
     use std::collections::BTreeMap;
     use ty_math::TyVector2F64;
@@ -229,7 +230,7 @@ mod tests {
         glyphs: Vec<(char, SdfGlyph)>,
         string: &str,
         align: SdfTextAlign,
-    ) -> Result<Vec<Vec<OutlineSegment>>, String> {
+    ) -> Result<Vec<OutlineContour>, String> {
         let font = SdfFontData {
             units_per_em: 1000.0,
             cap_height,
@@ -251,7 +252,7 @@ mod tests {
 
         // 700 units scale to 0.07, so each unit spans 0.0001.
         assert_eq!(contours.len(), 2);
-        let [h, u] = [&contours[0], &contours[1]].map(|contour| contour.as_slice());
+        let [h, u] = [&contours[0], &contours[1]].map(|contour| contour.segments.as_slice());
         let close = |a: TyVector2F64, b: TyVector2F64| a.distance(b) < 1e-12;
         assert!(close(h[1].to(), point(0.05, 0.07)), "{h:?}");
         let OutlineSegment::Quadratic { control, to } = u[0] else {
@@ -273,9 +274,12 @@ mod tests {
 
         // `U` starts at 600 - 100 and the second `H` at 500 + 550 + 300.
         let close = |a: TyVector2F64, b: TyVector2F64| a.distance(b) < 1e-12;
-        assert!(close(contours[1][0].to(), point(0.1, 0.0)), "{contours:?}");
         assert!(
-            close(contours[2][0].to(), point(0.135, 0.07)),
+            close(contours[1].segments[0].to(), point(0.1, 0.0)),
+            "{contours:?}"
+        );
+        assert!(
+            close(contours[2].segments[0].to(), point(0.135, 0.07)),
             "{contours:?}"
         );
     }
@@ -288,11 +292,7 @@ mod tests {
             (SdfTextAlign::End, -0.06),
         ] {
             let contours = outline(Some(700.0), vec![h()], "H", align).unwrap();
-            let left_most = contours[0]
-                .iter()
-                .flat_map(OutlineSegment::points)
-                .map(|point| point.x)
-                .fold(f64::INFINITY, f64::min);
+            let left_most = contours[0].bounds.min.x;
             assert!((left_most - left).abs() < 1e-12, "{align:?}: {left_most}");
         }
     }
