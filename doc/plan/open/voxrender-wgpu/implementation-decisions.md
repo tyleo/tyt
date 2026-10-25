@@ -377,10 +377,11 @@ they land.
   2. Two independent chains, each read counted as a step
   3. vec4 loads from the cache lines the u32 loop reads
   4. One start per workgroup, so a subgroup reads one address
-- The compute launch runs the hoisted loop at 0 steps. The fragment launch
-  draws one triangle per eye into a 2-layer Rgba8Unorm target with two
-  passes. Its time runs from the first pass's start to the second's end.
-  Multiview waits for a frame that needs it
+- The compute launch runs the hoisted loop at 0, 1, 2, 4, and 8 steps. The
+  counts below the step loops' show where a launch's cost ends. The
+  fragment launch draws one triangle per eye into a 2-layer Rgba8Unorm
+  target with two passes. Its time runs from the first pass's start to the
+  second's end. Multiview waits for a frame that needs it
 - The subgroup probe reports the least and greatest `subgroup_size` of an
   8x8 dispatch over one eye. It is its own pipeline, so a register-heavy
   walk can still compile to another size. Naga 30 rejects `enable
@@ -404,3 +405,9 @@ they land.
   batches in flight keep the GPU busy through short kernels and bound the
   queue behind long ones. The Quest app runs the profile in place of B1 and
   B2's timer when `debug.voxrenderbench.profile` is `true`
+- The Quest app reads the GPU clock from kgsl's `devfreq/cur_freq` each frame
+  and logs each clock's share of a B2 window's time. Level 4 moves between
+  545, 599, and 640 MHz every few seconds, so every window blends the three
+  clocks. Pinning one clock needs root. B2 keeps blended windows because
+  repeat windows' trace medians agree within 2% and an app at level 4 sees
+  the same blend

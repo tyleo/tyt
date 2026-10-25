@@ -92,6 +92,12 @@ pub enum Error {
     /// The profile property holds a value other than `true` or `false`.
     ProfileProperty(String),
 
+    /// The GPU clock's file would not read.
+    ClockRead(IOError),
+
+    /// The GPU clock's file holds other than a clock in Hz.
+    ClockParse(String),
+
     /// A benchmark failed.
     Bench(BenchError),
 }
@@ -127,6 +133,8 @@ impl Display for Error {
             Error::ProfileProperty(value) => {
                 write!(f, "the profile property holds {value:?}, not true or false")
             }
+            Error::ClockRead(error) => write!(f, "the GPU clock would not read: {error}"),
+            Error::ClockParse(text) => write!(f, "the GPU clock file holds {text:?}"),
             Error::Bench(error) => write!(f, "a benchmark failed: {error}"),
         }
     }

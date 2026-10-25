@@ -1,6 +1,6 @@
 use crate::{
-    Error, EyeSwapchain, FrameTimes, Result, XrGpu, XrSystem, probe_focal_lengths, probe_session,
-    probe_visibility_mask,
+    Error, EyeSwapchain, FrameTimes, GpuClock, Result, XrGpu, XrSystem, probe_focal_lengths,
+    probe_session, probe_visibility_mask,
 };
 use openxr::{
     CompositionLayerProjection, CompositionLayerProjectionView, Duration as XrDuration,
@@ -111,8 +111,8 @@ impl XrApp {
                 KernelProfile::new(&gpu.device, &gpu.queue, width, height).map_err(Error::Bench)?,
             )
         } else {
-            FrameWork::Timer(
-                PassTimer::new(
+            FrameWork::Timer {
+                pass_timer: PassTimer::new(
                     &gpu.device,
                     &gpu.queue,
                     TimedBench::B2 { ray_queries: true },
@@ -120,7 +120,8 @@ impl XrApp {
                     height,
                 )
                 .map_err(Error::Bench)?,
-            )
+                clock: GpuClock::new()?,
+            }
         };
 
         Ok(XrApp {
@@ -259,7 +260,9 @@ impl XrApp {
         });
 
         match &mut self.work {
-            FrameWork::Timer(pass_timer) => {
+            FrameWork::Timer { pass_timer, clock } => {
+                clock.sample()?;
+
                 pass_timer
                     .record(&self.gpu.device, &self.gpu.queue, &mut encoder)
                     .map_err(Error::Bench)?;
@@ -270,6 +273,8 @@ impl XrApp {
                     .collect(&self.gpu.device, &self.gpu.queue)
                     .map_err(Error::Bench)?
                 {
+                    log::info!("b2 {}", clock.take());
+
                     for line in report.lines() {
                         log::info!("b2 {line}");
                     }
@@ -331,8 +336,13 @@ impl XrApp {
 
 /// What each frame records after it clears the eyes.
 enum FrameWork {
-    /// B2's timer, which logs each window's report on `b2` lines.
-    Timer(PassTimer),
+    /// B2's timer, which logs each GPU clock's share of a window and then the
+    /// window's report on `b2` lines.
+    Timer {
+        pass_timer: PassTimer,
+
+        clock: GpuClock,
+    },
 
     /// The profile, which logs each kernel as its stretch starts on
     /// `profile` lines.

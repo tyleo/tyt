@@ -338,3 +338,180 @@ The Quest p99s sit within 6% of the p50s.
    storage-buffer step
 6. On Quest the ray query beats the tree walk by 2.1x on S1 and loses by
    1.7x on S5. Both stay candidates for the shadow march B5 measures
+
+## B2 re-baseline, 2026-10-25
+
+S9.2's profile of where B2's time goes. B2 runs on trusted modules with new
+step variants and launch kernels, beside the tree walk with the checks.
+
+- Device: Meta Quest 3, Horizon OS build 52641960028000520 on Android 14,
+  OpenXR runtime Oculus 209.147.0. GPU, driver, wgpu, and openxr as in B0
+- Command: the run steps in `voxrender-bench-quest`'s README, worn. Two
+  windows ran at 07:22 and 07:24 and one at 13:35. The tables hold the 13:35
+  window
+- GPU level: 4. The 13:35 window ran 89% of its time at 640 MHz, 7% at 599,
+  and 4% at 545, a mean of 633 MHz. The morning windows logged 545 to 640 MHz
+  without the shares
+- Temperature: 33 C per VrApi two minutes after the 13:35 window
+- This Mac: the device of B1 desktop, through
+  `cargo run --release -p voxrender-bench-desktop -- b2-times`
+- Ids: B1 passes on both devices. Quest's counts match B2 2026-10-22's
+  table
+
+**Clock.** Level 4 moves between 545, 599, and 640 MHz every few seconds, so
+every window blends the three. The three windows' trace medians agree
+within 2%. Kernels under 15 ms agree within 10%. B2 2026-10-22 sampled no
+clock. Its checked tree walk on S1 took 161.7 ms, against 135.6 ms now, and
+that 1.19x falls near the 1.16x between a mean of 633 MHz and level 4's
+floor of 545.
+
+**Probes.**
+
+1. Subgroups: an 8x8 dispatch runs as one 64-wide subgroup on Quest and two
+   32-wide ones on this Mac
+2. Quad views: with an OpenXR 1.1 instance and the manifest tag, the runtime
+   offers PRIMARY_STEREO_WITH_FOVEATED_INSET. Its four views each recommend
+   840x880, 2.96 M pixels in all, where PRIMARY_STEREO's two recommend
+   5.91 M
+3. Focal lengths: the left eye spans -54 to 40 degrees across and -55 to 44
+   down to up, and the right eye mirrors it. At 1680x1760, f is 758.3 px
+   across and 735.2 px up
+
+**Step loops.** Each pass times one loop at one step count over two 1680 by
+1760 eyes. Times are p50s in ms. The rate comes from each loop's
+least-squares line through its three p50s.
+
+| Loop | Quest 8 | Quest 16 | Quest 32 | Quest Gsteps/s | Mac 8 | Mac 16 | Mac 32 | Mac Gsteps/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| storage buffer | 5.176 | 10.138 | 19.599 | 9.86 | 0.254 | 0.470 | 0.901 | 219.25 |
+| 3D texture | 4.802 | 10.518 | 20.510 | 9.09 | 0.243 | 0.444 | 0.846 | 235.13 |
+| 2D array | 4.802 | 10.506 | 20.373 | 9.18 | 0.250 | 0.461 | 0.879 | 225.88 |
+| u32-pair masks | 6.321 | 13.345 | 26.865 | 6.92 | 0.359 | 0.688 | 1.355 | 142.46 |
+| buffer, start hoisted | 3.201 | 5.789 | 10.089 | 20.80 | 0.232 | 0.428 | 0.813 | 244.72 |
+| buffer, two chains | 2.877 | 5.390 | 11.889 | 31.13 | 0.281 | 0.534 | 1.024 | 382.86 |
+| buffer, vec4 loads | 3.108 | 6.598 | 13.752 | 13.32 | 0.258 | 0.478 | 0.916 | 215.54 |
+| buffer, uniform address | 2.592 | 4.729 | 10.622 | 17.42 | 0.234 | 0.427 | 0.813 | 245.07 |
+
+The trusted storage-buffer step runs 1.22x B2 2026-10-22's on Quest and
+2.6x on this Mac. Hoisting the start doubles the Quest rate again. Two chains
+run 1.50x one chain on Quest and 1.56x on this Mac. On Quest, vec4 loads cost
+0.64x the hoisted rate and a uniform address 0.84x.
+
+**Launches.** The compute launch runs the hoisted loop at 0 to 8 steps. The
+fragment launch draws both eyes with one triangle each. Times are p50s in
+ms.
+
+| Launch | Quest | Mac |
+| --- | ---: | ---: |
+| compute, 0 steps | 2.318 | 0.106 |
+| compute, 1 step | 2.319 | 0.159 |
+| compute, 2 steps | 2.321 | 0.171 |
+| compute, 4 steps | 2.323 | 0.172 |
+| compute, 8 steps | 2.793 | 0.232 |
+| fragment | 0.228 | 0.056 |
+
+On Quest, a compute pass over both eyes takes at least 2.32 ms, 10x the
+fragment pass over the same pixels. Up to 4 steps hide under that floor. A
+pass takes the floor or its work, whichever is longer. The step loops' lines
+start at 8 steps, above the floor, so their intercepts hold no launch cost.
+
+The hoisted loop at 8 steps takes 3.201 ms in the step loops' rows and
+2.793 ms as the compute launch, the same pipeline in the same window. The
+morning windows show the same gap. The two differ only in the pass before
+them: the 32-step masks loop, and the 4-step launch. On this Mac both take
+0.232 ms. The pass before can move a short Quest kernel's time by up to
+15%.
+
+**Traces.** The tree walk, with and without the checks, and the four ray
+query arms trace S1 and S5 without their lights.
+
+| Trace | Quest p50 | Quest Grays/s | Mac p50 | Mac Grays/s |
+| --- | ---: | ---: | ---: | ---: |
+| tree walk, S1 | 108.036 | 0.055 | 8.505 | 0.695 |
+| tree walk, checked, S1 | 135.578 | 0.044 | 11.180 | 0.529 |
+| ray query, integer march, 4^3, S1 | 67.187 | 0.088 | 7.742 | 0.764 |
+| ray query, integer march, 16^3, S1 | 75.620 | 0.078 | 8.615 | 0.686 |
+| ray query, float march, 4^3, S1 | 44.752 | 0.132 | 6.216 | 0.951 |
+| ray query, float march, 16^3, S1 | 42.175 | 0.140 | 5.700 | 1.037 |
+| tree walk, S5 | 13.392 | 0.442 | 1.064 | 5.559 |
+| tree walk, checked, S5 | 16.949 | 0.349 | 1.290 | 4.583 |
+| ray query, integer march, 4^3, S5 | 42.555 | 0.139 | 7.320 | 0.808 |
+| ray query, integer march, 16^3, S5 | 27.298 | 0.217 | 3.730 | 1.586 |
+| ray query, float march, 4^3, S5 | 30.350 | 0.195 | 6.187 | 0.956 |
+| ray query, float march, 16^3, S5 | 21.691 | 0.273 | 3.282 | 1.802 |
+
+The checks cost the tree walk 1.25x on S1 and 1.27x on S5 on Quest, and
+1.31x and 1.21x on this Mac.
+
+**Iterations.** A counted walk splits each ray's loop iterations by the side
+of the region each one leaves. The counts match on both devices.
+
+| Scene | Iterations per ray | Cell steps | 4^3 skips | 16^3 skips | Quest Giterations/s | Mac Giterations/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| S1 | 18.6 | 3.8 | 5.2 | 9.5 | 1.02 | 12.91 |
+| S5 | 2.7 | 2.7 | 0.0 | 0.0 | 1.20 | 15.12 |
+
+On S1, 79% of the iterations skip a region. One S1 iteration costs about 20
+hoisted steps on Quest and 19 on this Mac.
+
+**Shader lines.** One Xcode Metal capture of the S1 tree walk on this Mac,
+on 2026-10-24, costs each line of the generated Metal. The walk compiles to
+80 registers. Shares are of the whole shader.
+
+| Code | Share |
+| --- | ---: |
+| `tree_walk` | 88.75% |
+| `leave()`, crossing a region | 29.74% |
+| `leave()`'s f32 guess, `(high * ONE - origin) / direction` | 6.35% |
+| `leave()`'s crossing on another axis | 5.29% |
+| `leave()`'s floor and clamp of that crossing | 3.49% |
+| `leave()`'s correction loops | about 2% |
+| `enter()`, no line over 3.03% | 22.27% |
+| `at % size`, an i32 modulo by a runtime 4 or 16 | 13.11% |
+| `region_at` | 6.54% |
+| the single-cell step | about 0.8% |
+
+**Counters.** `ovrgpuprofiler -r` sampled each profiled kernel for 7 seconds
+on Quest at 640 MHz, on 2026-10-25. The profile runs each kernel alone.
+
+| Counter | Tree walk, S1 | Tree walk, S5 | Ray query, float, 16^3, S1 | Hoisted, 16 steps | Compute launch | Fragment launch |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| % Shaders Busy | 94.9 | 93.2 | 94.3 | 93.1 | 27.6 | 5.6 |
+| % Shaders Stalled | 8.6 | 15.8 | 4.5 | 6.0 | 22.3 | 0.2 |
+| % Shader ALU Capacity Utilized | 56.4 | 39.8 | 51.6 | 57.7 | 11.1 | 68.4 |
+| % Time ALUs Working | 59.7 | 44.5 | 64.3 | 59.9 | 11.5 | 71.0 |
+| % Time EFUs Working | 6.3 | 1.9 | 7.8 | 1.2 | 2.5 | 15.2 |
+| % Wave Context Occupancy | 51.6 | 51.9 | 51.7 | 98.8 | 20.5 | 95.0 |
+| % L1 Hit | 89.4 | 81.5 | 91.5 | 85.9 | 62.4 | 62.5 |
+| % Global Buffer Read L2 Hit | 78.4 | 80.2 | 78.6 | 75.5 | 75.1 | 75.0 |
+| % Stalled on System Memory | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 |
+| % RTU Busy | 0.0 | 0.0 | 31.2 | 0.0 | 0.0 | 0.0 |
+| % BVH Fetch Stall | 0.0 | 0.0 | 0.5 | 0.0 | 0.0 | 0.0 |
+| % Time Compute | 95.4 | 94.8 | 95.3 | 95.0 | 30.5 | 0.0 |
+| % Kernel Load Cycles | 5.1 | 6.4 | 5.6 | 6.6 | 70.4 | 92.1 |
+
+The compute launch spends 67% of its time shading fragments, so the eye
+clear and the compositor fill its column. The launch columns do not isolate
+the launches.
+
+**Outcomes.**
+
+1. R stays under 0.25 Grays/s on S1 and between 0.25 and 0.5 on S5. The best
+   S1 rate is 0.140, from the ray query's float march over 16^3 bricks. The
+   best S5 rate is 0.442, from the tree walk
+2. Trusted modules gain 1.25x on the tree walk. The rest of the gain over
+   B2 2026-10-22 falls within the clock's 1.16x
+3. The walk computes more than it waits. Its ALUs work 60% of the time and
+   stall 8.6%, its L1 hits 89%, and system memory stalls stay at 0.1%. Two
+   chains gain 1.5x, short of the 2x that would mark a latency-bound loop.
+   Rung 3 stays ahead of rung 4
+4. The walk keeps half the step loop's waves: 52% occupancy against 99%.
+   Rung 1's footprint read in RenderDoc has not run, so the 24 vec4 test
+   that moves rung 5's trims up has no answer
+5. Region skips dominate. `leave()`, `enter()`, and `at % size` take 65% of
+   the S1 walk, and the single-cell step under 1%. `at % size` divides by a
+   power of two, which a mask could replace
+6. No compute pass over both eyes runs under 2.32 ms on Quest, 21% of a
+   90 Hz frame. A fragment pass over the same pixels takes 0.23 ms
+7. Quad views cut the recommended pixels to 2.96 M, half of stereo's
+8. Wave64 on Quest drops rung 5's 16x8 groups, which waited on wave128

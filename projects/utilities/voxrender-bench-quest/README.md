@@ -42,7 +42,9 @@ adb logcat -s voxrender-bench
 The property pins the GPU at level 4, the level the benchmarks' thresholds
 assume, until the headset reboots. `adb logcat -s VrApi` shows the level as
 the second number after `GPU=` and the clock after the slash that follows.
-The clock can change within a level during a run.
+The clock moves within a level every few seconds, so each window of B2's
+times starts with a `b2` line holding each clock's share of the window's
+time.
 
 The headset's library also lists the app under Unknown Sources. B1 takes
 about 22 seconds, and the session opens after it. The session starts only

@@ -15,7 +15,7 @@ const PROFILED: [(&str, u32); 6] = [
     ("tree walk, S5 grazing floor", 1),
     ("ray query, float march, 16^3 bricks, S1 art room", 1),
     ("buffer, start hoisted, 16 steps", 2),
-    ("compute launch", 5),
+    ("compute launch, 0 steps", 5),
     ("fragment launch", 50),
 ];
 

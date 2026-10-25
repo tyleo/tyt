@@ -126,38 +126,56 @@ code-level choices in
 - [ ] **S9. A faster march on Quest.** B2's first rates come from
       first-draft code. S9 raises them as far as it can before R picks the
       B3 arms.
-      1. Industry research finds the levers that cut each ray's cost or the
-         rays a frame needs. The research ranks the levers into an ordered
-         list of experiments. The report lands in `reference/`
-      2. A re-baseline shows where the time goes. B2's kernels move to
-         trusted shader modules. The step loop gains variants that split
-         load cost from ALU cost. Profilers time the tree walk and the step
-         loop on the desktop and on Quest
-      3. A bare greedy-mesh raster of S1 and S5 on Quest gives the march a
-         rate to beat
-      4. The experiments follow the research's
-         [ladder](reference/speedup-research.md#5-experiment-ladder). They
-         rework the tree walk, the 64-tree, and the ray query march, one
-         change at a time. Each change is timed on the desktop through
-         `b2-times`. A change that wins stays. One short worn run confirms a
-         batch on Quest. B1's ids check every change against the reference
-      5. Conservative start bounds join the experiments. A bound tells a
-         march where it can start without skipping a hit, so the hits stay
-         exact. Three bounds run:
-         1. The second eye from the first: the left eye, then the right eye
-         2. Crossed halves: the left half of the left eye with the right
-            half of the right eye, then the other two halves
-         3. The previous frame, reprojected through a scripted head move.
-            Each scene renders two frames with a turn at 100 degrees per
-            second and a step at 1 m/s between them. Moving placements
-            wait for the moving scene in Later
-      6. Lossy cuts run as tests: the lens-matched grid, stereo hit copying,
-         and iteration caps. Each test reports its gain and how many pixels it
-         changes on every scene. It also writes three images per scene: the
-         full trace, the cut, and a map of the changed pixels. A cut stays
-         when the project lead accepts its tradeoff from the images
-      7. A final worn run re-times B2 with the improved code. The report
-         lands in benchmarks.md. R picks the B3 arms
+      - [x] **S9.1. Research.** Industry research finds the levers that cut
+            each ray's cost or the rays a frame needs. The research ranks
+            the levers into an ordered list of experiments. The report lands
+            in `reference/`
+      - [ ] **S9.2. Re-baseline.** Profiles show where the time goes.
+            - [x] B2's kernels move to trusted shader modules, and B2 also
+                  times the tree walk with the checks
+            - [x] The step loop gains variants that split load cost from ALU
+                  cost
+            - [x] Probes report the subgroup size, the quad views, and each
+                  eye's focal length
+            - [x] B2 splits the tree walk's iterations by the side of the
+                  region each one leaves
+            - [x] Xcode's Metal capture costs the tree walk's lines on the
+                  desktop
+            - [x] `ovrgpuprofiler` reads the counters of the tree walk, the
+                  step loop, the ray query, and the launches on Quest
+            - [x] A sweep at 0 to 8 steps shows the compute launch's floor.
+                  The Quest app logs the GPU clock's mix for each window
+            - [x] The report lands in benchmarks.md
+            - [ ] Each finding becomes an experiment in S9.4
+      - [ ] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and
+            S5 on Quest gives the march a rate to beat
+      - [ ] **S9.4. Experiments.** The experiments follow the research's
+            [ladder](reference/speedup-research.md#5-experiment-ladder).
+            They rework the tree walk, the 64-tree, and the ray query march,
+            one change at a time. Each change is timed on the desktop
+            through `b2-times`. A change that wins stays. One short worn run
+            confirms a batch on Quest. B1's ids check every change against
+            the reference
+      - [ ] **S9.5. Start bounds.** Conservative start bounds join the
+            experiments. A bound tells a march where it can start without
+            skipping a hit, so the hits stay exact. Three bounds run:
+            1. The second eye from the first: the left eye, then the right
+               eye
+            2. Crossed halves: the left half of the left eye with the right
+               half of the right eye, then the other two halves
+            3. The previous frame, reprojected through a scripted head move.
+               Each scene renders two frames with a turn at 100 degrees per
+               second and a step at 1 m/s between them. Moving placements
+               wait for the moving scene in Later
+      - [ ] **S9.6. Lossy cuts.** Lossy cuts run as tests: the lens-matched
+            grid, stereo hit copying, and iteration caps. Each test reports
+            its gain and how many pixels it changes on every scene. It also
+            writes three images per scene: the full trace, the cut, and a
+            map of the changed pixels. A cut stays when the project lead
+            accepts its tradeoff from the images
+      - [ ] **S9.7. The final run.** A final worn run re-times B2 with the
+            improved code. The report lands in benchmarks.md. R picks the B3
+            arms
 
 ## Later
 

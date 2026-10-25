@@ -12,8 +12,12 @@ const COUNTS: [u32; 3] = [8, 16, 32];
 /// tile.
 const REGION_SIDES: [i32; 3] = [1, 4, 16];
 
-/// The launch-only kernels' labels, in pass order.
-const LAUNCHES: [&str; 2] = ["compute launch", "fragment launch"];
+/// The step counts the compute launch's sweep runs the hoisted loop at. The
+/// counts below the step loops' show where a launch's cost ends.
+const LAUNCH_STEPS: [u32; 5] = [0, 1, 2, 4, 8];
+
+/// The fragment launch's label.
+const FRAGMENT_LAUNCH: &str = "fragment launch";
 
 /// B2's kernels over a `width` by `height` eye, with the ray queries when
 /// `ray_queries`.
@@ -39,19 +43,22 @@ pub fn b2_kernels(
         }
     }
 
+    for count in LAUNCH_STEPS {
+        kernels.push((
+            compute_launch(count),
+            KernelWork::Steps(StepKernel::new(
+                device,
+                &grid,
+                StepLoop::Hoisted,
+                width,
+                height,
+                count,
+            )),
+        ));
+    }
+
     kernels.push((
-        LAUNCHES[0].to_owned(),
-        KernelWork::Steps(StepKernel::new(
-            device,
-            &grid,
-            StepLoop::Hoisted,
-            width,
-            height,
-            0,
-        )),
-    ));
-    kernels.push((
-        LAUNCHES[1].to_owned(),
+        FRAGMENT_LAUNCH.to_owned(),
         KernelWork::Fragments(FragmentLaunch::new(device, width, height)),
     ));
 
@@ -120,7 +127,7 @@ pub fn b2_kernels(
         measured: 120,
         summary: Box::new(move |medians, rays| {
             let (steps, rest) = medians.split_at(StepLoop::ALL.len() * COUNTS.len());
-            let (launches, trace_medians) = rest.split_at(LAUNCHES.len());
+            let (launches, trace_medians) = rest.split_at(LAUNCH_STEPS.len() + 1);
 
             let mut lines = vec![
                 match subgroups {
@@ -147,6 +154,11 @@ pub fn b2_kernels(
             lines
         }),
     })
+}
+
+/// The label of the compute launch's kernel at `count` steps.
+fn compute_launch(count: u32) -> String {
+    format!("compute launch, {count} steps")
 }
 
 /// `scene` without its lights.
@@ -210,7 +222,12 @@ fn launch_lines(medians: &[f64], rays: f64) -> Vec<String> {
         "| --- | ---: | ---: |".to_owned(),
     ];
 
-    for (label, median) in LAUNCHES.iter().zip(medians) {
+    let labels = LAUNCH_STEPS
+        .map(compute_launch)
+        .into_iter()
+        .chain([FRAGMENT_LAUNCH.to_owned()]);
+
+    for (label, median) in labels.zip(medians) {
         lines.push(format!(
             "| {label} | {median:.3} | {:.2} |",
             rays / median / 1e6
