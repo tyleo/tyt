@@ -1,4 +1,5 @@
 import * as check from "./check.ts";
+import { Font } from "./font.ts";
 import { Shape2d } from "./shape2d.ts";
 import type { Vec2 } from "./types.ts";
 
@@ -159,5 +160,26 @@ export function arch(min: Vec2, max: Vec2): Shape2d {
     kind: "arch",
     min: check.vec2("arch min", min),
     max: check.vec2("arch max", max),
+  });
+}
+
+/**
+ * The line of `string` in `font` with capitals `size` tall, running along +u
+ * with its baseline on v = 0. `align` puts the line's start, center, or end at
+ * u = 0.
+ */
+export function text(
+  font: Font,
+  string: string,
+  size: number,
+  options?: { align?: "start" | "center" | "end" },
+): Shape2d {
+  const option = check.knownOptions("text", options, ["align"]);
+  return new Shape2d({
+    kind: "text",
+    font: check.instance("text font", font, Font),
+    string: check.text("text string", string),
+    size: check.finite("text size", size),
+    align: check.optional("text align", option.align, check.textAlign),
   });
 }

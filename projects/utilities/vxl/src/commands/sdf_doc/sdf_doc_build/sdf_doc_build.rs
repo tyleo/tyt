@@ -1,8 +1,9 @@
 use crate::{
     Dependencies, Error, ProfileOrigin, ProfileSet, Result, cli_value_parser,
     commands::{
-        BuildVar, FontFlagParser, SdfDocBuildFont, SdfDocBuildProfile, land_profile_vars,
-        load_sdf_doc_build_profile_set, run_sdfj_builder, sdfj_builder_libraries,
+        BuildVar, FontFlagParser, SdfDocBuildFont, SdfDocBuildProfile, document_font_path,
+        land_profile_vars, load_sdf_doc_build_profile_set, run_sdfj_builder,
+        sdfj_builder_libraries,
     },
 };
 use clap::{ArgAction, Parser};
@@ -11,7 +12,7 @@ use sdfj_builder::JavaScriptRuntime;
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 /// Records a TypeScript model as an `.sdfj` document.
@@ -113,14 +114,11 @@ impl SdfDocBuild {
             None => (None, SdfDocBuildProfile::default()),
         };
 
+        let cwd = dependencies.resolve_prefs_paths()?.cwd;
         let (origin, libraries) = self.libraries(&profile);
-        let libraries = sdfj_builder_libraries(&dependencies, origin, libraries)?;
-        let fonts = if self.font.is_empty() && profile.fonts.is_empty() {
-            Vec::new()
-        } else {
-            let cwd = dependencies.resolve_prefs_paths()?.cwd;
-            self.fonts(&profile, profile_dir.as_deref().unwrap_or(&cwd), &cwd)?
-        };
+        let libraries =
+            sdfj_builder_libraries(&dependencies, origin, libraries, &self.document_dir(&cwd))?;
+        let fonts = self.fonts(&profile, profile_dir.as_deref().unwrap_or(&cwd), &cwd)?;
         let fonts = serde_json::to_vec(&fonts).expect("fonts serialize");
         let vars = serde_json::to_vec(&self.vars(&profiles)?).expect("JSON values serialize");
 
@@ -154,12 +152,11 @@ impl SdfDocBuild {
         profile_dir: &Path,
         cwd: &Path,
     ) -> Result<Vec<SdfjFont>> {
-        let output = cwd.join(self.output());
-        let document_dir = output.parent().expect("the output path holds a file name");
+        let document_dir = self.document_dir(cwd);
 
         let mut fonts = BTreeMap::new();
         for (name, font) in &profile.fonts {
-            let font = sdfj_font(name, font, profile_dir, document_dir)?;
+            let font = sdfj_font(name, font, profile_dir, &document_dir)?;
             fonts.insert(name.as_str(), font);
         }
 
@@ -196,7 +193,7 @@ impl SdfDocBuild {
             if !flagged.insert(name) {
                 return Err(Error::usage(format!("--font sets `{name}` twice")));
             }
-            fonts.insert(name, sdfj_font(name, &font, cwd, document_dir)?);
+            fonts.insert(name, sdfj_font(name, &font, cwd, &document_dir)?);
         }
 
         Ok(fonts.into_values().collect())
@@ -235,6 +232,13 @@ impl SdfDocBuild {
         self.intern.or(profile.intern).unwrap_or(true)
     }
 
+    /// The absolute directory of the output document.
+    fn document_dir(&self, cwd: &Path) -> PathBuf {
+        let output = cwd.join(self.output());
+        let dir = output.parent().expect("the output path holds a file name");
+        dir.to_owned()
+    }
+
     fn output(&self) -> PathBuf {
         self.output
             .clone()
@@ -242,8 +246,8 @@ impl SdfDocBuild {
     }
 }
 
-/// The `fonts` entry `name` takes for `font`, whose file path resolves against
-/// `base` and lands relative to `document_dir`.
+/// The `fonts` entry `name` takes for `font`, whose relative file path resolves
+/// against `base` and lands relative to `document_dir`.
 fn sdfj_font(
     name: &str,
     font: &SdfDocBuildFont,
@@ -251,68 +255,16 @@ fn sdfj_font(
     document_dir: &Path,
 ) -> Result<SdfjFont> {
     Ok(match font {
-        SdfDocBuildFont::File { path } => {
-            let path = base.join(path);
-            let Some(path) = relative_path(&path, document_dir) else {
-                return Err(Error::usage(format!(
-                    "the font `{name}` takes the path `{}`, which is not UTF-8",
-                    path.display()
-                )));
-            };
-            SdfjFont::File {
-                name: name.to_owned(),
-                path,
-            }
-        }
+        SdfDocBuildFont::File { path } => SdfjFont::File {
+            name: name.to_owned(),
+            path: document_font_path(name, path, base, document_dir)?,
+        },
 
         SdfDocBuildFont::Installed { font } => SdfjFont::Installed {
             name: name.to_owned(),
             font: font.clone(),
         },
     })
-}
-
-/// The absolute `path` as seen from the absolute `directory`, with `/` between
-/// its components, or `None` when it is not UTF-8. A path on another root
-/// stays absolute.
-fn relative_path(path: &Path, directory: &Path) -> Option<String> {
-    let path = lexical_components(path);
-    let directory = lexical_components(directory);
-    let shared = path
-        .iter()
-        .zip(&directory)
-        .take_while(|(path, directory)| path == directory)
-        .count();
-
-    if shared == 0 {
-        return path.iter().collect::<PathBuf>().to_str().map(str::to_owned);
-    }
-
-    let parents = directory[shared..].iter().map(|_| Some(".."));
-    let rest = path[shared..]
-        .iter()
-        .map(|component| component.as_os_str().to_str());
-    Some(parents.chain(rest).collect::<Option<Vec<_>>>()?.join("/"))
-}
-
-/// The components of the absolute `path` with each `.` dropped and each `..`
-/// taking away the component before it.
-fn lexical_components(path: &Path) -> Vec<Component<'_>> {
-    let mut components = Vec::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-
-            Component::ParentDir => {
-                if matches!(components.last(), Some(Component::Normal(_))) {
-                    components.pop();
-                }
-            }
-
-            _ => components.push(component),
-        }
-    }
-    components
 }
 
 #[cfg(test)]
@@ -432,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn a_font_file_lands_relative_to_the_output_s_directory() {
+    fn a_relative_font_file_lands_relative_to_the_output_s_directory() {
         let fonts = SdfDocBuild::try_parse_from([
             "build",
             "sign.ts",
@@ -440,6 +392,9 @@ mod tests {
             "--font",
             "file",
             "small=../shared/./stix.otf",
+            "--font",
+            "file",
+            "system=/fonts/plex.otf",
         ])
         .unwrap()
         .fonts(
@@ -455,6 +410,7 @@ mod tests {
                 file("label", "../../fonts/plex.otf"),
                 installed("sign", "Futura"),
                 file("small", "../../shared/stix.otf"),
+                file("system", "/fonts/plex.otf"),
             ]
         );
     }

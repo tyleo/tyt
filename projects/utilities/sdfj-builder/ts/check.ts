@@ -161,6 +161,14 @@ export function caps(path: string, value: unknown): "flat" | "round" {
   return oneOf(path, value, ["flat", "round"]);
 }
 
+/** `value` as the alignment of a `text`. */
+export function textAlign(
+  path: string,
+  value: unknown,
+): "start" | "center" | "end" {
+  return oneOf(path, value, ["start", "center", "end"]);
+}
+
 /** `value` as a `Side`. */
 export function side(path: string, value: unknown): Side {
   return oneOf(path, value, ["+x", "-x", "+y", "-y", "+z", "-z"]);

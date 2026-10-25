@@ -64,11 +64,16 @@ The sdfj format's validation checks the values the document holds.
 
 ## Running
 
-The builder runs under Node 24, Bun, and Deno with no dependencies. It reads the
-libraries from `libraries.json` beside `main.ts`. The file holds an array of
-each library's `name` and `.sdfj` `document`. `vars.json` beside `main.ts` holds
-the build variables as an object of JSON values by name. `globals.d.ts` declares
-the API for type-checking model files. The tests run under `deno test`.
+The builder runs under Node 24, Bun, and Deno with no dependencies. It reads
+three files beside `main.ts`:
+
+1. `libraries.json` holds an array of each library's `name` and `.sdfj`
+   `document`
+2. `fonts.json` holds the `.sdfj` `fonts` entries a `text` can read
+3. `vars.json` holds the build variables as an object of JSON values by name
+
+`globals.d.ts` declares the API for type-checking model files. The tests run
+under `deno test`.
 
 The folder is also the `sdfj-builder` crate, with its Rust in `src/`.
 `SDFJ_BUILDER_FILES` embeds the files a run needs, and

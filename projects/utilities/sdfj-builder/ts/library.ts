@@ -1,4 +1,5 @@
 import type { Entry } from "./entry.ts";
+import { Font } from "./font.ts";
 import { Material } from "./material.ts";
 import { Part } from "./part.ts";
 import { Pattern } from "./pattern.ts";
@@ -89,6 +90,7 @@ export function libraryGlobals(
 type ValueTable =
   | "shapes3d"
   | "shapes2d"
+  | "fonts"
   | "materials"
   | "shades"
   | "patterns"
@@ -112,9 +114,11 @@ const REFERENCES: Readonly<
   shapes2d: {
     base: "shapes2d",
     cutters: "shapes2d",
+    font: "fonts",
     shape: "shapes2d",
     shapes: "shapes2d",
   },
+  fonts: {},
   materials: { shades: "shades" },
   shades: { base: "materials" },
   patterns: {
@@ -135,6 +139,7 @@ const REFERENCES: Readonly<
 const VALUES = {
   shapes3d: Shape3d,
   shapes2d: Shape2d,
+  fonts: Font,
   materials: Material,
   shades: Shades,
   patterns: Pattern,
@@ -286,7 +291,7 @@ class LibraryReader {
 
   /** The names the entry at `index` of `table` holds. */
   #names(table: ValueTable, index: number): string[] {
-    if (table === "shades") {
+    if (table === "fonts" || table === "shades") {
       return [];
     }
     const names = this.#document.names[

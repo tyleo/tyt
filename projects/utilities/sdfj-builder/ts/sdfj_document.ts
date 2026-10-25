@@ -1,5 +1,6 @@
 import * as check from "./check.ts";
 import { type Entry, entry } from "./entry.ts";
+import { Font } from "./font.ts";
 import { jsonText } from "./json_text.ts";
 import { libraryNames } from "./library.ts";
 import { Material } from "./material.ts";
@@ -23,6 +24,9 @@ export interface SdfjDocument {
 
   /** The `Shape2d` entries. */
   shapes2d: Entry[];
+
+  /** The `Font` entries. */
+  fonts: Entry[];
 
   /** The `Material` entries. */
   materials: Entry[];
@@ -97,7 +101,14 @@ export function sdfjDocument(
 }
 
 /** A value with an entry in one of the document's tables. */
-type TableValue = Material | Pattern | Shades | Shape2d | Shape3d | Step;
+type TableValue =
+  | Font
+  | Material
+  | Pattern
+  | Shades
+  | Shape2d
+  | Shape3d
+  | Step;
 
 type NamesTable = keyof SdfjNames;
 
@@ -107,6 +118,7 @@ class SdfjWriter {
     version: SDFJ_VERSION,
     shapes3d: [],
     shapes2d: [],
+    fonts: [],
     materials: [],
     shades: [],
     patterns: [],
@@ -262,9 +274,10 @@ class SdfjWriter {
   /** `value` with an index in place of each value it holds. */
   #write(value: unknown): unknown {
     if (
-      value instanceof Material || value instanceof Pattern ||
-      value instanceof Shades || value instanceof Shape2d ||
-      value instanceof Shape3d || value instanceof Step
+      value instanceof Font || value instanceof Material ||
+      value instanceof Pattern || value instanceof Shades ||
+      value instanceof Shape2d || value instanceof Shape3d ||
+      value instanceof Step
     ) {
       return this.#index(value);
     }
@@ -281,6 +294,9 @@ class SdfjWriter {
 
   /** The table `value` writes into and the entry it writes. */
   #tableEntry(value: TableValue): [Entry[], Entry] {
+    if (value instanceof Font) {
+      return [this.document.fonts, Font.entry(value)];
+    }
     if (value instanceof Material) {
       return [this.document.materials, Material.entry(value)];
     }

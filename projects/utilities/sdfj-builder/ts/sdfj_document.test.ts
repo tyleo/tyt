@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { Font } from "./font.ts";
 import { libraryGlobals } from "./library.ts";
 import { material } from "./material.ts";
 import { modelList } from "./model_list.ts";
 import { part } from "./part.ts";
 import { putApiInScope } from "./put_api_in_scope.ts";
 import { sphere } from "./primitives.ts";
+import { text } from "./primitives2d.ts";
+import { extrude } from "./profiles.ts";
 import { sdfjDocument, type SdfjNames } from "./sdfj_document.ts";
 import { sdfjJson } from "./sdfj_json.ts";
 import { add } from "./step.ts";
@@ -37,7 +40,7 @@ function names(names: Partial<SdfjNames>): SdfjNames {
 }
 
 Deno.test("the chair writes the sdfj format's chair", async () => {
-  putApiInScope([library("materials", [["oak", material(OAK)]])], {});
+  putApiInScope([library("materials", [["oak", material(OAK)]])], [], {});
   const chair = await import("./test/chair.ts");
   assert.deepStrictEqual(sdfjJson(sdfjDocument("chair", modelList(chair))), {
     version: 1,
@@ -73,12 +76,16 @@ Deno.test("the chair writes the sdfj format's chair", async () => {
 });
 
 Deno.test("the forest writes the sdfj format's forest", async () => {
-  putApiInScope([
-    library("materials", [
-      ["bark", material(BARK)],
-      ["leaf", material(LEAF)],
-    ]),
-  ], {});
+  putApiInScope(
+    [
+      library("materials", [
+        ["bark", material(BARK)],
+        ["leaf", material(LEAF)],
+      ]),
+    ],
+    [],
+    {},
+  );
   const forest = await import("./test/forest.ts");
   assert.deepStrictEqual(sdfjJson(sdfjDocument("forest", modelList(forest))), {
     version: 1,
@@ -216,4 +223,16 @@ Deno.test("two different entries taking one name errors", () => {
     () => sdfjDocument("model", [add("seat", ball, mat.oak)], [["oak", black]]),
     { message: 'two different Materials take the name "oak"' },
   );
+});
+
+Deno.test("texts in one font write one fonts entry", () => {
+  const sign = new Font({ kind: "installed", name: "sign", font: "Futura" });
+  const letters = (string: string) =>
+    extrude(text(sign, string, 0.1), { from: 0, to: 0.01 });
+  const { fonts, shapes2d } = document([
+    add("open", letters("OPEN"), white),
+    add("shut", letters("SHUT"), white),
+  ]);
+  assert.deepStrictEqual(fonts, [Font.entry(sign)]);
+  assert.deepStrictEqual(shapes2d.map(({ font }) => font), [0, 0]);
 });

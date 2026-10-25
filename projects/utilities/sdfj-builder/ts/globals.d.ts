@@ -1,6 +1,7 @@
 // Declares the API as globals for type-checking model files. Each global takes
 // the type of the API export it holds.
 import type * as api from "./api.ts";
+import type { Fonts } from "./font.ts";
 import type { Lib } from "./library.ts";
 import type { Vars } from "./vars.ts";
 
@@ -8,6 +9,7 @@ declare global {
   type Axes = api.Axes;
   type Axis = api.Axis;
   type CoatOptions = api.CoatOptions;
+  type Font = api.Font;
   type IntValue = api.IntValue;
   type JsonValue = api.JsonValue;
   type Material = api.Material;
@@ -43,6 +45,7 @@ declare global {
   var ellipse: typeof api.ellipse;
   var ellipsoid: typeof api.ellipsoid;
   var extrude: typeof api.extrude;
+  var fonts: Fonts;
   var gradient: typeof api.gradient;
   var grain: typeof api.grain;
   var halfSpace: typeof api.halfSpace;
@@ -78,6 +81,7 @@ declare global {
   var star: typeof api.star;
   var subtract: typeof api.subtract;
   var sweep: typeof api.sweep;
+  var text: typeof api.text;
   var torus: typeof api.torus;
   var union: typeof api.union;
   var vars: Vars;

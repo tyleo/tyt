@@ -18,6 +18,7 @@ pub const SDFJ_BUILDER_FILES: &[SdfjBuilderFile] = &[
     builder_file!("ts/booleans.ts"),
     builder_file!("ts/check.ts"),
     builder_file!("ts/entry.ts"),
+    builder_file!("ts/font.ts"),
     builder_file!("ts/globals.d.ts"),
     builder_file!("ts/json_text.ts"),
     builder_file!("ts/library.ts"),

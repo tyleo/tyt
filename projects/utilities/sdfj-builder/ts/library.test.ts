@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { Font } from "./font.ts";
 import { libraryGlobals } from "./library.ts";
 import { material } from "./material.ts";
 import { part } from "./part.ts";
 import { grain } from "./pattern.ts";
 import { box } from "./primitives.ts";
+import { text } from "./primitives2d.ts";
+import type { Shape2d } from "./shape2d.ts";
 import { extrude } from "./profiles.ts";
 import { type SdfjDocument, sdfjDocument } from "./sdfj_document.ts";
 import { sdfjDocumentFromJson } from "./sdfj_json.ts";
@@ -73,6 +76,24 @@ Deno.test("an entry takes every name its library gives it", () => {
   ]);
   const { names } = sdfjDocument("model", [add("seat", ball, mat.wood)]);
   assert.deepStrictEqual(names.materials, { walnut: 0, wood: 0 });
+});
+
+Deno.test("a library text brings its font", () => {
+  const futura = { kind: "installed", name: "sign", font: "Futura" };
+  const plex = { kind: "file", name: "label", path: "../fonts/plex.otf" };
+  const { lib } = libraryGlobals([
+    library("signs", [
+      ["open", text(new Font(futura), "OPEN", 0.1)],
+      ["hours", text(new Font(plex), "9 to 5", 0.04)],
+    ]),
+  ]);
+  const raised = (shape: Shape2d) => extrude(shape, { from: 0, to: 0.01 });
+  const { fonts, shapes2d } = sdfjDocument("model", [
+    add("hours", raised(lib.shapes2d.hours), white),
+    add("open", raised(lib.shapes2d.open), white),
+  ]);
+  assert.deepStrictEqual(fonts, [plex, futura]);
+  assert.deepStrictEqual(shapes2d.map(({ font }) => font), [0, 1]);
 });
 
 Deno.test("reading a name no library holds errors", () => {

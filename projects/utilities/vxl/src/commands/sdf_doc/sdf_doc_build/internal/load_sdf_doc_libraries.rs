@@ -35,7 +35,13 @@ pub fn load_sdf_doc_libraries(
         .libraries
         .embedded
         .into_iter()
-        .map(|(name, library)| (name, SdfDocLibrary::Embedded(Box::new(library.document))))
+        .map(|(name, library)| {
+            let library = SdfDocLibrary::Embedded {
+                document: Box::new(library.document),
+                dir: None,
+            };
+            (name, library)
+        })
         .collect();
 
     for layer in layers {
@@ -53,11 +59,13 @@ pub fn load_sdf_doc_libraries(
             .into());
         }
 
-        libraries.extend(
-            embedded
-                .into_iter()
-                .map(|(name, library)| (name, SdfDocLibrary::Embedded(Box::new(library.document)))),
-        );
+        libraries.extend(embedded.into_iter().map(|(name, library)| {
+            let library = SdfDocLibrary::Embedded {
+                document: Box::new(library.document),
+                dir: Some(layer.dir.clone()),
+            };
+            (name, library)
+        }));
 
         libraries.extend(
             files
@@ -75,7 +83,7 @@ mod tests {
         Cascade,
         commands::{SdfDocLibrary, load_sdf_doc_libraries},
     };
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     /// A `.vxlconfig` holding `libraries` as its `sdfDoc.build.libraries`.
     fn layer(libraries: &str) -> &'static str {
@@ -120,7 +128,10 @@ mod tests {
             libraries["fabrics"],
             SdfDocLibrary::File(PathBuf::from("/repo/sub/fabrics.sdfj"))
         );
-        assert!(matches!(libraries["props"], SdfDocLibrary::Embedded(_)));
+        assert!(matches!(
+            &libraries["props"],
+            SdfDocLibrary::Embedded { dir: Some(dir), .. } if dir == Path::new("/repo/sub")
+        ));
     }
 
     #[test]

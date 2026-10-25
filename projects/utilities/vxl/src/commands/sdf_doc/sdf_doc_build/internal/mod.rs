@@ -1,6 +1,7 @@
 // Internal API
 
 mod build_var;
+mod document_font_path;
 mod font_flag_parser;
 mod javascript_runtime;
 mod land_profile_vars;
@@ -17,6 +18,7 @@ mod sdf_doc_library;
 mod sdfj_builder_libraries;
 
 pub(crate) use build_var::*;
+pub(crate) use document_font_path::*;
 pub(crate) use font_flag_parser::*;
 pub(crate) use land_profile_vars::*;
 pub(crate) use load_sdf_doc_build_profile_set::*;

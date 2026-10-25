@@ -17,6 +17,7 @@ export {
   type Properties,
   type Value,
 } from "./material.ts";
+export { type Font } from "./font.ts";
 export { type Part, part } from "./part.ts";
 export { helix } from "./paths.ts";
 export {
@@ -56,6 +57,7 @@ export {
   sector,
   spline,
   star,
+  text,
   vesica,
 } from "./primitives2d.ts";
 export { extrude, lathe, revolve, sweep } from "./profiles.ts";

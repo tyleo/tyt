@@ -1,14 +1,15 @@
 use crate::{
     Error, ReadFile, ResolvePrefsPaths, Result,
-    commands::{SdfDocLibrary, load_sdf_doc_libraries},
+    commands::{SdfDocLibrary, document_font_path, load_sdf_doc_libraries},
 };
-use sdfj::SdfjFile;
+use sdfj::{SdfjFile, SdfjFont};
 use sdfj_codec::{DependenciesImpl as SdfjCodecDependencies, from_sdfj_or_sdfjz_file_bytes};
 use sdfj_sdfcore::from_sdfj_file;
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
     io::{Error as IOError, ErrorKind},
+    path::Path,
 };
 use ty_preferences::Dependencies as PreferencesDependencies;
 
@@ -21,12 +22,14 @@ struct BuilderLibrary<'a> {
 }
 
 /// The builder's JSON holding each library `names` lists, in list order. Each
-/// library passes the sdfj format's checks first. Errors report `origin` as the
-/// setting that lists `names`.
+/// library passes the sdfj format's checks first. A relative font file path
+/// resolves against the library's directory and lands relative to
+/// `document_dir`. Errors report `origin` as the setting that lists `names`.
 pub fn sdfj_builder_libraries(
     dependencies: &(impl PreferencesDependencies + ReadFile + ResolvePrefsPaths),
     origin: &str,
     names: &[String],
+    document_dir: &Path,
 ) -> Result<Vec<u8>> {
     let defined = if names.is_empty() {
         BTreeMap::new()
@@ -37,8 +40,10 @@ pub fn sdfj_builder_libraries(
     let libraries = names
         .iter()
         .map(|name| {
-            let document = match defined.get(name) {
-                Some(SdfDocLibrary::Embedded(document)) => (**document).clone(),
+            let (mut document, dir) = match defined.get(name) {
+                Some(SdfDocLibrary::Embedded { document, dir }) => {
+                    ((**document).clone(), dir.as_deref())
+                }
 
                 Some(SdfDocLibrary::File(path)) => {
                     let failed = |error| {
@@ -49,9 +54,11 @@ pub fn sdfj_builder_libraries(
                     };
                     let bytes = ReadFile::read_file(dependencies, path)
                         .map_err(|error| IOError::new(error.kind(), failed(error.to_string())))?;
-                    from_sdfj_or_sdfjz_file_bytes(&SdfjCodecDependencies, &bytes).map_err(
-                        |error| IOError::new(ErrorKind::InvalidData, failed(error.to_string())),
-                    )?
+                    let document = from_sdfj_or_sdfjz_file_bytes(&SdfjCodecDependencies, &bytes)
+                        .map_err(|error| {
+                            IOError::new(ErrorKind::InvalidData, failed(error.to_string()))
+                        })?;
+                    (document, path.parent())
                 }
 
                 None => return Err(undefined(origin, name, &defined)),
@@ -63,6 +70,13 @@ pub fn sdfj_builder_libraries(
                     format!("the library `{name}` breaks the sdfj format: {error}"),
                 )
             })?;
+
+            for font in &mut document.fonts {
+                if let SdfjFont::File { name, path } = font {
+                    let dir = dir.expect("vxl's built-in libraries hold no font file");
+                    *path = document_font_path(name, Path::new(path), dir, document_dir)?;
+                }
+            }
 
             Ok(BuilderLibrary { name, document })
         })
@@ -84,7 +98,8 @@ fn undefined(origin: &str, name: &str, defined: &BTreeMap<String, SdfDocLibrary>
 #[cfg(test)]
 mod tests {
     use crate::{Cascade, commands::sdfj_builder_libraries};
-    use serde_json::Value;
+    use serde_json::{Value, json};
+    use std::path::Path;
 
     /// A cascade whose user layer defines file libraries and the embedded
     /// library `velvet`. `missing.sdfj` has no file.
@@ -102,6 +117,7 @@ mod tests {
                         },
                         "embedded": { "velvet": { "document": {
                             "version": 1,
+                            "fonts": [{ "kind": "file", "name": "script", "path": "fonts/script.otf" }],
                             "materials": [{ "kind": "material", "properties": { "baseColor": "#5A1030" } }],
                             "names": { "materials": { "velvet": 0 } },
                         } } },
@@ -116,6 +132,10 @@ mod tests {
     /// A library naming the material `crate`.
     const PROPS: &str = r##"{
         "version": 1,
+        "fonts": [
+            { "kind": "file", "name": "label", "path": "../fonts/plex.otf" },
+            { "kind": "installed", "name": "sign", "font": "Futura" }
+        ],
         "materials": [{ "kind": "material", "properties": { "baseColor": "#8A5A2B" } }],
         "names": { "materials": { "crate": 0 } }
     }"##;
@@ -127,7 +147,7 @@ mod tests {
     fn libraries(names: &[&str]) -> Result<Value, String> {
         let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
 
-        sdfj_builder_libraries(&cascade(), "--library", &names)
+        sdfj_builder_libraries(&cascade(), "--library", &names, Path::new("/repo/models"))
             .map(|bytes| serde_json::from_slice(&bytes).unwrap())
             .map_err(|error| error.to_string())
     }
@@ -136,7 +156,8 @@ mod tests {
     fn no_names_read_no_library() {
         let unreadable = Cascade::new(true, &[("/home/.vxlconfig", "{ not jsonc")]);
 
-        let bytes = sdfj_builder_libraries(&unreadable, "--library", &[]).unwrap();
+        let bytes =
+            sdfj_builder_libraries(&unreadable, "--library", &[], Path::new("/repo")).unwrap();
 
         assert_eq!(bytes, b"[]");
     }
@@ -166,6 +187,23 @@ mod tests {
         assert_eq!(
             named(2, "materials"),
             ("materials".to_owned(), "amethyst".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_font_file_lands_relative_to_the_document_from_its_library_s_directory() {
+        let libraries = libraries(&["props", "velvet"]).unwrap();
+
+        assert_eq!(
+            libraries[0]["document"]["fonts"],
+            json!([
+                { "kind": "file", "name": "label", "path": "../../home/fonts/plex.otf" },
+                { "kind": "installed", "name": "sign", "font": "Futura" },
+            ])
+        );
+        assert_eq!(
+            libraries[1]["document"]["fonts"][0]["path"],
+            "../../home/fonts/script.otf"
         );
     }
 

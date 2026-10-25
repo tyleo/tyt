@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
     )
 )]
 pub enum SdfjFont {
-    /// A font file at `path`, relative to the document's directory. A font
-    /// collection gives its first face.
+    /// A font file at `path`, absolute or relative to the document's
+    /// directory. A font collection gives its first face.
     File { name: String, path: String },
 
     /// The installed face whose family or full name matches `font`, ignoring

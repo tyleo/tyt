@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { Entry } from "./entry.ts";
+import { Font } from "./font.ts";
 import {
   arc,
   arch,
@@ -12,10 +13,13 @@ import {
   sector,
   spline,
   star,
+  text,
   vesica,
 } from "./primitives2d.ts";
 import type { Shape2d } from "./shape2d.ts";
 import { shapes2d } from "./test/tables.ts";
+
+const SIGN = new Font({ kind: "installed", name: "sign", font: "Futura" });
 
 const CASES: [string, () => Shape2d, Entry][] = [
   ["arc", () => arc([0, 0], 1, 0, 90, 0.1, { caps: "flat" }), {
@@ -86,6 +90,13 @@ const CASES: [string, () => Shape2d, Entry][] = [
     outerRadius: 1,
     innerRadius: 0.5,
   }],
+  ["text", () => text(SIGN, "OPEN", 0.1, { align: "center" }), {
+    kind: "text",
+    font: 0,
+    string: "OPEN",
+    size: 0.1,
+    align: "center",
+  }],
   ["vesica", () => vesica([0, 0], [0, 1], 0.25), {
     kind: "vesica",
     a: [0, 0],
@@ -109,5 +120,11 @@ Deno.test("a list of points errors on a point the document cannot hold", () => {
   assert.throws(() => polyline([[0, 0], , [1, 1]] as never, 0.1), {
     message:
       "polyline points[1] must be a Vec2 of 2 finite numbers, not undefined",
+  });
+});
+
+Deno.test("a text takes a font from fonts", () => {
+  assert.throws(() => text("Futura" as never, "OPEN", 0.1), {
+    message: 'text font must be a Font, not "Futura"',
   });
 });

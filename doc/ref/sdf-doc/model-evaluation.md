@@ -125,17 +125,23 @@ takes the name of each named export that holds it.
 ```jsonc
 {
   "fonts": {
-    // a path resolves against this file's directory
     "label": { "kind": "file", "path": "fonts/plex.otf" },
     "sign": { "kind": "installed", "font": "Futura" },
   },
 }
 ```
 
-A `--font` path resolves against the working directory. A `--font` replaces the
-profile's font of the same name. The document's
+A `--font` replaces the profile's font of the same name. A relative font file
+path resolves against:
+
+1. The working directory for a `--font`
+2. The `.vxlconfig`'s directory for a profile or an embedded library
+3. The library file's directory for a file library
+
+The document's
 [`fonts`](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#fonts)
-entry holds each path relative to the document's directory.
+entry holds that path relative to the document's directory and keeps an absolute
+path as it is.
 
 ## Sampling
 

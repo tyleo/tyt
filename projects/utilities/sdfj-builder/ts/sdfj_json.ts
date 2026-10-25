@@ -19,6 +19,7 @@ export function sdfjDocumentFromJson(json: SdfjJson): SdfjDocument {
     version: json.version,
     shapes3d: json.shapes3d ?? [],
     shapes2d: json.shapes2d ?? [],
+    fonts: json.fonts ?? [],
     materials: json.materials ?? [],
     shades: json.shades ?? [],
     patterns: json.patterns ?? [],

@@ -1222,8 +1222,8 @@ report it by. Its `kind` picks where its data comes from:
 
 ```jsonc
 [
-  // file: a font file at a path relative to the document's directory. A font
-  // collection gives its first face
+  // file: a font file at a path, absolute or relative to the document's
+  // directory. A font collection gives its first face
   { "kind": "file", "name": "label", "path": "../fonts/plex.otf" },
 
   // installed: the installed face whose family or full name matches `font`,

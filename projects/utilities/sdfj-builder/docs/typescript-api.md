@@ -71,6 +71,7 @@ type AxisRotation = [Axis, number];
 | ---------- | ------------------------------------------------------- |
 | `Shape3d`  | A 3D region                                             |
 | `Shape2d`  | A 2D region in a plane with axes u and v                |
+| `Font`     | A font a `text` reads                                   |
 | `Material` | Surface properties                                      |
 | `Pattern`  | A pick of one material per cell                         |
 | `Step`     | One entry of a part's list                              |
@@ -346,6 +347,12 @@ function sector(
 ): Shape2d;
 function vesica(a: Vec2, b: Vec2, width: number): Shape2d;
 function arch(min: Vec2, max: Vec2): Shape2d;
+function text(
+  font: Font,
+  string: string,
+  size: number,
+  options?: { align?: "start" | "center" | "end" },
+): Shape2d;
 ```
 
 Angles in the plane run from +u toward +v.
@@ -368,6 +375,19 @@ Angles in the plane run from +u toward +v.
 9. `arch` tops the rectangle between its corners with a half circle as wide as
    the rectangle. `max` has to sit at least half the width above `min`. Doors,
    windows, and gravestones start from an `arch`
+10. `text` sets `string` in `font` with capitals `size` tall, running along +u
+    from its baseline on v = 0. `align` puts the line's start, center, or end at
+    u = 0. Lettering reads from a `size` of about `8 * v`
+
+`fonts` holds the fonts the build's `--font` flags and profile set, by name.
+Reading a font the build does not set errors:
+
+```ts
+// Built with --font installed sign=Futura.
+const letters = text(fonts.sign, "OPEN", 0.1, { align: "center" });
+
+export default [add("sign", extrude(letters, { from: 0, to: 0.02 }), mat.gold)];
+```
 
 ### From 2D to 3D
 

@@ -1,6 +1,7 @@
 // Records a model as an `.sdfj` document. The builder runs as
 // `main.ts <model> <output>`, with `--intern false` to keep an entry per value,
-// and reads the `libraries.json` and `vars.json` beside this file.
+// and reads the `libraries.json`, `fonts.json`, and `vars.json` beside this
+// file.
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -24,7 +25,11 @@ if (
 }
 const readJson = (name: string) =>
   JSON.parse(fs.readFileSync(new URL(name, import.meta.url), "utf8"));
-putApiInScope(readJson("libraries.json"), readJson("vars.json"));
+putApiInScope(
+  readJson("libraries.json"),
+  readJson("fonts.json"),
+  readJson("vars.json"),
+);
 const model = await import(url.pathToFileURL(path.resolve(modelPath)).href);
 const document = sdfjDocument(
   path.parse(modelPath).name,
