@@ -1,7 +1,7 @@
 //! voxrender's GPU benchmarks as a headless desktop app. Each subcommand runs
 //! one benchmark of the voxrender-wgpu plan and prints its report.
 
-use clap::{Args, Parser, Subcommand, value_parser};
+use clap::{ArgAction, Args, Parser, Subcommand, value_parser};
 use std::process;
 use voxrender_bench::{TimedBench, run_b1};
 
@@ -46,10 +46,25 @@ enum Command {
     #[command(name = "b1-times")]
     B1Times(Times),
 
-    /// B2: times fixed-step loops over each memory layout and the tree walk's
+    /// B2: times fixed-step loops, launch-only kernels, and the tree walk's
     /// and ray queries' ray rates on this GPU.
     #[command(name = "b2-times")]
-    B2Times(Times),
+    B2Times {
+        #[command(flatten)]
+        times: Times,
+
+        /// Times the ray queries. `--ray-queries false` leaves them out for a
+        /// Metal capture.
+        #[arg(
+            value_name = "ray-queries",
+            long,
+            default_value_t = true,
+            default_missing_value = "true",
+            num_args = 0..=1,
+            action = ArgAction::Set
+        )]
+        ray_queries: bool,
+    },
 }
 
 #[derive(Clone, Debug, Args)]
@@ -75,6 +90,11 @@ struct Times {
     /// The windows to report.
     #[arg(value_name = "count", long, default_value_t = 1)]
     windows: usize,
+
+    /// Then captures one pass of each kernel in a graphics debugger, such as
+    /// Xcode's Metal capture.
+    #[arg(value_name = "capture", long)]
+    capture: bool,
 }
 
 fn main() {
@@ -87,7 +107,7 @@ fn main() {
 
         Command::B1Times(times) => time(TimedBench::B1, &times),
 
-        Command::B2Times(times) => time(TimedBench::B2, &times),
+        Command::B2Times { times, ray_queries } => time(TimedBench::B2 { ray_queries }, &times),
     };
 
     match result {
@@ -101,6 +121,14 @@ fn main() {
 }
 
 fn time(bench: TimedBench, times: &Times) -> Result<String> {
-    headless_gpu()
-        .and_then(|gpu| time_passes(&gpu, bench, times.width, times.height, times.windows))
+    headless_gpu().and_then(|gpu| {
+        time_passes(
+            &gpu,
+            bench,
+            times.width,
+            times.height,
+            times.windows,
+            times.capture,
+        )
+    })
 }

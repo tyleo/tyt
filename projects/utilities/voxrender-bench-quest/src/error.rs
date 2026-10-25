@@ -89,6 +89,9 @@ pub enum Error {
     /// `getprop` would not run.
     Getprop(IOError),
 
+    /// The profile property holds a value other than `true` or `false`.
+    ProfileProperty(String),
+
     /// A benchmark failed.
     Bench(BenchError),
 }
@@ -121,6 +124,9 @@ impl Display for Error {
             Error::Map(error) => write!(f, "a readback buffer would not map: {error}"),
             Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
             Error::Getprop(error) => write!(f, "getprop would not run: {error}"),
+            Error::ProfileProperty(value) => {
+                write!(f, "the profile property holds {value:?}, not true or false")
+            }
             Error::Bench(error) => write!(f, "a benchmark failed: {error}"),
         }
     }

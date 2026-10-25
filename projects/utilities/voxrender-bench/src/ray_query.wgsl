@@ -37,6 +37,9 @@ struct Brick {
 // Per pixel: placement index, voxel id, face, unused. NO_HIT for a miss.
 @group(0) @binding(6) var<storage, read_write> hits: array<vec4<u32>>;
 
+// The integer march counts no iterations.
+fn count(size: i32) {}
+
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if id.x >= frame.width || id.y >= frame.height {

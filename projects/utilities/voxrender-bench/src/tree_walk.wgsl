@@ -2,15 +2,14 @@
 // value in a single jump to the first cell past it, landing on the cell and
 // the error terms the walk would reach one step at a time.
 // `plain_tree_walk.wgsl` or `counted_tree_walk.wgsl` defines `walk` over it.
+// The WGSL that includes it defines `count`, which each loop iteration calls
+// with the side of the region it leaves.
 
 const TILE: u32 = 16u;
 const TAG_SHIFT: u32 = 29u;
 const PAYLOAD: u32 = 0x1fffffffu;
 const UNIFORM: u32 = 0u;
 const LEAF: u32 = 2u;
-
-// The loop iterations of every walk in this invocation so far.
-var<private> iterations: u32;
 
 // A cell's value, and the side of the aligned cube around it that holds only
 // that value.
@@ -207,7 +206,7 @@ fn tree_walk(placement: Placement, ray: Ray, corner: vec3<i32>, extent: vec3<i32
     let steps = bounds.x + bounds.y + bounds.z + 3;
 
     for (var n = 0; n < steps; n++) {
-        iterations += 1u;
+        count(region.size);
 
         var axis = 0;
 

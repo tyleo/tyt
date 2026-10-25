@@ -7,9 +7,8 @@ use std::{
 };
 use wgpu::{
     Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, CommandEncoder,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePassTimestampWrites, Device, Features,
-    MapMode, PollType, QUERY_RESOLVE_BUFFER_ALIGNMENT, QuerySet, QuerySetDescriptor, QueryType,
-    Queue,
+    CommandEncoderDescriptor, Device, Features, MapMode, PollType, QUERY_RESOLVE_BUFFER_ALIGNMENT,
+    QuerySet, QuerySetDescriptor, QueryType, Queue,
 };
 
 /// The passes before the timer keeps samples.
@@ -108,7 +107,9 @@ impl PassTimer {
             summary,
         } = match bench {
             TimedBench::B1 => b1_kernels(device, width, height)?,
-            TimedBench::B2 => b2_kernels(device, queue, width, height)?,
+            TimedBench::B2 { ray_queries } => {
+                b2_kernels(device, queue, width, height, ray_queries)?
+            }
         };
 
         let kernels = kernels
@@ -167,6 +168,11 @@ impl PassTimer {
         })
     }
 
+    /// The kernels a window times, one per pass in turn.
+    pub fn kernel_count(&self) -> usize {
+        self.kernels.len()
+    }
+
     /// Records the next kernel's timed pass over both eyes into `encoder`.
     /// Records nothing while the previous pass runs, so passes never overlap.
     /// Waits on the GPU while the next slot's readback is in flight.
@@ -206,20 +212,9 @@ impl PassTimer {
             usize::try_from(self.passes).expect("pass counts fit in usize") % self.kernels.len();
         let first = index * 2;
 
-        {
-            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some(&self.kernels[kernel].label),
-                timestamp_writes: Some(ComputePassTimestampWrites {
-                    query_set: &self.query_set,
-                    beginning_of_pass_write_index: Some(first),
-                    end_of_pass_write_index: Some(first + 1),
-                }),
-            });
+        let Kernel { label, work, .. } = &self.kernels[kernel];
 
-            for _ in 0..2 {
-                self.kernels[kernel].work.dispatch(&mut pass);
-            }
-        }
+        work.record(encoder, label, &self.query_set, first);
 
         self.slots[slot].pending = Some((kernel, self.passes >= WARM_UP));
         self.recorded = Some(slot);

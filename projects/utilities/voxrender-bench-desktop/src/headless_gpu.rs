@@ -6,7 +6,7 @@ use wgpu::{
 };
 
 /// The high-performance adapter's device with default limits, and with
-/// timestamp queries and ray queries when the adapter has them.
+/// timestamp queries, ray queries, and subgroups when the adapter has them.
 pub fn headless_gpu() -> Result<Gpu> {
     let instance = Instance::default();
 
@@ -16,8 +16,8 @@ pub fn headless_gpu() -> Result<Gpu> {
     }))
     .map_err(Error::Adapter)?;
 
-    let features =
-        adapter.features() & (Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY);
+    let features = adapter.features()
+        & (Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY | Features::SUBGROUP);
 
     let limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
         Limits::default().using_acceleration_structure_values(adapter.limits())

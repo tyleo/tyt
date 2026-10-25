@@ -9,7 +9,7 @@ use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, Device, MapMode, PipelineCompilationOptions, PollType, Queue,
-    ShaderModuleDescriptor, ShaderSource,
+    ShaderModuleDescriptor, ShaderRuntimeChecks, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -48,23 +48,35 @@ impl HitTrace {
         width: u32,
         height: u32,
     ) -> Result<Self> {
-        Self::with_walk(
-            device,
-            scene,
-            view_id,
-            width,
-            height,
-            include_str!("integer_walk.wgsl"),
-            dense_cells,
-        )
+        // SAFETY: the integer walk reads only its placements' cells, and each
+        // of its loops ends within a grid's extent.
+        unsafe {
+            Self::with_walk(
+                device,
+                scene,
+                view_id,
+                width,
+                height,
+                include_str!("integer_walk.wgsl"),
+                dense_cells,
+                ShaderRuntimeChecks::unchecked(),
+            )
+        }
     }
 
     /// As [`HitTrace::new`], tracing with `walk` in place of the integer
     /// walk. `walk` is WGSL defining
     /// `fn walk(placement: Placement, ray: Ray) -> Hit` over
     /// [`GRID_WALK_WGSL`] and `first_hit.wgsl`'s helpers. It reads the words
-    /// `cells` gives each object.
-    pub fn with_walk(
+    /// `cells` gives each object. The module keeps the runtime checks in
+    /// `checks`.
+    ///
+    /// # Safety
+    ///
+    /// Unless `checks` keeps them, `walk` must index only within its
+    /// bindings, and each of its loops must end.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn with_walk(
         device: &Device,
         scene: &RenderScene,
         view_id: U32Id<BRenderView>,
@@ -72,6 +84,7 @@ impl HitTrace {
         height: u32,
         walk: &str,
         cells: impl Fn(&RenderObject) -> Vec<u32>,
+        checks: ShaderRuntimeChecks,
     ) -> Result<Self> {
         let view = scene
             .view(view_id)
@@ -180,16 +193,23 @@ impl HitTrace {
             (pixels * u64::from(light_count)).max(1) * 4,
         );
 
-        let module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("first_hit"),
-            source: ShaderSource::Wgsl(
-                format!(
-                    "{GRID_WALK_WGSL}\n{}\n{walk}",
-                    include_str!("first_hit.wgsl")
-                )
-                .into(),
-            ),
-        });
+        // SAFETY: the caller vouches for `walk` under `checks`. The rest of
+        // the module indexes within its bindings, and its loops end.
+        let module = unsafe {
+            device.create_shader_module_trusted(
+                ShaderModuleDescriptor {
+                    label: Some("first_hit"),
+                    source: ShaderSource::Wgsl(
+                        format!(
+                            "{GRID_WALK_WGSL}\n{}\n{walk}",
+                            include_str!("first_hit.wgsl")
+                        )
+                        .into(),
+                    ),
+                },
+                checks,
+            )
+        };
 
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
             label: Some("first_hit"),

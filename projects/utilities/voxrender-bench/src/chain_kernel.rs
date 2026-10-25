@@ -1,7 +1,7 @@
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BufferUsages, ComputePass, ComputePipeline,
     ComputePipelineDescriptor, Device, PipelineCompilationOptions, ShaderModuleDescriptor,
-    ShaderSource,
+    ShaderRuntimeChecks, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -43,10 +43,17 @@ impl ChainKernel {
             usage: BufferUsages::STORAGE,
         });
 
-        let module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("chain"),
-            source: ShaderSource::Wgsl(include_str!("chain.wgsl").into()),
-        });
+        // SAFETY: the chain reads no bindings by index, and its loops count
+        // to a constant.
+        let module = unsafe {
+            device.create_shader_module_trusted(
+                ShaderModuleDescriptor {
+                    label: Some("chain"),
+                    source: ShaderSource::Wgsl(include_str!("chain.wgsl").into()),
+                },
+                ShaderRuntimeChecks::unchecked(),
+            )
+        };
 
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
             label: Some("chain"),

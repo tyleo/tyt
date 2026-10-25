@@ -41,7 +41,8 @@ adb logcat -s voxrender-bench
 
 The property pins the GPU at level 4, the level the benchmarks' thresholds
 assume, until the headset reboots. `adb logcat -s VrApi` shows the level as
-the second number after `GPU=`.
+the second number after `GPU=` and the clock after the slash that follows.
+The clock can change within a level during a run.
 
 The headset's library also lists the app under Unknown Sources. B1 takes
 about 22 seconds, and the session opens after it. The session starts only
@@ -50,6 +51,24 @@ session has focus. The app logs the first window of frame times about ten
 seconds after the session starts, then another every seven seconds. A window
 of B2's times takes 120 timed passes per kernel after a warm-up of 300, and
 the kernels slow the frame rate while they run.
+
+## Profile
+
+The profile runs six of B2's kernels in turn, each alone for 10 seconds.
+`ovrgpuprofiler` samples its counters each second, so each sample sees one
+kernel. The app skips B1 and logs each kernel as it starts on `profile`
+lines:
+
+```sh
+adb shell setprop debug.voxrenderbench.profile true
+adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
+adb shell ovrgpuprofiler -m
+adb shell ovrgpuprofiler -r="4,17,18,19,20,23,55"
+```
+
+`-m` lists the counters by id. `-r` prints the chosen ones each second.
+The profile repeats until the app stops. `setprop
+debug.voxrenderbench.profile false` returns the app to B1 and B2.
 
 ## Lint
 

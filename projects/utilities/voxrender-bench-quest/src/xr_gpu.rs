@@ -153,12 +153,15 @@ impl XrGpu {
             .expose_adapter(physical_device)
             .ok_or(Error::NoAdapter)?;
 
-        let features =
+        let required =
             Features::MULTIVIEW | Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY;
 
-        if !exposed.features.contains(features) {
-            return Err(Error::MissingFeatures(features - exposed.features));
+        if !exposed.features.contains(required) {
+            return Err(Error::MissingFeatures(required - exposed.features));
         }
+
+        // B2 reports the subgroup sizes when the device has subgroups.
+        let features = required | (exposed.features & Features::SUBGROUP);
 
         let limits = exposed.capabilities.limits.clone();
         let device_extensions = exposed.adapter.required_device_extensions(features);

@@ -11,8 +11,8 @@ use wgpu::{
     BlasGeometries, BlasGeometrySizeDescriptors, Buffer, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, CreateBlasDescriptor, CreateTlasDescriptor, Device, Features,
-    MapMode, PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor, ShaderSource,
-    TlasInstance,
+    MapMode, PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource, TlasInstance,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -269,18 +269,27 @@ impl RayQueryTrace {
             mapped_at_creation: false,
         });
 
-        let module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("ray_query"),
-            source: ShaderSource::Wgsl(
-                format!(
-                    "{}\n{GRID_WALK_WGSL}\n{}\n{}",
-                    include_str!("ray_query.wgsl"),
-                    include_str!("tree_walk.wgsl"),
-                    arm.march.wgsl()
-                )
-                .into(),
-            ),
-        });
+        // SAFETY: each march reads only within its placements' cells and
+        // bricks, and its loops end within a grid's extent. Each query
+        // proceeds before it reads a candidate, and its rays hold finite
+        // values.
+        let module = unsafe {
+            device.create_shader_module_trusted(
+                ShaderModuleDescriptor {
+                    label: Some("ray_query"),
+                    source: ShaderSource::Wgsl(
+                        format!(
+                            "{}\n{GRID_WALK_WGSL}\n{}\n{}",
+                            include_str!("ray_query.wgsl"),
+                            include_str!("tree_walk.wgsl"),
+                            arm.march.wgsl()
+                        )
+                        .into(),
+                    ),
+                },
+                ShaderRuntimeChecks::unchecked(),
+            )
+        };
 
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
             label: Some("ray_query"),

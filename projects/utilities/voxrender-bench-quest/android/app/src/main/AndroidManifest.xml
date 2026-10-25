@@ -10,6 +10,11 @@
         android:name="oculus.software.handtracking"
         android:required="false" />
 
+    <!-- B0 probes whether the runtime offers quad views. -->
+    <uses-feature
+        android:name="com.oculus.feature.QUAD_VIEWS"
+        android:required="false" />
+
     <uses-permission android:name="horizonos.permission.HAND_TRACKING" />
 
     <application

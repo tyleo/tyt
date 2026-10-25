@@ -1,5 +1,6 @@
 use crate::{
-    Error, EyeSwapchain, FrameTimes, Result, XrGpu, XrSystem, probe_session, probe_visibility_mask,
+    Error, EyeSwapchain, FrameTimes, Result, XrGpu, XrSystem, probe_focal_lengths, probe_session,
+    probe_visibility_mask,
 };
 use openxr::{
     CompositionLayerProjection, CompositionLayerProjectionView, Duration as XrDuration,
@@ -8,7 +9,7 @@ use openxr::{
     ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
 };
 use std::num::NonZeroU32;
-use voxrender_bench::{PassTimer, TimedBench};
+use voxrender_bench::{KernelProfile, PassTimer, TimedBench};
 use wgpu::{
     Color, CommandEncoderDescriptor, LoadOp, Operations, RenderPassColorAttachment,
     RenderPassDescriptor, StoreOp,
@@ -29,7 +30,7 @@ const CLEAR: Color = Color {
 };
 
 /// An OpenXR session that clears both eyes each frame, runs B0's session
-/// probes, and times B2's kernels.
+/// probes, and times B2's kernels or runs the profile.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
@@ -37,7 +38,7 @@ pub struct XrApp {
 
     frame_times: Option<FrameTimes>,
 
-    pass_timer: PassTimer,
+    work: FrameWork,
 
     space: Space,
 
@@ -49,7 +50,7 @@ pub struct XrApp {
 
     running: bool,
 
-    mask_pending: bool,
+    eye_probes_pending: bool,
 
     events: EventDataBuffer,
 
@@ -59,8 +60,9 @@ pub struct XrApp {
 }
 
 impl XrApp {
-    /// Opens a session on the GPU and the eyes' swapchain.
-    pub fn new(xr: XrSystem, gpu: XrGpu) -> Result<Self> {
+    /// Opens a session on the GPU and the eyes' swapchain. The frames run
+    /// the profile when `profile`.
+    pub fn new(xr: XrSystem, gpu: XrGpu, profile: bool) -> Result<Self> {
         let blend_modes = xr
             .instance
             .enumerate_environment_blend_modes(xr.system, VIEW_TYPE)
@@ -101,25 +103,36 @@ impl XrApp {
         let frame_times = FrameTimes::new(&xr, &session)?;
         let swapchain = EyeSwapchain::new(&xr, &gpu, &session)?;
 
-        let pass_timer = PassTimer::new(
-            &gpu.device,
-            &gpu.queue,
-            TimedBench::B2,
-            u32::try_from(swapchain.extent.width).expect("an eye's width is positive"),
-            u32::try_from(swapchain.extent.height).expect("an eye's height is positive"),
-        )
-        .map_err(Error::Bench)?;
+        let width = u32::try_from(swapchain.extent.width).expect("an eye's width is positive");
+        let height = u32::try_from(swapchain.extent.height).expect("an eye's height is positive");
+
+        let work = if profile {
+            FrameWork::Profile(
+                KernelProfile::new(&gpu.device, &gpu.queue, width, height).map_err(Error::Bench)?,
+            )
+        } else {
+            FrameWork::Timer(
+                PassTimer::new(
+                    &gpu.device,
+                    &gpu.queue,
+                    TimedBench::B2 { ray_queries: true },
+                    width,
+                    height,
+                )
+                .map_err(Error::Bench)?,
+            )
+        };
 
         Ok(XrApp {
             swapchain,
             frame_times,
-            pass_timer,
+            work,
             space,
             frame_stream,
             frame_waiter,
             session,
             running: false,
-            mask_pending: false,
+            eye_probes_pending: false,
             events: EventDataBuffer::new(),
             xr,
             gpu,
@@ -152,7 +165,7 @@ impl XrApp {
                             self.running = true;
                         }
 
-                        SessionState::FOCUSED => self.mask_pending = true,
+                        SessionState::FOCUSED => self.eye_probes_pending = true,
 
                         SessionState::STOPPING => {
                             self.session.end().map_err(Error::Xr)?;
@@ -165,7 +178,7 @@ impl XrApp {
                     }
                 }
 
-                Event::VisibilityMaskChangedKHR(_) => self.mask_pending = true,
+                Event::VisibilityMaskChangedKHR(_) => self.eye_probes_pending = true,
 
                 Event::DisplayRefreshRateChangedFB(changed) => {
                     log::info!(
@@ -209,9 +222,10 @@ impl XrApp {
                 .map_err(Error::Xr);
         }
 
-        if self.mask_pending {
+        if self.eye_probes_pending {
             probe_visibility_mask(&self.xr, &self.session, &eyes)?;
-            self.mask_pending = false;
+            probe_focal_lengths(&self.xr, &eyes)?;
+            self.eye_probes_pending = false;
         }
 
         let image = self.swapchain.handle.acquire_image().map_err(Error::Xr)?;
@@ -244,19 +258,34 @@ impl XrApp {
             ..RenderPassDescriptor::default()
         });
 
-        self.pass_timer
-            .record(&self.gpu.device, &self.gpu.queue, &mut encoder)
-            .map_err(Error::Bench)?;
+        match &mut self.work {
+            FrameWork::Timer(pass_timer) => {
+                pass_timer
+                    .record(&self.gpu.device, &self.gpu.queue, &mut encoder)
+                    .map_err(Error::Bench)?;
 
-        self.gpu.queue.submit([encoder.finish()]);
+                self.gpu.queue.submit([encoder.finish()]);
 
-        if let Some(report) = self
-            .pass_timer
-            .collect(&self.gpu.device, &self.gpu.queue)
-            .map_err(Error::Bench)?
-        {
-            for line in report.lines() {
-                log::info!("b2 {line}");
+                if let Some(report) = pass_timer
+                    .collect(&self.gpu.device, &self.gpu.queue)
+                    .map_err(Error::Bench)?
+                {
+                    for line in report.lines() {
+                        log::info!("b2 {line}");
+                    }
+                }
+            }
+
+            FrameWork::Profile(profile) => {
+                if let Some(label) = profile
+                    .record(&self.gpu.device, &mut encoder)
+                    .map_err(Error::Bench)?
+                {
+                    log::info!("profile {label}");
+                }
+
+                self.gpu.queue.submit([encoder.finish()]);
+                profile.submitted(&self.gpu.queue);
             }
         }
 
@@ -298,4 +327,14 @@ impl XrApp {
             None => Ok(()),
         }
     }
+}
+
+/// What each frame records after it clears the eyes.
+enum FrameWork {
+    /// B2's timer, which logs each window's report on `b2` lines.
+    Timer(PassTimer),
+
+    /// The profile, which logs each kernel as its stretch starts on
+    /// `profile` lines.
+    Profile(KernelProfile),
 }

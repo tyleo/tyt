@@ -364,3 +364,43 @@ they land.
   `world_to_object` missed 15 to 84% of each scene's pixels
 - B2's window holds 120 passes per kernel, where B1's holds 600, to keep a
   worn run short. Most of B2's 22 kernels take longer than a frame
+
+## S9. A faster march on Quest
+
+- `HitTrace::with_walk` is an unsafe fn that takes the module's
+  `ShaderRuntimeChecks`. `HitTrace::new` stays safe and builds the integer
+  walk unchecked. Every bench kernel builds unchecked. B2 also times the tree
+  walk with the checks to show their cost
+- B2's four layout loops keep their per-step divides, as S8 timed them. The
+  variants read the storage buffer from a start computed once:
+  1. Start hoisted alone
+  2. Two independent chains, each read counted as a step
+  3. vec4 loads from the cache lines the u32 loop reads
+  4. One start per workgroup, so a subgroup reads one address
+- The compute launch runs the hoisted loop at 0 steps. The fragment launch
+  draws one triangle per eye into a 2-layer Rgba8Unorm target with two
+  passes. Its time runs from the first pass's start to the second's end.
+  Multiview waits for a frame that needs it
+- The subgroup probe reports the least and greatest `subgroup_size` of an
+  8x8 dispatch over one eye. It is its own pipeline, so a register-heavy
+  walk can still compile to another size. Naga 30 rejects `enable
+  subgroups;`. The device feature alone enables the builtin
+- The Quest app creates an OpenXR 1.1 instance and declares
+  `com.oculus.feature.QUAD_VIEWS` as optional, so B0's view configurations
+  list quad views if the runtime offers them. A focal-length probe logs each
+  eye's field of view and its f at the recommended size
+- `b2-times --ray-queries false` leaves the ray queries out because Xcode's
+  Metal capture wraps the device and hides ray queries from wgpu.
+  `--capture` then captures one pass of each kernel through wgpu's graphics
+  debugger capture
+- B2 splits the tree walk's iterations by the side of the region each one
+  leaves: a cell, a 4^3 child, or a 16^3 tile. The counted walk runs once
+  per side with the side as a prepended const. `tree_walk.wgsl` calls a
+  `count` hook that its includer defines. The plain walk and the ray query's
+  integer march define it empty
+- `KernelProfile` runs six of B2's kernels alone for 10 seconds each, in
+  turn, because `ovrgpuprofiler` samples its counters once a second over all
+  GPU work. A frame records a batch sized to about 10 ms on Quest. Up to two
+  batches in flight keep the GPU busy through short kernels and bound the
+  queue behind long ones. The Quest app runs the profile in place of B1 and
+  B2's timer when `debug.voxrenderbench.profile` is `true`

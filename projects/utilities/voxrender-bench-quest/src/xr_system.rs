@@ -51,7 +51,8 @@ impl XrSystem {
                     application_version: 0,
                     engine_name: "voxrender",
                     engine_version: 0,
-                    api_version: Version::new(1, 0, 0),
+                    // Quad views need OpenXR 1.1.
+                    api_version: Version::new(1, 1, 0),
                 },
                 &extensions,
                 &[],

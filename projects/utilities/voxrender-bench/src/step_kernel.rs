@@ -1,13 +1,13 @@
-use crate::{STEP_GRID, StepGrid, StepLayout};
+use crate::{STEP_GRID, StepGrid, StepLoop};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, BufferUsages, ComputePass,
     ComputePipeline, ComputePipelineDescriptor, Device, PipelineCompilationOptions,
-    ShaderModuleDescriptor, ShaderSource,
+    ShaderModuleDescriptor, ShaderRuntimeChecks, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
-/// B2's fixed-step loop over one layout of a [`StepGrid`], one invocation
-/// per pixel of a `width` by `height` image.
+/// One of B2's fixed-step loops over a [`StepGrid`], one invocation per pixel
+/// of a `width` by `height` image.
 pub struct StepKernel {
     pipeline: ComputePipeline,
 
@@ -19,11 +19,12 @@ pub struct StepKernel {
 }
 
 impl StepKernel {
-    /// Builds the loop of `count` steps over `layout`.
+    /// Builds `step_loop` at `count` steps. At 0 steps, the loop times the
+    /// launch alone.
     pub fn new(
         device: &Device,
         grid: &StepGrid,
-        layout: StepLayout,
+        step_loop: StepLoop,
         width: u32,
         height: u32,
         count: u32,
@@ -46,16 +47,23 @@ impl StepKernel {
             usage: BufferUsages::STORAGE,
         });
 
-        let module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("steps"),
-            source: ShaderSource::Wgsl(include_str!("steps.wgsl").into()),
-        });
+        // SAFETY: each loop reads only within the grid, and its loop counts
+        // to a constant.
+        let module = unsafe {
+            device.create_shader_module_trusted(
+                ShaderModuleDescriptor {
+                    label: Some("steps"),
+                    source: ShaderSource::Wgsl(include_str!("steps.wgsl").into()),
+                },
+                ShaderRuntimeChecks::unchecked(),
+            )
+        };
 
         let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some(layout.label()),
+            label: Some(step_loop.label()),
             layout: None,
             module: &module,
-            entry_point: Some(layout.entry_point()),
+            entry_point: Some(step_loop.entry_point()),
             compilation_options: PipelineCompilationOptions {
                 constants: &[("STEPS", f64::from(count)), ("SIZE", f64::from(STEP_GRID))],
                 ..PipelineCompilationOptions::default()
@@ -63,15 +71,22 @@ impl StepKernel {
             cache: None,
         });
 
-        let (binding, resource) = match layout {
-            StepLayout::Buffer => (1, grid.cells.as_entire_binding()),
-            StepLayout::Volume => (2, BindingResource::TextureView(&grid.volume)),
-            StepLayout::Layers => (3, BindingResource::TextureView(&grid.layers)),
-            StepLayout::Masks => (4, grid.masks.as_entire_binding()),
+        let (binding, resource) = match step_loop {
+            StepLoop::Buffer | StepLoop::Hoisted | StepLoop::TwoChains | StepLoop::Uniform => {
+                (1, grid.cells.as_entire_binding())
+            }
+
+            StepLoop::Volume => (2, BindingResource::TextureView(&grid.volume)),
+
+            StepLoop::Layers => (3, BindingResource::TextureView(&grid.layers)),
+
+            StepLoop::Masks => (4, grid.masks.as_entire_binding()),
+
+            StepLoop::Quads => (6, grid.cells.as_entire_binding()),
         };
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some(layout.label()),
+            label: Some(step_loop.label()),
             layout: &pipeline.get_bind_group_layout(0),
             entries: &[
                 BindGroupEntry {
