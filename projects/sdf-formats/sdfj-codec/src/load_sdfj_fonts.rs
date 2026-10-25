@@ -77,7 +77,7 @@ mod tests {
     };
     use sdfj::{SDFJ_VERSION, SdfjFile, SdfjFont, SdfjNames, SdfjShape2d};
     use std::{
-        collections::BTreeSet,
+        collections::{BTreeMap, BTreeSet},
         io::{Error as IOError, ErrorKind, Result as IOResult},
         path::Path,
     };
@@ -118,6 +118,7 @@ mod tests {
                     .iter()
                     .map(|character| (*character, SdfjGlyph::default()))
                     .collect(),
+                kerning: BTreeMap::new(),
             })
         }
     }

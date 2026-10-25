@@ -20,11 +20,19 @@ pub fn text_outline(
     let tolerance = font.units_per_em / 1000.0;
     let mut contours = Vec::new();
     let mut pen = 0.0;
+    let mut previous = None;
     for character in string.chars() {
         let glyph = font
             .glyphs
             .get(&character)
             .ok_or_else(|| format!("the font `{font_name}` has no `{character}`"))?;
+        if let Some(previous) = previous.replace(character) {
+            pen += font
+                .kerning
+                .get(&(previous, character))
+                .copied()
+                .unwrap_or(0.0);
+        }
         let offset = TyVector2F64::new(pen, 0.0);
 
         for contour in &glyph.contours {
@@ -164,6 +172,7 @@ mod tests {
     use super::ContourBuilder;
     use crate::operations::sdf_doc::{OutlineSegment, text_outline};
     use sdfcore::{SdfFontData, SdfGlyph, SdfGlyphContour, SdfGlyphSegment, SdfTextAlign};
+    use std::collections::BTreeMap;
     use ty_math::TyVector2F64;
 
     fn point(u: f64, v: f64) -> TyVector2F64 {
@@ -225,6 +234,7 @@ mod tests {
             units_per_em: 1000.0,
             cap_height,
             glyphs: glyphs.into_iter().collect(),
+            kerning: BTreeMap::new(),
         };
         text_outline(&font, "sign", string, 0.07, align)
     }
@@ -249,6 +259,25 @@ mod tests {
         };
         assert!(close(control, point(0.11, 0.05)), "{control}");
         assert!(close(to, point(0.135, 0.0)), "{to}");
+    }
+
+    #[test]
+    fn a_kerned_pair_moves_the_second_character_and_the_rest_of_the_line() {
+        let font = SdfFontData {
+            units_per_em: 1000.0,
+            cap_height: Some(700.0),
+            glyphs: [h(), u()].into(),
+            kerning: [(('H', 'U'), -100.0), (('U', 'H'), 300.0)].into(),
+        };
+        let contours = text_outline(&font, "sign", "HUH", 0.07, SdfTextAlign::Start).unwrap();
+
+        // `U` starts at 600 - 100 and the second `H` at 500 + 550 + 300.
+        let close = |a: TyVector2F64, b: TyVector2F64| a.distance(b) < 1e-12;
+        assert!(close(contours[1][0].to(), point(0.1, 0.0)), "{contours:?}");
+        assert!(
+            close(contours[2][0].to(), point(0.135, 0.07)),
+            "{contours:?}"
+        );
     }
 
     #[test]

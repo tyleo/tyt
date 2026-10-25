@@ -1,16 +1,27 @@
-use crate::TestGlyph;
+use crate::{TestGlyph, TestKerning};
 
 /// A TrueType font of one face named `family` and `full_name` at `weight`
 /// holding `glyphs`. A `cap_height` of 0 leaves the OS/2 table without one,
-/// and the full name takes Mac Roman.
+/// and the full name takes Mac Roman. The face kerns the pairs of `kern` in a
+/// `kern` table and those of `gpos` in a GPOS `kern` lookup. An empty list
+/// leaves its table out.
 pub fn test_font(
     family: &str,
     full_name: &str,
     weight: u16,
     cap_height: i16,
     glyphs: &[TestGlyph],
+    kern: &[TestKerning],
+    gpos: &[TestKerning],
 ) -> Vec<u8> {
     let count = u16::try_from(glyphs.len() + 1).unwrap();
+    let glyph_id = |character: char| {
+        let index = glyphs
+            .iter()
+            .position(|glyph| glyph.0 == character)
+            .unwrap();
+        u16::try_from(index + 1).unwrap()
+    };
 
     // Glyph 0 holds `.notdef`, empty.
     let mut glyf = Vec::new();
@@ -122,18 +133,90 @@ pub fn test_font(
 
     let loca: Vec<_> = loca.into_iter().flat_map(u32::to_be_bytes).collect();
 
+    // The pairs sort by glyph ids for a `kern` table's and a pair set's search.
+    let pairs = |kerning: &[TestKerning]| {
+        let mut pairs: Vec<_> = kerning
+            .iter()
+            .map(|&(left, right, value)| (glyph_id(left), glyph_id(right), value))
+            .collect();
+        pairs.sort();
+        pairs
+    };
+    let words =
+        |words: &[u16]| -> Vec<u8> { words.iter().flat_map(|word| word.to_be_bytes()).collect() };
+
+    // A version 0 table of one horizontal format 0 subtable.
+    let kern_pairs = pairs(kern);
+    let mut kern = Vec::new();
+    if !kern_pairs.is_empty() {
+        let pair_count = u16::try_from(kern_pairs.len()).unwrap();
+        kern.extend(words(&[
+            0,
+            1,
+            0,
+            14 + 6 * pair_count,
+            1,
+            pair_count,
+            0,
+            0,
+            0,
+        ]));
+        for (left, right, value) in kern_pairs {
+            kern.extend(words(&[left, right]));
+            kern.extend(value.to_be_bytes());
+        }
+    }
+
+    // The table holds no scripts and one `kern` feature of one lookup. The
+    // lookup holds one format 1 pair adjustment subtable, which gives each
+    // first glyph a pair set.
+    let gpos_pairs = pairs(gpos);
+    let mut gpos = Vec::new();
+    if !gpos_pairs.is_empty() {
+        let mut firsts: Vec<_> = gpos_pairs.iter().map(|pair| pair.0).collect();
+        firsts.dedup();
+        let first_count = u16::try_from(firsts.len()).unwrap();
+
+        gpos.extend(words(&[1, 0, 10, 12, 26, 0, 1]));
+        gpos.extend(*b"kern");
+        gpos.extend(words(&[8, 0, 1, 0, 1, 4, 2, 0, 1, 8]));
+
+        let coverage = 10 + 2 * first_count;
+        let mut sets = Vec::new();
+        let mut set_offsets = Vec::new();
+        for first in &firsts {
+            set_offsets.push(coverage + 4 + 2 * first_count + u16::try_from(sets.len()).unwrap());
+            let set: Vec<_> = gpos_pairs.iter().filter(|pair| pair.0 == *first).collect();
+            sets.extend(words(&[u16::try_from(set.len()).unwrap()]));
+            for (_, right, value) in set {
+                sets.extend(words(&[*right]));
+                sets.extend(value.to_be_bytes());
+            }
+        }
+        gpos.extend(words(&[1, coverage, 4, 0, first_count]));
+        gpos.extend(words(&set_offsets));
+        gpos.extend(words(&[1, first_count]));
+        gpos.extend(words(&firsts));
+        gpos.extend(sets);
+    }
+
     // The table records sort by tag.
-    let tables = [
+    let tables: Vec<_> = [
+        (b"GPOS", gpos),
         (b"OS/2", os2),
         (b"cmap", cmap),
         (b"glyf", glyf),
         (b"head", head),
         (b"hhea", hhea),
         (b"hmtx", hmtx),
+        (b"kern", kern),
         (b"loca", loca),
         (b"maxp", maxp),
         (b"name", name),
-    ];
+    ]
+    .into_iter()
+    .filter(|(_, table)| !table.is_empty())
+    .collect();
     let mut font = vec![0, 1, 0, 0];
     font.extend(u16::try_from(tables.len()).unwrap().to_be_bytes());
     font.extend([0; 6]);

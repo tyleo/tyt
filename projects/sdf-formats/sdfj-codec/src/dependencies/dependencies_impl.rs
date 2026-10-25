@@ -12,7 +12,12 @@ use std::{
     path::Path,
     sync::OnceLock,
 };
-use ttf_parser::{Face, OutlineBuilder, PlatformId, name::Name, name_id};
+use ttf_parser::{
+    Face, GlyphId, OutlineBuilder, PlatformId, Tag,
+    gpos::{PairAdjustment, PositioningSubtable},
+    name::Name,
+    name_id,
+};
 
 /// The dependencies the `impl` feature provides.
 #[derive(Clone, Copy, Debug, Default)]
@@ -34,6 +39,7 @@ impl DecodeFont for DependenciesImpl {
             })
             .map(f64::from);
 
+        let mut glyph_ids = BTreeMap::new();
         let mut glyphs = BTreeMap::new();
         for &character in characters {
             // Glyph 0 stands in for a character the face lacks.
@@ -49,6 +55,7 @@ impl DecodeFont for DependenciesImpl {
 
             let mut builder = ContourBuilder::default();
             face.outline_glyph(glyph_id, &mut builder);
+            glyph_ids.insert(character, glyph_id);
             glyphs.insert(
                 character,
                 SdfjGlyph {
@@ -62,6 +69,7 @@ impl DecodeFont for DependenciesImpl {
             units_per_em: f64::from(face.units_per_em()),
             cap_height,
             glyphs,
+            kerning: kerning(&face, &glyph_ids),
         })
     }
 }
@@ -169,6 +177,84 @@ impl OutlineBuilder for ContourBuilder {
     fn close(&mut self) {}
 }
 
+/// The nonzero kerning `face` makes between each pair of `glyph_ids`'
+/// characters. The face's GPOS `kern` lookups set it, and a face without them
+/// takes its `kern` table.
+fn kerning(face: &Face, glyph_ids: &BTreeMap<char, GlyphId>) -> BTreeMap<(char, char), f64> {
+    let kern = Tag::from_bytes(b"kern");
+    let lookups: Vec<_> = face
+        .tables()
+        .gpos
+        .map(|gpos| {
+            let lookup_indices: BTreeSet<_> = gpos
+                .features
+                .into_iter()
+                .filter(|feature| feature.tag == kern)
+                .flat_map(|feature| feature.lookup_indices)
+                .collect();
+            lookup_indices
+                .into_iter()
+                .filter_map(|lookup_index| gpos.lookups.get(lookup_index))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let pair_kerning = |left: GlyphId, right: GlyphId| -> i32 {
+        if lookups.is_empty() {
+            return face.tables().kern.map_or(0, |table| {
+                table
+                    .subtables
+                    .into_iter()
+                    .filter(|subtable| subtable.horizontal && !subtable.variable)
+                    .filter_map(|subtable| subtable.glyphs_kerning(left, right))
+                    .map(i32::from)
+                    .sum()
+            });
+        }
+
+        // Each lookup adds the first of its subtables that holds the pair.
+        lookups
+            .iter()
+            .filter_map(|lookup| {
+                lookup
+                    .subtables
+                    .into_iter::<PositioningSubtable>()
+                    .find_map(|subtable| pair_advance(subtable, left, right))
+            })
+            .map(i32::from)
+            .sum()
+    };
+
+    glyph_ids
+        .iter()
+        .flat_map(|(&left, &left_id)| {
+            glyph_ids
+                .iter()
+                .map(move |(&right, &right_id)| ((left, right), pair_kerning(left_id, right_id)))
+        })
+        .filter(|(_, kerning)| *kerning != 0)
+        .map(|(pair, kerning)| (pair, f64::from(kerning)))
+        .collect()
+}
+
+/// The adjustment `subtable` adds to `left`'s advance when `right` follows it,
+/// or `None` when the subtable does not hold the pair.
+fn pair_advance(subtable: PositioningSubtable, left: GlyphId, right: GlyphId) -> Option<i16> {
+    let PositioningSubtable::Pair(pair) = subtable else {
+        return None;
+    };
+    let coverage_index = pair.coverage().get(left)?;
+    let (first, _) = match pair {
+        PairAdjustment::Format1 { sets, .. } => sets.get(coverage_index)?.get(right)?,
+
+        PairAdjustment::Format2 {
+            classes, matrix, ..
+        } => matrix.get((classes.0.get(left), classes.1.get(right)))?,
+    };
+
+    Some(first.x_advance)
+}
+
 /// The point at `x` and `y` in font units.
 fn point(x: f32, y: f32) -> [f64; 2] {
     [f64::from(x), f64::from(y)]
@@ -266,7 +352,7 @@ mod tests {
     use super::find_font;
     use crate::{
         DecodeFont, Deflate, DependenciesImpl, Inflate, SdfjFontFile, SdfjGlyph, SdfjGlyphContour,
-        SdfjGlyphSegment, TestGlyph, test_font,
+        SdfjGlyphSegment, TestGlyph, TestKerning, test_font,
     };
     use fontdb::Database;
 
@@ -299,7 +385,7 @@ mod tests {
 
     /// A font file named `full_name` at `weight` in the family `family`.
     fn font(family: &str, full_name: &str, weight: u16) -> Vec<u8> {
-        test_font(family, full_name, weight, 700, &[H])
+        test_font(family, full_name, weight, 700, &[H], &[], &[])
     }
 
     #[test]
@@ -324,7 +410,15 @@ mod tests {
     fn a_face_decodes_the_characters_it_holds_and_measures_its_cap_height() {
         let decode = |cap_height: i16, characters: &str| {
             let file = SdfjFontFile {
-                data: test_font("Test Sans", "Test Sans Regular", 400, cap_height, &[H]),
+                data: test_font(
+                    "Test Sans",
+                    "Test Sans Regular",
+                    400,
+                    cap_height,
+                    &[H],
+                    &[],
+                    &[],
+                ),
                 index: 0,
             };
             DependenciesImpl
@@ -350,5 +444,42 @@ mod tests {
 
         // Without a cap height, the top of `H` stands in, decoded or not.
         assert_eq!(decode(0, "").cap_height, Some(700.0));
+    }
+
+    #[test]
+    fn a_face_kerns_by_its_gpos_lookups_or_else_its_kern_table() {
+        let kerning = |kern: &[TestKerning], gpos: &[TestKerning]| {
+            let glyphs = [('A', 600, &[][..]), H, ('V', 600, &[][..])];
+            let file = SdfjFontFile {
+                data: test_font(
+                    "Test Sans",
+                    "Test Sans Regular",
+                    400,
+                    700,
+                    &glyphs,
+                    kern,
+                    gpos,
+                ),
+                index: 0,
+            };
+            let kerning = DependenciesImpl
+                .decode_font(&file, &"AHV".chars().collect())
+                .unwrap()
+                .kerning;
+            kerning.into_iter().collect::<Vec<_>>()
+        };
+
+        let kern = [('A', 'V', -80), ('V', 'A', -60)];
+        assert_eq!(
+            kerning(&kern, &[]),
+            [(('A', 'V'), -80.0), (('V', 'A'), -60.0)]
+        );
+
+        // A pair the font kerns by 0 takes no entry.
+        let gpos = [('A', 'H', 0), ('A', 'V', -120), ('H', 'V', 10)];
+        assert_eq!(
+            kerning(&kern, &gpos),
+            [(('A', 'V'), -120.0), (('H', 'V'), 10.0)]
+        );
     }
 }

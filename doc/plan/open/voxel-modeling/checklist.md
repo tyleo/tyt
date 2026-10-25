@@ -253,7 +253,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       the check after every conversion into voxcore, from a file read or from a
       voxelize, and warns with a pointer to `--select-index`. Names pass
       through unchanged
-- [ ] **S31. New calls.** More calls the rounds built by hand:
+- [x] **S31. New calls.** More calls the rounds built by hand:
   1. `text` lays out a string as a 2D shape for finding 47. The font comes
      from a file or an installed font that a flag or `.vxlconfig` provides,
      never from vxl. The build stores each glyph used as an exact outline of

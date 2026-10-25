@@ -530,7 +530,8 @@ formulas the lines below cite.
   // as the rectangle, inside the same corners
   { "kind": "arch", "min": [-0.5, 0], "max": [0.5, 1.5] },
 
-  // text: a line of text in a font, along +u with its baseline on v = 0
+  // text: a line of text set in a font with its kerning, along +u with its
+  // baseline on v = 0
   {
     "kind": "text",
 

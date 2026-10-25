@@ -37,6 +37,7 @@ fn sdf_font_data_from_sdfj_font_data(font_data: SdfjFontData) -> SdfFontData {
             .into_iter()
             .map(|(character, glyph)| (character, sdf_glyph_from_sdfj_glyph(glyph)))
             .collect(),
+        kerning: font_data.kerning,
     }
 }
 
@@ -94,7 +95,11 @@ mod tests {
         DecodeFont, DecodeSdfjJson, DependenciesImpl, FindInstalledFont, Inflate, ReadFontFile,
         SdfjFontData, SdfjFontFile, SdfjGlyph, SdfjGlyphContour, SdfjGlyphSegment,
     };
-    use std::{collections::BTreeSet, io::Result as IOResult, path::Path};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        io::Result as IOResult,
+        path::Path,
+    };
     use ty_math::TyVector2F64;
 
     /// The codec impl's JSON, with each font file holding its path or its
@@ -161,6 +166,7 @@ mod tests {
                     .iter()
                     .map(|character| (*character, glyph.clone()))
                     .collect(),
+                kerning: BTreeMap::new(),
             })
         }
     }

@@ -3,8 +3,9 @@ use std::collections::BTreeSet;
 
 /// Decodes the glyphs of a font file.
 pub trait DecodeFont {
-    /// The glyphs of `characters` in `file`'s face, or the reason the face
-    /// does not decode. A font without a cap height takes the top of its `H`.
+    /// The glyphs of `characters` in `file`'s face with the kerning between
+    /// them, or the reason the face does not decode. A font without a cap
+    /// height takes the top of its `H`.
     fn decode_font(
         &self,
         file: &SdfjFontFile,

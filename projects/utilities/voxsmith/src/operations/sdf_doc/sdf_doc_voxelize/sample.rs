@@ -168,7 +168,7 @@ mod tests {
         SdfMaterial, SdfNode, SdfObject, SdfPattern, SdfShape2d, SdfShape3d, SdfSide, SdfState,
         SdfStep, SdfStepMaterial,
     };
-    use std::f64::consts::PI;
+    use std::{collections::BTreeMap, f64::consts::PI};
     use ty_math::{TyAxis3, TyVector2F64, TyVector3F64, TyVector3I32};
 
     fn material(index: u32) -> SdfStepMaterial {
@@ -974,6 +974,7 @@ mod tests {
             units_per_em: 1000.0,
             cap_height: Some(700.0),
             glyphs: [('H', h)].into(),
+            kerning: BTreeMap::new(),
         }]);
 
         let loaded = |string: &str| text(string).with_font_data(fonts.clone());

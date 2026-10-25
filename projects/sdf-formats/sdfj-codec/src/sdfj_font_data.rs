@@ -1,8 +1,9 @@
 use crate::SdfjGlyph;
 use std::collections::BTreeMap;
 
-/// The decoded glyphs of a font in [`SdfjFile::fonts`](sdfj::SdfjFile::fonts)
-/// for the characters its `text` shapes hold, in font units.
+/// The decoded glyphs and kerning of a font in
+/// [`SdfjFile::fonts`](sdfj::SdfjFile::fonts) for the characters
+/// its `text` shapes hold, in font units.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SdfjFontData {
     /// The units in the font's em.
@@ -15,4 +16,8 @@ pub struct SdfjFontData {
     /// The glyph of each character the font holds. A character the font lacks
     /// has no entry.
     pub glyphs: BTreeMap<char, SdfjGlyph>,
+
+    /// The adjustment the font adds to the first character's advance when the
+    /// second follows it. A pair without an entry takes none.
+    pub kerning: BTreeMap<(char, char), f64>,
 }
