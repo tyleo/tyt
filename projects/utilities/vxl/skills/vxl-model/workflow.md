@@ -115,8 +115,8 @@ vxl object render room.voxj
 1. `--view-orbit` places a view by an azimuth and an elevation in degrees and a
    distance in meters or `fit`. `--view-look-at` beside it sets a point to
    circle at a distance in meters
-2. A new view such as `close` adds `table-close.png` and renames the sheet
-   `table-review.png`. A close-up alone leaves `--profile review` off
+2. A new view such as `close` adds `table-close.png` beside the sheet
+   `table.png`. A close-up alone leaves `--profile review` off
 3. A view placed by position takes `--view-frame`, `--view-position`, and a
    rotation flag such as `--view-look-at`
 4. `--select` renders the matched parts alone. `--view-select <view> <select>`

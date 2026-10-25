@@ -536,11 +536,7 @@ impl ObjectRender {
             .map(|(view_id, view)| (view.name.as_str(), view_id))
             .collect();
 
-        let paths = output.map(|output| {
-            let names: Vec<_> = images.iter().map(ImageRecord::name).collect();
-
-            image_outputs(&output, &names)
-        });
+        let paths = output.map(|output| image_outputs(&output, &images));
 
         for (index, image) in images.iter().enumerate() {
             let drawn: Vec<_> = image
@@ -1078,23 +1074,36 @@ fn check_images(
     Ok(())
 }
 
-/// The file each image of `names` writes: `output` alone for one image, else
-/// `output`'s stem, a hyphen, and the image's name under `output`'s extension
-/// beside it.
-fn image_outputs(output: &Path, names: &[&str]) -> Vec<PathBuf> {
-    if let [_] = names {
-        return vec![output.to_path_buf()];
-    }
+/// The file each of `images` writes. The only image, or else the only sheet,
+/// takes `output`, and each other image appends `-<name>` to the stem.
+fn image_outputs(output: &Path, images: &[ImageRecord]) -> Vec<PathBuf> {
+    let sheets: Vec<_> = images
+        .iter()
+        .enumerate()
+        .filter(|(_, image)| matches!(image, ImageRecord::Sheet { .. }))
+        .map(|(index, _)| index)
+        .collect();
+
+    let bare = match (images, sheets.as_slice()) {
+        ([_], _) => Some(0),
+        (_, [sheet]) => Some(*sheet),
+        _ => None,
+    };
 
     let stem = output
         .file_stem()
         .expect("the output path carries a file name")
         .to_string_lossy();
 
-    names
+    images
         .iter()
-        .map(|name| {
-            let mut file_name = format!("{stem}-{name}");
+        .enumerate()
+        .map(|(index, image)| {
+            if bare == Some(index) {
+                return output.to_path_buf();
+            }
+
+            let mut file_name = format!("{stem}-{}", image.name());
 
             if let Some(extension) = output.extension() {
                 file_name = format!("{file_name}.{}", extension.to_string_lossy());
@@ -2786,17 +2795,41 @@ mod tests {
     }
 
     #[test]
-    fn one_image_takes_the_stem_and_several_write_under_their_names() {
+    fn the_only_image_or_the_only_sheet_takes_the_stem_and_the_rest_write_under_their_names() {
         let output = Path::new("out/model.png");
 
+        let sheet = |name: &str| ImageRecord::Sheet {
+            name: name.to_owned(),
+            views: owned_names(&["hero"]),
+            border_width: 8,
+            border_color: TySrgbU8::new(128, 128, 128),
+        };
+
         assert_eq!(
-            image_outputs(output, &["review"]),
+            image_outputs(output, &[view_image("close", "close")]),
             [PathBuf::from("out/model.png")]
         );
         assert_eq!(
-            image_outputs(output, &["close", "review"]),
+            image_outputs(output, &[view_image("close", "close"), sheet("review")]),
             [
                 PathBuf::from("out/model-close.png"),
+                PathBuf::from("out/model.png")
+            ]
+        );
+        assert_eq!(
+            image_outputs(
+                output,
+                &[view_image("close", "close"), view_image("far", "far")]
+            ),
+            [
+                PathBuf::from("out/model-close.png"),
+                PathBuf::from("out/model-far.png")
+            ]
+        );
+        assert_eq!(
+            image_outputs(output, &[sheet("overview"), sheet("review")]),
+            [
+                PathBuf::from("out/model-overview.png"),
                 PathBuf::from("out/model-review.png")
             ]
         );
