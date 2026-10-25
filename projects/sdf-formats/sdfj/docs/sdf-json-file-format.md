@@ -1207,9 +1207,7 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
    - On `axis`, `t = q[axis] / height` and `size = height`. On each other axis,
      `t = s[i]` and `size = length`
    - With `f = t - floor(t)`, the border's material takes the point when
-     `size * f < 0.7 * width` or `size * (1 - f) <= 0.3 * width` on any axis.
-     The joint sits off center so that its edges miss the cell centers of a
-     grid that meets or centers on the joint
+     `size * f < width` on any axis, so each brick opens with its joint
 7. `speckle` reads the point's sample position `x`: where the point sits in the
    frame a reader samples in. The cube `c = floor(x / size)` gives the point an
    accent when `unit(hash(c, 0))` reads below `density`. With `m` accents, the

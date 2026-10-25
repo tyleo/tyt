@@ -201,10 +201,9 @@ fn bricks_material(
 
         brick[index] = lattice_coordinate(floor);
 
-        // An off-center joint keeps both edges off the cell centers when the
-        // joint sits on a cell's face or its center.
+        // Each brick opens with its joint.
         if let Some(SdfBorder { width, .. }) = border {
-            in_joint |= size * within < 0.7 * width || size * (1.0 - within) <= 0.3 * width;
+            in_joint |= size * within < width;
         }
     }
 
@@ -517,7 +516,7 @@ mod tests {
         let upright = bricks(None);
         assert_eq!(pick_at(&upright, 0.1, 0.051, 0.1), 99);
         assert_eq!(pick_at(&upright, 0.052, 0.025, 0.1), 99);
-        assert_eq!(pick_at(&upright, 0.1, 0.025, 0.048), 99);
+        assert_eq!(pick_at(&upright, 0.1, 0.025, 0.052), 99);
         assert_ne!(pick_at(&upright, 0.1, 0.025, 0.1), 99);
 
         // A face built at a whole or half brick stays brick.
@@ -530,37 +529,30 @@ mod tests {
     }
 
     #[test]
-    fn a_joint_on_a_cell_face_or_center_fills_one_cell() {
-        let bricks = |width| SdfPattern::Bricks {
-            material_ids: materials(4),
-            length: 0.2,
-            height: 0.06,
-            axis: None,
-            seed: 2.0,
-            border: Some(SdfBorder {
-                material_id: U32Id::from_u32(99),
-                width,
-            }),
-        };
+    fn a_joint_whole_cells_wide_fills_that_many_cells_in_every_course() {
+        for joint_cells in [1, 2] {
+            let bricks = SdfPattern::Bricks {
+                material_ids: materials(4),
+                length: 0.2,
+                height: 0.06,
+                axis: None,
+                seed: 2.0,
+                border: Some(SdfBorder {
+                    material_id: U32Id::from_u32(99),
+                    width: f64::from(joint_cells) * 0.01,
+                }),
+            };
 
-        // Cells 0.01 wide meet the joints at 0.06 and 1.2 on their faces.
-        let column = |width, y0: f64, count: u32| -> Vec<bool> {
-            (0..count)
-                .map(|cell| {
-                    let y = y0 + (f64::from(cell) + 0.5) * 0.01;
-                    pick_at(&bricks(width), 0.1, y, 0.1) == 99
-                })
-                .collect()
-        };
-        assert_eq!(column(0.01, 0.04, 4), [false, false, true, false]);
-        assert_eq!(column(0.01, 1.18, 2), [false, false]);
-
-        // Cells 0.02 wide center on the joint at 0.06.
-        let centered: Vec<bool> = [0.04, 0.06, 0.08]
-            .iter()
-            .map(|y| pick_at(&bricks(0.02), 0.1, *y, 0.1) == 99)
-            .collect();
-        assert_eq!(centered, [false, true, false]);
+            // Cells 0.01 wide stack six to a course.
+            for cell in 0..300 {
+                let y = (f64::from(cell) + 0.5) * 0.01;
+                assert_eq!(
+                    pick_at(&bricks, 0.1, y, 0.1) == 99,
+                    cell % 6 < joint_cells,
+                    "{joint_cells} {cell}"
+                );
+            }
+        }
     }
 
     #[test]

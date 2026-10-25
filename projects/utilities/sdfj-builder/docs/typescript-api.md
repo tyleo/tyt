@@ -781,7 +781,9 @@ A seed always gives the same picks. A seed left out reads 0.
 6. `bricks` stacks courses `height` tall along `axis` and splits each course
    into bricks `length` long that each take a random pick. Each course shifts by
    half a brick. `axis` defaults to `"y"`, and a floor takes `"x"` or `"z"`.
-   `border` fills the joints with its `material`
+   `border` fills the joints with its `material`. When `length`, `height`, and
+   the shape's offset are whole multiples of `v`, a `width` of `n * v` fills `n`
+   cells in each joint
 7. `speckle` gives each cube `size` wide on the grid a `density` chance of a
    random accent and leaves the rest `base`. Because `speckle` reads cubes fixed
    to the grid, its copies differ. A `size` of `v` accents single cells
