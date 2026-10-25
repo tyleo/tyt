@@ -1,5 +1,6 @@
 use crate::{
-    BSdfMaterial, BSdfNode, BSdfObject, BSdfPattern, BSdfShades, BSdfShape2d, BSdfShape3d, BSdfStep,
+    BSdfFont, BSdfMaterial, BSdfNode, BSdfObject, BSdfPattern, BSdfShades, BSdfShape2d,
+    BSdfShape3d, BSdfStep,
 };
 use branded_id::U32Id;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -8,6 +9,9 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 /// `table[index]`, which points to the entry in a document.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SdfEntryId {
+    /// An entry of `fonts`.
+    Font(U32Id<BSdfFont>),
+
     /// An entry of `materials`.
     Material(U32Id<BSdfMaterial>),
 
@@ -37,6 +41,7 @@ impl SdfEntryId {
     /// The name of the table holding the entry.
     pub fn table(self) -> &'static str {
         match self {
+            SdfEntryId::Font(_) => "fonts",
             SdfEntryId::Material(_) => "materials",
             SdfEntryId::Node(_) => "nodes",
             SdfEntryId::Object(_) => "objects",
@@ -54,6 +59,7 @@ impl Display for SdfEntryId {
         let table = self.table();
 
         match self {
+            SdfEntryId::Font(font_id) => write!(f, "{table}[{font_id}]"),
             SdfEntryId::Material(material_id) => write!(f, "{table}[{material_id}]"),
             SdfEntryId::Node(node_id) => write!(f, "{table}[{node_id}]"),
             SdfEntryId::Object(object_id) => write!(f, "{table}[{object_id}]"),

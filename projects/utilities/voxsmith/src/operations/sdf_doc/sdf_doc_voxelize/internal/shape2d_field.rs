@@ -1,8 +1,8 @@
 use crate::operations::sdf_doc::{
-    ArcSpan, Bounds2d, PointMap2d, ShapeSource, arc_distance, arch_distance, chamfer_rect_distance,
-    ellipse_distance, exact_sin_cos, fold_to_direction, polygon_distance, polyline_distance,
-    rect_distance, sector_distance, smooth_intersect_distance, smooth_union_distance,
-    spline_points, vesica_distance, whole_count,
+    ArcSpan, Bounds2d, OutlineSegment, PointMap2d, ShapeSource, arc_distance, arch_distance,
+    chamfer_rect_distance, ellipse_distance, exact_sin_cos, fold_to_direction, outline_distance,
+    polygon_distance, polyline_distance, rect_distance, sector_distance, smooth_intersect_distance,
+    smooth_union_distance, spline_points, vesica_distance, whole_count,
 };
 use branded_id::{IdVec, U32Id};
 use sdfcore::{BSdfShape2d, SdfAxes2d, SdfCaps, SdfShape2d};
@@ -83,6 +83,10 @@ pub enum Shape2dField {
 
         distance: f64,
     },
+
+    /// Closed contours of lines and quadratic curves, filled by the nonzero
+    /// rule.
+    Outline { contours: Vec<Vec<OutlineSegment>> },
 
     /// A closed outline.
     Polygon { points: Vec<TyVector2F64> },
@@ -193,7 +197,7 @@ pub enum Shape2dField {
 }
 
 impl Shape2dField {
-    /// The field of `shape`.
+    /// The field of `shape`, which can't be a `text`.
     pub fn new(shape: &SdfShape2d) -> Self {
         match shape {
             SdfShape2d::Arc {
@@ -454,6 +458,10 @@ impl Shape2dField {
                 shape_ids: shape_ids.clone(),
             },
 
+            SdfShape2d::Text { .. } => {
+                unreachable!("a text's field takes the contours its font lays out")
+            }
+
             SdfShape2d::Vesica { a, b, width } => Shape2dField::Vesica {
                 a: *a,
                 b: *b,
@@ -514,6 +522,8 @@ impl Shape2dField {
             Shape2dField::Offset { shape_id, distance } => {
                 shapes.distance2d(*shape_id, point) - distance
             }
+
+            Shape2dField::Outline { contours } => outline_distance(contours, point),
 
             Shape2dField::Polygon { points } => polygon_distance(points, point),
 
@@ -680,6 +690,10 @@ impl Shape2dField {
                 of(shape_id).grow(TyVector2F64::splat(distance.max(0.0)))
             }
 
+            Shape2dField::Outline { contours } => {
+                Bounds2d::from_points(contours.iter().flatten().flat_map(OutlineSegment::points))
+            }
+
             Shape2dField::Polygon { points } => Bounds2d::from_points(points.iter().copied()),
 
             Shape2dField::Polyline { points, half_width } => {
@@ -796,7 +810,7 @@ fn arc_bounds(center: TyVector2F64, radius: f64, from_degrees: f64, to_degrees: 
 #[cfg(test)]
 mod tests {
     use crate::operations::sdf_doc::{
-        assert_shape2d, grid2d, outline_distance, rect_reference, shapes_of,
+        assert_shape2d, grid2d, polygon_reference, rect_reference, shapes_of,
     };
     use branded_id::U32Id;
     use sdfcore::{BSdfShape2d, SdfAxes2d, SdfShape2d};
@@ -855,7 +869,7 @@ mod tests {
             };
 
             assert_shape2d(vec![shape], GRID, 1e-12, |point| {
-                outline_distance(&corners, point)
+                polygon_reference(&corners, point)
             });
         }
     }
@@ -901,7 +915,7 @@ mod tests {
             };
 
             assert_shape2d(vec![shape], GRID, 1e-12, |point| {
-                outline_distance(&outline, point)
+                polygon_reference(&outline, point)
             });
         }
     }

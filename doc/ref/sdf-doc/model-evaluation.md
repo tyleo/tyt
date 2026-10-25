@@ -29,7 +29,9 @@ sets how the builder writes the document.
 `vxl sdf-doc voxelize` runs in order:
 
 1. The flags and profile merge into the [settings](#settings)
-2. vxl reads the document and runs the [checks](#checks)
+2. vxl reads the document and the
+   [fonts](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#fonts)
+   its `text` shapes use, then runs the [checks](#checks)
 3. The [sampling](#sampling) settles the voxel size
 4. Each part's steps fill its [grid](#grids)
 5. The fill mode empties the cells that do not show

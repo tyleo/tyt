@@ -32,7 +32,7 @@ pub fn cone_distance(
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::sdf_doc::{assert_shape3d, outline_distance};
+    use crate::operations::sdf_doc::{assert_shape3d, polygon_reference};
     use sdfcore::SdfShape3d;
     use ty_math::{TyVector2F64, TyVector3F64};
 
@@ -55,7 +55,7 @@ mod tests {
             TyVector2F64::new(-radius_b, length),
         ];
 
-        outline_distance(
+        polygon_reference(
             &trapezoid,
             TyVector2F64::new(offset.cross(axis).length(), offset.dot(axis)),
         )

@@ -4,7 +4,7 @@ use crate::{
     warn_slashed_names,
 };
 use clap::{ArgAction, Parser};
-use sdfconv::{ReadFormat, load};
+use sdfconv::{LoadOptions, ReadFormat, load};
 use std::path::PathBuf;
 use voxconv::{
     WriteFormat, save,
@@ -108,7 +108,12 @@ impl SdfDocVoxelize {
             ..write_options
         };
 
-        let main = load(&dependencies, ReadFormat::Sdfj, &self.input)?;
+        let main = load(
+            &dependencies,
+            ReadFormat::Sdfj,
+            &self.input,
+            LoadOptions { fonts: true },
+        )?;
         let sampling = sample(&VoxsmithDependenciesImpl, &main, &settings.sample)?;
         let document = to_vox_main(&sampling, &settings.vox_main)?;
 

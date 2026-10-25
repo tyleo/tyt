@@ -1,8 +1,9 @@
 use crate::operations::sdf_doc::{
-    Bounds2d, Bounds3d, SdfEvaluation, Shape2dField, Shape3dField, ShapeSource,
+    Bounds2d, Bounds3d, OutlineSegment, SdfEvaluation, Shape2dField, Shape3dField, ShapeSource,
 };
-use branded_id::{IdVec, U32Id};
-use sdfcore::{BSdfShape2d, BSdfShape3d, SdfMain};
+use branded_id::{IdVec, IteratorExt, U32Id};
+use sdfcore::{BSdfShape2d, BSdfShape3d, SdfMain, SdfShape2d};
+use std::collections::HashMap;
 use ty_math::{TyVector2F64, TyVector3F64};
 
 /// A model's shapes, ready to evaluate at any point by the sdfj format's
@@ -20,12 +21,16 @@ pub struct SdfShapes {
 
 impl SdfShapes {
     /// The shapes of `main`, with every sine and cosine model evaluation takes
-    /// once already computed.
+    /// once already computed. `text_outlines` holds the contours of each
+    /// `text`.
     ///
     /// # Panics
     ///
     /// When a shape's arguments fail the sdfj format's validation.
-    pub fn new(main: &SdfMain) -> Self {
+    pub(crate) fn new(
+        main: &SdfMain,
+        mut text_outlines: HashMap<U32Id<BSdfShape2d>, Vec<Vec<OutlineSegment>>>,
+    ) -> Self {
         let state = main.state();
 
         let mut shapes = Self {
@@ -35,8 +40,16 @@ impl SdfShapes {
             bounds2d: IdVec::with_capacity(state.shapes2d.len()),
         };
 
-        for shape in state.shapes2d.iter() {
-            let field = Shape2dField::new(shape);
+        for (shape2d_id, shape) in state.shapes2d.iter().enumerate_ids() {
+            let field = match shape {
+                SdfShape2d::Text { .. } => Shape2dField::Outline {
+                    contours: text_outlines
+                        .remove(&shape2d_id)
+                        .expect("each text comes laid out"),
+                },
+
+                _ => Shape2dField::new(shape),
+            };
             shapes.bounds2d.push(field.bounds(&shapes.bounds2d));
             shapes.shapes2d.push(field);
         }

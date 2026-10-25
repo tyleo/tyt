@@ -23,6 +23,8 @@ from file bytes over `sdfj-codec`:
 
 - `codec::from_sdfj_bytes`: `.sdfj` or `.sdfjz` bytes into an `SdfMain`,
   detecting the form by its leading bytes
+- `codec::from_sdfj_bytes_with_fonts`: the same, with the document's fonts
+  loaded
 - `codec::to_sdfj_bytes` / `codec::to_sdfj_pretty_bytes`: an `SdfMain` to
   compact or pretty-printed `.sdfj` JSON
 - `codec::to_sdfjz_bytes`: an `SdfMain` to a `.sdfjz` zip archive

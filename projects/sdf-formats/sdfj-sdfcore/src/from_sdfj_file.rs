@@ -1,14 +1,16 @@
 use crate::{Error, Result};
 use branded_id::{IdVec, U32Id};
 use sdfcore::{
-    SdfAxes2d, SdfAxes3d, SdfAxisRotation, SdfBorder, SdfCaps, SdfMain, SdfMap, SdfMapEntry,
-    SdfMaterial, SdfNames, SdfNode, SdfObject, SdfPattern, SdfProperty, SdfPropertyValue,
-    SdfShades, SdfShape2d, SdfShape3d, SdfSide, SdfState, SdfStep, SdfStepMaterial, SdfValue,
+    SdfAxes2d, SdfAxes3d, SdfAxisRotation, SdfBorder, SdfCaps, SdfFont, SdfMain, SdfMap,
+    SdfMapEntry, SdfMaterial, SdfNames, SdfNode, SdfObject, SdfPattern, SdfProperty,
+    SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d, SdfSide, SdfState, SdfStep,
+    SdfStepMaterial, SdfTextAlign, SdfValue,
 };
 use sdfj::{
-    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjBorder, SdfjCaps, SdfjFile, SdfjIntValue,
-    SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNode, SdfjObject, SdfjPattern, SdfjPropertyValue,
-    SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep, SdfjTaggedValue, SdfjValue,
+    SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjBorder, SdfjCaps, SdfjFile, SdfjFont,
+    SdfjIntValue, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNode, SdfjObject, SdfjPattern,
+    SdfjPropertyValue, SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep, SdfjTaggedValue,
+    SdfjTextAlign, SdfjValue,
 };
 use std::result::Result as StdResult;
 use ty_math::{TyAxis3, TyVector2F64, TyVector3F64};
@@ -33,6 +35,9 @@ pub fn from_sdfj_file(file: &SdfjFile) -> Result<SdfMain> {
     let state = SdfState {
         shapes3d: entries("shapes3d", &file.shapes3d, sdf_shape3d_from_sdfj_shape3d)?,
         shapes2d: entries("shapes2d", &file.shapes2d, sdf_shape2d_from_sdfj_shape2d)?,
+        fonts: entries("fonts", &file.fonts, |font| {
+            Ok(sdf_font_from_sdfj_font(font))
+        })?,
         materials: entries(
             "materials",
             &file.materials,
@@ -614,6 +619,18 @@ fn sdf_shape2d_from_sdfj_shape2d(shape: &SdfjShape2d) -> StdResult<SdfShape2d, S
             cutter_ids: wire_ids(cutters)?,
         },
 
+        SdfjShape2d::Text {
+            font,
+            string,
+            size,
+            align,
+        } => SdfShape2d::Text {
+            font_id: wire_id(*font)?,
+            string: string.clone(),
+            size: *size,
+            align: align.map(sdf_text_align_from_sdfj_text_align),
+        },
+
         SdfjShape2d::Translate { shape, offset } => SdfShape2d::Translate {
             shape_id: wire_id(*shape)?,
             offset: TyVector2F64::from_array(*offset),
@@ -985,6 +1002,30 @@ fn sdf_caps_from_sdfj_caps(caps: SdfjCaps) -> SdfCaps {
     match caps {
         SdfjCaps::Flat => SdfCaps::Flat,
         SdfjCaps::Round => SdfCaps::Round,
+    }
+}
+
+/// A font as sdfcore holds it.
+fn sdf_font_from_sdfj_font(font: &SdfjFont) -> SdfFont {
+    match font {
+        SdfjFont::File { name, path } => SdfFont::File {
+            name: name.clone(),
+            path: path.clone(),
+        },
+
+        SdfjFont::Installed { name, font } => SdfFont::Installed {
+            name: name.clone(),
+            font: font.clone(),
+        },
+    }
+}
+
+/// A text alignment as sdfcore holds it.
+fn sdf_text_align_from_sdfj_text_align(align: SdfjTextAlign) -> SdfTextAlign {
+    match align {
+        SdfjTextAlign::Center => SdfTextAlign::Center,
+        SdfjTextAlign::End => SdfTextAlign::End,
+        SdfjTextAlign::Start => SdfTextAlign::Start,
     }
 }
 

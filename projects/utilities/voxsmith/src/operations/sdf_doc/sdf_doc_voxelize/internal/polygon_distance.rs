@@ -39,7 +39,7 @@ pub fn polygon_distance(points: &[TyVector2F64], point: TyVector2F64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::operations::sdf_doc::{assert_shape2d, outline_distance, polygon_distance};
+    use crate::operations::sdf_doc::{assert_shape2d, polygon_distance, polygon_reference};
     use sdfcore::SdfShape2d;
     use ty_math::TyVector2F64;
 
@@ -66,7 +66,7 @@ mod tests {
         let grid = (TyVector2F64::splat(-1.0), TyVector2F64::splat(1.0), 17);
 
         assert_shape2d(vec![shape], grid, 1e-12, |point| {
-            outline_distance(&points, point)
+            polygon_reference(&points, point)
         });
     }
 

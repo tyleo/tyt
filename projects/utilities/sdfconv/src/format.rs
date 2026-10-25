@@ -1,6 +1,6 @@
 use crate::{Dependencies, ReadFormat, Result, WriteFormat};
 use sdfcore::SdfMain;
-use std::fmt::Debug;
+use std::{fmt::Debug, path::Path};
 
 /// An SDF document format, a marker type. Each format feature adds one.
 /// [`ReadFormat::with`] and [`WriteFormat::with`] turn a runtime format into
@@ -28,6 +28,14 @@ pub trait Format: 'static {
 
     /// Decodes a document's bytes into a model.
     fn read<D: Dependencies>(dependencies: &D, bytes: &[u8]) -> Result<SdfMain>;
+
+    /// Decodes a document's bytes into a model with its fonts loaded. The
+    /// document sits in `directory`.
+    fn read_with_fonts<D: Dependencies>(
+        dependencies: &D,
+        bytes: &[u8],
+        directory: &Path,
+    ) -> Result<SdfMain>;
 
     /// Encodes a model as a document's bytes.
     fn write<D: Dependencies>(

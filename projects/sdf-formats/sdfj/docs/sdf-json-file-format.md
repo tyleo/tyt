@@ -60,6 +60,10 @@ document is packaged in a zip archive.
     /* ... */
   ],
 
+  "fonts": [
+    /* ... */
+  ],
+
   "materials": [
     /* ... */
   ],
@@ -97,7 +101,8 @@ document is packaged in a zip archive.
 Each table holds one kind of entry, and an entry references another by its
 index in that entry's table.
 
-1. `shapes3d` and `shapes2d` hold the [shapes](#shapes)
+1. `shapes3d` and `shapes2d` hold the [shapes](#shapes), and `fonts` the
+   [fonts](#fonts) a `text` reads
 2. `materials` and `shades` hold the [materials](#materials)
 3. `patterns` holds the [patterns](#patterns), and `steps` the [steps](#steps)
 4. `objects` and `nodes` hold the [parts](#parts), and `rootNodes` lists the
@@ -524,6 +529,23 @@ formulas the lines below cite.
   // arch: the rectangle between two corners topped by a half circle as wide
   // as the rectangle, inside the same corners
   { "kind": "arch", "min": [-0.5, 0], "max": [0.5, 1.5] },
+
+  // text: a line of text in a font, along +u with its baseline on v = 0
+  {
+    "kind": "text",
+
+    // an index into `fonts`
+    "font": 0,
+
+    "string": "OPEN",
+
+    // the height of a capital letter
+    "size": 0.1,
+
+    // optional: defaults to "start". "start", "center", or "end" picks the
+    // point of the line that sits on u = 0
+    "align": "center",
+  },
 ]
 ```
 
@@ -573,6 +595,22 @@ formulas the lines below cite.
 10. `vesica` uses the oriented vesica formula with half its width
 11. `arch` measures to its outline of base, sides, and half circle by the tunnel
     formula
+12. `text` sets each character's outline from its font, scaled by `size` over
+    the font's cap height. A font without a cap height takes the top of its `H`
+    - Each character starts where the previous character's advance ends.
+      `align` shifts the line back by none, half, or all of the advances' sum
+    - Each cubic curve of the font splits into quadratic curves that stray from
+      it by at most a thousandth of an em
+    - The text measures to its nearest segment. A line measures as a `polygon`
+      edge does. A curve `b(t)` with `t` in `[0, 1]` measures to the nearest of
+      its ends and the roots of the cubic `dot(b(t) - p, b'(t)) = 0`
+    - The sign follows the nonzero rule on the ray from `p` toward +u. A curve
+      splits into pieces where its v turns
+    - Each line or piece that crosses the ray counts +1 when it runs up in v and
+      -1 when it runs down. It crosses when `p.v` lies in the half-open range
+      from its start's v to its end's v and it meets that v right of `p`
+    - Inside an overlap of contours, the distance runs to the nearest segment
+      even when that segment lies inside the fill
 
 ### From 2D to 3D
 
@@ -922,7 +960,8 @@ at an angle, the box comes from the
    their radius or radii, and a `rect` and an `arch` span their corners. An
    `ngon`, a `star`, and a `polygon` take the box around their vertices, and a
    `polyline` takes the box around its points grown by half its width. A
-   `spline` takes the box of the `polygon` or `polyline` its curve forms
+   `spline` takes the box of the `polygon` or `polyline` its curve forms, and a
+   `text` takes the box around its segments' end and control points
 7. An `arc` takes the box around its end points and the points at `radius` in
    each axis direction its span crosses. Half its width then grows that box. A
    `sector`'s box also holds its center, and a `vesica` spans `a` and `b` grown
@@ -1178,6 +1217,23 @@ sets `octaves`. `hash(x, ...)` folds its whole-number arguments into the
 8. `checker` gives the point material
    `mod(floor(q[0] / size) + floor(q[1] / size) + floor(q[2] / size), n)`
 
+## Fonts
+
+`fonts` holds the fonts a `text` reads. Each font takes a `name` that errors
+report it by. Its `kind` picks where its data comes from:
+
+```jsonc
+[
+  // file: a font file at a path relative to the document's directory. A font
+  // collection gives its first face
+  { "kind": "file", "name": "label", "path": "../fonts/plex.otf" },
+
+  // installed: the installed face whose family or full name matches `font`,
+  // ignoring case. A family picks its regular face
+  { "kind": "installed", "name": "sign", "font": "Futura" },
+]
+```
+
 ## Names
 
 `names` holds a map per kind of entry a document can name. Each map takes a name
@@ -1231,7 +1287,8 @@ below and never repairs, coerces, or fills in bad input.
       least one shape, and an `onto` holds at least one step. A `polygon` and a
       `spline` without `width` list at least 3 points, and a `polyline`, a
       `lathe`, a `spline` with `width`, and a `sweep` list at least 2. A
-      `sweep` lists one scale per point
+      `sweep` lists one scale per point. A `text` string holds at least one
+      character and no line break
    4. `amplitude`, `warp`, and the lengths of an `elongate` are zero or more,
       `density` falls in `[0, 1]`, and a range's end passes its start
    5. Colors parse as `#RRGGBB`, or `#RRGGBBAA` for `baseColor`, and the other
@@ -1275,6 +1332,12 @@ below and never repairs, coerces, or fills in bad input.
       root parts count as one list
    4. Every step in an `onto` is an `add` earlier in each object holding the
       `paint` or the `coat`
+8. Fonts, checked as a `text` reads its font:
+   1. The font loads. A `file` font reads as a font, and an `installed` font
+      matches an installed face
+   2. The font holds every character of the string and gives a cap height or
+      holds an `H`
+   3. The text draws at least one contour
 
 ## Examples
 

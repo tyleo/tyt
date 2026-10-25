@@ -25,6 +25,9 @@ formats.
 - `load` / `save`: the same from and to a path, through the caller's
   `ReadFile` and `WriteFile`
 
+`load` takes `LoadOptions`. With `fonts` set, the format's codec also loads
+the document's fonts into the `SdfMain`.
+
 Each takes a `Dependencies`: any type implementing each enabled format's
 dependencies trait, such as `sdfj::SdfjDependencies`. A type holding those in
 another value implements `ForwardDependencies` instead and gets every trait

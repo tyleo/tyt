@@ -4,7 +4,7 @@ use crate::{
     operations::sdf_doc::{
         EntryPaths, PlaceFrame, SdfCellBounds, SdfGrid, SdfSampleOptions, SdfSampling, SdfShapes,
         SdfStepRecord, check_document, check_shape_boxes, collect_places, resolve_materials,
-        sample_grid, sample_voxel_size, whole_voxels,
+        sample_grid, sample_voxel_size, text_outlines, whole_voxels,
     },
     utilities::VoxelFrame,
 };
@@ -33,7 +33,7 @@ pub fn sample<D: MapCells>(
     check_document(state, &places, &paths)?;
     let materials = resolve_materials(state, &paths)?;
 
-    let shapes = SdfShapes::new(main);
+    let shapes = SdfShapes::new(main, text_outlines(main, &paths)?);
     check_shape_boxes(state, &shapes, &paths)?;
 
     let voxel_size = sample_voxel_size(state, &places, &shapes, options.resolution)?;
@@ -164,11 +164,12 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use sdfcore::{
-        SdfAxisRotation, SdfMain, SdfMaterial, SdfNode, SdfObject, SdfPattern, SdfShape3d, SdfSide,
-        SdfState, SdfStep, SdfStepMaterial,
+        SdfAxisRotation, SdfFont, SdfFontData, SdfGlyph, SdfGlyphContour, SdfGlyphSegment, SdfMain,
+        SdfMaterial, SdfNode, SdfObject, SdfPattern, SdfShape2d, SdfShape3d, SdfSide, SdfState,
+        SdfStep, SdfStepMaterial,
     };
     use std::f64::consts::PI;
-    use ty_math::{TyAxis3, TyVector3F64, TyVector3I32};
+    use ty_math::{TyAxis3, TyVector2F64, TyVector3F64, TyVector3I32};
 
     fn material(index: u32) -> SdfStepMaterial {
         SdfStepMaterial::Material(U32Id::from_u32(index))
@@ -930,5 +931,64 @@ mod tests {
             ),
             "model must hold a live cell, not only empty grids"
         );
+    }
+
+    #[test]
+    fn a_text_fills_its_letters_and_an_error_points_to_its_font() {
+        let text = |string: &str| {
+            let mut state =
+                single_part_main(vec![cuboid([0.0; 3], [1.0; 3])], vec![add("letters", 0, 0)])
+                    .state()
+                    .clone();
+            state.shapes3d = IdVec::from_vec(vec![SdfShape3d::Extrude {
+                profile_id: U32Id::from_u32(0),
+                axis: None,
+                from: 0.0,
+                to: 0.01,
+            }]);
+            state.shapes2d = IdVec::from_vec(vec![SdfShape2d::Text {
+                font_id: U32Id::from_u32(0),
+                string: string.to_owned(),
+                size: 0.07,
+                align: None,
+            }]);
+            state.fonts = IdVec::from_vec(vec![SdfFont::Installed {
+                name: "sign".to_owned(),
+                font: "Test Sans".to_owned(),
+            }]);
+            SdfMain::new(state).unwrap()
+        };
+
+        // `H` covers 500 by 700 units of a 700 unit cap height.
+        let corner = |u: f64, v: f64| SdfGlyphSegment::Line {
+            to: TyVector2F64::new(u, v),
+        };
+        let h = SdfGlyph {
+            advance: 600.0,
+            contours: vec![SdfGlyphContour {
+                start: TyVector2F64::ZERO,
+                segments: vec![corner(0.0, 700.0), corner(500.0, 700.0), corner(500.0, 0.0)],
+            }],
+        };
+        let fonts = IdVec::from_vec(vec![SdfFontData {
+            units_per_em: 1000.0,
+            cap_height: Some(700.0),
+            glyphs: [('H', h)].into(),
+        }]);
+
+        let loaded = |string: &str| text(string).with_font_data(fonts.clone());
+
+        let sampling = sample(&DependenciesImpl, &loaded("H"), &at_size(0.01)).unwrap();
+        assert_eq!(live_cells(&sampling).len(), 5 * 7);
+
+        for (main, message) in [
+            (loaded("HÉ"), ": the font `sign` has no `É`"),
+            (text("H"), ": the font `sign` is not loaded"),
+        ] {
+            let error = sample(&DependenciesImpl, &main, &at_size(0.01))
+                .unwrap_err()
+                .to_string();
+            assert!(error.ends_with(message), "{error}");
+        }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{SdfjAxes2d, SdfjCaps};
+use crate::{SdfjAxes2d, SdfjCaps, SdfjTextAlign};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -310,6 +310,26 @@ pub enum SdfjShape2d {
 
     /// A base shape with the cutters removed.
     Subtract { base: usize, cutters: Vec<usize> },
+
+    /// A line of text in a font of [`SdfjFile::fonts`](crate::SdfjFile::fonts).
+    Text {
+        font: usize,
+
+        string: String,
+
+        #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
+        size: f64,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        align: Option<SdfjTextAlign>,
+    },
 
     /// Moves a shape.
     Translate {

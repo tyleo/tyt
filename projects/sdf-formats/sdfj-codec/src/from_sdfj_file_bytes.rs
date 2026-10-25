@@ -28,6 +28,7 @@ mod tests {
                 radius: 0.25,
             }],
             shapes2d: Vec::new(),
+            fonts: Vec::new(),
             materials: vec![SdfjMaterial::Material {
                 properties: SdfjMap::new(vec![SdfjMapEntry {
                     key: "baseColor".to_owned(),

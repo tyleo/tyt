@@ -1,14 +1,14 @@
 use branded_id::U32Id;
 use sdfcore::{
-    SdfAxes2d, SdfAxes3d, SdfBorder, SdfCaps, SdfMain, SdfMaterial, SdfNode, SdfObject, SdfPattern,
-    SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d, SdfSide, SdfStep, SdfStepMaterial,
-    SdfValue,
+    SdfAxes2d, SdfAxes3d, SdfBorder, SdfCaps, SdfFont, SdfMain, SdfMaterial, SdfNode, SdfObject,
+    SdfPattern, SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d, SdfSide, SdfStep,
+    SdfStepMaterial, SdfTextAlign, SdfValue,
 };
 use sdfj::{
     SDFJ_VERSION, SdfjAxes2d, SdfjAxes3d, SdfjAxis, SdfjAxisRotation, SdfjBorder, SdfjCaps,
-    SdfjFile, SdfjIntValue, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode, SdfjObject,
-    SdfjPattern, SdfjPropertyValue, SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide, SdfjStep,
-    SdfjTaggedValue, SdfjValue,
+    SdfjFile, SdfjFont, SdfjIntValue, SdfjMap, SdfjMapEntry, SdfjMaterial, SdfjNames, SdfjNode,
+    SdfjObject, SdfjPattern, SdfjPropertyValue, SdfjShades, SdfjShape2d, SdfjShape3d, SdfjSide,
+    SdfjStep, SdfjTaggedValue, SdfjTextAlign, SdfjValue,
 };
 use ty_math::{TyAxis3, TyVector2F64, TyVector3F64};
 
@@ -29,6 +29,7 @@ pub fn to_sdfj_file(main: &SdfMain) -> SdfjFile {
             .iter()
             .map(sdfj_shape2d_from_sdf_shape2d)
             .collect(),
+        fonts: state.fonts.iter().map(sdfj_font_from_sdf_font).collect(),
         materials: state
             .materials
             .iter()
@@ -598,6 +599,18 @@ fn sdfj_shape2d_from_sdf_shape2d(shape: &SdfShape2d) -> SdfjShape2d {
             cutters: wire_indices(cutter_ids),
         },
 
+        SdfShape2d::Text {
+            font_id,
+            string,
+            size,
+            align,
+        } => SdfjShape2d::Text {
+            font: wire_index(*font_id),
+            string: string.clone(),
+            size: *size,
+            align: align.map(sdfj_text_align_from_sdf_text_align),
+        },
+
         SdfShape2d::Translate { shape_id, offset } => SdfjShape2d::Translate {
             shape: wire_index(*shape_id),
             offset: offset.to_array(),
@@ -950,6 +963,30 @@ fn sdfj_axes3d_from_sdf_axes3d(axes: SdfAxes3d) -> SdfjAxes3d {
         SdfAxes3d::Y => SdfjAxes3d::Y,
         SdfAxes3d::Yz => SdfjAxes3d::Yz,
         SdfAxes3d::Z => SdfjAxes3d::Z,
+    }
+}
+
+/// A font as a document holds it.
+fn sdfj_font_from_sdf_font(font: &SdfFont) -> SdfjFont {
+    match font {
+        SdfFont::File { name, path } => SdfjFont::File {
+            name: name.clone(),
+            path: path.clone(),
+        },
+
+        SdfFont::Installed { name, font } => SdfjFont::Installed {
+            name: name.clone(),
+            font: font.clone(),
+        },
+    }
+}
+
+/// A text alignment as a document holds it.
+fn sdfj_text_align_from_sdf_text_align(align: SdfTextAlign) -> SdfjTextAlign {
+    match align {
+        SdfTextAlign::Center => SdfjTextAlign::Center,
+        SdfTextAlign::End => SdfjTextAlign::End,
+        SdfTextAlign::Start => SdfjTextAlign::Start,
     }
 }
 

@@ -3,7 +3,7 @@ use ty_math::TyVector2F64;
 
 /// The signed distance from `point` to the simple polygon through `points`,
 /// negative where the outline winds around the point.
-pub fn outline_distance(points: &[TyVector2F64], point: TyVector2F64) -> f64 {
+pub fn polygon_reference(points: &[TyVector2F64], point: TyVector2F64) -> f64 {
     let edges = || {
         points
             .iter()

@@ -66,7 +66,13 @@ pub const EVERY_KIND_SDFJ: &str = r##"{
     { "kind": "offset", "shape": 0, "distance": 0.1 },
     { "kind": "shell", "shape": 0, "thickness": 0.1 },
     { "kind": "spline", "points": [[0, 0], [1, 0], [0, 1]] },
-    { "kind": "spline", "points": [[0, 0], [1, 0]], "width": 0.1 }
+    { "kind": "spline", "points": [[0, 0], [1, 0]], "width": 0.1 },
+    { "kind": "text", "font": 0, "string": "OPEN", "size": 0.1 },
+    { "kind": "text", "font": 1, "string": "Aisle 4", "size": 0.03, "align": "center" }
+  ],
+  "fonts": [
+    { "kind": "file", "name": "label", "path": "../fonts/plex.otf" },
+    { "kind": "installed", "name": "sign", "font": "Futura" }
   ],
   "materials": [
     {

@@ -1,7 +1,8 @@
 use crate::{
-    BSdfMaterial, BSdfNode, BSdfObject, BSdfPattern, BSdfShades, BSdfShape2d, BSdfShape3d,
-    BSdfStep, Error, Result, SdfEntryId, SdfMaterial, SdfNames, SdfNode, SdfObject, SdfPattern,
-    SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d, SdfStep, SdfStepMaterial, SdfValue,
+    BSdfFont, BSdfMaterial, BSdfNode, BSdfObject, BSdfPattern, BSdfShades, BSdfShape2d,
+    BSdfShape3d, BSdfStep, Error, Result, SdfEntryId, SdfFont, SdfMaterial, SdfNames, SdfNode,
+    SdfObject, SdfPattern, SdfPropertyValue, SdfShades, SdfShape2d, SdfShape3d, SdfStep,
+    SdfStepMaterial, SdfValue,
 };
 use branded_id::{IdVec, IteratorExt, U32Id, UsizeId};
 use std::{collections::HashSet, iter};
@@ -16,6 +17,9 @@ pub struct SdfState {
 
     /// The 2D shapes.
     pub shapes2d: IdVec<BSdfShape2d, SdfShape2d>,
+
+    /// The fonts.
+    pub fonts: IdVec<BSdfFont, SdfFont>,
 
     /// The materials.
     pub materials: IdVec<BSdfMaterial, SdfMaterial>,
@@ -50,6 +54,7 @@ impl SdfState {
         for (table, length) in [
             ("shapes3d", self.shapes3d.len()),
             ("shapes2d", self.shapes2d.len()),
+            ("fonts", self.fonts.len()),
             ("materials", self.materials.len()),
             ("shades", self.shades.len()),
             ("patterns", self.patterns.len()),
@@ -240,6 +245,13 @@ impl EntryCheck<'_> {
         node_ids
             .into_iter()
             .try_for_each(|node_id| self.reference(SdfEntryId::Node(node_id), node_id, end_id))
+    }
+
+    /// Errors on a font past the end of `fonts`.
+    fn font_ids(&self, font_ids: impl IntoIterator<Item = U32Id<BSdfFont>>) -> Result<()> {
+        font_ids.into_iter().try_for_each(|font_id| {
+            self.reference(SdfEntryId::Font(font_id), font_id, self.state.fonts.end())
+        })
     }
 
     /// Errors on a material past the end of `materials`.
@@ -728,6 +740,11 @@ fn check_shape2d(check: &EntryCheck, shape: &SdfShape2d) -> Result<()> {
             base_id,
             cutter_ids,
         } => check.shape2d_ids(iter::once(*base_id).chain(cutter_ids.iter().copied())),
+
+        SdfShape2d::Text { font_id, size, .. } => {
+            check.font_ids([*font_id])?;
+            check.numbers([*size])
+        }
 
         SdfShape2d::Translate { shape_id, offset } => {
             check.shape2d_ids([*shape_id])?;

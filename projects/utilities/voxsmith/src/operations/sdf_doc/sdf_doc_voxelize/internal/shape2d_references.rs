@@ -15,6 +15,7 @@ pub fn shape2d_references(shape: &SdfShape2d) -> Vec<U32Id<BSdfShape2d>> {
         | SdfShape2d::Sector { .. }
         | SdfShape2d::Spline { .. }
         | SdfShape2d::Star { .. }
+        | SdfShape2d::Text { .. }
         | SdfShape2d::Vesica { .. } => Vec::new(),
 
         SdfShape2d::Intersect { shape_ids }

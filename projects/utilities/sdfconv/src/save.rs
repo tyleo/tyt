@@ -15,7 +15,7 @@ pub fn save<D: Dependencies + WriteFile>(
 
 #[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::{MemoryFiles, ReadFormat, WriteFormat, load, save, test_main};
+    use crate::{LoadOptions, MemoryFiles, ReadFormat, WriteFormat, load, save, test_main};
     use std::path::Path;
 
     #[test]
@@ -32,7 +32,13 @@ mod tests {
 
         assert_eq!(memory.0.borrow().len(), 1);
 
-        let loaded = load(&memory, ReadFormat::Sdfj, Path::new("out/m.sdfj")).unwrap();
+        let loaded = load(
+            &memory,
+            ReadFormat::Sdfj,
+            Path::new("out/m.sdfj"),
+            LoadOptions::default(),
+        )
+        .unwrap();
 
         assert_eq!(loaded, test_main());
     }
@@ -43,7 +49,8 @@ mod tests {
             load(
                 &MemoryFiles::default(),
                 ReadFormat::Sdfj,
-                Path::new("m.sdfj")
+                Path::new("m.sdfj"),
+                LoadOptions::default()
             )
             .is_err()
         );

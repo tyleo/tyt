@@ -8,9 +8,10 @@
 //! runtime, and their `with` methods hand the marker to a visitor as a type.
 //! [`read()`] and [`write()`] move a document's bytes through a format over the
 //! caller's [`Dependencies`] as an [`SdfMain`](sdfcore::SdfMain). [`load()`]
-//! and [`save()`] start and end at a path instead of the bytes. Each format
-//! feature enables its bridge's `codec` feature and opens a module of its name
-//! holding the marker and the format's writer options.
+//! and [`save()`] start and end at a path instead of the bytes. [`load()`] can
+//! also load the document's fonts through its format. Each format feature
+//! enables its bridge's `codec` feature and opens a module of its name holding
+//! the marker and the format's writer options.
 
 #[cfg(not(feature = "sdfj"))]
 compile_error!("sdfconv needs at least one format feature enabled: sdfj");
@@ -22,6 +23,7 @@ mod error;
 mod format;
 mod forward_dependencies;
 mod load;
+mod load_options;
 mod read;
 mod read_file;
 mod read_format;
@@ -38,6 +40,7 @@ pub use error::*;
 pub use format::*;
 pub use forward_dependencies::*;
 pub use load::*;
+pub use load_options::*;
 pub use read::*;
 pub use read_file::*;
 pub use read_format::*;

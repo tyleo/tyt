@@ -1,5 +1,5 @@
 use crate::{
-    SdfjMaterial, SdfjNames, SdfjNode, SdfjObject, SdfjPattern, SdfjShades, SdfjShape2d,
+    SdfjFont, SdfjMaterial, SdfjNames, SdfjNode, SdfjObject, SdfjPattern, SdfjShades, SdfjShape2d,
     SdfjShape3d, SdfjStep,
 };
 #[cfg(feature = "serde")]
@@ -32,6 +32,13 @@ pub struct SdfjFile {
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
     pub shapes2d: Vec<SdfjShape2d>,
+
+    /// The fonts.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub fonts: Vec<SdfjFont>,
 
     /// The materials.
     #[cfg_attr(

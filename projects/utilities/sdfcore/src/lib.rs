@@ -9,6 +9,7 @@
 
 // Public API
 
+mod b_sdf_font;
 mod b_sdf_material;
 mod b_sdf_node;
 mod b_sdf_object;
@@ -25,6 +26,11 @@ mod sdf_axis_rotation;
 mod sdf_border;
 mod sdf_caps;
 mod sdf_entry_id;
+mod sdf_font;
+mod sdf_font_data;
+mod sdf_glyph;
+mod sdf_glyph_contour;
+mod sdf_glyph_segment;
 mod sdf_main;
 mod sdf_map;
 mod sdf_map_entry;
@@ -42,8 +48,10 @@ mod sdf_side;
 mod sdf_state;
 mod sdf_step;
 mod sdf_step_material;
+mod sdf_text_align;
 mod sdf_value;
 
+pub use b_sdf_font::*;
 pub use b_sdf_material::*;
 pub use b_sdf_node::*;
 pub use b_sdf_object::*;
@@ -60,6 +68,11 @@ pub use sdf_axis_rotation::*;
 pub use sdf_border::*;
 pub use sdf_caps::*;
 pub use sdf_entry_id::*;
+pub use sdf_font::*;
+pub use sdf_font_data::*;
+pub use sdf_glyph::*;
+pub use sdf_glyph_contour::*;
+pub use sdf_glyph_segment::*;
 pub use sdf_main::*;
 pub use sdf_map::*;
 pub use sdf_map_entry::*;
@@ -77,4 +90,5 @@ pub use sdf_side::*;
 pub use sdf_state::*;
 pub use sdf_step::*;
 pub use sdf_step_material::*;
+pub use sdf_text_align::*;
 pub use sdf_value::*;

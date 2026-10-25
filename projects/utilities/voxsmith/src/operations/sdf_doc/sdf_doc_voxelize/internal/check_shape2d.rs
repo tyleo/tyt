@@ -202,6 +202,23 @@ pub fn check_shape2d(shape: &SdfShape2d) -> StdResult<(), String> {
             ArgumentCheck::new("union").count("shapes", shape_ids.len(), 1)
         }
 
+        SdfShape2d::Text { string, size, .. } => {
+            let check = ArgumentCheck::new("text");
+            check.above_zero("size", *size)?;
+            check.expect(
+                !string.is_empty(),
+                "string",
+                "at least one character",
+                "an empty string",
+            )?;
+            check.expect(
+                !string.contains(['\n', '\r']),
+                "string",
+                "one line",
+                format!("{string:?}"),
+            )
+        }
+
         SdfShape2d::Vesica { a, b, width } => {
             let check = ArgumentCheck::new("vesica");
             check.above_zero("width", *width)?;
@@ -342,6 +359,7 @@ fn cross(a: TyVector2F64, b: TyVector2F64, c: TyVector2F64) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::operations::sdf_doc::check_shape2d;
+    use branded_id::U32Id;
     use sdfcore::SdfShape2d;
     use ty_math::TyVector2F64;
 
@@ -351,6 +369,31 @@ mod tests {
                 .iter()
                 .map(|(u, v)| TyVector2F64::new(*u, *v))
                 .collect(),
+        }
+    }
+
+    #[test]
+    fn a_text_holds_one_line_at_a_size_above_zero() {
+        let text = |string: &str, size: f64| SdfShape2d::Text {
+            font_id: U32Id::from_u32(0),
+            string: string.to_owned(),
+            size,
+            align: None,
+        };
+
+        assert!(check_shape2d(&text("OPEN", 0.1)).is_ok());
+        for (shape, message) in [
+            (text("OPEN", 0.0), "text size must be above zero, not 0"),
+            (
+                text("", 0.1),
+                "text string must be at least one character, not an empty string",
+            ),
+            (
+                text("OPEN\nNOW", 0.1),
+                "text string must be one line, not \"OPEN\\nNOW\"",
+            ),
+        ] {
+            assert_eq!(check_shape2d(&shape).unwrap_err(), message);
         }
     }
 

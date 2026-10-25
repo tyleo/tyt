@@ -4,11 +4,13 @@
 // Public API
 
 mod from_sdfj_bytes;
+mod from_sdfj_bytes_with_fonts;
 mod to_sdfj_bytes;
 mod to_sdfj_pretty_bytes;
 mod to_sdfjz_bytes;
 
 pub use from_sdfj_bytes::*;
+pub use from_sdfj_bytes_with_fonts::*;
 pub use to_sdfj_bytes::*;
 pub use to_sdfj_pretty_bytes::*;
 pub use to_sdfjz_bytes::*;

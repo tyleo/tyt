@@ -1,4 +1,4 @@
-use crate::{BSdfShape2d, SdfAxes2d, SdfCaps};
+use crate::{BSdfFont, BSdfShape2d, SdfAxes2d, SdfCaps, SdfTextAlign};
 use branded_id::U32Id;
 use ty_math::TyVector2F64;
 
@@ -188,6 +188,17 @@ pub enum SdfShape2d {
         base_id: U32Id<BSdfShape2d>,
 
         cutter_ids: Vec<U32Id<BSdfShape2d>>,
+    },
+
+    /// A line of text in a font of [`SdfState::fonts`](crate::SdfState::fonts).
+    Text {
+        font_id: U32Id<BSdfFont>,
+
+        string: String,
+
+        size: f64,
+
+        align: Option<SdfTextAlign>,
     },
 
     /// Moves a shape.
