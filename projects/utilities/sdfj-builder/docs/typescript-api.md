@@ -793,7 +793,7 @@ A seed always gives the same picks. A seed left out reads 0.
    stands for `shades(base)`
 3. `gradient` splits `from` to `to` along `axis` into equal spans that take the
    materials in order. Cells before `from` take the first material, and cells
-   past `to` take the last
+   past `to` take the last. `to` can sit below `from`
 4. `noise` splits fractal noise with features about `scale` across into value
    ranges that take the materials in order. Each material covers about an equal
    share of the cells. `octaves` defaults to 4

@@ -142,6 +142,11 @@ impl ArgumentCheck {
         self.expect(to > from, "to", &format!("past from {from}"), to)
     }
 
+    /// Errors unless `to` differs from `from`.
+    pub fn ends_apart(&self, from: f64, to: f64) -> StdResult<(), String> {
+        self.expect(to != from, "to", &format!("other than from {from}"), to)
+    }
+
     /// Errors unless `max` sits apart from `min` on each axis.
     pub fn opposite_corners(&self, min: TyVector3F64, max: TyVector3F64) -> StdResult<(), String> {
         self.expect(

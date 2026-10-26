@@ -1296,7 +1296,7 @@ below and never repairs, coerces, or fills in bad input.
       character and no line break
    4. `amplitude`, `warp`, and the lengths of an `elongate` are zero or more,
       `density` falls in `[0, 1]`, a `coat`'s `slope` falls in `(0, 90]`, and
-      a range's end passes its start
+      a range's end passes its start. A `gradient`'s ends need only differ
    5. Colors parse as `#RRGGBB`, or `#RRGGBBAA` for `baseColor`, and the other
       named properties fall in their ranges. A custom property takes a
       non-empty name and a value with a kind, and every material that sets it

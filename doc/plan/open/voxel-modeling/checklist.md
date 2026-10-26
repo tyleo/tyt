@@ -270,7 +270,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
         points to the block
   - [x] A rotated part's line and the model line give posed world bounds and
         the world pivot for finding 128
-  - [ ] `coat` takes a slope limit for finding 135, and `gradient` takes its
+  - [x] `coat` takes a slope limit for finding 135, and `gradient` takes its
         range in either order for finding 136
   - [ ] The library's `oak` stays apart from `pine` for finding 13
 - [ ] **S33. Round 8.** Run the prompts after S20 to S32 and log the round

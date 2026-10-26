@@ -85,7 +85,7 @@ pub fn check_pattern(pattern: &SdfPattern) -> StdResult<(), String> {
         } => {
             let check = ArgumentCheck::new("gradient");
             check.count("materials", material_ids.len(), 1)?;
-            check.range(*from, *to)?;
+            check.ends_apart(*from, *to)?;
             optional_at_least_zero(check, "warp", *warp)?;
             optional_seed(check, *seed)
         }
@@ -161,6 +161,7 @@ mod tests {
     use crate::operations::sdf_doc::check_pattern;
     use branded_id::U32Id;
     use sdfcore::{SdfBorder, SdfPattern};
+    use ty_math::TyAxis3;
 
     #[test]
     fn a_speckle_takes_a_size_above_zero_a_density_from_0_to_1_and_a_whole_seed() {
@@ -209,6 +210,25 @@ mod tests {
         assert_eq!(
             check_pattern(&bricks(0.06)),
             Err("bricks border width must be below height 0.06, not 0.06".to_string())
+        );
+    }
+
+    #[test]
+    fn a_gradient_takes_ends_in_either_order() {
+        let gradient = |from, to| SdfPattern::Gradient {
+            material_ids: vec![U32Id::from_u32(0)],
+            axis: TyAxis3::Y,
+            from,
+            to,
+            warp: None,
+            seed: None,
+        };
+
+        assert!(check_pattern(&gradient(1.9, 2.5)).is_ok());
+        assert!(check_pattern(&gradient(2.5, 1.9)).is_ok());
+        assert_eq!(
+            check_pattern(&gradient(2.5, 2.5)),
+            Err("gradient to must be other than from 2.5, not 2.5".to_string())
         );
     }
 

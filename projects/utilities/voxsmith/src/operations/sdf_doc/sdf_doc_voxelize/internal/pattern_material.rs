@@ -400,6 +400,24 @@ mod tests {
     }
 
     #[test]
+    fn a_gradient_from_high_to_low_runs_its_materials_down() {
+        let gradient = SdfPattern::Gradient {
+            material_ids: materials(4),
+            axis: TyAxis3::X,
+            from: 2.0,
+            to: 0.0,
+            warp: None,
+            seed: None,
+        };
+
+        let picks: Vec<u32> = [-1.0, 0.1, 0.6, 1.1, 1.9, 3.0]
+            .iter()
+            .map(|x| pick_at(&gradient, *x, 0.0, 0.0))
+            .collect();
+        assert_eq!(picks, [3, 3, 2, 1, 0, 0]);
+    }
+
+    #[test]
     fn noise_spreads_the_cells_across_the_materials() {
         let noise = SdfPattern::Noise {
             material_ids: materials(3),
