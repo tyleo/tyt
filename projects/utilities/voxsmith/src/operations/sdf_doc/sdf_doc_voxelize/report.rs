@@ -162,8 +162,10 @@ pub fn report(
         detached: &detached,
         see_through: &see_through,
         place_label: &place_label,
+        step_label: &step_label,
         first_places: HashMap::new(),
         lines: &mut lines,
+        checks: Vec::new(),
     };
 
     for &root in &roots {
@@ -176,6 +178,8 @@ pub fn report(
             writer.place(root, 1);
         }
     }
+
+    let mut checks = writer.checks;
 
     if pieces.len() > 1 {
         let mut sources: Vec<Vec<String>> = vec![Vec::new(); pieces.len()];
@@ -203,7 +207,7 @@ pub fn report(
         let width = pieces.len().to_string().len();
 
         for (index, (piece, sources)) in pieces.iter().zip(sources).enumerate() {
-            lines.push(ReportLine {
+            let line = ReportLine {
                 kind: LineKind::Piece,
                 depth: 1,
                 fields: [
@@ -219,15 +223,33 @@ pub fn report(
                     vec![Some(Field::Text(format!("from {}", sources.join(", "))))],
                 ]
                 .concat(),
-            });
+            };
+
+            if index > 0 {
+                checks.push(line.clone());
+            }
+
+            lines.push(line);
         }
     }
+
+    lines.push(ReportLine {
+        kind: LineKind::Check,
+        depth: 0,
+        fields: vec![
+            Some(Field::Text("check".to_owned())),
+            Some(count_field(checks.len() as u64, "line", "lines")),
+        ],
+    });
+    lines.extend(checks);
 
     Ok(layout(&lines))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LineKind {
+    Check,
+
     Model,
 
     Part,
@@ -247,6 +269,7 @@ enum Field {
 }
 
 /// One line of the report before its columns line up.
+#[derive(Clone)]
 struct ReportLine {
     kind: LineKind,
 
@@ -276,10 +299,16 @@ struct ReportWriter<'a> {
     /// The path a line gives the place at an index.
     place_label: &'a dyn Fn(usize) -> String,
 
+    /// The name a check line gives a step of the place at an index.
+    step_label: &'a dyn Fn(usize, &SdfStep) -> String,
+
     /// The first place written of each part, by the part's node.
     first_places: HashMap<U32Id<BSdfNode>, usize>,
 
     lines: &'a mut Vec<ReportLine>,
+
+    /// The step lines the check block repeats.
+    checks: Vec<ReportLine>,
 }
 
 impl ReportWriter<'_> {
@@ -348,7 +377,7 @@ impl ReportWriter<'_> {
             let sampling = self.sampling;
 
             for &grid_index in &place.grid_indices {
-                self.steps(&sampling.grids[grid_index], depth);
+                self.steps(&sampling.grids[grid_index], place_index, depth);
             }
         }
 
@@ -359,8 +388,9 @@ impl ReportWriter<'_> {
         }
     }
 
-    /// Adds the line of each step that ran over `grid` at `depth`.
-    fn steps(&mut self, grid: &SdfGrid, depth: usize) {
+    /// Adds the line of each step that ran over `grid` at `depth`, and the
+    /// check line of each step a review has to clear.
+    fn steps(&mut self, grid: &SdfGrid, place_index: usize, depth: usize) {
         let object = &self.state.objects[grid.object_id.to_usize_id()];
         let step_name = |step_index: u32| {
             self.state.steps[object.step_ids[step_index as usize].to_usize_id()].name()
@@ -371,8 +401,8 @@ impl ReportWriter<'_> {
             let record = &grid.steps[step_index];
             let kept: Vec<(TyVector3I32, bool)> = kept_cells(grid, step_index).collect();
 
-            let (exposed, pieces) = match step {
-                SdfStep::Carve { .. } => (None, None),
+            let (exposed, piece_count) = match step {
+                SdfStep::Carve { .. } => (None, 0),
 
                 _ => {
                     let exposed = kept
@@ -380,11 +410,9 @@ impl ReportWriter<'_> {
                         .filter(|(cell, live)| *live && is_exposed(grid, *cell, self.see_through))
                         .count();
 
-                    let piece_count = face_pieces(&live_written(grid, record).collect()).len();
-
                     (
-                        Some(count_field(exposed as u64, "exposed", "exposed")),
-                        (piece_count > 1).then_some(Field::Count(piece_count as u64, "pieces")),
+                        Some(exposed),
+                        face_pieces(&live_written(grid, record).collect()).len(),
                     )
                 }
             };
@@ -415,23 +443,30 @@ impl ReportWriter<'_> {
 
             let written = record.written_bounds.map(|bounds| [bounds.min, bounds.max]);
 
-            self.lines.push(ReportLine {
+            let line = |name: String, depth: usize| ReportLine {
                 kind: LineKind::Step,
                 depth,
                 fields: [
                     vec![
                         Some(Field::Text(step_kind(step).to_owned())),
-                        Some(Field::Text(step.name().to_owned())),
+                        Some(Field::Text(name)),
                         Some(count_field(record.written.len() as u64, "cell", "cells")),
                         Some(count_field(kept.len() as u64, "kept", "kept")),
-                        exposed,
-                        pieces,
+                        exposed.map(|exposed| count_field(exposed as u64, "exposed", "exposed")),
+                        (piece_count > 1).then_some(Field::Count(piece_count as u64, "pieces")),
                     ],
                     extent_fields(written.into_iter().flatten(), self.sampling.voxel_size),
-                    vec![over, lost],
+                    vec![over.clone(), lost.clone()],
                 ]
                 .concat(),
-            });
+            };
+
+            if kept.is_empty() || exposed == Some(0) || piece_count > 1 {
+                self.checks
+                    .push(line((self.step_label)(place_index, step), 1));
+            }
+
+            self.lines.push(line(step.name().to_owned(), depth));
         }
     }
 }
@@ -792,6 +827,8 @@ model.voxj  32 voxels of 0.025 m  1 piece  4x2x4  [0, 0, 0] .. [0.1, 0.05, 0.1]
   carve  top    16 cells  16 kept              4x1x4  [0, 0.05, 0] .. [0.1, 0.075, 0.1]
   paint  band    8 cells   8 kept   8 exposed  2x1x4  [0, 0.025, 0] .. [0.05, 0.05, 0.1]  over block
   paint  miss    0 cells   0 kept   0 exposed
+check  1 line
+  paint  miss  0 cells  0 kept  0 exposed
 "
         );
     }
@@ -809,6 +846,8 @@ model.voxj  37 voxels of 1 m  2 pieces  7x3x4  [0, 0, 0] .. [7, 3, 4]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
   piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]  from body, lid
   piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+check  1 line
+  piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
 "
         );
     }
@@ -834,6 +873,7 @@ model.voxj  37 voxels of 1 m  1 piece  4x4x4  [0, 0, 0] .. [4, 4, 4]
     add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
   part  pebble  1 voxel  1x1x1  [1, 3, 1] .. [2, 4, 2]  pivot [1, 3, 1]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [1, 3, 1] .. [2, 4, 2]
+check  0 lines
 "
         );
     }
@@ -868,6 +908,8 @@ model.voxj  37 voxels of 1 m  2 pieces  4x5x4  [0, 0, 0] .. [4, 5, 4]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [1, 4, 1] .. [2, 5, 2]
   piece 1  32 voxels  4x2x4  [0, 0, 0] .. [4, 2, 4]  from body
   piece 2   5 voxels  2x2x2  [1, 3, 1] .. [3, 5, 3]  from lid, pebble
+check  1 line
+  piece 2  5 voxels  2x2x2  [1, 3, 1] .. [3, 5, 3]  from lid, pebble
 "
         );
     }
@@ -907,6 +949,10 @@ model.voxj  4 voxels of 1 m  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]
   carve  cut    1 cell   1 kept                       1x1x1  [2, 0, 0] .. [3, 1, 1]
   paint  stain  4 cells  4 kept  4 exposed  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]  over bar
   piece 1  2 voxels  2x1x1  [0, 0, 0] .. [2, 1, 1]  from bar, stain
+  piece 2  2 voxels  2x1x1  [3, 0, 0] .. [5, 1, 1]  from bar, stain
+check  3 lines
+  add    bar    5 cells  0 kept  0 exposed  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]            lost to cut, stain
+  paint  stain  4 cells  4 kept  4 exposed  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]  over bar
   piece 2  2 voxels  2x1x1  [3, 0, 0] .. [5, 1, 1]  from bar, stain
 "
         );
@@ -948,6 +994,40 @@ model.voxj  4 voxels of 1 m  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]
 model.voxj  27 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
   add  water  27 cells  26 kept  26 exposed  3x3x3  [0, 0, 0] .. [3, 3, 3]  lost to rock
   add  rock    1 cell    1 kept   1 exposed  1x1x1  [1, 1, 1] .. [2, 2, 2]
+check  0 lines
+"
+        );
+    }
+
+    #[test]
+    fn the_check_block_repeats_a_step_that_keeps_cells_and_shows_none() {
+        let main = single_part_main(
+            vec![
+                cuboid([0.0, 0.0, 0.0], [3.0, 3.0, 3.0]),
+                cuboid([1.0, 1.0, 1.0], [2.0, 2.0, 2.0]),
+            ],
+            vec![
+                SdfStep::Add {
+                    name: "block".to_string(),
+                    shape_id: U32Id::from_u32(0),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Add {
+                    name: "core".to_string(),
+                    shape_id: U32Id::from_u32(1),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(1)),
+                },
+            ],
+        );
+
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  27 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
+  add  block  27 cells  26 kept  26 exposed  3x3x3  [0, 0, 0] .. [3, 3, 3]  lost to core
+  add  core    1 cell    1 kept   0 exposed  1x1x1  [1, 1, 1] .. [2, 2, 2]
+check  1 line
+  add  core  1 cell  1 kept  0 exposed  1x1x1  [1, 1, 1] .. [2, 2, 2]
 "
         );
     }
@@ -972,6 +1052,7 @@ model.voxj  27 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
             "\
 model.voxj  26 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
   add  block  27 cells  27 kept  26 exposed  3x3x3  [0, 0, 0] .. [3, 3, 3]
+check  0 lines
 "
         );
     }
@@ -988,6 +1069,8 @@ model.voxj  2 voxels of 1 m  2 pieces  3x3x1  [0, 0, 0] .. [3, 3, 1]
   part  b  0 voxels  pivot [0.5, 2, 0]
     part  leaf  1 voxel  1x1x1  [0, 2, 0] .. [1, 3, 1]  pivot [0.5, 2, 0]  repeats a/leaf
   piece 1  1 voxel  1x1x1  [0, 2, 0] .. [1, 3, 1]  from b/leaf/cube
+  piece 2  1 voxel  1x1x1  [2, 0, 0] .. [3, 1, 1]  from a/leaf/cube
+check  1 line
   piece 2  1 voxel  1x1x1  [2, 0, 0] .. [3, 1, 1]  from a/leaf/cube
 "
         );

@@ -119,6 +119,11 @@ table.voxj  2768 voxels of 0.025 m  1 piece  22x22x22  [-0.275, 0, -0.275] .. [0
   add    top        968 cells  800 kept  672 exposed            22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]              lost to gilt
   paint  gilt       168 cells  168 kept  168 exposed            22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]    over top
   add    sapphires   96 cells   96 kept   48 exposed  3 pieces  14x4x4    [-0.175, 0.375, 0.175] .. [0.175, 0.475, 0.275]
+check  4 lines
+  add  legs       480 cells  360 kept  292 exposed  4 pieces  20x20x20  [-0.25, 0, -0.25] .. [0.25, 0.5, 0.25]           lost to aprons, sides, shelf
+  add  aprons     384 cells  312 kept  308 exposed  2 pieces  16x6x18   [-0.2, 0.35, -0.225] .. [0.2, 0.5, 0.225]        lost to sides, sapphires
+  add  sides      384 cells  384 kept  356 exposed  2 pieces  18x6x16   [-0.225, 0.35, -0.2] .. [0.225, 0.5, 0.2]
+  add  sapphires   96 cells   96 kept   48 exposed  3 pieces  14x4x4    [-0.175, 0.375, 0.175] .. [0.175, 0.475, 0.275]
 ```
 
 | Field     | Counts                                                                              |
@@ -200,9 +205,26 @@ figure.voxj  392 voxels of 0.025 m  3 pieces  28x10x4  [-0.35, 0.3, -0.05] .. [0
   piece 1  376 voxels  22x10x4  [-0.275, 0.3, -0.05] .. [0.275, 0.55, 0.05]  from torso, L arm, R arm
   piece 2    8 voxels  2x2x2    [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  from R hand
   piece 3    8 voxels  2x2x2    [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]    from L hand
+check  2 lines
+  piece 2  8 voxels  2x2x2  [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  from R hand
+  piece 3  8 voxels  2x2x2  [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]    from L hand
 ```
 
 A second piece usually means a shape floats.
+
+### The check block
+
+The report ends with a `check` line. Under it, the report repeats the lines a
+review has to clear:
+
+1. Each step line at `0 kept`
+2. Each step line at `0 exposed`
+3. Each step line with `pieces`
+4. Each piece line past the first
+
+A step line there takes the step's path when the step's name appears in several
+lists.
+A report with nothing to clear ends at `check  0 lines`.
 
 ## Errors
 

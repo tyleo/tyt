@@ -265,7 +265,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       [findings](trials-round-7.md#findings) before the next round:
   - [x] The review sheet keeps `<stem>.png` whatever views the command adds
         for finding 126
-  - [ ] The report ends with a block that repeats its `0 kept`, `0 exposed`,
+  - [x] The report ends with a block that repeats its `0 kept`, `0 exposed`,
         extra piece, and broken-step lines for finding 4. The skill's done line
         points to the block
   - [ ] A rotated part's line and the model line give posed world bounds and
@@ -274,4 +274,6 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
         range in either order for finding 136
   - [ ] The library's `oak` stays apart from `pine` for finding 13
 - [ ] **S33. Round 8.** Run the prompts after S20 to S32 and log the round
-      beside round 7.
+      beside round 7. The judging records whether sessions skimmed past the
+      `check` lines of steps meant to be in pieces. The answer decides whether
+      the block keeps those steps.

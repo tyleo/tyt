@@ -192,11 +192,6 @@ The phase 2 candidates that round 7 showed:
 | 59  | Patterns that line up across tiles              | 1       | 0       |
 | 92  | No pattern lays brick courses                   | 1       | 0       |
 
-PHASE2_Findings 1, 21, 27, 28, 36, 40, 45, 52, 54, 56, 57, 66, 70, 71, 72, 73,
-74, 76, 77, 78, 79, 82, 83, 84, 85, 86, 88, 89, 93, 95, 96, 97, 98, 99, 100,
-101, 104, 105, 106, 108, 109, 110, 111, 112, 113, 114, 115, 116, 119, 120, 121,
-and 125 showed in no prompt.
-
 ### New in round 7
 
 126. **Review sheets changed names between passes.** In 4 prompts, a pass that

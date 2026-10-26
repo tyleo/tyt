@@ -81,7 +81,7 @@ reads as the prompt. Color goes wrong in a few known ways:
    `emissiveStrength` or a darker `baseColor`
 
 The model is done when every view shows the prompt with no flaw a review can
-name and every extra piece and `0 kept` step in the report is intended.
+name and every line under the report's `check` line is intended.
 
 ## Other views
 
