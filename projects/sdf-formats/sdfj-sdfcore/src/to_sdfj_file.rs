@@ -849,6 +849,7 @@ fn sdfj_step_from_sdf_step(step: &SdfStep) -> SdfjStep {
             material,
             sides,
             depth,
+            slope,
             within_id,
             onto_ids,
         } => SdfjStep::Coat {
@@ -859,6 +860,7 @@ fn sdfj_step_from_sdf_step(step: &SdfStep) -> SdfjStep {
                 .as_ref()
                 .map(|sides| sides.iter().copied().map(sdfj_side_from_sdf_side).collect()),
             depth: *depth,
+            slope: *slope,
             within: within_id.map(wire_index),
             onto: onto_ids.as_deref().map(wire_indices),
         },

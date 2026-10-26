@@ -237,6 +237,10 @@ live point remembers its owner: the last `add` that filled it.
     // how far to look
     "depth": 0.025,
 
+    // optional: the steepest surface to coat, in degrees off facing a side;
+    // defaults to 90
+    "slope": 40,
+
     // optional: an index into `shapes3d` that bounds the coat; defaults to
     // every point
     "within": 6,
@@ -271,8 +275,10 @@ A point lies inside a shape where the shape's distance reads zero or less.
    direction `n`, the point `x + depth * n` lies outside the object's earlier
    shapes. The last `add` or `carve` before the `coat` whose shape holds that
    point decides: inside after an `add` and outside after a `carve`. A point no
-   such shape holds lies outside. `within` narrows the result to the points
-   inside its shape
+   such shape holds lies outside. With `slope`, the side also needs the 8
+   points `x + depth * n + depth / tan(slope) * h` outside, where `h` runs
+   through the 4 axis directions across `n` and the 4 unit diagonals between
+   them. `within` narrows the result to the points inside its shape
 5. `set` gives the material to every point `x` with
    `p - size / 2 <= x < p + size / 2` on every axis, for each listed point `p`.
    Each point keeps its owner
@@ -1289,7 +1295,8 @@ below and never repairs, coerces, or fills in bad input.
       `sweep` lists one scale per point. A `text` string holds at least one
       character and no line break
    4. `amplitude`, `warp`, and the lengths of an `elongate` are zero or more,
-      `density` falls in `[0, 1]`, and a range's end passes its start
+      `density` falls in `[0, 1]`, a `coat`'s `slope` falls in `(0, 90]`, and
+      a range's end passes its start
    5. Colors parse as `#RRGGBB`, or `#RRGGBBAA` for `baseColor`, and the other
       named properties fall in their ranges. A custom property takes a
       non-empty name and a value with a kind, and every material that sets it

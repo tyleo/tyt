@@ -18,13 +18,19 @@ const CASES: [string, () => Step, Entry][] = [
   }],
   [
     "coat",
-    () => coat("snow", white, 0.05, { sides: ["+y", "-x"], within: ball }),
+    () =>
+      coat("snow", white, 0.05, {
+        sides: ["+y", "-x"],
+        slope: 40,
+        within: ball,
+      }),
     {
       kind: "coat",
       name: "snow",
       material: 0,
       sides: ["+y", "-x"],
       depth: 0.05,
+      slope: 40,
       within: 0,
     },
   ],

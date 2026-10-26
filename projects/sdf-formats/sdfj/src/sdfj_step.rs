@@ -49,7 +49,8 @@ pub enum SdfjStep {
     Carve { name: String, shape: usize },
 
     /// Recolors the live cells whose point `depth` meters toward a listed side
-    /// lies outside the part's earlier shapes.
+    /// lies outside the part's earlier shapes. With `slope`, its copies shifted
+    /// `depth / tan(slope)` meters across the side lie outside too.
     Coat {
         name: String,
 
@@ -85,6 +86,17 @@ pub enum SdfjStep {
 
         #[cfg_attr(feature = "serde", serde(serialize_with = "crate::finite"))]
         depth: f64,
+
+        #[cfg_attr(
+            feature = "serde",
+            serde(
+                default,
+                deserialize_with = "crate::present",
+                serialize_with = "crate::finite",
+                skip_serializing_if = "Option::is_none"
+            )
+        )]
+        slope: Option<f64>,
 
         #[cfg_attr(
             feature = "serde",

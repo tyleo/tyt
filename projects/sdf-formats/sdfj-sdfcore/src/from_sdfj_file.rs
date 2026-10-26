@@ -879,6 +879,7 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
             pattern,
             sides,
             depth,
+            slope,
             within,
             onto,
         } => SdfStep::Coat {
@@ -888,6 +889,7 @@ fn sdf_step_from_sdfj_step(step: &SdfjStep) -> StdResult<SdfStep, String> {
                 .as_ref()
                 .map(|sides| sides.iter().copied().map(sdf_side_from_sdfj_side).collect()),
             depth: *depth,
+            slope: *slope,
             within_id: within.map(wire_id).transpose()?,
             onto_ids: onto.as_deref().map(wire_ids).transpose()?,
         },

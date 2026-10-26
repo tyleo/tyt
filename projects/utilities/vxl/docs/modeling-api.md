@@ -305,8 +305,8 @@ add("branch", roundCone([0, 0.25, 0], [0.15, 0.45, 0.05], 0.05, 0.025), mat.bark
 // A lantern cage.
 add("cage", boxFrame([-0.1, 0, -0.1], [0.1, 0.25, 0.1], 0.025), mat.iron),
 
-// Snow on every upward face.
-coat("snow", mat.snow, 0.05, { sides: ["+y"] }),
+// Snow on the upward faces no steeper than 40 degrees.
+coat("snow", mat.snow, 0.05, { sides: ["+y"], slope: 40 }),
 
 // A rough boulder.
 add("boulder", sphere([0, 0.125, 0], 0.15).displace({ amplitude: 0.0375, scale: 0.1, seed: 3 }), mat.granite),

@@ -987,12 +987,13 @@ fn check_step(check: &EntryCheck, step: &SdfStep) -> Result<()> {
         SdfStep::Coat {
             material,
             depth,
+            slope,
             within_id,
             onto_ids,
             ..
         } => {
             check_step_material(check, *material)?;
-            check.numbers([*depth])?;
+            check.numbers([*depth].into_iter().chain(*slope))?;
             check.shape3d_ids(*within_id)?;
             check.step_ids(onto_ids.iter().flatten().copied())
         }

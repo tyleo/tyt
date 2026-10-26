@@ -3,7 +3,7 @@ use crate::{
     dependencies::sdf_doc::MapCells,
     operations::sdf_doc::{
         ArgumentCheck, Bounds3d, LatticeShapes, SdfCell, SdfEvaluation, SdfGrid, SdfShapes,
-        SdfStepRecord, ShapeSource, meters, pattern_material, side_direction,
+        SdfStepRecord, ShapeSource, exact_sin_cos, meters, pattern_material, side_direction,
     },
 };
 use branded_id::{IdVec, U32Id};
@@ -22,6 +22,10 @@ const MOST_CELLS: f64 = (1 << 27) as f64;
 /// The most cells a step decides before it writes them. The cap limits the
 /// decisions held in memory.
 const CHUNK_CELLS: usize = 1 << 16;
+
+/// How many offsets a `coat` with a `slope` reads around each side. A face
+/// between two offsets passes at most 2.3 degrees past `slope`.
+const SLOPE_RING: usize = 8;
 
 /// The sides a `coat` reads when the model leaves them out.
 const ALL_SIDES: [SdfSide; 6] = [
@@ -219,6 +223,7 @@ impl StepRun<'_, '_> {
                 material,
                 sides,
                 depth,
+                slope,
                 within_id,
                 onto_ids,
                 ..
@@ -230,7 +235,12 @@ impl StepRun<'_, '_> {
                     &format!("at least the voxel size {}", meters(self.voxel_size)),
                 )?;
 
-                let sides = sides.as_deref().unwrap_or(&ALL_SIDES);
+                let offsets: Vec<Vec<TyVector3F64>> = sides
+                    .as_deref()
+                    .unwrap_or(&ALL_SIDES)
+                    .iter()
+                    .map(|side| coat_offsets(*side, *depth, *slope))
+                    .collect();
                 let bounds = within_id.and_then(|within_id| self.lattice.cells(within_id));
                 let cells = self.cells_within(bounds);
 
@@ -239,17 +249,18 @@ impl StepRun<'_, '_> {
                         return Ok(None);
                     }
 
+                    let center = run.center(cell);
                     let mut reaches_outside = false;
 
-                    for side in sides {
-                        let (axis, sign) = side_direction(*side);
-                        let mut offset = TyVector3F64::ZERO;
-                        offset[axis.index()] = sign * depth;
-
-                        if !run.is_solid(run.center(cell) + offset)? {
-                            reaches_outside = true;
-                            break;
+                    'sides: for side_offsets in &offsets {
+                        for offset in side_offsets {
+                            if run.is_solid(center + *offset)? {
+                                continue 'sides;
+                            }
                         }
+
+                        reaches_outside = true;
+                        break;
                     }
 
                     let within = match within_id {
@@ -257,8 +268,10 @@ impl StepRun<'_, '_> {
                         None => true,
                     };
 
-                    Ok((reaches_outside && within)
-                        .then(|| Some(run.pick(*material, run.center(cell), cell))))
+                    Ok(
+                        (reaches_outside && within)
+                            .then(|| Some(run.pick(*material, center, cell))),
+                    )
                 })?;
             }
 
@@ -501,6 +514,36 @@ impl StepRun<'_, '_> {
             step: Some(self.step),
         };
     }
+}
+
+/// The offsets a `coat` reads toward `side`. Under `slope`, a ring of
+/// [`SLOPE_RING`] more shifts the first `depth / tan(slope)` meters across the
+/// side. The shift keeps the coat on a flat face `depth` deep.
+fn coat_offsets(side: SdfSide, depth: f64, slope: Option<f64>) -> Vec<TyVector3F64> {
+    let (axis, sign) = side_direction(side);
+    let along = axis.index();
+    let (across, past) = ((along + 1) % 3, (along + 2) % 3);
+
+    let mut toward = TyVector3F64::ZERO;
+    toward[along] = sign * depth;
+
+    let Some(slope) = slope else {
+        return vec![toward];
+    };
+
+    let (slope_sin, slope_cos) = exact_sin_cos(slope);
+    let shift = depth * slope_cos / slope_sin;
+
+    [toward]
+        .into_iter()
+        .chain((0..SLOPE_RING).map(|index| {
+            let (turn_sin, turn_cos) = exact_sin_cos(index as f64 * 360.0 / SLOPE_RING as f64);
+            let mut offset = toward;
+            offset[across] = shift * turn_cos;
+            offset[past] = shift * turn_sin;
+            offset
+        }))
+        .collect()
 }
 
 /// The cell box of a `set` cube `size` wide around `point` posed by `pose`. A

@@ -271,6 +271,7 @@ mod tests {
                     material: material(1),
                     sides: Some(vec![SdfSide::PositiveY]),
                     depth: 1.0,
+                    slope: None,
                     within_id: None,
                     onto_ids: None,
                 },
@@ -368,6 +369,7 @@ mod tests {
                         material: material(1),
                         sides: None,
                         depth,
+                        slope: None,
                         within_id: None,
                         onto_ids: None,
                     },
@@ -380,12 +382,56 @@ mod tests {
     }
 
     #[test]
+    fn a_coat_slope_keeps_a_flat_top_and_skips_a_steep_cone() {
+        // A flat slab beside a cone whose sides face 76 degrees off up.
+        let cone = SdfShape3d::Cone {
+            a: TyVector3F64::new(8.0, 0.0, 2.0),
+            b: TyVector3F64::new(8.0, 6.0, 2.0),
+            radius_a: 1.5,
+            radius_b: 0.0,
+        };
+
+        for (slope, slab, crown) in [(None, 256, 112), (Some(40.0), 256, 0)] {
+            let main = single_part_main(
+                vec![cuboid([0.0, 0.0, 0.0], [4.0, 1.0, 4.0]), cone.clone()],
+                vec![
+                    add("slab", 0, 0),
+                    add("crown", 1, 0),
+                    SdfStep::Coat {
+                        name: "snow".to_string(),
+                        material: material(1),
+                        sides: Some(vec![SdfSide::PositiveY]),
+                        depth: 0.25,
+                        slope,
+                        within_id: None,
+                        onto_ids: None,
+                    },
+                ],
+            );
+
+            let sampling = sample(&DependenciesImpl, &main, &at_size(0.25)).unwrap();
+            let grid = &sampling.grids[0];
+            let written = &grid.steps[2].written;
+            let on_slab = written
+                .iter()
+                .filter(|&&index| grid.lattice_index(index as usize).x < 16)
+                .count();
+            assert_eq!(
+                (on_slab, written.len() - on_slab),
+                (slab, crown),
+                "{slope:?}"
+            );
+        }
+    }
+
+    #[test]
     fn a_coat_reads_the_shapes_and_errors_under_one_voxel() {
         let coat = |depth| SdfStep::Coat {
             name: "skin".to_string(),
             material: material(1),
             sides: Some(vec![SdfSide::PositiveY]),
             depth,
+            slope: None,
             within_id: None,
             onto_ids: None,
         };
@@ -452,6 +498,7 @@ mod tests {
                     material: material(1),
                     sides: None,
                     depth: 1.0,
+                    slope: None,
                     within_id: None,
                     onto_ids: onto(1),
                 },

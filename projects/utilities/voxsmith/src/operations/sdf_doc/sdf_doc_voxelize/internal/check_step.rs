@@ -10,10 +10,19 @@ pub fn check_step(step: &SdfStep) -> StdResult<(), String> {
         SdfStep::Add { .. } | SdfStep::Carve { .. } => Ok(()),
 
         SdfStep::Coat {
-            depth, onto_ids, ..
+            depth,
+            slope,
+            onto_ids,
+            ..
         } => {
             let check = ArgumentCheck::new("coat");
             check.above_zero("depth", *depth)?;
+
+            if let Some(slope) = *slope {
+                check.above_zero("slope", slope)?;
+                check.at_most("slope", slope, 90.0, "at most 90")?;
+            }
+
             check_onto(&check, onto_ids.as_deref())
         }
 
@@ -83,17 +92,27 @@ mod tests {
             Err("set size must be above zero, not 0".to_string())
         );
 
-        let coat = SdfStep::Coat {
+        let coat = |depth, slope| SdfStep::Coat {
             name: "skin".to_string(),
             material: SdfStepMaterial::Material(U32Id::from_u32(0)),
             sides: None,
-            depth: 0.0,
+            depth,
+            slope,
             within_id: None,
             onto_ids: None,
         };
         assert_eq!(
-            check_step(&coat),
+            check_step(&coat(0.0, None)),
             Err("coat depth must be above zero, not 0".to_string())
+        );
+        assert!(check_step(&coat(1.0, Some(90.0))).is_ok());
+        assert_eq!(
+            check_step(&coat(1.0, Some(0.0))),
+            Err("coat slope must be above zero, not 0".to_string())
+        );
+        assert_eq!(
+            check_step(&coat(1.0, Some(95.0))),
+            Err("coat slope must be at most 90, not 95".to_string())
         );
 
         let paint = SdfStep::Paint {

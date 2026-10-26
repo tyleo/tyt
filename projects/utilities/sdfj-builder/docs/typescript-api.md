@@ -131,7 +131,10 @@ wherever two steps reach the same cell.
 1. `depth` takes at least one voxel, and `depth: v` coats the outer layer of
    cells
 2. `sides` defaults to all six
-3. `within` limits the coat to a shape's cells
+3. `slope` keeps the coat on surfaces facing within that many degrees of a
+   listed side. Snow with `sides: ["+y"]` and `slope: 40` stays off a steep
+   crown
+4. `within` limits the coat to a shape's cells
 
 `set` places detail too small for a shape. A `size` of `v` around a cell center,
 `(i + 0.5) * v`, fills that one cell. A `set` lists each point once.

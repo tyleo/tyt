@@ -26,6 +26,9 @@ export interface CoatOptions {
   /** The sides the coat looks toward from each live cell. */
   sides?: Side[];
 
+  /** The steepest surface the coat holds, in degrees off facing a side. */
+  slope?: number;
+
   /** The shape whose cells the coat stays inside. */
   within?: Shape3d;
 
@@ -95,6 +98,7 @@ export function coat(
   const path = stepPath("coat", name);
   const option = check.knownOptions(path, options, [
     "sides",
+    "slope",
     "within",
     "onto",
   ]);
@@ -103,6 +107,7 @@ export function coat(
     name,
     ...stepMaterial(`${path} material`, material),
     depth: check.finite(`${path} depth`, depth),
+    slope: check.optional(`${path} slope`, option.slope, check.finite),
     sides: check.optional(
       `${path} sides`,
       option.sides,
