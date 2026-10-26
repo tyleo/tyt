@@ -145,6 +145,8 @@ code-level choices in
                   step loop, the ray query, and the launches on Quest
             - [x] A sweep at 0 to 8 steps shows the compute launch's floor.
                   The Quest app logs the GPU clock's mix for each window
+            - [x] RenderDoc Meta Fork reads the register footprints of the
+                  tree walk, the ray query, and the step loop on Quest
             - [x] The report lands in benchmarks.md
             - [ ] Each finding becomes an experiment in S9.4
       - [ ] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and

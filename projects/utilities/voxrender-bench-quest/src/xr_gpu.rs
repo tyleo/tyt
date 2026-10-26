@@ -16,8 +16,10 @@ use wgpu::{
     hal::{api::Vulkan, vulkan::Instance as HalInstance},
 };
 
-/// The Vulkan version the app creates.
-const VULKAN_VERSION: Version = Version::new(1, 1, 0);
+/// The Vulkan version the app's instance requests. wgpu calls Vulkan 1.2
+/// functions when the device has them. A layer such as RenderDoc's withholds
+/// those functions from an instance below 1.2.
+const VULKAN_VERSION: Version = Version::new(1, 3, 0);
 
 /// A wgpu device on the Vulkan instance and device the OpenXR runtime made.
 pub struct XrGpu {

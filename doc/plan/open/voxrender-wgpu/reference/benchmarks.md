@@ -494,6 +494,19 @@ The compute launch spends 67% of its time shading fragments, so the eye
 clear and the compositor fill its column. The launch columns do not isolate
 the launches.
 
+**Registers.** On 2026-10-25, RenderDoc Meta Fork v207.0 captured one frame
+of each kernel while the profile ran on Quest. Its
+KHR_pipeline_executable_properties view shows the driver's statistics. A
+register holds one vec4. A scratch slot holds 16 bytes.
+
+| Kernel | Registers | Scratch slots | ALU fiber occupancy | Instructions |
+| --- | ---: | ---: | ---: | ---: |
+| tree walk | 20 | 0 | 50% | 4563 |
+| ray query, float march, 16^3 | 23 | 168 | 50% | 1912 |
+| buffer, start hoisted, 16 steps | 3 | 0 | 100% | 168 |
+
+The driver flags any scratch use as slow.
+
 **Outcomes.**
 
 1. R stays under 0.25 Grays/s on S1 and between 0.25 and 0.5 on S5. The best
@@ -505,9 +518,10 @@ the launches.
    stall 8.6%, its L1 hits 89%, and system memory stalls stay at 0.1%. Two
    chains gain 1.5x, short of the 2x that would mark a latency-bound loop.
    Rung 3 stays ahead of rung 4
-4. The walk keeps half the step loop's waves: 52% occupancy against 99%.
-   Rung 1's footprint read in RenderDoc has not run, so the 24 vec4 test
-   that moves rung 5's trims up has no answer
+4. The walk holds 20 registers and no scratch. Rung 1 moves rung 5's trims
+   up only past 24 registers or a spill, so the trims stay at rung 5. The
+   counters' 52% matches the driver's cap of 50% occupancy at 20 registers.
+   The step loop holds 3 registers and runs at 100% occupancy
 5. Region skips dominate. `leave()`, `enter()`, and `at % size` take 65% of
    the S1 walk, and the single-cell step under 1%. `at % size` divides by a
    power of two, which a mask could replace
@@ -515,3 +529,4 @@ the launches.
    90 Hz frame. A fragment pass over the same pixels takes 0.23 ms
 7. Quad views cut the recommended pixels to 2.96 M, half of stereo's
 8. Wave64 on Quest drops rung 5's 16x8 groups, which waited on wave128
+9. Each invocation of the ray query march uses 2.7 KB of scratch
