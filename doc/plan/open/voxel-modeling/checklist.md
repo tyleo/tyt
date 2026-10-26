@@ -268,7 +268,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   - [x] The report ends with a block that repeats its `0 kept`, `0 exposed`,
         extra piece, and broken-step lines for finding 4. The skill's done line
         points to the block
-  - [ ] A rotated part's line and the model line give posed world bounds and
+  - [x] A rotated part's line and the model line give posed world bounds and
         the world pivot for finding 128
   - [ ] `coat` takes a slope limit for finding 135, and `gradient` takes its
         range in either order for finding 136

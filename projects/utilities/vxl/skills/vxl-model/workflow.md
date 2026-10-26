@@ -50,8 +50,7 @@ The API already does much of what a model would build by hand:
 
 The report reads more reliably than the PNGs:
 
-1. The bounds on the model's line match the prompt's real size in meters. They
-   read each posed part unrotated
+1. The bounds on the model's line match the prompt's real size in meters
 2. A step at `0 cells` missed every cell center, and a step at `0 kept` lost
    every cell to the steps after `lost to`
 3. A detail at `0 exposed` sits buried inside another form. A see-through

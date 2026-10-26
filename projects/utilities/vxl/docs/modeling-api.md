@@ -167,7 +167,7 @@ The example table reads this way:
 
 ### Parts in the report
 
-1. Each place of a part gets a part line with the part's pivot
+1. Each place of a part gets a part line with the part's pivot in world meters
 2. The part's steps and child parts follow, indented one level past the part
    line
 3. A part line counts the part's live cells
@@ -178,8 +178,11 @@ The example table reads this way:
 6. A part reading `0 voxels` writes its node with no object
 7. A step name that repeats across lists takes its path of part names, such as
    `tree.1/tree/trunk`
+8. A part under a turn adds `posed` with the part's box in world meters
 
-The model's line and the pieces count the cells the parts cover together.
+The model's line and the pieces count the cells the parts cover together. The
+model's box holds every part as posed in the world. Under a turn, the model's
+line leaves out its size in cells.
 
 ### Piece lines
 

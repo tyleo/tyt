@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        FACE_OFFSETS, SdfCell, SdfGrid, SdfSampling, SdfStepRecord, is_exposed, meters,
-        see_through_materials,
+        Bounds3d, FACE_OFFSETS, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfStepRecord, is_exposed,
+        meters, see_through_materials,
     },
     utilities::{FillMode, VoxelFrame},
 };
@@ -13,7 +13,7 @@ use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet, VecDeque},
 };
-use ty_math::TyVector3I32;
+use ty_math::{TyPoseF64, TyQuaternionExt, TyVector3F64, TyVector3I32};
 
 /// The report on the grids of `sampling` for the voxj document `name` written
 /// under `fill_mode` by model evaluation. Errors on grids sampled under the
@@ -131,6 +131,21 @@ pub fn report(
             .join("/")
     };
 
+    let poses = world_poses(&sampling.places);
+
+    // Under a turn, the model's box reads posed and has no size in cells.
+    let posed = place_cells
+        .iter()
+        .zip(&poses)
+        .filter_map(|(cells, pose)| posed_bounds(cells.iter().copied(), *pose, voxel_size))
+        .reduce(|bounds, place| bounds.union(&place))
+        .map(|bounds| Field::Text(bounds_text(&bounds)));
+    let mut extent = extent_fields(covered.iter().copied(), voxel_size);
+
+    if extent[1] != posed {
+        extent = vec![None, posed];
+    }
+
     let pieces_label = match pieces.len() {
         1 => "1 piece".to_owned(),
         count => format!("{count} pieces"),
@@ -149,7 +164,7 @@ pub fn report(
                 ))),
                 Some(Field::Text(pieces_label)),
             ],
-            extent_fields(covered.iter().copied(), voxel_size),
+            extent,
         ]
         .concat(),
     }];
@@ -161,6 +176,7 @@ pub fn report(
         place_voxels: &place_voxels,
         detached: &detached,
         see_through: &see_through,
+        poses: &poses,
         place_label: &place_label,
         step_label: &step_label,
         first_places: HashMap::new(),
@@ -259,7 +275,7 @@ enum LineKind {
     Step,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 enum Field {
     /// A count beside its label, with the counts of one column aligned right.
     Count(u64, &'static str),
@@ -295,6 +311,9 @@ struct ReportWriter<'a> {
     detached: &'a [bool],
 
     see_through: &'a IdSlice<BSdfMaterial, bool>,
+
+    /// Each place's pose in the world.
+    poses: &'a [TyPoseF64],
 
     /// The path a line gives the place at an index.
     place_label: &'a dyn Fn(usize) -> String,
@@ -333,7 +352,15 @@ impl ReportWriter<'_> {
 
         let detached = self.detached[place_index].then(|| Field::Text("detached".to_owned()));
 
-        let pivot = place.pivot;
+        let voxel_size = self.sampling.voxel_size;
+        let pose = self.poses[place_index];
+        let extent = extent_fields(cells.iter().copied(), voxel_size);
+
+        // A part under a turn adds its posed box.
+        let posed = posed_bounds(cells.iter().copied(), pose, voxel_size)
+            .map(|bounds| bounds_text(&bounds))
+            .filter(|posed| extent[1] != Some(Field::Text(posed.clone())))
+            .map(|posed| Field::Text(format!("posed {posed}")));
 
         self.lines.push(ReportLine {
             kind: LineKind::Part,
@@ -350,14 +377,13 @@ impl ReportWriter<'_> {
                         "voxels",
                     )),
                 ],
-                extent_fields(cells.iter().copied(), self.sampling.voxel_size),
+                extent,
                 vec![
                     Some(Field::Text(format!(
-                        "pivot [{}, {}, {}]",
-                        meters(pivot.x),
-                        meters(pivot.y),
-                        meters(pivot.z)
+                        "pivot {}",
+                        point_text(pose.position + pose.rotation * place.pivot)
                     ))),
+                    posed,
                     detached,
                     repeats,
                 ],
@@ -503,24 +529,70 @@ fn extent_fields(cells: impl Iterator<Item = TyVector3I32>, voxel_size: f64) -> 
     };
 
     let size = max - min + 1;
-    let corner = |cell: TyVector3I32| {
-        let position = cell.as_dvec3() * voxel_size;
-        format!(
-            "[{}, {}, {}]",
-            meters(position.x),
-            meters(position.y),
-            meters(position.z)
-        )
-    };
 
     vec![
         Some(Field::Text(format!("{}x{}x{}", size.x, size.y, size.z))),
-        Some(Field::Text(format!(
-            "{} .. {}",
-            corner(min),
-            corner(max + 1)
-        ))),
+        Some(Field::Text(bounds_text(&Bounds3d {
+            min: min.as_dvec3() * voxel_size,
+            max: (max + 1).as_dvec3() * voxel_size,
+        }))),
     ]
+}
+
+/// The box in meters around `cells` posed by `pose`, or `None` for no cells.
+fn posed_bounds(
+    cells: impl Iterator<Item = TyVector3I32>,
+    pose: TyPoseF64,
+    voxel_size: f64,
+) -> Option<Bounds3d> {
+    let half_extents = pose
+        .rotation
+        .rotate_extents_abs(TyVector3F64::splat(voxel_size / 2.0));
+
+    cells
+        .map(|cell| {
+            let center = (cell.as_dvec3() + 0.5) * voxel_size;
+
+            Bounds3d::around(pose.position + pose.rotation * center, half_extents)
+        })
+        .reduce(|bounds, cell| bounds.union(&cell))
+}
+
+/// The world pose of each of `places`, which list each place before its
+/// children. A pose composes the turns about the pivots on the place's path.
+fn world_poses(places: &[SdfPlace]) -> Vec<TyPoseF64> {
+    let mut poses: Vec<TyPoseF64> = Vec::with_capacity(places.len());
+
+    for place in places {
+        let base = place
+            .parent
+            .map_or(TyPoseF64::IDENTITY, |parent| poses[parent]);
+
+        // The place turns `x` about its pivot to
+        // `place.rotation * (x - pivot) + pivot`, and the base pose carries
+        // the result.
+        poses.push(TyPoseF64::new(
+            base.position + base.rotation * (place.pivot - place.rotation * place.pivot),
+            base.rotation * place.rotation,
+        ));
+    }
+
+    poses
+}
+
+/// `bounds` as a report line shows it.
+fn bounds_text(bounds: &Bounds3d) -> String {
+    format!("{} .. {}", point_text(bounds.min), point_text(bounds.max))
+}
+
+/// `point` as a report line shows it.
+fn point_text(point: TyVector3F64) -> String {
+    format!(
+        "[{}, {}, {}]",
+        meters(point.x),
+        meters(point.y),
+        meters(point.z)
+    )
 }
 
 /// The live cells of `grid` by lattice index.
@@ -750,9 +822,10 @@ mod tests {
     };
     use branded_id::U32Id;
     use sdfcore::{
-        SdfMain, SdfMaterial, SdfProperty, SdfPropertyValue, SdfShape3d, SdfStep, SdfStepMaterial,
+        SdfAxisRotation, SdfMain, SdfMaterial, SdfProperty, SdfPropertyValue, SdfShape3d, SdfStep,
+        SdfStepMaterial,
     };
-    use ty_math::TyVector3F64;
+    use ty_math::{TyAxis3, TyVector3F64};
 
     fn cuboid(min: [f64; 3], max: [f64; 3]) -> SdfShape3d {
         SdfShape3d::Box {
@@ -843,6 +916,32 @@ model.voxj  37 voxels of 1 m  2 pieces  7x3x4  [0, 0, 0] .. [7, 3, 4]
   part  lid  4 voxels  2x1x2  [1, 2, 1] .. [3, 3, 3]  pivot [2, 2, 2]
     add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
   part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [6, 0, 0]  detached
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
+  piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]  from body, lid
+  piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+check  1 line
+  piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+"
+        );
+    }
+
+    #[test]
+    fn a_part_under_a_turn_reads_its_posed_box_and_world_pivot() {
+        // The model's quarter turn about y at the origin carries +x onto -z.
+        let mut state = parts_main().state().clone();
+        state.nodes[U32Id::from_u32(2).to_usize_id()].rotation = vec![SdfAxisRotation {
+            axis: TyAxis3::Y,
+            degrees: 90.0,
+        }];
+
+        assert_eq!(
+            report_on(&SdfMain::new(state).unwrap(), 1.0, FillMode::Solid),
+            "\
+model.voxj  37 voxels of 1 m  2 pieces  [0, 0, -7] .. [4, 3, 0]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 2, 1] .. [3, 3, 3]  pivot [2, 2, -2]  posed [1, 2, -3] .. [3, 3, -1]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
+  part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [0, 0, -6]  posed [0, 0, -7] .. [1, 1, -6]  detached
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
   piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]  from body, lid
   piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
