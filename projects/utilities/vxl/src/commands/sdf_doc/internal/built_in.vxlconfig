@@ -9,49 +9,49 @@
             "document": {
               "version": 1,
               "materials": [
-                { "kind": "material", "properties": { "baseColor": "#8E5BB5", "ior": 1.54, "roughness": 0.05, "transmission": 0.6 } }, // amethyst
-                { "kind": "material", "properties": { "baseColor": "#4A3626", "roughness": 0.95 } }, // bark
-                { "kind": "material", "properties": { "baseColor": "#D9C7A0", "roughness": 0.7 } }, // birch
-                { "kind": "material", "properties": { "baseColor": "#E3DAC9", "roughness": 0.6 } }, // bone
-                { "kind": "material", "properties": { "baseColor": "#D6B356", "metallic": 1, "roughness": 0.35 } }, // brass
-                { "kind": "material", "properties": { "baseColor": "#9C4A32", "roughness": 0.9 } }, // brick
-                { "kind": "material", "properties": { "baseColor": "#B07A45", "metallic": 1, "roughness": 0.4 } }, // bronze
-                { "kind": "material", "properties": { "baseColor": "#B5704F", "roughness": 0.85 } }, // clay
-                { "kind": "material", "properties": { "baseColor": "#D08A5C", "metallic": 1, "roughness": 0.35 } }, // copper
-                { "kind": "material", "properties": { "baseColor": "#D8DEE4", "ior": 2.42, "roughness": 0.02, "transmission": 0.95 } }, // diamond
-                { "kind": "material", "properties": { "baseColor": "#5E4632", "roughness": 0.95 } }, // dirt
-                { "kind": "material", "properties": { "baseColor": "#2B211C", "roughness": 0.5 } }, // ebony
-                { "kind": "material", "properties": { "baseColor": "#8C3A20", "emissiveColor": "#FF5A1A", "emissiveStrength": 1, "roughness": 0.9 } }, // ember
-                { "kind": "material", "properties": { "baseColor": "#3A9A64", "ior": 1.57, "roughness": 0.05, "transmission": 0.6 } }, // emerald
+                { "kind": "material", "properties": { "baseColor": "#E7CEE5", "ior": 1.54, "roughness": 0.05, "transmission": 0.6 } }, // amethyst
+                { "kind": "material", "properties": { "baseColor": "#675B4F", "roughness": 0.95 } }, // bark
+                { "kind": "material", "properties": { "baseColor": "#D7B595", "roughness": 0.7 } }, // birch
+                { "kind": "material", "properties": { "baseColor": "#E6E6D5", "roughness": 0.6 } }, // bone
+                { "kind": "material", "properties": { "baseColor": "#F5E4AE", "metallic": 1, "roughness": 0.35 } }, // brass
+                { "kind": "material", "properties": { "baseColor": "#8B5341", "roughness": 0.9 } }, // brick
+                { "kind": "material", "properties": { "baseColor": "#FAD9B9", "metallic": 1, "roughness": 0.4 } }, // bronze
+                { "kind": "material", "properties": { "baseColor": "#C47F5D", "roughness": 0.85 } }, // clay
+                { "kind": "material", "properties": { "baseColor": "#F7CFBF", "metallic": 1, "roughness": 0.35 } }, // copper
+                { "kind": "material", "properties": { "baseColor": "#FFFFFF", "ior": 2.42, "roughness": 0.02, "transmission": 0.95 } }, // diamond
+                { "kind": "material", "properties": { "baseColor": "#3A3028", "roughness": 0.95 } }, // dirt
+                { "kind": "material", "properties": { "baseColor": "#4C463E", "roughness": 0.5 } }, // ebony
+                { "kind": "material", "properties": { "baseColor": "#272727", "emissiveColor": "#FF5A1A", "emissiveStrength": 1, "roughness": 0.9 } }, // ember
+                { "kind": "material", "properties": { "baseColor": "#00AA72", "ior": 1.57, "roughness": 0.05, "transmission": 0.6 } }, // emerald
                 { "kind": "material", "properties": { "baseColor": "#9A5A1E", "emissiveColor": "#FF9A30", "emissiveStrength": 1.5, "roughness": 1 } }, // flame
                 { "kind": "material", "properties": { "baseColor": "#C8D2E0", "emissiveColor": "#CFE0FF", "emissiveStrength": 2.75, "roughness": 0.5 } }, // glow
-                { "kind": "material", "properties": { "baseColor": "#D9B04E", "metallic": 1, "roughness": 0.25 } }, // gold
-                { "kind": "material", "properties": { "baseColor": "#8A8580", "roughness": 0.75 } }, // granite
-                { "kind": "material", "properties": { "baseColor": "#5E8445", "roughness": 0.8 } }, // grass
-                { "kind": "material", "properties": { "baseColor": "#BCD6E0", "ior": 1.31, "roughness": 0.1, "transmission": 0.6 } }, // ice
-                { "kind": "material", "properties": { "baseColor": "#6E6B68", "metallic": 1, "roughness": 0.6 } }, // iron
-                { "kind": "material", "properties": { "baseColor": "#522414", "emissiveColor": "#FF4A10", "emissiveStrength": 1, "roughness": 0.9 } }, // lava
-                { "kind": "material", "properties": { "baseColor": "#4C7A2E", "roughness": 0.7 } }, // leaf
-                { "kind": "material", "properties": { "baseColor": "#7A4B2A", "roughness": 0.6 } }, // leather
-                { "kind": "material", "properties": { "baseColor": "#6E3426", "roughness": 0.55 } }, // mahogany
-                { "kind": "material", "properties": { "baseColor": "#D8D4CC", "roughness": 0.3 } }, // marble
-                { "kind": "material", "properties": { "baseColor": "#5D7A36", "roughness": 0.9 } }, // moss
-                { "kind": "material", "properties": { "baseColor": "#9D7D51", "roughness": 0.65 } }, // oak
-                { "kind": "material", "properties": { "baseColor": "#C9A26B", "roughness": 0.7 } }, // pine
-                { "kind": "material", "properties": { "baseColor": "#AE946D", "roughness": 0.9 } }, // rope
-                { "kind": "material", "properties": { "baseColor": "#B33A48", "ior": 1.77, "roughness": 0.05, "transmission": 0.6 } }, // ruby
-                { "kind": "material", "properties": { "baseColor": "#D6C08E", "roughness": 0.9 } }, // sand
-                { "kind": "material", "properties": { "baseColor": "#C8A97E", "roughness": 0.9 } }, // sandstone
-                { "kind": "material", "properties": { "baseColor": "#2A4FB0", "ior": 1.77, "roughness": 0.05, "transmission": 0.6 } }, // sapphire
-                { "kind": "material", "properties": { "baseColor": "#D4D4D8", "metallic": 1, "roughness": 0.2 } }, // silver
-                { "kind": "material", "properties": { "baseColor": "#4F5559", "roughness": 0.7 } }, // slate
-                { "kind": "material", "properties": { "baseColor": "#D8DDE0", "roughness": 0.8 } }, // snow
-                { "kind": "material", "properties": { "baseColor": "#9A9EA3", "metallic": 1, "roughness": 0.35 } }, // steel
-                { "kind": "material", "properties": { "baseColor": "#808078", "roughness": 0.85 } }, // stone
-                { "kind": "material", "properties": { "baseColor": "#D8C27A", "roughness": 0.85 } }, // straw
-                { "kind": "material", "properties": { "baseColor": "#E0A040", "ior": 1.62, "roughness": 0.05, "transmission": 0.6 } }, // topaz
-                { "kind": "material", "properties": { "baseColor": "#563F31", "roughness": 0.6 } }, // walnut
-                { "kind": "material", "properties": { "baseColor": "#3F7FA6", "ior": 1.33, "roughness": 0.05, "transmission": 0.9 } }, // water
+                { "kind": "material", "properties": { "baseColor": "#FFE496", "metallic": 1, "roughness": 0.25 } }, // gold
+                { "kind": "material", "properties": { "baseColor": "#797874", "roughness": 0.75 } }, // granite
+                { "kind": "material", "properties": { "baseColor": "#5B6639", "roughness": 0.8 } }, // grass
+                { "kind": "material", "properties": { "baseColor": "#F9FEFF", "ior": 1.31, "roughness": 0.1, "transmission": 0.6 } }, // ice
+                { "kind": "material", "properties": { "baseColor": "#C0BEBB", "metallic": 1, "roughness": 0.6 } }, // iron
+                { "kind": "material", "properties": { "baseColor": "#464644", "emissiveColor": "#FF4A10", "emissiveStrength": 1, "roughness": 0.9 } }, // lava
+                { "kind": "material", "properties": { "baseColor": "#4E5B35", "roughness": 0.7 } }, // leaf
+                { "kind": "material", "properties": { "baseColor": "#8C6744", "roughness": 0.6 } }, // leather
+                { "kind": "material", "properties": { "baseColor": "#89593F", "roughness": 0.55 } }, // mahogany
+                { "kind": "material", "properties": { "baseColor": "#EBE6E1", "roughness": 0.3 } }, // marble
+                { "kind": "material", "properties": { "baseColor": "#5C5E1A", "roughness": 0.9 } }, // moss
+                { "kind": "material", "properties": { "baseColor": "#B99169", "roughness": 0.65 } }, // oak
+                { "kind": "material", "properties": { "baseColor": "#CEAB7F", "roughness": 0.7 } }, // pine
+                { "kind": "material", "properties": { "baseColor": "#B29A77", "roughness": 0.9 } }, // rope
+                { "kind": "material", "properties": { "baseColor": "#96001C", "ior": 1.77, "roughness": 0.05, "transmission": 0.6 } }, // ruby
+                { "kind": "material", "properties": { "baseColor": "#B09E7B", "roughness": 0.9 } }, // sand
+                { "kind": "material", "properties": { "baseColor": "#BFAC97", "roughness": 0.9 } }, // sandstone
+                { "kind": "material", "properties": { "baseColor": "#0085D1", "ior": 1.77, "roughness": 0.05, "transmission": 0.6 } }, // sapphire
+                { "kind": "material", "properties": { "baseColor": "#FEFDFC", "metallic": 1, "roughness": 0.2 } }, // silver
+                { "kind": "material", "properties": { "baseColor": "#565759", "roughness": 0.7 } }, // slate
+                { "kind": "material", "properties": { "baseColor": "#EDEDED", "roughness": 0.8 } }, // snow
+                { "kind": "material", "properties": { "baseColor": "#D6D1CB", "metallic": 1, "roughness": 0.35 } }, // steel
+                { "kind": "material", "properties": { "baseColor": "#8A857F", "roughness": 0.85 } }, // stone
+                { "kind": "material", "properties": { "baseColor": "#A98E58", "roughness": 0.85 } }, // straw
+                { "kind": "material", "properties": { "baseColor": "#F2C8A4", "ior": 1.62, "roughness": 0.05, "transmission": 0.6 } }, // topaz
+                { "kind": "material", "properties": { "baseColor": "#6F5140", "roughness": 0.6 } }, // walnut
+                { "kind": "material", "properties": { "baseColor": "#EEFCFF", "ior": 1.33, "roughness": 0.05, "transmission": 0.9 } }, // water
               ],
               "names": {
                 "materials": {

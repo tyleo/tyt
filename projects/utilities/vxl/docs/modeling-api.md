@@ -76,15 +76,15 @@ at the cell's center.
 
 vxl defines the `materials` library with these materials:
 
-| Group  | Names                                                                   | Traits                                                                            |
-| ------ | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Wood   | `bark`, `birch`, `ebony`, `mahogany`, `oak`, `pine`, `walnut`           |                                                                                   |
-| Stone  | `brick`, `clay`, `granite`, `marble`, `sandstone`, `slate`, `stone`     |                                                                                   |
-| Metal  | `brass`, `bronze`, `copper`, `gold`, `iron`, `silver`, `steel`          | Fully metallic                                                                    |
-| Gem    | `amethyst`, `diamond`, `emerald`, `ruby`, `sapphire`, `topaz`           | Smooth and saturated but for a clear `diamond`. Transmit light at their own `ior` |
-| Nature | `bone`, `dirt`, `grass`, `ice`, `leaf`, `moss`, `sand`, `snow`, `water` | `ice` and `water` transmit light at their own `ior`                               |
-| Craft  | `leather`, `rope`, `straw`                                              |                                                                                   |
-| Light  | `ember`, `flame`, `glow`, `lava`                                        | `glow` glows cool white and the rest orange                                       |
+| Group  | Names                                                                   | Traits                                              |
+| ------ | ----------------------------------------------------------------------- | --------------------------------------------------- |
+| Wood   | `bark`, `birch`, `ebony`, `mahogany`, `oak`, `pine`, `walnut`           |                                                     |
+| Stone  | `brick`, `clay`, `granite`, `marble`, `sandstone`, `slate`, `stone`     |                                                     |
+| Metal  | `brass`, `bronze`, `copper`, `gold`, `iron`, `silver`, `steel`          | Fully metallic                                      |
+| Gem    | `amethyst`, `diamond`, `emerald`, `ruby`, `sapphire`, `topaz`           | Smooth. Transmit light at their own `ior`           |
+| Nature | `bone`, `dirt`, `grass`, `ice`, `leaf`, `moss`, `sand`, `snow`, `water` | `ice` and `water` transmit light at their own `ior` |
+| Craft  | `leather`, `rope`, `straw`                                              |                                                     |
+| Light  | `ember`, `flame`, `glow`, `lava`                                        | `glow` glows cool white and the rest orange         |
 
 Velvet, painted wood, and anything else the library lacks take a custom
 `material`.

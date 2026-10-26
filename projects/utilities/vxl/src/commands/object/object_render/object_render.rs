@@ -1712,7 +1712,7 @@ mod tests {
     }
 
     #[test]
-    fn review_renders_each_library_material_s_lightest_shade_brighter_than_the_material() {
+    fn review_renders_each_library_material_s_lightest_shade_brighter_than_its_darkest() {
         let library = &built_in_sdf_doc_config().build.libraries.embedded["materials"].document;
         let names: Vec<_> = library
             .names
@@ -1723,24 +1723,26 @@ mod tests {
             .collect();
         let count = names.len();
 
-        // Two parts for each material: a box painted the material, and a box
-        // painted the material's lightest default shade.
+        // Two parts for each material: a box painted the material's darkest
+        // default shade, and a box painted its lightest.
         let mut file = serde_json::to_value(library).unwrap();
-        file["materials"].as_array_mut().unwrap().extend(
-            (0..count).map(|shades| json!({ "kind": "shade", "shades": shades, "index": 2 })),
-        );
+        file["materials"]
+            .as_array_mut()
+            .unwrap()
+            .extend((0..count).flat_map(|shades| {
+                [0, 2].map(|index| json!({ "kind": "shade", "shades": shades, "index": index }))
+            }));
         file["shades"] = (0..count)
             .map(|base| json!({ "base": base, "count": 3 }))
             .collect();
         file["shapes3d"] =
             json!([{ "kind": "box", "min": [-0.1, 0, -0.1], "max": [0.1, 0.2, 0.1] }]);
         file["steps"] = (0..2 * count)
-            .map(|material| json!({ "kind": "add", "name": "block", "shape": 0, "material": material }))
+            .map(|shade| json!({ "kind": "add", "name": "block", "shape": 0, "material": count + shade }))
             .collect();
         let part_names: Vec<_> = names
             .iter()
-            .cloned()
-            .chain(names.iter().map(|name| format!("{name}-lightest")))
+            .flat_map(|name| [format!("{name}-darkest"), format!("{name}-lightest")])
             .collect();
         file["objects"] = part_names
             .iter()
@@ -1810,18 +1812,17 @@ mod tests {
                 .sum()
         };
 
-        // A shade at the tonemap's white ceiling renders no brighter than the
-        // material.
+        // Shades at the tonemap's white ceiling render alike.
         for name in &names {
-            let material_views = views_of(name);
+            let darkest_views = views_of(&format!("{name}-darkest"));
             let lightest_views = views_of(&format!("{name}-lightest"));
 
-            for (material_pixels, lightest_pixels) in material_views.iter().zip(&lightest_views) {
-                for (material, lightest) in material_pixels.iter().zip(lightest_pixels) {
-                    if material.alpha > 0 && lightest.alpha > 0 {
+            for (darkest_pixels, lightest_pixels) in darkest_views.iter().zip(&lightest_views) {
+                for (darkest, lightest) in darkest_pixels.iter().zip(lightest_pixels) {
+                    if darkest.alpha > 0 && lightest.alpha > 0 {
                         assert!(
-                            brightness(lightest) > brightness(material),
-                            "{name}: {lightest:?} against {material:?}"
+                            brightness(lightest) > brightness(darkest),
+                            "{name}: {lightest:?} against {darkest:?}"
                         );
                     }
                 }

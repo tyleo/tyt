@@ -1059,11 +1059,13 @@ The eight named properties follow glTF's metallic-roughness model, except that
    kind's empty value there: 0, a zero vector, `false`, `""`, or `null`
 3. `shades` steps the base color's
    [Oklab](https://bottosson.github.io/posts/oklab/) lightness. Shade `i` of
-   `count` steps the lightness by `(i - (count - 1) / 2) * spread`. A step of 0
-   keeps the base color. A step down scales the color in linear light toward
-   black by the amount that reaches the stepped lightness. A step up keeps the
-   color's Oklab hue and chroma at the stepped lightness. Every other property
-   and the alpha carry over
+   `count` steps the lightness by `(i - (count - 1) / 2 - d) * spread`. `d`
+   starts at 0 and grows by 1 until the last shade's step is 0 or less, or
+   linear sRGB holds the color's Oklab hue and chroma at its stepped lightness.
+   A step of 0 keeps the base color. A step down scales the color in linear
+   light toward black by the amount that reaches the stepped lightness. A step
+   up keeps the color's Oklab hue and chroma at the stepped lightness. Every
+   other property and the alpha carry over
 
 ## Patterns
 
@@ -1302,9 +1304,7 @@ below and never repairs, coerces, or fills in bad input.
       non-empty name and a value with a kind, and every material that sets it
       gives it one kind. An `int` holds whole numbers within `2^53 - 1`, and a
       vector holds 2 to 4 numbers
-   6. Every shade's stepped lightness stays in `[0, 1]`, a step up stays inside
-      linear sRGB at the color's chroma, and every shade stays inside `[0, 1]`
-      in linear light
+   6. Every shade's stepped lightness stays at 0 or more
    7. The corners of a `box`, a `boxFrame`, and a `rect` differ on each axis. A
       `rect` takes `round` or `chamfer` but not both, and either stays within
       half its shorter side. A `box`'s `round` stays within half its shortest

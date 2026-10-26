@@ -492,3 +492,63 @@ table` lands `table` again over `tall`
    such places. The pivot error comes at the same point
 4. The hint reads "sample under the local frame" because voxsmith's errors
    mention no vxl flag
+
+## S33. Measured colors
+
+1. Each library color takes a measured value under D65 as people commonly see
+   the material. Woods take a clear finish, leather a light-aged tannage, and
+   metals their polished reflectance at normal incidence
+2. A gem, `water`, and `ice` take the square root of the tint through their
+   measured absorption over the path given below, because a ray tints at each of
+   the two surfaces it crosses. A cut stone's path counts its bounces off the
+   back facets
+3. `ember` and `lava` keep their glow, which already matches a blackbody near
+   1350 K and 1200 K. `flame` and `glow` keep their colors
+4. `shades` moves a run down whole steps until its lighter shades fit, which
+   keeps the base in an odd run. A centered run errored on the measured metals
+   and clear materials
+5. The colors and their sources:
+
+| Material    | Color   | Measured                               | Source                                                                                                                                                    |
+| ----------- | ------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `amethyst`  | #E7CEE5 | Bolivian amethyst over a 12 mm path    | [Caltech](http://minerals.gps.caltech.edu/Files/Visible/quartz/Index.html)                                                                                |
+| `bark`      | #675B4F | mean of 9 bark spectra                 | [spectraldb](https://spectraldb.com/measurements/00350/)                                                                                                  |
+| `birch`     | #D7B595 | paper birch under polyurethane         | [Polymers 2021](https://pmc.ncbi.nlm.nih.gov/articles/PMC8511998/)                                                                                        |
+| `bone`      | #E6E6D5 | dry bone                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `brass`     | #F5E4AE | polished                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `brick`     | #8B5341 | mean of 6 red bricks                   | [spectraldb](https://spectraldb.com/), [physicallybased](https://api.physicallybased.info/v2/materials)                                                   |
+| `bronze`    | #FAD9B9 | polished tin bronze                    | [J. Arch. Sci. 2017](https://scholarlypublications.universiteitleiden.nl/download/1887/87610/1)                                                           |
+| `clay`      | #C47F5D | fired terracotta                       | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `copper`    | #F7CFBF | polished                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `diamond`   | #FFFFFF | colorless                              | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `dirt`      | #3A3028 | moist soil                             | [spectraldb](https://spectraldb.com/measurements/00340/)                                                                                                  |
+| `ebony`     | #4C463E | Ceylon ebony, sanded                   | [BioResources 2026](https://bioresources.cnr.ncsu.edu/wp-content/uploads/2026/06/BioRes_21_3_7304_Ayata_Bleach_Chemicals_Surfac_Elbony_Species_25697.pdf) |
+| `ember`     | #272727 | charcoal                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `emerald`   | #00AA72 | Panjshir emerald over a 12 mm path     | [Caltech](http://minerals.gps.caltech.edu/Files/Visible/Beryl/Index.html)                                                                                 |
+| `gold`      | #FFE496 | polished                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `granite`   | #797874 | mean of 4 gray granites                | [ECOSTRESS](https://speclib.jpl.nasa.gov/), [spectraldb](https://spectraldb.com/)                                                                         |
+| `grass`     | #5B6639 | living turf                            | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `ice`       | #F9FEFF | ice over a 0.5 m path                  | [Warren and Brandt 2008](https://atmos.uw.edu/ice_optical_constants/IOP_2008_ASCIItable.dat)                                                              |
+| `iron`      | #C0BEBB | polished                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `lava`      | #464644 | mean of 2 basalts                      | [ECOSTRESS](https://speclib.jpl.nasa.gov/)                                                                                                                |
+| `leaf`      | #4E5B35 | mean of 12 leaf tops                   | [spectraldb](https://spectraldb.com/measurements/00330/)                                                                                                  |
+| `leather`   | #8C6744 | chestnut-tanned, after light           | [Annals Univ. Oradea 2016](http://textile.webhost.uoradea.ro/Annals/Vol%20XVII-No%201-2016/Pielarie/Art.nr.162-pag.183-188.pdf)                           |
+| `mahogany`  | #89593F | Swietenia veneer, paste wax            | [UnB 2017](https://bdm.unb.br/bitstream/10483/19019/1/2017_AmandadeFreitasMeireles.pdf)                                                                   |
+| `marble`    | #EBE6E1 | white marble                           | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `moss`      | #5C5E1A | live turf moss                         | [EcoSIS 2018](https://ecosis.org/package/993b475d-e43a-4f5e-bd38-530f8010069e)                                                                            |
+| `oak`       | #B99169 | oak under polyurethane lacquer         | [Polymers 2023](https://pmc.ncbi.nlm.nih.gov/articles/PMC9920847/)                                                                                        |
+| `pine`      | #CEAB7F | Scots pine sapwood, linseed oil        | [Drewno 2025](https://www.drewno-wood.pl/Effect-of-Thermal-Modification-and-Picture-Varnish-Application-on-Color-Change-of,201974,0,2.html)               |
+| `rope`      | #B29A77 | retted hemp fiber                      | [EIHA 2013](https://eiha.org/media/attach/906/Joerg_Muessig_EIHA_fibre_quality_2013.pdf.pagespeed.ce.9LQArqfsj8.pdf)                                      |
+| `ruby`      | #96001C | natural ruby over a 12 mm path         | [Caltech](http://minerals.gps.caltech.edu/Files/Visible/corundum/Index.html)                                                                              |
+| `sand`      | #B09E7B | dry sand                               | [spectraldb](https://spectraldb.com/measurements/00464/)                                                                                                  |
+| `sandstone` | #BFAC97 | buff sandstone                         | [Mater. Construcc.](https://materconstrucc.revistas.csic.es/index.php/materconstrucc/article/download/3494/4210)                                          |
+| `sapphire`  | #0085D1 | medium blue sapphire over a 12 mm path | [Caltech](http://minerals.gps.caltech.edu/Files/Visible/corundum/Index.html)                                                                              |
+| `silver`    | #FEFDFC | polished                               | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `slate`     | #565759 | gray slate                             | [ECOSTRESS](https://speclib.jpl.nasa.gov/)                                                                                                                |
+| `snow`      | #EDEDED | snow                                   | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `steel`     | #D6D1CB | polished stainless                     | [physicallybased](https://api.physicallybased.info/v2/materials)                                                                                          |
+| `stone`     | #8A857F | mean of 6 gray limestones              | [ECOSTRESS](https://speclib.jpl.nasa.gov/)                                                                                                                |
+| `straw`     | #A98E58 | broom straw                            | [spectraldb](https://spectraldb.com/measurements/00468/)                                                                                                  |
+| `topaz`     | #F2C8A4 | natural sherry topaz over a 12 mm path | [Caltech](http://minerals.gps.caltech.edu/Files/Visible/topaz/Index.html)                                                                                 |
+| `walnut`    | #6F5140 | black walnut, waxy varnish             | [Les/Wood 2024](https://journals.uni-lj.si/les-wood/article/view/18741)                                                                                   |
+| `water`     | #EEFCFF | pure water over a 1 m path             | [Pope and Fry 1997](https://omlc.org/spectra/water/data/pope97.txt)                                                                                       |

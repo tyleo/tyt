@@ -726,8 +726,9 @@ with the original in the middle:
 4. Darker shades mix the base with black
 5. Lighter shades keep the base's hue and saturation
 
-A shade past black or white errors. So does a lighter shade that sRGB cannot
-hold at the base's saturation. The error gives the largest `spread` that fits.
+When the lighter shades don't fit, the run moves down a `spread` at a time until
+they do. A shade past black errors, and the error gives the largest `spread`
+that fits.
 
 ### Patterns
 

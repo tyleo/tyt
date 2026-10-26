@@ -187,10 +187,10 @@ mod tests {
     fn a_shade_reads_its_base_and_an_error_reports_the_reaching_step() {
         let main = main_of(
             vec![
-                material(&[("baseColor", SdfPropertyValue::Text("#FFFFFF".to_owned()))]),
+                material(&[("baseColor", SdfPropertyValue::Text("#000000".to_owned()))]),
                 SdfMaterial::Shade {
                     shades_id: U32Id::from_u32(0),
-                    index: 2,
+                    index: 0,
                 },
             ],
             vec![SdfShades {
@@ -201,7 +201,7 @@ mod tests {
         );
         let error = resolved(&main).unwrap_err().to_string();
         assert!(
-            error.starts_with("materials[1]: shades shade 2 must be between black and white"),
+            error.starts_with("materials[1]: shades shade 0 must be between black and white"),
             "{error}"
         );
 

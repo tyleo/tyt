@@ -261,7 +261,7 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
   2. `bricks` lays courses of bricks with mortar joints for findings 37 and 92
   3. `random` gives the model a seeded generator for placements and sizes for
      findings 26 and 91
-- [ ] **S32. Round 7 fixes.** Answer round 7's
+- [x] **S32. Round 7 fixes.** Answer round 7's
       [findings](trials-round-7.md#findings) before the next round:
   - [x] The review sheet keeps `<stem>.png` whatever views the command adds
         for finding 126
@@ -272,8 +272,16 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
         the world pivot for finding 128
   - [x] `coat` takes a slope limit for finding 135, and `gradient` takes its
         range in either order for finding 136
-  - [ ] The library's `oak` stays apart from `pine` for finding 13
-- [ ] **S33. Round 8.** Run the prompts after S20 to S32 and log the round
+- [x] **S33. Measured colors.** The library's colors take measured values
+      for finding 13. The decisions log cites each color's source. The metals
+      take their measured reflectances ahead of S34. Where two real materials
+      share a color, grain or `shades` tells them apart
+- [ ] **S34. Reflections.** A metal reflects the scene along its mirror
+      direction for findings 5 and 20, as the rendering follow-ups'
+      [reflections](../voxel-rendering-followups/README.md#reflections)
+      section lays out. `studio` stays bright down to the horizon, and the
+      review renders confirm S33's metals
+- [ ] **S35. Round 8.** Run the prompts after S20 to S34 and log the round
       beside round 7. The judging records whether sessions skimmed past the
       `check` lines of steps meant to be in pieces. The answer decides whether
       the block keeps those steps.
