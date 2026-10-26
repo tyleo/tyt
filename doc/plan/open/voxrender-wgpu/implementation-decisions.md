@@ -145,8 +145,8 @@ they land.
 - The manifest declares hand tracking as optional, so the headset launches
   the app without controllers. The bench takes no input.
 - B0's probe logs one `b0` line per result. The startup results come before
-  the session runs. The visibility mask and the frame times need the
-  headset worn.
+  the session runs. The visibility mask and the frame times need a running
+  session.
 - The app asks for 90 Hz through `XR_FB_display_refresh_rate`, the rate the
   frame budget assumes. The runtime starts at 72 Hz.
 - The compositor and app GPU times come from `XR_META_performance_metrics`,

@@ -130,7 +130,7 @@ code-level choices in
             each ray's cost or the rays a frame needs. The research ranks
             the levers into an ordered list of experiments. The report lands
             in `reference/`
-      - [ ] **S9.2. Re-baseline.** Profiles show where the time goes.
+      - [x] **S9.2. Re-baseline.** Profiles show where the time goes.
             - [x] B2's kernels move to trusted shader modules, and B2 also
                   times the tree walk with the checks
             - [x] The step loop gains variants that split load cost from ALU
@@ -148,16 +148,35 @@ code-level choices in
             - [x] RenderDoc Meta Fork reads the register footprints of the
                   tree walk, the ray query, and the step loop on Quest
             - [x] The report lands in benchmarks.md
-            - [ ] Each finding becomes an experiment in S9.4
+            - [x] Each finding becomes an experiment in S9.4
       - [ ] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and
             S5 on Quest gives the march a rate to beat
       - [ ] **S9.4. Experiments.** The experiments follow the research's
             [ladder](reference/speedup-research.md#5-experiment-ladder).
             They rework the tree walk, the 64-tree, and the ray query march,
             one change at a time. Each change is timed on the desktop
-            through `b2-times`. A change that wins stays. One short worn run
+            through `b2-times`. A change that wins stays. One short Quest run
             confirms a batch on Quest. B1's ids check every change against
             the reference
+            - [ ] Rung 2 runs as three changes in turn: power-of-two masks
+                  for `at % size`, the f32 walk with per-ray reciprocals,
+                  and the placement cull. `leave()`, `enter()`, and
+                  `at % size` take 65% of the S1 walk on the desktop
+            - [ ] Rung 3, boxes. Two chains gained 1.5x on Quest. A
+                  latency-bound loop would gain 2x, so boxes stay ahead of
+                  rung 4
+            - [ ] Rung 4, register-resident leaves. RenderDoc reads each
+                  change's footprint and occupancy on Quest. The walk starts
+                  at 20 registers and 50% occupancy
+            - [ ] Rung 5, fetch and footprint trims. The 16x8 groups drop
+                  because Quest runs an 8x8 group as one 64-wide wave
+            - [ ] Rung 6, the decision
+            - [ ] Rung 8, the ray-query arm. The rung first finds what fills
+                  the march's 2.7 KB of scratch per invocation
+            - [ ] Rung 9, the output path. Moving the march into a fragment
+                  pass also avoids the compute launch's 2.32 ms floor. A
+                  sweep of workgroup sizes over the launch kernel shows
+                  whether the floor falls with fewer groups
       - [ ] **S9.5. Start bounds.** Conservative start bounds join the
             experiments. A bound tells a march where it can start without
             skipping a hit, so the hits stay exact. Three bounds run:
@@ -170,12 +189,12 @@ code-level choices in
                second and a step at 1 m/s between them. Moving placements
                wait for the moving scene in Later
       - [ ] **S9.6. Lossy cuts.** Lossy cuts run as tests: the lens-matched
-            grid, stereo hit copying, and iteration caps. Each test reports
-            its gain and how many pixels it changes on every scene. It also
-            writes three images per scene: the full trace, the cut, and a
-            map of the changed pixels. A cut stays when the project lead
-            accepts its tradeoff from the images
-      - [ ] **S9.7. The final run.** A final worn run re-times B2 with the
+            grid, quad views, stereo hit copying, and iteration caps. Each
+            test reports its gain and how many pixels it changes on every
+            scene. It also writes three images per scene: the full trace,
+            the cut, and a map of the changed pixels. A cut stays when the
+            project lead accepts its tradeoff from the images
+      - [ ] **S9.7. The final run.** A final Quest run re-times B2 with the
             improved code. The report lands in benchmarks.md. R picks the B3
             arms
 
