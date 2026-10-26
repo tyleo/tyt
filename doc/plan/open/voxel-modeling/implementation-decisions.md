@@ -552,3 +552,15 @@ table` lands `table` again over `tall`
 | `topaz`     | #F2C8A4 | natural sherry topaz over a 12 mm path | [Caltech](http://minerals.gps.caltech.edu/Files/Visible/topaz/Index.html)                                                                                 |
 | `walnut`    | #6F5140 | black walnut, waxy varnish             | [Les/Wood 2024](https://journals.uni-lj.si/les-wood/article/view/18741)                                                                                   |
 | `water`     | #EEFCFF | pure water over a 1 m path             | [Pope and Fry 1997](https://omlc.org/spectra/water/data/pope97.txt)                                                                                       |
+
+## S34. Reflections
+
+1. Each hit traces one ray along the view's mirror direction. A hit that ray
+   meets reflects the hemisphere without tracing. One bounce keeps a pixel to
+   one reflection walk
+2. A reflection sees the sky down to the horizon and the ground below it. The
+   GGX alpha blurs the horizon over a band as wide as the alpha and sets the
+   share that sees the blurred hemisphere in place of the ray. Area lights stay
+   waiting for a reason
+3. `studio`'s ground goes from #404040 to #C0C0C0. Over the dark ground a
+   metal's sides reflected it and went near-black

@@ -72,8 +72,8 @@
     "bloomThreshold": 1,
   },
 
-  // The key light's offset gives a box three distinct shades. The shadow
-  // takes the default granularity.
+  // The key light's offset gives a box three distinct shades. A metal's
+  // sides reflect the light ground. The shadow takes the default granularity.
   "studio": {
     "description": "A key light from the upper left over a hemisphere light",
     "lights": [
@@ -89,7 +89,7 @@
       {
         "kind": "hemisphere",
         "sky": "#FFFFFF",
-        "ground": "#404040",
+        "ground": "#C0C0C0",
         "strength": 1,
       },
     ],

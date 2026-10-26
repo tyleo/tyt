@@ -70,7 +70,7 @@ pub fn render<D: Dependencies>(
             .map(|x| {
                 let walk = RenderRayWalk::new(scene, grid_rays.iter().map(|rays| rays.ray(x, y)));
 
-                shade_ray(scene, occlusion, &rays.ray(x, y), walk)
+                shade_ray(scene, occlusion, &rays.ray(x, y), walk, true)
             })
             .collect::<Result<Vec<_>>>()
     });
@@ -135,19 +135,20 @@ struct RayShade {
 }
 
 /// The shade of `ray` through `scene`, summed front to back over the hits
-/// of its `walk`.
+/// of its `walk`. `bounce` decides whether each hit traces its reflection.
 fn shade_ray(
     scene: &RenderScene,
     occlusion: RenderOcclusion,
     ray: &RenderRay,
     walk: RenderRayWalk,
+    bounce: bool,
 ) -> Result<RayShade> {
     let mut light = BLACK;
     let mut emission = BLACK;
     let mut throughput = WHITE;
 
     for hit in walk {
-        let shade = shade_hit(scene, occlusion, ray, &hit)?;
+        let shade = shade_hit(scene, occlusion, ray, &hit, bounce)?;
         let covered = throughput * shade.coverage;
 
         light += covered * shade.color;
@@ -183,12 +184,13 @@ struct HitShade {
 
 /// The shade of `hit` seen along `ray` under every light of `scene`.
 /// `occlusion` decides whether the corner occlusion darkens the hemisphere
-/// term.
+/// term. `bounce` decides whether the hit traces its reflection.
 fn shade_hit(
     scene: &RenderScene,
     occlusion: RenderOcclusion,
     ray: &RenderRay,
     hit: &RenderHit,
+    bounce: bool,
 ) -> Result<HitShade> {
     let placement = scene
         .placement(hit.placement_id)
@@ -209,7 +211,7 @@ fn shade_hit(
     let view = -ray.direction;
     let point = ray.origin + ray.direction * hit.distance;
 
-    let open = match occlusion {
+    let corner = match occlusion {
         RenderOcclusion::None => 1.0,
 
         RenderOcclusion::Corner => {
@@ -311,21 +313,41 @@ fn shade_hit(
                 color += radiance * light_color * lit * (strength * reach);
             }
 
-            RenderLight::Hemisphere {
-                sky,
-                ground,
-                strength,
-            } => {
-                color += hemisphere_radiance(material, normal, view, sky, ground, strength, open);
-            }
+            RenderLight::Hemisphere { .. } => {}
         }
+    }
+
+    let open = 1.0 - material.occlusion_strength * (1.0 - corner);
+    let cosine = normal.dot(view);
+    let mirror = normal * (2.0 * cosine) - view;
+    let alpha = (material.roughness * material.roughness).max(MIN_ALPHA);
+    let transmitted = material.transmission * (1.0 - material.metallic);
+
+    let diffuse =
+        material.base_color.color * ((1.0 - material.metallic) * (1.0 - material.transmission));
+    let reflectance = normal_reflectance(material) * (1.0 - transmitted)
+        + transmitted_reflectance(material, cosine) * transmitted;
+
+    color += sky_radiance(scene, normal, 1.0) * diffuse * open;
+
+    if reflectance != BLACK {
+        let sky = sky_radiance(scene, mirror, alpha);
+
+        let reflected = if bounce && alpha < 1.0 {
+            trace_reflection(scene, occlusion, hit, mirror, sky)? * (1.0 - alpha)
+                + sky * (alpha * open)
+        } else {
+            sky * open
+        };
+
+        color += reflected * reflectance;
     }
 
     Ok(HitShade {
         color,
         emission,
         coverage: material.base_color.alpha,
-        pass: material_pass(material, normal.dot(view)),
+        pass: material_pass(material, cosine),
     })
 }
 
@@ -398,43 +420,50 @@ fn direct_radiance(
     (diffuse + specular) * n_dot_l
 }
 
-/// The light `material` reflects from a hemisphere light, darkened toward
-/// `occlusion` by the material's occlusion strength. The normal-incidence
-/// reflectance gives a metal a reflection in its base color.
-///
-/// # Arguments
-/// * `normal` - the surface's unit normal.
-/// * `view` - the unit direction toward the viewer.
-/// * `occlusion` - the corner occlusion, from `0` fully occluded to `1`
-///   open.
-fn hemisphere_radiance(
-    material: &RenderMaterial,
-    normal: TyVector3F64,
-    view: TyVector3F64,
+/// The hemisphere lights of `scene` seen along the unit `direction`, with
+/// each sky meeting its ground at the horizon over a band `width` wide in
+/// `direction`'s +Y. A `width` of `1` gives the light a face with that normal
+/// takes.
+fn sky_radiance(scene: &RenderScene, direction: TyVector3F64, width: f64) -> TyLinSrgbF64 {
+    let up = (0.5 + direction.y / (2.0 * width)).clamp(0.0, 1.0);
+
+    scene
+        .iter_lights()
+        .fold(BLACK, |radiance, (_, light)| match *light {
+            RenderLight::Hemisphere {
+                sky,
+                ground,
+                strength,
+            } => radiance + (sky * up + ground * (1.0 - up)) * strength,
+
+            _ => radiance,
+        })
+}
+
+/// The light that reaches `hit` along the unit `mirror`, with `sky` where
+/// the ray leaves the scene. Errors if the ray's start lies out of a grid's
+/// [range](crate::GRID_RANGE_BITS).
+fn trace_reflection(
+    scene: &RenderScene,
+    occlusion: RenderOcclusion,
+    hit: &RenderHit,
+    mirror: TyVector3F64,
     sky: TyLinSrgbF64,
-    ground: TyLinSrgbF64,
-    strength: f64,
-    occlusion: f64,
-) -> TyLinSrgbF64 {
-    let ambient = |direction: TyVector3F64| {
-        let up = (direction.y + 1.0) / 2.0;
+) -> Result<TyLinSrgbF64> {
+    let across = pixel_across(hit);
+    let (_, origin) = shadow_origin(scene, hit, across);
+    let target = ShadowTarget::Direction(mirror);
 
-        (sky * up + ground * (1.0 - up)) * strength
+    let walk = RenderRayWalk::new(scene, shadow_rays(scene, hit, across, &target)?);
+    let entry = entry_pass(scene, &walk);
+
+    let ray = RenderRay {
+        origin,
+        direction: mirror,
     };
+    let seen = shade_ray(scene, occlusion, &ray, walk, false)?;
 
-    let cosine = normal.dot(view);
-    let mirror = normal * (2.0 * cosine) - view;
-    let transmitted = material.transmission * (1.0 - material.metallic);
-
-    let f0 = normal_reflectance(material);
-    let diffuse =
-        material.base_color.color * ((1.0 - material.metallic) * (1.0 - material.transmission));
-
-    let open = 1.0 - material.occlusion_strength * (1.0 - occlusion);
-
-    (ambient(normal) * (diffuse + f0 * (1.0 - transmitted))
-        + ambient(mirror) * transmitted_reflectance(material, cosine) * transmitted)
-        * open
+    Ok(entry * (seen.light + seen.transmittance * sky))
 }
 
 /// How much of a point light reaches `distance` meters out: the inverse
@@ -505,16 +534,7 @@ fn shadow_factor(
     match shadow {
         RenderShadow::None => Ok(WHITE),
 
-        RenderShadow::PerPixel => {
-            let across = |axis: usize, start: usize| {
-                (i64::from(hit.point[axis]) - start as i64 * ONE).clamp(INSET, ONE - INSET)
-            };
-
-            sample([
-                across(hit.face.u(), hit.face.u0),
-                across(hit.face.v(), hit.face.v0),
-            ])
-        }
+        RenderShadow::PerPixel => sample(pixel_across(hit)),
 
         RenderShadow::PerFace => sample([ONE / 2; 2]),
 
@@ -529,6 +549,19 @@ fn shadow_factor(
             Ok(bilinear(&hit.face, values, hit.along))
         }
     }
+}
+
+/// The fixed point of `hit` across its face from the min corner, held
+/// [`INSET`] inside the face's edges.
+fn pixel_across(hit: &RenderHit) -> [i64; 2] {
+    let across = |axis: usize, start: usize| {
+        (i64::from(hit.point[axis]) - start as i64 * ONE).clamp(INSET, ONE - INSET)
+    };
+
+    [
+        across(hit.face.u(), hit.face.u0),
+        across(hit.face.v(), hit.face.v0),
+    ]
 }
 
 /// What the light paid to enter the materials `walk` starts inside. The light
@@ -581,7 +614,7 @@ mod tests {
         DependenciesImpl, RenderHit, RenderRayWalk, cast_ray, material_pass, render,
         render::{
             BLACK, RayShade, WHITE, bilinear, check_bloom, cone_attenuation, direct_radiance,
-            hemisphere_radiance, point_attenuation, shade_hit, shade_ray, shadow_factor,
+            point_attenuation, shade_hit, shade_ray, shadow_factor, sky_radiance,
         },
         test_utilities::{bar_scene, check_goldens},
         transmitted_reflectance,
@@ -606,7 +639,7 @@ mod tests {
     fn ray_shade(scene: &RenderScene, ray: &RenderRay) -> RayShade {
         let walk = RenderRayWalk::from_ray(scene, ray).unwrap();
 
-        shade_ray(scene, RenderOcclusion::None, ray, walk).unwrap()
+        shade_ray(scene, RenderOcclusion::None, ray, walk, true).unwrap()
     }
 
     #[test]
@@ -842,7 +875,7 @@ mod tests {
             direction: TyVector3F64::from_array(direction),
         };
         let hit = cast_ray(scene, &ray, f64::INFINITY).unwrap().unwrap();
-        let color = shade_hit(scene, RenderOcclusion::Corner, &ray, &hit)
+        let color = shade_hit(scene, RenderOcclusion::Corner, &ray, &hit, true)
             .unwrap()
             .color;
         color.red + color.green + color.blue
@@ -880,11 +913,13 @@ mod tests {
 
         // The white sky lights a face by its diffuse color plus the 0.04
         // reflectance. Each wall of the pane reflects the 0.04 alone and
-        // passes 0.96.
+        // passes 0.96. The far wall's mirror ray sees the sky through the
+        // near wall, and its roughness share of 0.04 sees the sky open.
         let (pane, ray) = bar_scene(&[glass(white)]);
         let alone = ray_shade(&pane, &ray);
+        let far = 0.96 * 0.96 + 0.04;
         assert!(
-            close(alone.light, WHITE * (0.04 + 0.96 * 0.04)),
+            close(alone.light, WHITE * (0.04 + 0.96 * 0.04 * far)),
             "{:?}",
             alone.light
         );
@@ -954,7 +989,7 @@ mod tests {
         assert!(!entry.exit && exit.exit);
 
         let shade = |scene: &RenderScene, hit, occlusion| {
-            shade_hit(scene, occlusion, &ray, hit).unwrap().color
+            shade_hit(scene, occlusion, &ray, hit, true).unwrap().color
         };
 
         // The exit faces the viewer, and the light reaches it through the
@@ -1006,7 +1041,9 @@ mod tests {
         let (pane, head_on) = bar_scene(&[clear]);
 
         // The ray enters by the -X face and leaves by the +Z face, each at a
-        // cosine of 0.707. The white sky reflects alike in every direction.
+        // cosine of 0.707. The white sky reflects alike in every direction,
+        // and the far wall's mirror ray sees it through the near wall head
+        // on for all but the roughness share of 0.04.
         let oblique = RenderRay {
             origin: TyVector3F64::new(-0.5, 0.5, 0.0),
             direction: TyVector3F64::new(1.0, 0.0, 1.0).normalize(),
@@ -1017,7 +1054,8 @@ mod tests {
 
         let shade = ray_shade(&pane, &oblique);
         assert!(close(shade.transmittance, pass * pass));
-        assert!(close(shade.light, fresnel + pass * fresnel));
+        let far = material_pass(&clear, 1.0) * 0.96 + WHITE * 0.04;
+        assert!(close(shade.light, fresnel + pass * fresnel * far));
         assert!(shade.transmittance.red < ray_shade(&pane, &head_on).transmittance.red);
     }
 
@@ -1057,16 +1095,19 @@ mod tests {
 
         // Each wall passes 0.98: the uncovered half whole and the covered
         // half 0.96. The near wall adds half the emission plus half the
-        // 0.04 reflectance, and the far wall adds as much through 0.98.
+        // 0.04 reflectance, and the far wall adds as much through 0.98. The
+        // far wall's mirror ray sees the sky through the near wall for all
+        // but the roughness share of 0.04.
         let walls = 1.0 + 0.98;
 
         assert!(close(
             shade.emission,
             TyLinSrgbF64::new(1.0, 0.5, 0.0) * walls
         ));
+        let far = TyLinSrgbF64::new(1.0, 0.5, 0.0) + WHITE * (0.02 * (0.98 * 0.96 + 0.04));
         assert!(close(
             shade.light,
-            TyLinSrgbF64::new(1.02, 0.52, 0.02) * walls
+            TyLinSrgbF64::new(1.02, 0.52, 0.02) + far * 0.98
         ));
         assert!(close(shade.transmittance, WHITE * (0.98 * 0.98)));
     }
@@ -1113,7 +1154,7 @@ mod tests {
         };
         let hit = cast_ray(&scene, &ray, f64::INFINITY).unwrap().unwrap();
 
-        let shade = shade_hit(&scene, RenderOcclusion::None, &ray, &hit).unwrap();
+        let shade = shade_hit(&scene, RenderOcclusion::None, &ray, &hit, true).unwrap();
         assert_eq!(shade.color, TyLinSrgbF64::new(2.0, 1.0, 0.0));
         assert_eq!(shade.emission, shade.color);
     }
@@ -1168,10 +1209,10 @@ mod tests {
             assert_eq!(hit.distance, 2.0);
 
             (
-                shade_hit(&scene, RenderOcclusion::Corner, &ray, &hit)
+                shade_hit(&scene, RenderOcclusion::Corner, &ray, &hit, true)
                     .unwrap()
                     .color,
-                shade_hit(&scene, RenderOcclusion::None, &ray, &hit)
+                shade_hit(&scene, RenderOcclusion::None, &ray, &hit, true)
                     .unwrap()
                     .color,
             )
@@ -1231,82 +1272,107 @@ mod tests {
         let clear = radiance(1.0);
         assert!(clear.red > 0.0 && clear.red < opaque.red);
         assert!(close(radiance(0.5), (opaque + clear) * 0.5));
-
-        // The hemisphere light leaves the reflectance alone.
-        let ambient = hemisphere_radiance(
-            &RenderMaterial {
-                transmission: 1.0,
-                ..matte(white)
-            },
-            normal,
-            normal,
-            WHITE,
-            WHITE,
-            1.0,
-            1.0,
-        );
-        assert!(close(ambient, TyLinSrgbF64::new(0.04, 0.04, 0.04)));
     }
 
     #[test]
-    fn the_sky_lights_the_top_the_ground_the_bottom_and_occlusion_darkens() {
-        let white = RenderMaterial {
-            metallic: 0.0,
-            ..RenderMaterial::default()
+    fn the_sky_meets_the_ground_at_the_horizon_over_the_width() {
+        let mut scene = RenderScene::default();
+        for sky in [WHITE, WHITE * 0.5] {
+            scene
+                .retain_light(RenderLight::Hemisphere {
+                    sky,
+                    ground: BLACK,
+                    strength: 1.0,
+                })
+                .unwrap();
+        }
+        let up = |y: f64| TyVector3F64::new((1.0 - y * y).sqrt(), y, 0.0);
+
+        // A width of 1 mixes by +Y.
+        assert_eq!(sky_radiance(&scene, up(1.0), 1.0), WHITE * 1.5);
+        assert_eq!(sky_radiance(&scene, up(0.0), 1.0), WHITE * 0.75);
+        assert_eq!(sky_radiance(&scene, up(-1.0), 1.0), BLACK);
+
+        // A narrow width steps at the horizon.
+        assert_eq!(sky_radiance(&scene, up(0.1), 0.01), WHITE * 1.5);
+        assert_eq!(sky_radiance(&scene, up(-0.1), 0.01), BLACK);
+    }
+
+    /// The shade of a white metal floor voxel `roughness` rough, seen at 45
+    /// degrees under a white sky over a black ground, with a red glowing
+    /// voxel along its mirror direction when `walled`.
+    fn mirror_shade(roughness: f64, walled: bool) -> TyLinSrgbF64 {
+        let mut scene = RenderScene::default();
+        let metal_id = scene
+            .retain_material(RenderMaterial {
+                roughness,
+                ..RenderMaterial::default()
+            })
+            .unwrap();
+        let glow_id = scene
+            .retain_material(RenderMaterial {
+                emissive_color: TyLinSrgbF64::new(1.0, 0.0, 0.0),
+                emissive_strength: 1.0,
+                ..matte(TyLinSrgbaF64::new(0.0, 0.0, 0.0, 1.0))
+            })
+            .unwrap();
+
+        let mut object = RenderObject::new("l".to_owned(), TyVector3U32::new(2, 2, 1)).unwrap();
+        let mut cells = vec![(TyVector3U32::ZERO, metal_id)];
+        if walled {
+            cells.push((TyVector3U32::new(1, 1, 0), glow_id));
+        }
+        for (position, material_id) in cells {
+            let voxel_id = object.voxel_id(position).unwrap();
+            object
+                .set_voxel_material(voxel_id, Some(material_id))
+                .unwrap();
+        }
+
+        let object_id = U32Id::from_u32(0);
+        scene.retain_object(object_id, object).unwrap();
+        scene
+            .retain_placement(RenderPlacement {
+                object_id,
+                transform: TyTransformF64::IDENTITY,
+            })
+            .unwrap();
+        scene
+            .retain_light(RenderLight::Hemisphere {
+                sky: WHITE,
+                ground: BLACK,
+                strength: 1.0,
+            })
+            .unwrap();
+
+        // The ray lands on the floor voxel's top, whose mirror direction
+        // runs up +X into the wall voxel.
+        let ray = RenderRay {
+            origin: TyVector3F64::new(-0.5, 2.0, 0.5),
+            direction: TyVector3F64::new(1.0, -1.0, 0.0).normalize(),
         };
-        let sky = TyLinSrgbF64::new(1.0, 1.0, 1.0);
-        let ground = TyLinSrgbF64::new(0.0, 0.0, 0.0);
+        let hit = cast_ray(&scene, &ray, f64::INFINITY).unwrap().unwrap();
 
-        let ambient = |material: &RenderMaterial, normal: TyVector3F64, occlusion| {
-            hemisphere_radiance(material, normal, normal, sky, ground, 1.0, occlusion)
-        };
-
-        let top = ambient(&white, TyVector3F64::Y, 1.0);
-        let side = ambient(&white, TyVector3F64::X, 1.0);
-        let bottom = ambient(&white, -TyVector3F64::Y, 1.0);
-        assert!((top.red - 1.04).abs() < 1e-9);
-        assert!((side.red - 0.52).abs() < 1e-9);
-        assert_eq!(bottom.red, 0.0);
-
-        // A material without transmission mixes by its normal from every
-        // view.
-        let oblique = TyVector3F64::new(1.0, 1.0, 0.0).normalize();
-        assert_eq!(
-            hemisphere_radiance(&white, TyVector3F64::X, oblique, sky, ground, 1.0, 1.0),
-            side
-        );
-
-        let closed = ambient(&white, TyVector3F64::Y, 0.0);
-        assert_eq!(closed.red, 0.0);
-
-        let half_strength = RenderMaterial {
-            occlusion_strength: 0.5,
-            ..white
-        };
-        let softened = ambient(&half_strength, TyVector3F64::Y, 0.0);
-        assert!((softened.red - 0.52).abs() < 1e-9);
+        shade_hit(&scene, RenderOcclusion::None, &ray, &hit, true)
+            .unwrap()
+            .color
     }
 
     #[test]
-    fn glass_reflects_the_hemisphere_along_the_mirror_direction() {
-        let clear = glass(TyLinSrgbaF64::new(1.0, 1.0, 1.0, 1.0));
-        let normal = TyVector3F64::X;
-        let ambient =
-            |view: TyVector3F64| hemisphere_radiance(&clear, normal, view, WHITE, BLACK, 1.0, 1.0);
+    fn a_smooth_metal_shows_what_its_mirror_ray_meets_and_a_rough_one_the_sky() {
+        // The open mirror direction looks up into the white sky.
+        let open = mirror_shade(0.0, false);
+        assert!(close(open, WHITE), "{open:?}");
 
-        // Head on, the mirror direction is the normal, which sees half sky.
-        assert!(close(ambient(normal), WHITE * 0.02));
+        // The glowing voxel's 0.04 reflectance shows the sky too.
+        let walled = mirror_shade(0.0, true);
+        assert!(walled.red > 0.99 && walled.green < 0.04, "{walled:?}");
 
-        // Seen from below, the mirror direction looks up into the sky. Seen
-        // from above, it looks down at the ground.
-        let below = TyVector3F64::new(1.0, -1.0, 0.0).normalize();
-        let above = TyVector3F64::new(1.0, 1.0, 0.0).normalize();
-        let fresnel = transmitted_reflectance(&clear, normal.dot(below));
-        let up = (1.0 + 0.5f64.sqrt()) / 2.0;
-
-        assert!(fresnel.red > 0.04);
-        assert!(close(ambient(below), fresnel * up));
-        assert!(close(ambient(above), fresnel * (1.0 - up)));
+        // A fully rough metal sees the sky blurred across the horizon,
+        // whatever lies along its mirror direction.
+        let up = 0.5 + 0.5f64.sqrt() / 2.0;
+        assert!(close(mirror_shade(1.0, true), WHITE * up));
+        assert_eq!(mirror_shade(1.0, true), mirror_shade(1.0, false));
     }
 
     #[test]
@@ -1405,7 +1471,7 @@ mod tests {
             };
             let hit = cast_ray(scene, &ray, f64::INFINITY).unwrap().unwrap();
             assert_eq!(hit.distance, 2.5);
-            shade_hit(scene, RenderOcclusion::None, &ray, &hit)
+            shade_hit(scene, RenderOcclusion::None, &ray, &hit, true)
                 .unwrap()
                 .color
                 .red
@@ -1681,7 +1747,7 @@ mod tests {
 
         let floor = |scene: &RenderScene| {
             let hit = cast_ray(scene, &ray, f64::INFINITY).unwrap().unwrap();
-            shade_hit(scene, RenderOcclusion::None, &ray, &hit)
+            shade_hit(scene, RenderOcclusion::None, &ray, &hit, true)
                 .unwrap()
                 .color
         };

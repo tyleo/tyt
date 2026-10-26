@@ -276,11 +276,11 @@ rarely or never [wait for a reason](README.md#waiting-for-a-reason).
       for finding 13. The decisions log cites each color's source. The metals
       take their measured reflectances ahead of S34. Where two real materials
       share a color, grain or `shades` tells them apart
-- [ ] **S34. Reflections.** A metal reflects the scene along its mirror
+- [x] **S34. Reflections.** A metal reflects the scene along its mirror
       direction for findings 5 and 20, as the rendering follow-ups'
       [reflections](../voxel-rendering-followups/README.md#reflections)
-      section lays out. `studio` stays bright down to the horizon, and the
-      review renders confirm S33's metals
+      section lays out. `studio` takes a light ground for a metal's sides to
+      reflect. The review renders confirm S33's metals
 - [ ] **S35. Round 8.** Run the prompts after S20 to S34 and log the round
       beside round 7. The judging records whether sessions skimmed past the
       `check` lines of steps meant to be in pieces. The answer decides whether

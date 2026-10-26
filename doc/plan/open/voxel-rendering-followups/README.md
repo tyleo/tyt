@@ -35,18 +35,9 @@ kind.
 ## Reflections
 
 Mirror reflections, for findings 5 and 20 of the voxel modeling
-[trials](../voxel-modeling/trials-round-6.md#findings). A flat metal face
-misses the key light's highlight and takes the hemisphere light at its normal.
-A face toward the camera points at the horizon between the white sky and the
-#404040 ground. The light there reaches half the sky's brightness. Gold reads
-olive in that light and iron near-black.
-
-A reflective face can trace a ray along the mirror direction and show what the
-ray hits, or the hemisphere where the ray leaves the scene. A face toward the
-camera still reflects the horizon, so `studio` also needs a backdrop that stays
-bright down to it. Area lights could instead give a flat metal face a broad
-highlight. The plan weighs the two answers. The plan also settles how a rough
-surface blurs a reflection.
+[trials](../voxel-modeling/trials-round-6.md#findings). Built in step S34 of the
+[voxel modeling checklist](../voxel-modeling/checklist.md), which gives
+`studio` a light ground for a metal's sides to reflect.
 
 ## Waiting for a reason
 

@@ -185,8 +185,13 @@ type PoseTransform =
   /** Degrees. `distance` omitted, `fit`. `center` mirrors
    *  `--view-look-at` and takes a `distance` in meters; omitted, the
    *  subject's center. */
-  | { kind: "orbit"; azimuth: number; elevation: number;
-      distance?: number | "fit"; center?: Vec3 }
+  | {
+      kind: "orbit";
+      azimuth: number;
+      elevation: number;
+      distance?: number | "fit";
+      center?: Vec3;
+    }
   /** `path` mirrors `--view-node`. */
   | { kind: "node"; path: string; position: Vec3; rotation: Rotation };
 
@@ -308,7 +313,11 @@ a profile writes its names and values.
               // `node` adds "path": "<glob>".
               "transform": {
                 "kind": "<world | camera | node>",
-                "rotation": { "kind": "angles", "azimuth": -30, "elevation": 30 },
+                "rotation": {
+                  "kind": "angles",
+                  "azimuth": -30,
+                  "elevation": 30,
+                },
               },
               "shadow": "<none | per-pixel | per-face | per-corner>",
               "color": "#FFFFFF",
@@ -447,7 +456,9 @@ when a profile loads, so the built-ins take the same schema by construction:
   "hero": {
     "description": "One perspective view from the front-right-top",
     "views": {
-      "hero": { "transform": { "kind": "orbit", "azimuth": 45, "elevation": 30 } },
+      "hero": {
+        "transform": { "kind": "orbit", "azimuth": 45, "elevation": 30 },
+      },
     },
     "images": { "hero": {} },
   },
@@ -455,42 +466,54 @@ when a profile loads, so the built-ins take the same schema by construction:
   "front": {
     "description": "One view of the front",
     "views": {
-      "front": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 } },
+      "front": {
+        "transform": { "kind": "orbit", "azimuth": 0, "elevation": 0 },
+      },
     },
     "images": { "front": {} },
   },
   "back": {
     "description": "One view of the back",
     "views": {
-      "back": { "transform": { "kind": "orbit", "azimuth": 180, "elevation": 0 } },
+      "back": {
+        "transform": { "kind": "orbit", "azimuth": 180, "elevation": 0 },
+      },
     },
     "images": { "back": {} },
   },
   "left": {
     "description": "One view of the left side",
     "views": {
-      "left": { "transform": { "kind": "orbit", "azimuth": -90, "elevation": 0 } },
+      "left": {
+        "transform": { "kind": "orbit", "azimuth": -90, "elevation": 0 },
+      },
     },
     "images": { "left": {} },
   },
   "right": {
     "description": "One view of the right side",
     "views": {
-      "right": { "transform": { "kind": "orbit", "azimuth": 90, "elevation": 0 } },
+      "right": {
+        "transform": { "kind": "orbit", "azimuth": 90, "elevation": 0 },
+      },
     },
     "images": { "right": {} },
   },
   "top": {
     "description": "One view from above with the front at the bottom of the image",
     "views": {
-      "top": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": 90 } },
+      "top": {
+        "transform": { "kind": "orbit", "azimuth": 0, "elevation": 90 },
+      },
     },
     "images": { "top": {} },
   },
   "bottom": {
     "description": "One view from below",
     "views": {
-      "bottom": { "transform": { "kind": "orbit", "azimuth": 0, "elevation": -90 } },
+      "bottom": {
+        "transform": { "kind": "orbit", "azimuth": 0, "elevation": -90 },
+      },
     },
     "images": { "bottom": {} },
   },
@@ -510,15 +533,18 @@ when a profile loads, so the built-ins take the same schema by construction:
       "top": { "projection": "orthographic" },
     },
     "images": {
-      "review": { "kind": "sheet", "views": ["hero", "front", "right", "back", "top"] },
+      "review": {
+        "kind": "sheet",
+        "views": ["hero", "front", "right", "back", "top"],
+      },
     },
     "bloomStrength": 1,
     "bloomRadius": 0.03,
     "bloomThreshold": 1,
   },
 
-  // The key light's offset gives a box three distinct shades. The shadow
-  // takes the default granularity.
+  // The key light's offset gives a box three distinct shades. A metal's
+  // sides reflect the light ground. The shadow takes the default granularity.
   "studio": {
     "description": "A key light from the upper left over a hemisphere light",
     "lights": [
@@ -534,7 +560,7 @@ when a profile loads, so the built-ins take the same schema by construction:
       {
         "kind": "hemisphere",
         "sky": "#FFFFFF",
-        "ground": "#404040",
+        "ground": "#C0C0C0",
         "strength": 1,
       },
     ],
@@ -612,7 +638,11 @@ in the same schema, and may build on the built-ins. Three examples follow:
               "kind": "directional",
               "transform": {
                 "kind": "world",
-                "rotation": { "kind": "angles", "azimuth": 120, "elevation": 10 },
+                "rotation": {
+                  "kind": "angles",
+                  "azimuth": 120,
+                  "elevation": 10,
+                },
               },
               "color": "#FFB070",
               "strength": 2,

@@ -49,8 +49,15 @@ emissive term. The light kinds reach a hit differently:
    cutoff at its range
 3. A spot light falls off as a point light does, times glTF's cone falloff
    between its inner and outer angles
-4. A hemisphere light mixes sky and ground by the +Y of the normal, or of
-   the view's mirror direction for the transmitted share
+4. A hemisphere light mixes sky and ground by the +Y of the normal
+
+Each hit reflects along the view's mirror direction. The mirror ray shows the
+shade of what it meets, with the hits behind showing through, then the
+hemisphere where the mirror ray leaves the scene. There the sky meets the ground
+at the horizon over a band as wide as the GGX alpha. The alpha also sets the
+share that sees the blurred hemisphere in place of the mirror ray, so a fully
+rough material traces none. A hit the mirror ray meets reflects the hemisphere
+without tracing.
 
 Under `RenderOcclusion::Corner`, the corner occlusion darkens the hemisphere
 light. It counts only the cells whose material passes no light, so glass
