@@ -72,8 +72,9 @@
     "bloomThreshold": 1,
   },
 
-  // The key light's offset gives a box three distinct shades. A metal's
-  // sides reflect the light ground. The shadow takes the default granularity.
+  // The key light's offset gives a box three distinct shades. A metal's sides
+  // reflect the light ground. The shadow takes the default granularity. The
+  // strengths render a matte face toward the camera at its base color.
   "studio": {
     "description": "A key light from the upper left over a hemisphere light",
     "lights": [
@@ -84,13 +85,13 @@
           "rotation": { "kind": "angles", "azimuth": -30, "elevation": 30 },
         },
         "color": "#FFFFFF",
-        "strength": 2.5,
+        "strength": 1.95,
       },
       {
         "kind": "hemisphere",
         "sky": "#FFFFFF",
         "ground": "#C0C0C0",
-        "strength": 1,
+        "strength": 0.78,
       },
     ],
   },

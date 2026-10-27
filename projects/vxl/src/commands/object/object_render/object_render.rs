@@ -1404,7 +1404,7 @@ mod tests {
                 ..
             }
         ));
-        assert!(matches!(fill, LightRecord::Hemisphere { strength, .. } if *strength == 1.0));
+        assert!(matches!(fill, LightRecord::Hemisphere { strength, .. } if *strength == 0.78));
     }
 
     #[test]
