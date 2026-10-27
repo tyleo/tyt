@@ -27,8 +27,8 @@ struct Cli {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
-    /// B1: checks the walks' and ray queries' ids and the walks' corner
-    /// shadows on this GPU against the reference.
+    /// B1: checks the walks', ray queries', and raster's ids and the walks'
+    /// corner shadows on this GPU against the reference.
     #[command(name = "b1")]
     B1 {
         /// The side of each view's square image.
@@ -46,8 +46,8 @@ enum Command {
     #[command(name = "b1-times")]
     B1Times(Times),
 
-    /// B2: times fixed-step loops, launch-only kernels, and the tree walk's
-    /// and ray queries' ray rates on this GPU.
+    /// B2: times fixed-step loops, launch-only kernels, and the tree walk's,
+    /// ray queries', and rasters' ray rates on this GPU.
     #[command(name = "b2-times")]
     B2Times {
         #[command(flatten)]

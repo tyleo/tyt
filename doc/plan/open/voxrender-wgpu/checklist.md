@@ -149,7 +149,7 @@ code-level choices in
                   tree walk, the ray query, and the step loop on Quest
             - [x] The report lands in benchmarks.md
             - [x] Each finding becomes an experiment in S9.4
-      - [ ] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and
+      - [x] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and
             S5 on Quest gives the march a rate to beat
       - [ ] **S9.4. Experiments.** The experiments follow the research's
             [ladder](reference/speedup-research.md#5-experiment-ladder).

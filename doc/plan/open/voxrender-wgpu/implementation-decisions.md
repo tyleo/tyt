@@ -411,3 +411,22 @@ they land.
   clocks. Pinning one clock needs root. B2 keeps blended windows because
   repeat windows' trace medians agree within 2% and an app at level 4 sees
   the same blend
+- S9.3's raster meshes each object once through voxsurface's greedy mesher
+  over a grid that reads every live cell as opaque, so quads merge across
+  materials. Each placement draws its object's index range, and the draw's
+  instance picks the placement's grid-to-clip matrix. Repeating each
+  placement's quads in one buffer gave S2's 1025 placements 1.2 GB of
+  vertices
+- The raster's matrix inverts `RenderViewRays`' pixel steps, so each pixel
+  center samples the march's ray without a second home for the projection.
+  Depth runs reversed: infinite for a perspective, with its near plane at
+  2^-20, and linear to past the deepest corner for an orthographic view
+- Each raster fragment packs its hit into 32 bits, the voxel id low, then
+  the face, then the placement, and writes it through `unpack4x8unorm` to an
+  `Rgba8Unorm` texel. One format serves every arm, and the MSAA arm resolves
+  as a shaded target would. A scene whose hits need more bits errors, and
+  B1 leaves its raster column out
+- The multiview arm's depth and samples are plain attachments that each pass
+  clears and discards. wgpu's transient textures hold one layer
+- The two-pass arm's module leaves out `view_index`, so B1 can draw it on a
+  device without multiview. Its instance picks the eye's matrix

@@ -5,7 +5,7 @@ use std::{
 };
 use voxrender::{BRenderMaterial, Error as RenderError};
 use voxrender_wgpu::Error as WgpuError;
-use wgpu::{BufferAsyncError, MapRangeError, PollError};
+use wgpu::{BufferAsyncError, Features, MapRangeError, PollError};
 
 /// Why a benchmark failed to run.
 #[derive(Debug)]
@@ -21,6 +21,13 @@ pub enum Error {
 
     /// The device lacks ray queries, which the ray-query trace needs.
     NoRayQuery,
+
+    /// The device lacks features a raster arm needs.
+    RasterFeatures(Features),
+
+    /// A raster's 32-bit hit has no room for a scene's placements beside its
+    /// voxel ids.
+    RasterHit { placements: usize, voxel_bits: u32 },
 
     /// Waiting on the GPU failed.
     Poll(PollError),
@@ -48,6 +55,16 @@ impl Display for Error {
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),
             Error::NoRayQuery => write!(f, "the device lacks ray queries"),
+            Error::RasterFeatures(features) => {
+                write!(f, "the device lacks a raster arm's features {features:?}")
+            }
+            Error::RasterHit {
+                placements,
+                voxel_bits,
+            } => write!(
+                f,
+                "{placements} placements do not fit a raster's hit beside {voxel_bits} voxel bits"
+            ),
             Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
             Error::Map(error) => write!(f, "a readback would not map: {error}"),
             Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),

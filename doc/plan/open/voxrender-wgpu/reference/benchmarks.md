@@ -530,3 +530,66 @@ The driver flags any scratch use as slow.
 7. Quad views cut the recommended pixels to 2.96 M, half of stereo's
 8. Wave64 on Quest drops rung 5's 16x8 groups, which waited on wave128
 9. Each invocation of the ray query march uses 2.7 KB of scratch
+
+## S9.3 raster, 2026-10-25
+
+A bare greedy-mesh raster of S1 and S5 gives the march a rate to beat. B2
+times it beside the traces, and B1 counts its id flips.
+
+- Device: Meta Quest 3 as in B2 re-baseline, run off the face through the
+  steps in `voxrender-bench-quest`'s README. Seven windows ran from 19:06 to
+  19:22. The tables hold the last
+- GPU level: 4. The window ran 83% of its time at 640 MHz, 12% at 599, and
+  5% at 545
+- This Mac: the device of B1 desktop, through
+  `cargo run --release -p voxrender-bench-desktop -- b2-times`
+
+**Raster.** voxsurface meshes each object once, merging quads by occupancy
+alone, and each placement draws its object. Depth runs reversed in f32. Each
+fragment finds the cell under the hit point and writes the hit as the
+march's ids, packed into an `Rgba8Unorm` texel, the 4 bytes of a shaded
+pixel. The march writes 16. S1 draws 1988 quads over 8 placements, and S5
+draws 803,082. Three arms run:
+
+1. Two passes, one per eye
+2. One multiview pass
+3. One multiview pass with 4x MSAA, resolved
+
+**Times.** Both eyes draw each scene's view at 1680 by 1760. A pixel counts
+as a ray. Times are p50s in ms.
+
+| Kernel | Quest p50 | Quest Grays/s | Mac p50 | Mac Grays/s |
+| --- | ---: | ---: | ---: | ---: |
+| tree walk, S1 | 106.517 | 0.056 | 8.981 | 0.658 |
+| ray query, float march, 16^3, S1 | 42.183 | 0.140 | 6.034 | 0.980 |
+| raster, two passes, S1 | 1.073 | 5.512 | 0.058 | 101.158 |
+| raster, multiview, S1 | 1.112 | 5.319 | 0.061 | 97.343 |
+| raster, multiview, 4x MSAA, S1 | 1.129 | 5.240 | 0.077 | 77.218 |
+| tree walk, S5 | 13.601 | 0.435 | 1.130 | 5.235 |
+| raster, two passes, S5 | 9.664 | 0.612 | 0.756 | 7.822 |
+| raster, multiview, S5 | 8.928 | 0.662 | 0.955 | 6.192 |
+| raster, multiview, 4x MSAA, S5 | 11.036 | 0.536 | 1.194 | 4.951 |
+
+The seven windows' raster p50s agree within 7%, apart from the fifth, which
+ran up to 1.16x slower.
+
+**Ids.** B1 passes on both devices. The raster's flips count for the record.
+On Quest at 256 by 256, they reach 0.12% of S1's pixels, 0.32% of S2's, and
+0.68% of S5's. The reference walks quantized rays and the raster samples the
+exact projection, so a pixel near a cell edge can land on either side. A few
+pixels fall through cracks where a greedy quad's edge meets another's
+corner. S3's hits need 34 bits, so B1 leaves it out.
+
+**Outcomes.**
+
+1. On S1 the raster runs 99x the tree walk and 39x the best march. On S5 it
+   runs 1.5x the tree walk
+2. S5's raster takes 8.9 ms, 80% of a 90 Hz frame, for 1.6 M triangles an
+   eye. S1's raster takes 1.07 ms for 4000 triangles an eye, 4.7x the
+   fragment launch
+3. Multiview saves 8% on S5 and costs 4% on S1 on Quest. On this Mac it
+   costs 1.26x on S5
+4. 4x MSAA costs 1.24x on S5 and 1.02x on S1 on Quest, against the
+   multiview pass
+5. The march is behind on both scenes. The gap is smallest on S5, whose
+   grazing floor holds 0.8 M quads

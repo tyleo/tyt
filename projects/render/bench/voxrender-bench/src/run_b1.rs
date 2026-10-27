@@ -1,5 +1,6 @@
 use crate::{
-    BrickMarch, Error, Gpu, RayQueryArm, RayQueryTrace, Result, Walk, b1_scenes, reference_hits,
+    BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh, RayQueryArm, RayQueryTrace, Result,
+    Walk, b1_scenes, reference_hits,
 };
 use branded_id::U32Id;
 use voxrender::{BRenderView, RenderScene};
@@ -12,12 +13,20 @@ const LINE: f64 = 0.001;
 /// The mismatches the report lists per scene and walk.
 const SHOWN: usize = 3;
 
+/// The raster arm B1 reads back. Every device draws it.
+const RASTER: RasterArm = RasterArm {
+    multiview: false,
+    samples: 1,
+};
+
 /// A GPU trace B1 compares with the reference.
 #[derive(Clone, Copy, Debug)]
 enum Tracer {
     Walk(Walk),
 
     RayQuery(RayQueryArm),
+
+    Raster,
 }
 
 /// How one trace's samples compare with the reference's over a scene.
@@ -34,8 +43,9 @@ struct Tally {
 /// image, and returns the report in Markdown.
 /// The integer and tree walks' primary ids and corner shadow bits, and the
 /// integer ray-query marches' primary ids, are judged against B1's line. The
-/// float walk's and float marches' flips are counted for the record. The
-/// report lists the first mismatching pixels of each scene and trace.
+/// float walk's, the float marches', and the raster's flips are counted for
+/// the record. The report lists the first mismatching pixels of each scene
+/// and trace.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = b1_scenes();
 
@@ -43,6 +53,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         .map(Tracer::Walk)
         .into_iter()
         .chain(RayQueryArm::ALL.map(Tracer::RayQuery))
+        .chain([Tracer::Raster])
         .collect();
 
     let info = &gpu.info;
@@ -79,7 +90,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         format!(
             "| Scene | Views | Pixels | Shadow samples | Id mismatches | Shadow mismatches \
              | Float id flips | Float shadow flips | Tree id mismatches | Tree shadow mismatches \
-             | {} |",
+             | {} | Raster id flips |",
             RayQueryArm::ALL
                 .map(|arm| format!(
                     "Ray query {}^3 {}",
@@ -94,13 +105,14 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         ),
         format!(
             "| --- | ---: | ---: | ---: | {}",
-            "---: | ".repeat(6 + RayQueryArm::ALL.len())
+            "---: | ".repeat(7 + RayQueryArm::ALL.len())
         )
         .trim_end()
         .to_owned(),
     ];
 
     let mut pass = true;
+    let mut unpacked = false;
     let mut mismatches = Vec::new();
 
     for (name, scene) in &scenes {
@@ -108,6 +120,14 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         let mut pixels = 0;
         let mut samples = 0;
         let mut tallies: Vec<_> = tracers.iter().map(|_| Tally::default()).collect();
+        // A scene whose hits need over 32 bits has no raster column.
+        let mesh = match RasterMesh::new(&gpu.device, scene) {
+            Ok(mesh) => Some(mesh),
+            Err(Error::RasterHit { .. }) => None,
+            Err(error) => return Err(error),
+        };
+
+        unpacked |= mesh.is_none();
 
         for (view_id, _) in scene.iter_views() {
             let want = reference_hits(scene, view_id, size)?;
@@ -121,7 +141,9 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                 .sum::<usize>();
 
             for (&tracer, tally) in tracers.iter().zip(&mut tallies) {
-                let got = trace(gpu, tracer, scene, view_id, size)?;
+                let Some(got) = trace(gpu, tracer, scene, mesh.as_ref(), view_id, size)? else {
+                    continue;
+                };
 
                 for (pixel, (want, got)) in want.iter().zip(&got).enumerate() {
                     let shown = tally.ids + tally.shadows < SHOWN;
@@ -163,6 +185,8 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
             .flat_map(|(tracer, tally)| match tracer {
                 Tracer::Walk(_) => vec![count(tally.ids, pixels), count(tally.shadows, samples)],
                 Tracer::RayQuery(_) => vec![count(tally.ids, pixels)],
+                Tracer::Raster if mesh.is_none() => vec!["n/a".to_owned()],
+                Tracer::Raster => vec![count(tally.ids, pixels)],
             })
             .collect();
 
@@ -173,6 +197,12 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     }
 
     lines.push(String::new());
+
+    if unpacked {
+        lines.push("n/a: the scene's hits need more than the raster's 32 bits.".to_owned());
+        lines.push(String::new());
+    }
+
     lines.push(format!("Result: {}.", if pass { "pass" } else { "fail" }));
 
     if !mismatches.is_empty() {
@@ -187,25 +217,38 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     Ok(lines.join("\n"))
 }
 
-/// `tracer`'s first hits of `view_id` over a `size` square image.
+/// `tracer`'s first hits of `view_id` over a `size` square image. The
+/// raster draws `mesh`, the mesh of `scene`, and has no hits without it.
 fn trace(
     gpu: &Gpu,
     tracer: Tracer,
     scene: &RenderScene,
+    mesh: Option<&RasterMesh>,
     view_id: U32Id<BRenderView>,
     size: u32,
-) -> Result<Vec<Option<PixelHit>>> {
-    match tracer {
+) -> Result<Option<Vec<Option<PixelHit>>>> {
+    let hits = match tracer {
         Tracer::Walk(walk) => walk
             .trace(&gpu.device, scene, view_id, size, size)?
             .trace(&gpu.device, &gpu.queue)
-            .map_err(Error::Trace),
+            .map_err(Error::Trace)?,
 
         Tracer::RayQuery(arm) => {
             RayQueryTrace::new(&gpu.device, &gpu.queue, scene, view_id, size, size, arm)?
-                .trace(&gpu.device, &gpu.queue)
+                .trace(&gpu.device, &gpu.queue)?
         }
-    }
+
+        Tracer::Raster => {
+            let Some(mesh) = mesh else {
+                return Ok(None);
+            };
+
+            MeshRaster::new(&gpu.device, mesh, scene, view_id, size, size, RASTER)?
+                .trace(&gpu.device, &gpu.queue)?
+        }
+    };
+
+    Ok(Some(hits))
 }
 
 /// Whether B1's line judges `tracer`.
@@ -217,6 +260,7 @@ fn judged(tracer: Tracer) -> bool {
                 march: BrickMarch::Float,
                 ..
             })
+            | Tracer::Raster
     )
 }
 
@@ -225,6 +269,7 @@ fn label(tracer: Tracer) -> String {
     match tracer {
         Tracer::Walk(walk) => format!("{walk:?} walk"),
         Tracer::RayQuery(arm) => arm.label(),
+        Tracer::Raster => RASTER.label(),
     }
 }
 

@@ -3133,6 +3133,7 @@ dependencies = [
  "voxrender",
  "voxrender-cpu",
  "voxrender-wgpu",
+ "voxsurface",
  "wgpu",
 ]
 

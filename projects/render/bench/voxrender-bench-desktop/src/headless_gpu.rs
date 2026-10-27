@@ -6,7 +6,8 @@ use wgpu::{
 };
 
 /// The high-performance adapter's device with default limits, and with
-/// timestamp queries, ray queries, and subgroups when the adapter has them.
+/// timestamp queries, ray queries, subgroups, multiview, and multisampled
+/// arrays when the adapter has them.
 pub fn headless_gpu() -> Result<Gpu> {
     let instance = Instance::default();
 
@@ -17,13 +18,22 @@ pub fn headless_gpu() -> Result<Gpu> {
     .map_err(Error::Adapter)?;
 
     let features = adapter.features()
-        & (Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY | Features::SUBGROUP);
+        & (Features::TIMESTAMP_QUERY
+            | Features::EXPERIMENTAL_RAY_QUERY
+            | Features::SUBGROUP
+            | Features::MULTIVIEW
+            | Features::MULTISAMPLE_ARRAY);
 
-    let limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
+    let mut limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
         Limits::default().using_acceleration_structure_values(adapter.limits())
     } else {
         Limits::default()
     };
+
+    // The multiview raster draws both eyes.
+    if features.contains(Features::MULTIVIEW) {
+        limits.max_multiview_view_count = 2;
+    }
 
     let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
         label: Some("voxrender-bench-desktop"),
