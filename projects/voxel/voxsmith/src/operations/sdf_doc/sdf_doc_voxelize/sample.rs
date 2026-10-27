@@ -912,6 +912,29 @@ mod tests {
             error(
                 &single_part_main(
                     vec![
+                        SdfShape3d::HalfSpace {
+                            side: SdfSide::PositiveY,
+                            at: 0.0,
+                        },
+                        SdfShape3d::HalfSpace {
+                            side: SdfSide::NegativeY,
+                            at: 1.0,
+                        },
+                        SdfShape3d::Intersect {
+                            shape_ids: vec![U32Id::from_u32(0), U32Id::from_u32(1)],
+                        },
+                    ],
+                    vec![add("slab", 2, 0)],
+                ),
+                at_size(1.0)
+            ),
+            "model/slab: add shape must be bounded, not an intersect without a bounded operand, \
+             such as a box around its half spaces"
+        );
+        assert_eq!(
+            error(
+                &single_part_main(
+                    vec![
                         cuboid([0.0, 0.0, 0.0], [4.0, 0.1, 0.1]),
                         SdfShape3d::Bend {
                             shape_id: U32Id::from_u32(0),

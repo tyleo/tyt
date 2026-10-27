@@ -7,7 +7,9 @@ use crate::{
     utilities::{FillMode, VoxelFrame},
 };
 use branded_id::{IdSlice, U32Id};
-use sdfcore::{BSdfMaterial, BSdfNode, SdfMain, SdfState, SdfStep};
+use sdfcore::{
+    BSdfMaterial, BSdfNode, BSdfShape3d, SdfAxes3d, SdfMain, SdfShape3d, SdfState, SdfStep,
+};
 use std::{
     borrow::Cow,
     cmp::Reverse,
@@ -162,7 +164,7 @@ pub fn report(
                     count_text(voxels.len() as u64, "voxel", "voxels"),
                     meters(voxel_size)
                 ))),
-                Some(Field::Text(pieces_label)),
+                Some(Field::Text(pieces_label.clone())),
             ],
             extent,
         ]
@@ -221,31 +223,78 @@ pub fn report(
         }
 
         let width = pieces.len().to_string().len();
+        let piece_voxels = |piece: &Vec<TyVector3I32>| {
+            piece.iter().filter(|cell| voxels.contains(cell)).count() as u64
+        };
+        let mut folds: Vec<(String, Vec<usize>)> = Vec::new();
+        let mut piece_lines = Vec::with_capacity(pieces.len());
 
         for (index, (piece, sources)) in pieces.iter().zip(sources).enumerate() {
+            let from = format!("from {}", sources.join(", "));
+
+            if index > 0 {
+                match folds.iter_mut().find(|(fold, _)| *fold == from) {
+                    Some((_, indices)) => indices.push(index),
+                    None => folds.push((from.clone(), vec![index])),
+                }
+            }
+
             let line = ReportLine {
                 kind: LineKind::Piece,
                 depth: 1,
                 fields: [
                     vec![
                         Some(Field::Text(format!("piece {:>width$}", index + 1))),
-                        Some(count_field(
-                            piece.iter().filter(|cell| voxels.contains(cell)).count() as u64,
-                            "voxel",
-                            "voxels",
-                        )),
+                        Some(count_field(piece_voxels(piece), "voxel", "voxels")),
                     ],
                     extent_fields(piece.iter().copied(), voxel_size),
-                    vec![Some(Field::Text(format!("from {}", sources.join(", "))))],
+                    vec![Some(Field::Text(from))],
                 ]
                 .concat(),
             };
 
-            if index > 0 {
-                checks.push(line.clone());
+            lines.push(line.clone());
+            piece_lines.push(line);
+        }
+
+        // Pieces from the same steps fold into one line, so a run of links or
+        // bubbles reads once and a stray from another step stands apart.
+        for (from, indices) in folds {
+            if let [index] = indices[..] {
+                checks.push(piece_lines[index].clone());
+                continue;
             }
 
-            lines.push(line);
+            let counts: Vec<u64> = indices
+                .iter()
+                .map(|&index| piece_voxels(&pieces[index]))
+                .collect();
+            let least = counts.iter().min().expect("a fold holds pieces");
+            let most = counts.iter().max().expect("a fold holds pieces");
+            let size = if least == most {
+                format!("{} each", count_text(*least, "voxel", "voxels"))
+            } else {
+                format!("{least} to {most} voxels")
+            };
+
+            checks.push(ReportLine {
+                kind: LineKind::Piece,
+                depth: 1,
+                fields: [
+                    vec![
+                        Some(Field::Text(format!("{} pieces", indices.len()))),
+                        Some(Field::Text(size)),
+                    ],
+                    extent_fields(
+                        indices
+                            .iter()
+                            .flat_map(|&index| pieces[index].iter().copied()),
+                        voxel_size,
+                    ),
+                    vec![Some(Field::Text(from))],
+                ]
+                .concat(),
+            });
         }
     }
 
@@ -255,6 +304,10 @@ pub fn report(
         fields: vec![
             Some(Field::Text("check".to_owned())),
             Some(count_field(checks.len() as u64, "line", "lines")),
+            Some(Field::Text(format!(
+                "model {}, {pieces_label}",
+                count_text(voxels.len() as u64, "voxel", "voxels")
+            ))),
         ],
     });
     lines.extend(checks);
@@ -487,13 +540,55 @@ impl ReportWriter<'_> {
                 .concat(),
             };
 
-            if kept.is_empty() || exposed == Some(0) || piece_count > 1 {
+            // A step in as many pieces as its shape draws copies reads whole.
+            let copies = match step {
+                SdfStep::Add { shape_id, .. } | SdfStep::Paint { shape_id, .. } => {
+                    copies(self.state, *shape_id)
+                }
+
+                _ => 1,
+            };
+
+            if kept.is_empty()
+                || exposed == Some(0)
+                || (piece_count > 1 && piece_count as u64 != copies)
+            {
                 self.checks
                     .push(line((self.step_label)(place_index, step), 1));
             }
 
             self.lines.push(line(step.name().to_owned(), depth));
         }
+    }
+}
+
+/// How many copies of one form the shape at `shape_id` draws.
+fn copies(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
+    match &state.shapes3d[shape_id.to_usize_id()] {
+        SdfShape3d::Mirror { shape_id, axes, .. } => {
+            let reflections = match axes {
+                SdfAxes3d::X | SdfAxes3d::Y | SdfAxes3d::Z => 2,
+                SdfAxes3d::Xy | SdfAxes3d::Xz | SdfAxes3d::Yz => 4,
+                SdfAxes3d::Xyz => 8,
+            };
+
+            reflections * copies(state, *shape_id)
+        }
+
+        SdfShape3d::Repeat {
+            shape_id, count, ..
+        } => (count.x * count.y * count.z) as u64 * copies(state, *shape_id),
+
+        SdfShape3d::RepeatPolar {
+            shape_id, count, ..
+        } => *count as u64 * copies(state, *shape_id),
+
+        SdfShape3d::Orient { shape_id, .. }
+        | SdfShape3d::Rotate { shape_id, .. }
+        | SdfShape3d::Scale { shape_id, .. }
+        | SdfShape3d::Translate { shape_id, .. } => copies(state, *shape_id),
+
+        _ => 1,
     }
 }
 
@@ -822,8 +917,8 @@ mod tests {
     };
     use branded_id::U32Id;
     use sdfcore::{
-        SdfAxisRotation, SdfMain, SdfMaterial, SdfProperty, SdfPropertyValue, SdfShape3d, SdfStep,
-        SdfStepMaterial,
+        SdfAxes3d, SdfAxisRotation, SdfMain, SdfMaterial, SdfProperty, SdfPropertyValue,
+        SdfShape3d, SdfStep, SdfStepMaterial,
     };
     use ty_math::{TyAxis3, TyVector3F64};
 
@@ -900,7 +995,7 @@ model.voxj  32 voxels of 0.025 m  1 piece  4x2x4  [0, 0, 0] .. [0.1, 0.05, 0.1]
   carve  top    16 cells  16 kept              4x1x4  [0, 0.05, 0] .. [0.1, 0.075, 0.1]
   paint  band    8 cells   8 kept   8 exposed  2x1x4  [0, 0.025, 0] .. [0.05, 0.05, 0.1]  over block
   paint  miss    0 cells   0 kept   0 exposed
-check  1 line
+check  1 line  model 32 voxels, 1 piece
   paint  miss  0 cells  0 kept  0 exposed
 "
         );
@@ -919,7 +1014,7 @@ model.voxj  37 voxels of 1 m  2 pieces  7x3x4  [0, 0, 0] .. [7, 3, 4]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
   piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]  from body, lid
   piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
-check  1 line
+check  1 line  model 37 voxels, 2 pieces
   piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
 "
         );
@@ -945,7 +1040,7 @@ model.voxj  37 voxels of 1 m  2 pieces  [0, 0, -7] .. [4, 3, 0]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
   piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]  from body, lid
   piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
-check  1 line
+check  1 line  model 37 voxels, 2 pieces
   piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
 "
         );
@@ -972,7 +1067,7 @@ model.voxj  37 voxels of 1 m  1 piece  4x4x4  [0, 0, 0] .. [4, 4, 4]
     add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
   part  pebble  1 voxel  1x1x1  [1, 3, 1] .. [2, 4, 2]  pivot [1, 3, 1]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [1, 3, 1] .. [2, 4, 2]
-check  0 lines
+check  0 lines  model 37 voxels, 1 piece
 "
         );
     }
@@ -1007,7 +1102,7 @@ model.voxj  37 voxels of 1 m  2 pieces  4x5x4  [0, 0, 0] .. [4, 5, 4]
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [1, 4, 1] .. [2, 5, 2]
   piece 1  32 voxels  4x2x4  [0, 0, 0] .. [4, 2, 4]  from body
   piece 2   5 voxels  2x2x2  [1, 3, 1] .. [3, 5, 3]  from lid, pebble
-check  1 line
+check  1 line  model 37 voxels, 2 pieces
   piece 2  5 voxels  2x2x2  [1, 3, 1] .. [3, 5, 3]  from lid, pebble
 "
         );
@@ -1049,7 +1144,7 @@ model.voxj  4 voxels of 1 m  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]
   paint  stain  4 cells  4 kept  4 exposed  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]  over bar
   piece 1  2 voxels  2x1x1  [0, 0, 0] .. [2, 1, 1]  from bar, stain
   piece 2  2 voxels  2x1x1  [3, 0, 0] .. [5, 1, 1]  from bar, stain
-check  3 lines
+check  3 lines  model 4 voxels, 2 pieces
   add    bar    5 cells  0 kept  0 exposed  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]            lost to cut, stain
   paint  stain  4 cells  4 kept  4 exposed  2 pieces  5x1x1  [0, 0, 0] .. [5, 1, 1]  over bar
   piece 2  2 voxels  2x1x1  [3, 0, 0] .. [5, 1, 1]  from bar, stain
@@ -1093,7 +1188,7 @@ check  3 lines
 model.voxj  27 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
   add  water  27 cells  26 kept  26 exposed  3x3x3  [0, 0, 0] .. [3, 3, 3]  lost to rock
   add  rock    1 cell    1 kept   1 exposed  1x1x1  [1, 1, 1] .. [2, 2, 2]
-check  0 lines
+check  0 lines  model 27 voxels, 1 piece
 "
         );
     }
@@ -1125,8 +1220,59 @@ check  0 lines
 model.voxj  27 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
   add  block  27 cells  26 kept  26 exposed  3x3x3  [0, 0, 0] .. [3, 3, 3]  lost to core
   add  core    1 cell    1 kept   0 exposed  1x1x1  [1, 1, 1] .. [2, 2, 2]
-check  1 line
+check  1 line  model 27 voxels, 1 piece
   add  core  1 cell  1 kept  0 exposed  1x1x1  [1, 1, 1] .. [2, 2, 2]
+"
+        );
+    }
+
+    #[test]
+    fn copies_in_their_own_pieces_leave_the_step_out_and_fold_their_piece_lines() {
+        // Two posts stand on the slab, and two links float off each end.
+        let mirrored = |shape_id| SdfShape3d::Mirror {
+            shape_id: U32Id::from_u32(shape_id),
+            axes: SdfAxes3d::X,
+            center: None,
+        };
+        let main = single_part_main(
+            vec![
+                cuboid([-3.0, 0.0, 0.0], [3.0, 1.0, 1.0]),
+                cuboid([1.0, 1.0, 0.0], [2.0, 2.0, 1.0]),
+                mirrored(1),
+                cuboid([5.0, 0.0, 0.0], [6.0, 1.0, 1.0]),
+                mirrored(3),
+            ],
+            vec![
+                SdfStep::Add {
+                    name: "slab".to_string(),
+                    shape_id: U32Id::from_u32(0),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Add {
+                    name: "posts".to_string(),
+                    shape_id: U32Id::from_u32(2),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Add {
+                    name: "links".to_string(),
+                    shape_id: U32Id::from_u32(4),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+            ],
+        );
+
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  10 voxels of 1 m  3 pieces  12x2x1  [-6, 0, 0] .. [6, 2, 1]
+  add  slab   6 cells  6 kept  6 exposed            6x1x1   [-3, 0, 0] .. [3, 1, 1]
+  add  posts  2 cells  2 kept  2 exposed  2 pieces  4x1x1   [-2, 1, 0] .. [2, 2, 1]
+  add  links  2 cells  2 kept  2 exposed  2 pieces  12x1x1  [-6, 0, 0] .. [6, 1, 1]
+  piece 1  8 voxels  6x2x1  [-3, 0, 0] .. [3, 2, 1]   from slab, posts
+  piece 2  1 voxel   1x1x1  [-6, 0, 0] .. [-5, 1, 1]  from links
+  piece 3  1 voxel   1x1x1  [5, 0, 0] .. [6, 1, 1]    from links
+check  1 line  model 10 voxels, 3 pieces
+  2 pieces  1 voxel each  12x1x1  [-6, 0, 0] .. [6, 1, 1]  from links
 "
         );
     }
@@ -1151,7 +1297,7 @@ check  1 line
             "\
 model.voxj  26 voxels of 1 m  1 piece  3x3x3  [0, 0, 0] .. [3, 3, 3]
   add  block  27 cells  27 kept  26 exposed  3x3x3  [0, 0, 0] .. [3, 3, 3]
-check  0 lines
+check  0 lines  model 26 voxels, 1 piece
 "
         );
     }
@@ -1169,7 +1315,7 @@ model.voxj  2 voxels of 1 m  2 pieces  3x3x1  [0, 0, 0] .. [3, 3, 1]
     part  leaf  1 voxel  1x1x1  [0, 2, 0] .. [1, 3, 1]  pivot [0.5, 2, 0]  repeats a/leaf
   piece 1  1 voxel  1x1x1  [0, 2, 0] .. [1, 3, 1]  from b/leaf/cube
   piece 2  1 voxel  1x1x1  [2, 0, 0] .. [3, 1, 1]  from a/leaf/cube
-check  1 line
+check  1 line  model 2 voxels, 2 pieces
   piece 2  1 voxel  1x1x1  [2, 0, 0] .. [3, 1, 1]  from a/leaf/cube
 "
         );

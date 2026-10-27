@@ -41,11 +41,13 @@ pub use voxel_frame::*;
 mod is_node_path_match;
 mod node_path;
 mod node_paths;
+mod object_paths;
 mod value_pool_kind_name;
 
 pub(crate) use is_node_path_match::*;
 pub(crate) use node_path::*;
 pub(crate) use node_paths::*;
+pub(crate) use object_paths::*;
 pub(crate) use value_pool_kind_name::*;
 
 #[cfg(any(feature = "object", feature = "palette"))]

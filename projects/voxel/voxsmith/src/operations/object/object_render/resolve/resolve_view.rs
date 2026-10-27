@@ -73,10 +73,23 @@ pub fn resolve_view(
                 (FitOrFixed::Fixed(distance), _) => distance,
 
                 (FitOrFixed::Fit, _) if centered => {
+                    let whole = match *projection {
+                        ViewProjection::Perspective { fov } => fit_distance(
+                            subject()?,
+                            TyAngleUnit::Degrees.to_radians(fov),
+                            width,
+                            height,
+                        ),
+
+                        ViewProjection::Orthographic { .. } => fit_scale(subject()?),
+                    };
+
                     return Err(Error::render_record(
                         element.clone(),
-                        "orbits a point at a `fit` distance, and an orbit about a point takes \
-                         its distance in meters",
+                        format!(
+                            "orbits a point at a `fit` distance, and an orbit about a point takes \
+                             its distance in meters, such as {whole:.3} to frame the whole subject"
+                        ),
                     ));
                 }
 
@@ -290,7 +303,10 @@ mod tests {
         let fit = resolve(FitOrFixed::Fit, ViewProjection::Perspective { fov: 35.0 })
             .unwrap_err()
             .to_string();
-        assert!(fit.contains("takes its distance in meters"), "{fit}");
+        assert!(
+            fit.contains("takes its distance in meters, such as"),
+            "{fit}"
+        );
 
         let scale = resolve(
             FitOrFixed::Fixed(2.0),

@@ -37,9 +37,9 @@ writes a `.voxj` document:
    thick, plus the opaque cells seen through glass or water
 4. `--frame` defaults to `world`, which samples every part on one lattice.
    `--frame local` samples each part in its own frame
-5. `--flatten` keeps each joint's node and voxelizes the joint unrotated. Every
-   other part voxelizes at its pose on the grid of the joint or root part it
-   flattens into
+5. `--flatten objects` builds the single object a prompt asks for. Each part
+   voxelizes at its pose on the grid of the joint or root part it flattens into.
+   Each joint keeps its node and voxelizes unrotated
 6. `--report` prints the [report](#report) and writes it to `table-report.txt`
 
 ### Profiles
@@ -119,11 +119,7 @@ table.voxj  2768 voxels of 0.025 m  1 piece  22x22x22  [-0.275, 0, -0.275] .. [0
   add    top        968 cells  800 kept  672 exposed            22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]              lost to gilt
   paint  gilt       168 cells  168 kept  168 exposed            22x2x22   [-0.275, 0.5, -0.275] .. [0.275, 0.55, 0.275]    over top
   add    sapphires   96 cells   96 kept   48 exposed  3 pieces  14x4x4    [-0.175, 0.375, 0.175] .. [0.175, 0.475, 0.275]
-check  4 lines
-  add  legs       480 cells  360 kept  292 exposed  4 pieces  20x20x20  [-0.25, 0, -0.25] .. [0.25, 0.5, 0.25]           lost to aprons, sides, shelf
-  add  aprons     384 cells  312 kept  308 exposed  2 pieces  16x6x18   [-0.2, 0.35, -0.225] .. [0.2, 0.5, 0.225]        lost to sides, sapphires
-  add  sides      384 cells  384 kept  356 exposed  2 pieces  18x6x16   [-0.225, 0.35, -0.2] .. [0.225, 0.5, 0.2]
-  add  sapphires   96 cells   96 kept   48 exposed  3 pieces  14x4x4    [-0.175, 0.375, 0.175] .. [0.175, 0.475, 0.275]
+check  0 lines  model 2768 voxels, 1 piece
 ```
 
 | Field     | Counts                                                                              |
@@ -167,18 +163,16 @@ The example table reads this way:
 
 ### Parts in the report
 
-1. Each place of a part gets a part line with the part's pivot in world meters
-2. The part's steps and child parts follow, indented one level past the part
-   line
-3. A part line counts the part's live cells
-4. A part reads `detached` when neither it nor a part below it shares a
+1. Each place of a part gets a line with the part's live cells and its pivot in
+   world meters. The part's steps and child parts follow, indented one level
+2. A part reads `detached` when neither it nor a part below it shares a
    face-connected piece with its parent
-5. A part in several places lists its steps under its first place. Each later
+3. A part in several places lists its steps under its first place. Each later
    place's line reads `repeats` and the first place's path
-6. A part reading `0 voxels` writes its node with no object
-7. A step name that repeats across lists takes its path of part names, such as
+4. A part reading `0 voxels` writes its node with no object
+5. A step name that repeats across lists takes its path of part names, such as
    `tree.1/tree/trunk`
-8. A part under a turn adds `posed` with the part's box in world meters
+6. A part under a turn adds `posed` with the part's box in world meters
 
 The model's line and the pieces count the cells the parts cover together. The
 model's box holds every part as posed in the world. Under a turn, the model's
@@ -208,7 +202,7 @@ figure.voxj  392 voxels of 0.025 m  3 pieces  28x10x4  [-0.35, 0.3, -0.05] .. [0
   piece 1  376 voxels  22x10x4  [-0.275, 0.3, -0.05] .. [0.275, 0.55, 0.05]  from torso, L arm, R arm
   piece 2    8 voxels  2x2x2    [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  from R hand
   piece 3    8 voxels  2x2x2    [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]    from L hand
-check  2 lines
+check  2 lines  model 392 voxels, 3 pieces
   piece 2  8 voxels  2x2x2  [-0.35, 0.5, -0.025] .. [-0.3, 0.55, 0.025]  from R hand
   piece 3  8 voxels  2x2x2  [0.3, 0.5, -0.025] .. [0.35, 0.55, 0.025]    from L hand
 ```
@@ -217,28 +211,25 @@ A second piece usually means a shape floats.
 
 ### The check block
 
-The report ends with a `check` line. Under it, the report repeats the lines a
-review has to clear:
+The report ends with a `check` line that carries the model's voxel and piece
+counts. Under it, the report repeats the lines a review has to clear:
 
 1. Each step line at `0 kept`
 2. Each step line at `0 exposed`
-3. Each step line with `pieces`
-4. Each piece line past the first
+3. Each step line with more `pieces` than the copies its `mirror`, `repeat`, or
+   `repeatPolar` draws
+4. Each piece line past the first. Pieces from the same steps fold into one line
+   with their count, sizes, and box
 
 A step line there takes the step's path when the step's name appears in several
 lists.
-A report with nothing to clear ends at `check  0 lines`.
+A report with nothing to clear reads `check  0 lines`.
 
 ## Errors
 
-Each command stops at its first error:
-
-| Command  | The error reports                                           |
-| -------- | ----------------------------------------------------------- |
-| Build    | The failing call, the argument, and the value               |
-| Voxelize | The failing value and the failing step's path of part names |
-
-A step that writes no cell stops nothing and reads `0 cells` in the report.
+Each command stops at its first error. The error reports the failing call or
+step, the argument, and the value. A step that writes no cell stops nothing and
+reads `0 cells` in the report.
 
 The
 [checks](https://github.com/tyleo/tyt/blob/main/doc/ref/sdf-doc/model-evaluation.md#checks)
@@ -257,7 +248,8 @@ shapes the smallest features:
    across or they break into pieces
 4. A sphere, cylinder, cone, or rounded corner under a radius of about 3
    voxels, or an octahedron under about 5, reads as a plus sign, a rod, or a
-   block. Small round details read better as boxes or `set` cells
+   block. Small round details read better as boxes or `set` cells. A `twist`
+   shows once its section spans about 10 cells
 5. A large `add` placed after a detail buries it because later steps win. Large
    forms go first and details after
 6. Nested shapes of one feature bury each other in any order
@@ -281,7 +273,7 @@ const leg = lathe([[0.0375, 0], [0.03, 0.15], [0.045, 0.225], [0.03, 0.425]]).tr
 add("legs", leg.mirror("xz"), grain(mat.oak, 0.05, { axis: "y", seed: 1 })),
 
 // A jewel set into a surface. The later add takes the cells the two share.
-add("jewel", octahedron([0, 0.875, -0.175], 0.075), mat.ruby),
+add("jewel", octahedron([0, 0.875, -0.175], 0.125), mat.ruby),
 
 // A gilded top edge.
 paint("gilt", intersect(rail.shell(0.025), halfSpace("+y", 0.925)), mat.gold),

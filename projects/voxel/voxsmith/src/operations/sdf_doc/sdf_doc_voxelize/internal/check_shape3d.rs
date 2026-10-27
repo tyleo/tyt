@@ -46,7 +46,10 @@ pub fn check_shape3d(
                         "round",
                         *round,
                         most,
-                        &format!("at most half the shortest side, {most}"),
+                        &format!(
+                            "at most half the shortest side, {}",
+                            ArgumentCheck::shown(most)
+                        ),
                     )
                 }
 
@@ -100,7 +103,10 @@ pub fn check_shape3d(
                         "round",
                         *round,
                         most,
-                        &format!("at most the radius and half the length, {most}"),
+                        &format!(
+                            "at most the radius and half the length, {}",
+                            ArgumentCheck::shown(most)
+                        ),
                     )
                 }
 
@@ -514,10 +520,7 @@ mod tests {
         assert!(check(rounded(0.025)).is_ok());
         assert_eq!(
             check(rounded(0.026)),
-            Err(
-                "box round must be at most half the shortest side, 0.024999999999999994, not 0.026"
-                    .to_string()
-            )
+            Err("box round must be at most half the shortest side, 0.025, not 0.026".to_string())
         );
     }
 

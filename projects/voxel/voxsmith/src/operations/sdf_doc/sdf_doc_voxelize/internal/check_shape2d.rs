@@ -282,7 +282,10 @@ fn corner_cut(
         argument,
         corner,
         most,
-        &format!("at most half the shorter side, {most}"),
+        &format!(
+            "at most half the shorter side, {}",
+            ArgumentCheck::shown(most)
+        ),
     )
 }
 

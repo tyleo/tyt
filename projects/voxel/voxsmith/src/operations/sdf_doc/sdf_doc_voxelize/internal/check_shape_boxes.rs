@@ -72,8 +72,16 @@ pub fn check_shape_boxes(state: &SdfState, shapes: &SdfShapes, paths: &EntryPath
         if let SdfStep::Add { shape_id, .. } = step
             && shapes.bounds3d(*shape_id).is_none()
         {
+            let unbounded = match state.shapes3d[shape_id.to_usize_id()] {
+                SdfShape3d::Intersect { .. } | SdfShape3d::SmoothIntersect { .. } => {
+                    "an intersect without a bounded operand, such as a box around its half spaces"
+                }
+
+                _ => "a shape that reaches without end",
+            };
+
             return Err(Error::invalid(format!(
-                "{}: add shape must be bounded, not a shape that reaches without end",
+                "{}: add shape must be bounded, not {unbounded}",
                 paths.step(step_id)
             )));
         }

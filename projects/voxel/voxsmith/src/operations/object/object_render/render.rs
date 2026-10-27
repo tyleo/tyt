@@ -4,7 +4,7 @@ use crate::{
         LightRecord, NodeFrames, RenderElement, RenderRecord, RenderedView, resolve_light_pose,
         resolve_light_position, resolve_light_rotation, resolve_view,
     },
-    utilities::select_objects,
+    utilities::{node_paths, object_paths, select_objects},
 };
 use branded_id::{IdVec, IteratorExt, U32Id};
 use std::collections::HashSet;
@@ -222,11 +222,21 @@ fn subject_bounds<T: VoxExt>(
             .collect();
 
         if matched.is_empty() {
+            let mut paths: Vec<String> = object_paths(main, object_ids, &node_paths(main))
+                .into_iter()
+                .map(|(_, path)| path)
+                .collect();
+            paths.sort();
+            paths.dedup();
+
             return Err(Error::render_record(
                 RenderElement::ViewSelect {
                     name: name.to_owned(),
                 },
-                "matches none of the rendered objects",
+                format!(
+                    "matches none of the rendered objects, whose paths read {}",
+                    paths.join(", ")
+                ),
             ));
         }
 
@@ -549,6 +559,30 @@ mod tests {
         )
         .unwrap();
         assert!((output(&far_alone, 0).view.pose.position.x - 10.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_select_that_matches_nothing_lists_the_rendered_paths() {
+        let mut main = bar();
+
+        let far = VoxObject::new("far".to_owned(), TyVector3U32::ONE).unwrap();
+        let far_id = main.retain_object(far).unwrap();
+
+        let mut close = orbit("close", 0.0);
+        close.select = vec!["handle".to_owned()];
+
+        let error = render(
+            &DependenciesImpl,
+            &main,
+            &[U32Id::from_u32(0), far_id],
+            &record(vec![close]),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("matches none of the rendered objects, whose paths read a, far"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -26,8 +26,8 @@ voxelize in minutes. A large scene under a voxel budget keeps its real size with
 `--fill-mode surface` or a coarser voxel.
 
 The `hero` view looks from the front-right-top. The detail the prompt is about
-faces +z or +x with nothing between it and that corner. A room or a hull keeps
-its walls and takes a view from [other views](#other-views).
+faces +z or +x with nothing between it and that corner. A room or a hull opens
+the walls facing that corner or adds a view from [other views](#other-views).
 
 A first pass of boxes settles the proportions cheaply. Shapes, openings, small
 details, and patterns then replace the boxes.
@@ -38,13 +38,15 @@ The API already does much of what a model would build by hand:
 
 1. Gems on a pile, snow on a roof, and gilt on top faces take `coat` with
    `sides`. The coat finds the surface without a guessed height
-2. Arms, spokes, and candles around a center take `repeatPolar`. Limbs, horns,
-   and curled tips take `bend` or `twist`
-3. A flame's core inside its outer flame takes one shape with a `gradient`
-   because nested shapes bury each other
-4. A `coat` or a `paint` recolors every live cell in its reach, a neighbor's
+2. Arms, spokes, candles, and the stones of a round wall take `repeatPolar`.
+   Limbs and horns take `bend`, and scrolls take a `spline` stroke
+3. Stairs, rails, and springs follow `helix` points. A ring or a tube takes
+   `revolve` of a `rect` because `lathe` closes on its axis
+4. A flame's core inside its outer flame takes one shape with a `gradient`
+   because nested shapes bury each other. The gradient runs in the shape's
+   frame from before any `translate`
+5. A `coat` or a `paint` recolors every live cell in its reach, a neighbor's
    included. `onto` keeps it on the cells of the listed `add` steps
-5. Repeated props place one part at each spot
 
 ## Checks
 
@@ -76,8 +78,8 @@ reads as the prompt. Color goes wrong in a few known ways:
 4. A tank-deep body of water reads dark and hides what sits in it, and clear
    glass over a dark backdrop hazes it pale. A low `baseColor` alpha such as
    `#B8E6F030` keeps either faint
-5. A glow that reads pale where the prompt wants color takes a lower
-   `emissiveStrength` or a darker `baseColor`
+5. A glow that reads pale where the prompt wants color takes a darker
+   `baseColor`. A lower `emissiveStrength` also drops the glow's halo
 
 The model is done when every view shows the prompt with no flaw a review can
 name and every line under the report's `check` line is intended.
@@ -115,11 +117,13 @@ vxl object render room.voxj
    distance in meters or `fit`. `--view-look-at` beside it sets a point to
    circle at a distance in meters
 2. A new view such as `close` adds `table-close.png` beside the sheet
-   `table.png`. A close-up alone leaves `--profile review` off
+   `table.png`. A close-up alone leaves `--profile review` off. The close-up
+   takes `--file-stem` because without one it overwrites the sheet
 3. A view placed by position takes `--view-frame`, `--view-position`, and a
    rotation flag such as `--view-look-at`
 4. `--select` renders the matched parts alone. `--view-select <view> <select>`
-   keeps the whole model and frames the view on the matched parts
+   keeps the whole model and frames the view on the matched parts and their
+   children. A model without parts takes `--view-look-at` for a close-up
 5. `--rotate <part> <axis> <degrees>` rotates a part about its pivot for one
    render. A raised arm then shows its clearance. A pose the model keeps goes in
    the part's `rotation`

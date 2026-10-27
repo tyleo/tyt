@@ -107,6 +107,12 @@ impl ArgumentCheck {
         )
     }
 
+    /// Rounds `bound` to the nanometer so an expectation prints without the
+    /// round-off of its sums.
+    pub fn shown(bound: f64) -> f64 {
+        (bound * 1e9).round() / 1e9
+    }
+
     /// Errors unless `value` is a whole number of at least `least`.
     pub fn whole_at_least(&self, argument: &str, value: f64, least: f64) -> StdResult<(), String> {
         self.expect(

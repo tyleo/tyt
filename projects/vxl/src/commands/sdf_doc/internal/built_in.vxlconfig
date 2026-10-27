@@ -29,7 +29,7 @@
                 { "kind": "material", "properties": { "baseColor": "#797874", "roughness": 0.75 } }, // granite
                 { "kind": "material", "properties": { "baseColor": "#5B6639", "roughness": 0.8 } }, // grass
                 { "kind": "material", "properties": { "baseColor": "#F9FEFF", "ior": 1.31, "roughness": 0.1, "transmission": 0.6 } }, // ice
-                { "kind": "material", "properties": { "baseColor": "#C0BEBB", "metallic": 1, "roughness": 0.6 } }, // iron
+                { "kind": "material", "properties": { "baseColor": "#7E7D7F", "metallic": 1, "roughness": 0.6 } }, // iron
                 { "kind": "material", "properties": { "baseColor": "#464644", "emissiveColor": "#FF4A10", "emissiveStrength": 1, "roughness": 0.9 } }, // lava
                 { "kind": "material", "properties": { "baseColor": "#4E5B35", "roughness": 0.7 } }, // leaf
                 { "kind": "material", "properties": { "baseColor": "#8C6744", "roughness": 0.6 } }, // leather

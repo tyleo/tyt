@@ -1,6 +1,6 @@
 use crate::{
     Result,
-    utilities::{IdSelector, NodePath, node_paths},
+    utilities::{IdSelector, node_paths, object_paths},
 };
 use branded_id::{RangeInclusiveExt, U32Id};
 use pathspec::{GitIgnoreRegex, is_file_path_match};
@@ -88,59 +88,6 @@ fn select_by_path<T: VoxExt>(
     }
 
     Ok(())
-}
-
-/// Every object's path strings, one per placement (a placing node's path plus
-/// the object name), or the bare object name when no node places it. Each entry
-/// pairs the object's index in `object_ids` with a path.
-fn object_paths<T: VoxExt>(
-    main: &VoxMain<T>,
-    object_ids: &[ObjectId],
-    node_paths: &[NodePath],
-) -> Vec<(usize, String)> {
-    let mut placed = vec![false; object_ids.len()];
-
-    let mut paths = Vec::new();
-
-    for NodePath {
-        node_id,
-        path: node_path,
-        ..
-    } in node_paths
-    {
-        let Some(node) = main.hierarchy_node(*node_id) else {
-            continue;
-        };
-
-        for &child_object_id in &node.child_object_ids {
-            let Some(object_index) = object_ids
-                .iter()
-                .position(|&object_id| object_id == child_object_id)
-            else {
-                continue;
-            };
-
-            let Some(object) = main.object(child_object_id) else {
-                continue;
-            };
-
-            placed[object_index] = true;
-
-            paths.push((object_index, format!("{node_path}/{}", object.name())));
-        }
-    }
-
-    for (object_index, &object_id) in object_ids.iter().enumerate() {
-        if placed[object_index] {
-            continue;
-        }
-
-        if let Some(object) = main.object(object_id) {
-            paths.push((object_index, object.name().to_owned()));
-        }
-    }
-
-    paths
 }
 
 #[cfg(test)]

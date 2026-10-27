@@ -16,22 +16,13 @@ export default [add("block", box([0, 0, 0], [0.1, 0.1, 0.1]), mat.stone)];
 
 Variables, functions, and loops shape the list. Nothing in a model runs per
 voxel because shapes, steps, and patterns only describe what gets sampled later.
-
 A model holds no voxel size.
 
 A variable named like a call in this section hides the call. A material held in
 `const paint` breaks every `paint` step.
 
-`vars` holds the build variables as JSON values by name. Reading a variable the
-build does not set errors:
-
-```ts
-// Built with legs set to 3.
-const leg = (i: number) =>
-  add(`leg${i}`, cylinder([i * 0.1, 0, 0], [i * 0.1, 0.4, 0], 0.02), mat.oak);
-
-export default Array.from({ length: vars.legs }, (_, i) => leg(i));
-```
+`vars` holds the build variables as JSON values by name, such as `vars.legs`.
+Reading a variable the build does not set errors.
 
 A larger model can split across files. A file imports another by its relative
 path with the `.ts` extension. Every file sees the names in this section.
@@ -193,14 +184,12 @@ A posed part voxelizes unrotated, and its node takes the rotation.
 
 Parts voxelize this way:
 
-1. A part's steps run in list order over the part's grid
-2. A child part voxelizes on its own grid, and parts can overlap in space
-3. `carve`, `paint`, and `coat` reach only the cells of their part, which keeps
+1. Each part voxelizes on its own grid, and parts can overlap in space
+2. `carve`, `paint`, and `coat` reach only the cells of their part, which keeps
    each part whole when a joint turns
-4. Each part writes its object under a node at its pivot, and the nodes nest as
+3. Each part writes its object under a node at its pivot, and the nodes nest as
    the parts do
-5. Turning a part's node turns the part and its children about the joint
-6. A step or a part can sit in several lists. A part in several lists writes one
+4. A step or a part can sit in several lists. A part in several lists writes one
    node that every parent's node lists
 
 The steps and parts outside every part belong to the root part. The root part
@@ -311,8 +300,9 @@ function halfSpace(side: Side, at: number): Shape3d;
 11. `halfSpace` covers everything past `at` toward `side`.
     `halfSpace("+y", 0.25)` holds every point above `y = 0.25`
 
-A half space has no bounds. An `add` takes a half space only inside an
-`intersect` or as a cutter. `carve`, `paint`, and `coat` take one bare.
+A half space has no bounds. An `add` takes a half space only as a cutter or
+inside an `intersect` with a bounded shape. `carve`, `paint`, and `coat` take
+one bare.
 
 ### 2D shapes
 
@@ -601,27 +591,20 @@ interface Shape3d {
 
 #### True thickness
 
-`offset` and `shell` measure true thickness on:
+`offset` and `shell` measure true thickness on every primitive but `ellipsoid`
+and `boxFrame`, on extrusions of 2D primitives, and on revolutions of 2D
+primitives that keep clear of the axis or are symmetric about it. An
+`intersect`, a `subtract`, a move, a rotation, or a uniform scale of such shapes
+keeps the true thickness. Elsewhere the thickness drifts:
 
-1. Every primitive but `ellipsoid` and `boxFrame`
-2. Extrusions of 2D primitives, and revolutions of 2D primitives that keep clear
-   of the axis or are symmetric about it
-3. An `intersect` or a `subtract` of such shapes
-4. Such shapes moved, rotated, or scaled uniformly
-
-A `union` or a `smoothUnion` measures each cell's depth to the nearest face of
-any operand. That face can lie buried inside another operand. A `shell` or a
-negative `offset` of a union then leaves walls or gaps where its operands meet.
-
-A hollow form takes one shape without buried faces: a `box`, a `lathe`, or an
-`extrude` of a `polygon`.
-
-On an `ellipsoid`, a non-uniform scale, or an `elongate` along more than one
-axis, the distance reads short. A `shell` there comes out thicker than asked,
-and an `offset` moves farther.
-
-After `twist`, `bend`, or `displace`, the distance can read long. A `shell` can
-then come out thinner and open holes.
+1. A `union` or a `smoothUnion` measures each cell's depth to the nearest face
+   of any operand, including a face buried in another operand. A `shell` or a
+   negative `offset` then leaves walls or gaps where the operands meet. A hollow
+   form takes one shape: a `box`, a `lathe`, or an `extrude` of a `polygon`
+2. On an `ellipsoid`, a non-uniform scale, or an `elongate` along more than one
+   axis, a `shell` comes out thicker than asked and an `offset` moves farther
+3. After `twist`, `bend`, or `displace`, a `shell` can come out thinner and open
+   holes
 
 ### Pattern frames
 
@@ -892,7 +875,8 @@ export default [
 ### Library exports
 
 A model file's named exports name their materials, patterns, shapes, steps, and
-parts in the built document. The document can then serve as a library.
+parts in the built document. The document can then serve as a library. A
+`woods.ts` with `export const walnut = material(...)` builds one.
 
 1. An exported function names nothing
 2. Any other named export errors
@@ -900,13 +884,3 @@ parts in the built document. The document can then serve as a library.
    export
 4. A model that exports an `oak` and also uses `mat.oak` errors because two
    different materials take one name
-
-```ts
-// woods.ts
-export const walnut = material({ baseColor: "#5C4033", roughness: 0.6 });
-export const stool = part("stool", {}, [
-  add("seat", cylinder([0, 0.4, 0], [0, 0.44, 0], 0.2), walnut),
-]);
-
-export default [stool];
-```
