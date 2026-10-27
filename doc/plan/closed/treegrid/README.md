@@ -21,13 +21,13 @@ Four commands orbit the same idea -- a hierarchical collection whose nodes
 carry data, rendered as text -- and each one re-implements the rendering:
 
 1. `vxl hierarchy show`
-   (`projects/utilities/vxl/src/implementation/hierarchy_show.rs`): a
+   (`projects/vxl/src/implementation/hierarchy_show.rs`): a
    box-glyph tree over the voxel-json scene graph, with per-node data
    subtrees (`transform`, bounds, origins, extents, layers, voxel counts),
    instancing and unplaced markers, and collapse stubs. Tree only, no
    `--layout`.
 2. `vxl palette show`
-   (`projects/utilities/vxl/src/implementation/palette_show.rs`): labeled
+   (`projects/vxl/src/implementation/palette_show.rs`): labeled
    value collections (an attribute's values down a palette) under
    `--layout row | row-no-header | column | column-no-header | markdown |
    pretty-json | compact-json`, with ANSI color swatches, visible-width
@@ -55,7 +55,7 @@ commands; the crate only arranges and serializes what it is handed.
 
 A tree grid is a forest of nodes in a branded-id arena, voxcore-style
 (`U32Id<BTreeGridNode>` into dense storage; compare
-`projects/utilities/voxcore/src/vox_hierarchy_node.rs` /
+`projects/voxel/voxcore/src/vox_hierarchy_node.rs` /
 `vox_runtime_state.rs`). Every node has a label (a single path segment,
 either `Bare`, printed as-is for trusted identifiers like `transform` or
 `0`, or `Quoted`, printed `{:?}`-quoted for user-entered strings like
@@ -86,7 +86,7 @@ rejects any option that render does not consume.
 
 ### The crate
 
-`projects/utilities/treegrid`, published like the other utilities crates.
+`projects/foundation/treegrid`, published like the other utilities crates.
 "Tree grid" is the term of art for exactly this widget concept -- a
 hierarchy whose nodes carry data columns (the ARIA role is `treegrid`) --
 and a standalone word matches the voxcore / voxsmith / pathspec style.
@@ -258,7 +258,7 @@ the no-header variants into `--label`:
 Default output (`text-rows` + `concat`) stays byte-identical. The JSON payload
 changes from the bespoke `[{palette, attribute, values}]` records to the
 generic envelope -- the "one shared JSON envelope across the read
-commands" the [vxl-commands plan](../vxl-commands/reference/palette/show.md)
+commands" the [vxl-commands plan](../../open/vxl-commands/reference/palette/show.md)
 deferred; see the [design notes](reference/design-notes.md) for why the
 envelope must be records rather than label-keyed objects.
 

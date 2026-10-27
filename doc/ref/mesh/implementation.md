@@ -691,7 +691,7 @@ Each entry states what stands and where the built thing bent from the design.
 
 ### The meshdoc crate
 
-`projects/utilities/meshdoc` holds `MeshMain<T>`, the state with an ext, and
+`projects/mesh/meshdoc` holds `MeshMain<T>`, the state with an ext, and
 its `MeshState` read side. The entities are hierarchy nodes forming a DAG with
 roots, objects of primitives, materials, textures, images, and files. A
 primitive holds positions, optional normals, tangents, and vertex colors, UV
@@ -717,7 +717,7 @@ has a typed home.
 
 ### The gltf-meshdoc crate
 
-`projects/mesh-formats/gltf-meshdoc` converts between glTF 2.0 and the
+`projects/mesh/formats/gltf-meshdoc` converts between glTF 2.0 and the
 document over the `gltf` crate. `from_gltf_file` loads a `GltfFile`, the JSON
 root with its binary blob and loose files, into a `GltfMeshMain`, and
 `to_gltf_file` writes one back, exactly for a loaded file, with
@@ -735,7 +735,7 @@ as its name, and a property's file reference resolves against the loose files.
 
 ### The meshconv crate
 
-`projects/utilities/meshconv` fronts the bridges. A `Format` marker per
+`projects/mesh/meshconv` fronts the bridges. A `Format` marker per
 enabled feature, `ReadFormat` and `WriteFormat` with their visitors, and
 `read`, `write`, `load`, `save`, and `check_document_files` move a document
 through a format over the caller's `Dependencies`, with the bare-state path

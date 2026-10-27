@@ -67,7 +67,7 @@ arbitrary user strings that would collide with any structural key.
 Resolution: the record envelope (`{"label", "annotation"?, "values"?,
 "children"?}`). This *is* the "one shared JSON envelope across the read
 commands" the vxl-commands plan deferred
-([palette/show.md](../../vxl-commands/reference/palette/show.md),
+([palette/show.md](../../../open/vxl-commands/reference/palette/show.md),
 Deferred item 3) -- settled here, in the library, once. Cost: `palette
 show`'s JSON output breaks (a conscious `feat(vxl)!`), and `palette
 list` / `info` / `validate` JSON stays bespoke until the deferred phase.

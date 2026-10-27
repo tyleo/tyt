@@ -19,19 +19,19 @@ if ! cargo clippy --workspace --all-targets -- -D warnings; then
     exit 1
 fi
 
-if git diff --cached --name-only | grep -q '^projects/utilities/sdfj-builder/'; then
+if git diff --cached --name-only | grep -q '^projects/sdf/sdfj-builder/'; then
     if ! command -v deno >/dev/null 2>&1; then
         echo "pre-commit: the commit touches sdfj-builder, whose checks need deno." >&2
         exit 1
     fi
-    if ! (cd projects/utilities/sdfj-builder && deno check && deno lint && deno fmt --check && deno test); then
+    if ! (cd projects/sdf/sdfj-builder && deno check && deno lint && deno fmt --check && deno test); then
         echo >&2
         echo "pre-commit: sdfj-builder's deno checks failed - fix them, then re-stage." >&2
         exit 1
     fi
 fi
 
-if git diff --cached --name-only | grep -q '^projects/utilities/voxrender-bench-quest/'; then
+if git diff --cached --name-only | grep -q '^projects/render/bench/voxrender-bench-quest/'; then
     if ! rustup target list --installed | grep -qx 'aarch64-linux-android'; then
         echo "pre-commit: the commit touches voxrender-bench-quest, whose lints need the aarch64-linux-android target." >&2
         exit 1

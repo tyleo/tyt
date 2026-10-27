@@ -1,6 +1,36 @@
 [workspace]
 
 members = [
+    "projects/foundation/pathspec",
+    "projects/foundation/treegrid",
+    "projects/foundation/treeselect",
+    "projects/foundation/ty-clap",
+    "projects/foundation/ty-math",
+    "projects/foundation/ty-math-serde",
+    "projects/foundation/ty-preferences",
+    "projects/foundation/ty-zip",
+
+    "projects/mesh/meshconv",
+    "projects/mesh/meshdoc",
+
+    "projects/mesh/formats/gltf-meshdoc",
+
+    "projects/render/voxrender",
+    "projects/render/voxrender-cpu",
+    "projects/render/voxrender-wgpu",
+
+    "projects/render/bench/voxrender-bench",
+    "projects/render/bench/voxrender-bench-desktop",
+    "projects/render/bench/voxrender-bench-quest",
+
+    "projects/sdf/sdfconv",
+    "projects/sdf/sdfcore",
+    "projects/sdf/sdfj-builder",
+
+    "projects/sdf/formats/sdfj",
+    "projects/sdf/formats/sdfj-codec",
+    "projects/sdf/formats/sdfj-sdfcore",
+
     "projects/tyt/tyt",
     "projects/tyt/tyt-claude",
     "projects/tyt/tyt-common",
@@ -15,53 +45,29 @@ members = [
     "projects/tyt/tyt-oai",
     "projects/tyt/tyt-vmax",
 
-    "projects/utilities/meshconv",
-    "projects/utilities/meshdoc",
-    "projects/utilities/pathspec",
-    "projects/utilities/sdfconv",
-    "projects/utilities/sdfcore",
-    "projects/utilities/sdfj-builder",
-    "projects/utilities/treegrid",
-    "projects/utilities/treeselect",
-    "projects/utilities/ty-clap",
-    "projects/utilities/ty-math",
-    "projects/utilities/ty-math-serde",
-    "projects/utilities/ty-preferences",
-    "projects/utilities/ty-zip",
-    "projects/utilities/voxconv",
-    "projects/utilities/voxcore",
-    "projects/utilities/voxrender",
-    "projects/utilities/voxrender-bench",
-    "projects/utilities/voxrender-bench-desktop",
-    "projects/utilities/voxrender-bench-quest",
-    "projects/utilities/voxrender-cpu",
-    "projects/utilities/voxrender-wgpu",
-    "projects/utilities/vox-value-language",
-    "projects/utilities/voxsmith",
-    "projects/utilities/voxsurface",
-    "projects/utilities/vxl",
+    "projects/voxel/vox-value-language",
+    "projects/voxel/voxconv",
+    "projects/voxel/voxcore",
+    "projects/voxel/voxsmith",
+    "projects/voxel/voxsurface",
 
-    "projects/mesh-formats/gltf-meshdoc",
+    "projects/voxel/formats/goxl",
+    "projects/voxel/formats/goxl-codec",
+    "projects/voxel/formats/goxl-voxcore",
+    "projects/voxel/formats/mvox",
+    "projects/voxel/formats/mvox-codec",
+    "projects/voxel/formats/mvox-voxcore",
+    "projects/voxel/formats/qbcl",
+    "projects/voxel/formats/qbcl-codec",
+    "projects/voxel/formats/qbcl-voxcore",
+    "projects/voxel/formats/vmax",
+    "projects/voxel/formats/vmax-codec",
+    "projects/voxel/formats/vmax-voxcore",
+    "projects/voxel/formats/voxj",
+    "projects/voxel/formats/voxj-codec",
+    "projects/voxel/formats/voxj-voxcore",
 
-    "projects/sdf-formats/sdfj",
-    "projects/sdf-formats/sdfj-codec",
-    "projects/sdf-formats/sdfj-sdfcore",
-
-    "projects/voxel-formats/goxl",
-    "projects/voxel-formats/goxl-codec",
-    "projects/voxel-formats/goxl-voxcore",
-    "projects/voxel-formats/mvox",
-    "projects/voxel-formats/mvox-codec",
-    "projects/voxel-formats/mvox-voxcore",
-    "projects/voxel-formats/qbcl",
-    "projects/voxel-formats/qbcl-codec",
-    "projects/voxel-formats/qbcl-voxcore",
-    "projects/voxel-formats/vmax",
-    "projects/voxel-formats/vmax-codec",
-    "projects/voxel-formats/vmax-voxcore",
-    "projects/voxel-formats/voxj",
-    "projects/voxel-formats/voxj-codec",
-    "projects/voxel-formats/voxj-voxcore",
+    "projects/vxl",
 ]
 
 exclude = ["submodules/branded-id"]
@@ -84,51 +90,57 @@ tyt-meta = { path = "projects/tyt/tyt-meta" }
 tyt-oai = { path = "projects/tyt/tyt-oai" }
 tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 
-meshconv = { path = "projects/utilities/meshconv" }
-meshdoc = { path = "projects/utilities/meshdoc" }
-pathspec = { path = "projects/utilities/pathspec" }
-sdfconv = { path = "projects/utilities/sdfconv" }
-sdfcore = { path = "projects/utilities/sdfcore" }
-treegrid = { path = "projects/utilities/treegrid" }
-treeselect = { path = "projects/utilities/treeselect" }
-ty-clap = { path = "projects/utilities/ty-clap" }
-ty-math = { path = "projects/utilities/ty-math" }
-ty-math-serde = { path = "projects/utilities/ty-math-serde" }
-ty-preferences = { path = "projects/utilities/ty-preferences" }
-ty-zip = { path = "projects/utilities/ty-zip" }
-voxconv = { path = "projects/utilities/voxconv" }
-voxcore = { path = "projects/utilities/voxcore" }
-voxrender = { path = "projects/utilities/voxrender" }
-voxrender-bench = { path = "projects/utilities/voxrender-bench" }
-voxrender-cpu = { path = "projects/utilities/voxrender-cpu" }
-voxrender-wgpu = { path = "projects/utilities/voxrender-wgpu" }
-vox-value-language = { path = "projects/utilities/vox-value-language" }
-voxsmith = { path = "projects/utilities/voxsmith" }
-voxsurface = { path = "projects/utilities/voxsurface" }
-vxl = { path = "projects/utilities/vxl" }
+pathspec = { path = "projects/foundation/pathspec" }
+treegrid = { path = "projects/foundation/treegrid" }
+treeselect = { path = "projects/foundation/treeselect" }
+ty-clap = { path = "projects/foundation/ty-clap" }
+ty-math = { path = "projects/foundation/ty-math" }
+ty-math-serde = { path = "projects/foundation/ty-math-serde" }
+ty-preferences = { path = "projects/foundation/ty-preferences" }
+ty-zip = { path = "projects/foundation/ty-zip" }
 
-gltf-meshdoc = { path = "projects/mesh-formats/gltf-meshdoc" }
+meshconv = { path = "projects/mesh/meshconv" }
+meshdoc = { path = "projects/mesh/meshdoc" }
 
-sdfj = { path = "projects/sdf-formats/sdfj" }
-sdfj-builder = { path = "projects/utilities/sdfj-builder" }
-sdfj-codec = { path = "projects/sdf-formats/sdfj-codec" }
-sdfj-sdfcore = { path = "projects/sdf-formats/sdfj-sdfcore" }
+gltf-meshdoc = { path = "projects/mesh/formats/gltf-meshdoc" }
 
-goxl = { path = "projects/voxel-formats/goxl" }
-goxl-codec = { path = "projects/voxel-formats/goxl-codec" }
-goxl-voxcore = { path = "projects/voxel-formats/goxl-voxcore" }
-mvox = { path = "projects/voxel-formats/mvox" }
-mvox-codec = { path = "projects/voxel-formats/mvox-codec" }
-mvox-voxcore = { path = "projects/voxel-formats/mvox-voxcore" }
-qbcl = { path = "projects/voxel-formats/qbcl" }
-qbcl-codec = { path = "projects/voxel-formats/qbcl-codec" }
-qbcl-voxcore = { path = "projects/voxel-formats/qbcl-voxcore" }
-vmax = { path = "projects/voxel-formats/vmax" }
-vmax-codec = { path = "projects/voxel-formats/vmax-codec" }
-vmax-voxcore = { path = "projects/voxel-formats/vmax-voxcore" }
-voxj = { path = "projects/voxel-formats/voxj" }
-voxj-codec = { path = "projects/voxel-formats/voxj-codec" }
-voxj-voxcore = { path = "projects/voxel-formats/voxj-voxcore" }
+voxrender = { path = "projects/render/voxrender" }
+voxrender-cpu = { path = "projects/render/voxrender-cpu" }
+voxrender-wgpu = { path = "projects/render/voxrender-wgpu" }
+
+voxrender-bench = { path = "projects/render/bench/voxrender-bench" }
+
+sdfconv = { path = "projects/sdf/sdfconv" }
+sdfcore = { path = "projects/sdf/sdfcore" }
+sdfj-builder = { path = "projects/sdf/sdfj-builder" }
+
+sdfj = { path = "projects/sdf/formats/sdfj" }
+sdfj-codec = { path = "projects/sdf/formats/sdfj-codec" }
+sdfj-sdfcore = { path = "projects/sdf/formats/sdfj-sdfcore" }
+
+vox-value-language = { path = "projects/voxel/vox-value-language" }
+voxconv = { path = "projects/voxel/voxconv" }
+voxcore = { path = "projects/voxel/voxcore" }
+voxsmith = { path = "projects/voxel/voxsmith" }
+voxsurface = { path = "projects/voxel/voxsurface" }
+
+goxl = { path = "projects/voxel/formats/goxl" }
+goxl-codec = { path = "projects/voxel/formats/goxl-codec" }
+goxl-voxcore = { path = "projects/voxel/formats/goxl-voxcore" }
+mvox = { path = "projects/voxel/formats/mvox" }
+mvox-codec = { path = "projects/voxel/formats/mvox-codec" }
+mvox-voxcore = { path = "projects/voxel/formats/mvox-voxcore" }
+qbcl = { path = "projects/voxel/formats/qbcl" }
+qbcl-codec = { path = "projects/voxel/formats/qbcl-codec" }
+qbcl-voxcore = { path = "projects/voxel/formats/qbcl-voxcore" }
+vmax = { path = "projects/voxel/formats/vmax" }
+vmax-codec = { path = "projects/voxel/formats/vmax-codec" }
+vmax-voxcore = { path = "projects/voxel/formats/vmax-voxcore" }
+voxj = { path = "projects/voxel/formats/voxj" }
+voxj-codec = { path = "projects/voxel/formats/voxj-codec" }
+voxj-voxcore = { path = "projects/voxel/formats/voxj-voxcore" }
+
+vxl = { path = "projects/vxl" }
 
 [workspace.metadata.workspaces]
 

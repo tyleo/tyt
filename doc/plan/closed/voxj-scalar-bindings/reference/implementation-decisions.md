@@ -10,7 +10,7 @@ scalar bindings, and whether the glTF converter emits them.
 ## voxcore `VoxPalette` target surface
 
 Owner, 2026-07-15, ahead of phase 5. The binding namespace split means
-`VoxPalette` (`projects/utilities/voxcore/src/vox_palette.rs`) grows from
+`VoxPalette` (`projects/voxel/voxcore/src/vox_palette.rs`) grows from
 today's `binding_ids` / `bindings` / `material_ids` / `materials` /
 `by_attribute` to:
 

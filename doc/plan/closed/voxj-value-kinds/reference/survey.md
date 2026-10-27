@@ -35,7 +35,7 @@ README's blast radius does not (see
 
 ### The vocabulary source
 
-`projects/utilities/voxsmith/src/gltf_attributes.rs` defines the voxj
+`projects/voxel/voxsmith/src/gltf_attributes.rs` defines the voxj
 property-name strings and the glTF metadata keyed on them:
 `BASE_COLOR_FACTOR`, `METALLIC_FACTOR`, `ROUGHNESS_FACTOR`,
 `EMISSIVE_FACTOR`, `TRANSMISSION_FACTOR` rename (values and identifiers);

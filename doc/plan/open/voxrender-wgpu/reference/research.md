@@ -1636,11 +1636,11 @@ judged after B3 needs these in the reference first:
 73. Amanatides, Woo. A Fast Voxel Traversal Algorithm for Ray Tracing, 1987.
     http://www.cse.yorku.ca/~amana/research/grid.pdf
 74. voxrender reference ray walk, 2026.
-    [render_ray_walk.rs](../../../../../projects/utilities/voxrender/src/render_ray_walk.rs)
+    [render_ray_walk.rs](../../../../../projects/render/voxrender-cpu/src/render_ray_walk.rs)
 75. Vulkan Hardware Database, report 51086 (Samsung SM-S911U1, Adreno 740,
     driver 512.676.1). https://vulkan.gpuinfo.org/displayreport.php?id=51086
 76. voxrender render.rs: shadow_factor, BIAS, INSET, 2026.
-    [render.rs](../../../../../projects/utilities/voxrender/src/render.rs)
+    [render.rs](../../../../../projects/render/voxrender-cpu/src/render.rs)
 77. Khronos. Vulkan specification, Precision and Operation of SPIR-V
     Instructions.
     https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#spirvenv-precision-operation
@@ -1722,7 +1722,7 @@ judged after B3 needs these in the reference first:
 114. Meta. Multisample Anti-Aliasing Analysis for Meta Quest.
      https://developers.meta.com/vr/documentation/native/android/mobile-msaa-analysis/
 115. voxsurface corner_occlusion.rs, 2026.
-     [corner_occlusion.rs](../../../../../projects/utilities/voxsurface/src/corner_occlusion.rs)
+     [corner_occlusion.rs](../../../../../projects/voxel/voxsurface/src/corner_occlusion.rs)
 116. Intel. Conservative Morphological Anti-Aliasing 2.0, 2018.
      https://www.intel.com/content/www/us/en/developer/articles/technical/conservative-morphological-anti-aliasing-20.html
 117. Epic. Virtual Shadow Maps documentation, 2024.

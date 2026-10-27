@@ -166,9 +166,9 @@ vxl object remove scene.vmax --select 'debris/**'
 3. `link` and `unlink` add or drop one placement
 4. `duplicate` copies objects within the document, and `add` copies them from another file along with their palettes
 5. `downsample` and `upsample` change the grid's resolution by a whole-number factor per axis, scaling `origin` and `bounds` with it so `vxl node set scale` keeps the object's size in the scene
-6. `mesh` writes the selected objects as a glTF mesh, with flags the [mesh reference](../../../doc/ref/mesh/mesh.md) covers
+6. `mesh` writes the selected objects as a glTF mesh, with flags the [mesh reference](../../doc/ref/mesh/mesh.md) covers
 
-`vxl object render` draws the selected objects into one image per view, placed as `vxl object mesh` places them. The views and lights come from profiles in `.vxlconfig` and the flags that mirror them. With neither, the `hero` view renders under the `studio` lights. `--profile glow` adds a bloom over the emissive materials. The image shows inline in the terminal, or `--to png` writes one PNG per view beside the input. The [render reference](../../../doc/ref/render/render.md) covers the flags and the profiles.
+`vxl object render` draws the selected objects into one image per view, placed as `vxl object mesh` places them. The views and lights come from profiles in `.vxlconfig` and the flags that mirror them. With neither, the `hero` view renders under the `studio` lights. `--profile glow` adds a bloom over the emissive materials. The image shows inline in the terminal, or `--to png` writes one PNG per view beside the input. The [render reference](../../doc/ref/render/render.md) covers the flags and the profiles.
 
 ```sh
 # Copies the first three props under the one node matching house.
@@ -208,7 +208,7 @@ vxl object voxels quantize scene.voxj --select crate --max-materials 16 --partit
 
 `vxl palette list` and `vxl palette show` print palettes. `vxl palette edit` and `vxl palette quantize` act on each palette `--index` selects. `--index` takes an id, an `a-b` range, or `*`. The flag repeats and defaults to `*`.
 
-`vxl palette edit` runs a [value-language](../../../doc/ref/mesh/value-language.md) program over each palette. Each property the program reads enters as a swatch array holding one entry per material. `--value` adds bindings to the program. `--write-property` writes an expression's result into a property and adds the property when the palette lacks it. Materials sharing a value that are written alike keep sharing it, so a Voxel Max material slot stays one slot. A bare whole number written to a float property reads as `f64`. Every selected palette evaluates before any write lands, so an error leaves the document untouched.
+`vxl palette edit` runs a [value-language](../../doc/ref/mesh/value-language.md) program over each palette. Each property the program reads enters as a swatch array holding one entry per material. `--value` adds bindings to the program. `--write-property` writes an expression's result into a property and adds the property when the palette lacks it. Materials sharing a value that are written alike keep sharing it, so a Voxel Max material slot stays one slot. A bare whole number written to a float property reads as `f64`. Every selected palette evaluates before any write lands, so an error leaves the document untouched.
 
 `vxl palette quantize` reduces each palette to at most `--max-materials` materials and snaps every voxel sampling it. Each cluster collapses onto its most-sampled material, and a merged voxel takes that whole material. Clustering runs on `--property`, `baseColor` by default. `--partition` keeps materials apart unless they agree on a property. Materials no voxel samples drop. A palette no voxel samples errors.
 
@@ -245,7 +245,7 @@ vxl node link scene.voxj --select house/door --select-parent garage
 
 ## Models
 
-`vxl sdf-doc build` records a voxel model written in TypeScript as an `.sdfj` document. `vxl sdf-doc voxelize` samples the document into Voxel Json. The [TypeScript API](https://github.com/tyleo/tyt/blob/main/projects/utilities/sdfj-builder/docs/typescript-api.md) lists every call a model file can make, and the [modeling API](docs/modeling-api.md) sets how vxl runs a model. [Modeling with Claude Code](#modeling-with-claude-code) sets up the skill that runs these commands for you.
+`vxl sdf-doc build` records a voxel model written in TypeScript as an `.sdfj` document. `vxl sdf-doc voxelize` samples the document into Voxel Json. The [TypeScript API](https://github.com/tyleo/tyt/blob/main/projects/sdf/sdfj-builder/docs/typescript-api.md) lists every call a model file can make, and the [modeling API](docs/modeling-api.md) sets how vxl runs a model. [Modeling with Claude Code](#modeling-with-claude-code) sets up the skill that runs these commands for you.
 
 A build output named `.sdfjz` holds the document zipped, the way `.voxjz` holds Voxel Json. `voxelize` accepts either form, as does a library file a `.vxlconfig` lists.
 

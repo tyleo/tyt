@@ -673,7 +673,7 @@ as `mat.oak` or `mat.ruby`.
 
 `material` makes a material from the key/value properties a voxj palette holds.
 The eight listed properties follow voxj's
-[glTF conventions](https://github.com/tyleo/tyt/blob/main/projects/voxel-formats/voxj/docs/voxel-json-file-format.md#gltf-conventions)
+[glTF conventions](https://github.com/tyleo/tyt/blob/main/projects/voxel/formats/voxj/docs/voxel-json-file-format.md#gltf-conventions)
 for their meanings, ranges, and defaults. Only `metallic` departs from them, by
 defaulting to 0.
 

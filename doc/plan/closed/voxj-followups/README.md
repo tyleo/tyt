@@ -22,7 +22,7 @@ redesigned format. This plan is additive and each track is independent, so this 
 three loosely-coupled tracks rather than one branch.
 
 The authoritative format is
-[voxel-json-file-format.md](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md).
+[voxel-json-file-format.md](../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md).
 It does not change here; every track is consumer-side.
 
 ## The tracks

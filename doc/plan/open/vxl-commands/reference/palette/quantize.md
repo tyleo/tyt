@@ -63,7 +63,7 @@ prunes the value-pool values only dropped materials referenced.
 
 The command runs [`object voxels quantize`](../object/voxels/quantize.md) with
 `--shared` over every layer referencing the palette, then compacts. See
-[Palettes](../../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#palettes).
+[Palettes](../../../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md#palettes).
 
 ## Profiles
 

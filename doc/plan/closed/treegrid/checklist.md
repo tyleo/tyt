@@ -13,7 +13,7 @@ items off as they land.
 - One reviewable chunk per step. `cargo fmt --all`, `cargo clippy
   --workspace --all-targets -- -D warnings`, and `cargo test` before each
   commit; the pre-commit hook enforces fmt + clippy.
-- The crate lives at `projects/utilities/treegrid` with dependency
+- The crate lives at `projects/foundation/treegrid` with dependency
   `branded-id`, an optional `json` feature gating `serde_json`
   (`preserve_order`) with the value JSON forms and the JSON layouts,
   an optional `ty-math` feature gating the typed-color
@@ -166,10 +166,10 @@ items off as they land.
       layout goldens now live in treegrid. Commit as `feat(vxl)!` with
       the old->new flag mapping in the message.
 - [x] **S8. Docs.** Update
-      [vxl-commands palette/show.md](../vxl-commands/reference/palette/show.md)
+      [vxl-commands palette/show.md](../../open/vxl-commands/reference/palette/show.md)
       (layouts, `--label`, the JSON envelope; check off its deferred
       envelope item) and
-      [conventions.md](../vxl-commands/reference/conventions.md) item 5.
+      [conventions.md](../../open/vxl-commands/reference/conventions.md) item 5.
 
 ## Phase 3: vxl tree renderers adopt (parity)
 
@@ -247,7 +247,7 @@ is in scope, not optional. The plan does not close without it.
       rendering ever appear (8-bit sRGB keeps its `#RRGGBB(AA)` hex).
       Text only -- the JSON form stays the native number array. Updates
       `a_linear_color_renders_float_components` and the
-      [palette show reference](../vxl-commands/reference/palette/show.md)
+      [palette show reference](../../open/vxl-commands/reference/palette/show.md)
       wording.
 
 ## Phase 7: tree-selection closure in treeselect (committed, closes the plan)

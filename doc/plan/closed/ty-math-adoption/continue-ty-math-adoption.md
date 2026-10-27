@@ -1,7 +1,7 @@
 # Continue the ty-math adoption
 
 You are consolidating hand-rolled math in the voxsmith converters onto the
-`ty-math` crate, from an audit of `projects/utilities/voxsmith/src/convert`. The
+`ty-math` crate, from an audit of `projects/voxel/voxsmith/src/convert`. The
 work is three tracks: harmless cleanups with no new API, a `ty-math` extension with
 adoption, and an investigation of the heavier `internal/` logic. One reviewable,
 staged chunk per session, then stop for review.

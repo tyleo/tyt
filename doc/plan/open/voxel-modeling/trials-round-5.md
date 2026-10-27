@@ -3,7 +3,7 @@
 Step S14 of the [checklist](checklist.md) runs the [prompts](trials.md#prompts)
 a fifth time after round 4's fixes. [Round 4](trials-round-4.md) logs the round
 before, and the [trial
-harness](../../../../projects/utilities/vxl/trials/README.md) ran all five.
+harness](../../../../projects/vxl/trials/README.md) ran all five.
 
 ## Changes before round 5
 

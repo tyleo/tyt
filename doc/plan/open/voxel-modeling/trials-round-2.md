@@ -3,7 +3,7 @@
 Step S14 of the [checklist](checklist.md) runs the [prompts](trials.md#prompts)
 a second time with S13's changes. [Round 1](trials.md#findings) logs the first
 run of the prompts, and the [trial
-harness](../../../../projects/utilities/vxl/trials/README.md) ran both rounds.
+harness](../../../../projects/vxl/trials/README.md) ran both rounds.
 
 ## Findings
 

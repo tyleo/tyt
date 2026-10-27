@@ -2,7 +2,7 @@
 
 The trials run each prompt in `prompts.json` through the vxl-model skill twice,
 each time in a fresh headless Claude Code session. The voxel-modeling plan's
-[trials](../../../../doc/plan/open/voxel-modeling/trials.md) log the first
+[trials](../../../doc/plan/open/voxel-modeling/trials.md) log the first
 round.
 
 ## Layout
@@ -30,9 +30,9 @@ command a classifier judges safe.
 
 ```sh
 npm run vxl:install
-sh projects/utilities/vxl/trials/setup.sh
-python3 projects/utilities/vxl/trials/build-gallery.py
-sh projects/utilities/vxl/trials/archive.sh 2026-10-04
+sh projects/vxl/trials/setup.sh
+python3 projects/vxl/trials/build-gallery.py
+sh projects/vxl/trials/archive.sh 2026-10-04
 ```
 
 1. The commit under test is checked out, and `npm run vxl:install` installs its

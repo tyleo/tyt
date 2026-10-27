@@ -115,7 +115,19 @@ Used by some commands to configure behavior.
 
 ## Project structure
 
-This is a Cargo workspace. Each crate lives under [`projects/`](projects/) with its own README. The command crates (`tyt-cubemap`, `tyt-fbx`, etc.) each define a `Dependencies` trait and a feature-gated `DependenciesImpl`, and the root `tyt` crate ties them all together.
+This is a Cargo workspace. Each crate lives under [`projects/`](projects/) with its own README, grouped by domain:
+
+| Group        | Holds                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `foundation` | General-purpose crates the rest build on, such as `ty-math`                                |
+| `voxel`      | The voxel state `voxcore`, its operations, and `voxconv`, with each format under `formats` |
+| `sdf`        | The SDF state `sdfcore` and `sdfconv`, with each format under `formats`                    |
+| `mesh`       | The mesh state `meshdoc` and `meshconv`, with each format under `formats`                  |
+| `render`     | The voxel render contract and its renderers, with the GPU benchmarks under `bench`         |
+| `vxl`        | The `vxl` command-line tool                                                                |
+| `tyt`        | The `tyt` binary and its command crates                                                    |
+
+The command crates (`tyt-cubemap`, `tyt-fbx`, etc.) each define a `Dependencies` trait and a feature-gated `DependenciesImpl`, and the root `tyt` crate ties them all together.
 
 A few shared crates support the architecture:
 
@@ -158,7 +170,7 @@ After cloning, run setup once:
 npm run setup
 ```
 
-This points `core.hooksPath` at `.githooks`, so a pre-commit hook runs `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` before each commit, and the Git LFS hooks upload binaries on push. A commit touching `projects/utilities/sdfj-builder` also runs the builder's Deno checks and needs `deno`. A commit touching `projects/utilities/voxrender-bench-quest` also lints it for Android and needs the `aarch64-linux-android` target. Setup also checks out the `submodules/branded-id` submodule, where `branded-id` is developed. The workspace builds against the published `branded-id`. To build against unreleased submodule changes, add `branded-id = { path = "submodules/branded-id" }` under the root manifest's `[patch.crates-io]`, and drop it once that version is published. Without npm, run `git config core.hooksPath .githooks` and `git submodule update --init submodules/branded-id`.
+This points `core.hooksPath` at `.githooks`, so a pre-commit hook runs `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` before each commit, and the Git LFS hooks upload binaries on push. A commit touching `projects/sdf/sdfj-builder` also runs the builder's Deno checks and needs `deno`. A commit touching `projects/render/bench/voxrender-bench-quest` also lints it for Android and needs the `aarch64-linux-android` target. Setup also checks out the `submodules/branded-id` submodule, where `branded-id` is developed. The workspace builds against the published `branded-id`. To build against unreleased submodule changes, add `branded-id = { path = "submodules/branded-id" }` under the root manifest's `[patch.crates-io]`, and drop it once that version is published. Without npm, run `git config core.hooksPath .githooks` and `git submodule update --init submodules/branded-id`.
 
 Format and lint manually with:
 
@@ -169,7 +181,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ### Quest builds
 
-`voxrender-bench-quest` runs voxrender's GPU benchmarks as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The crate's [README](projects/utilities/voxrender-bench-quest/README.md) holds the build and run commands. Gradle needs no install because the crate checks in its wrapper.
+`voxrender-bench-quest` runs voxrender's GPU benchmarks as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The crate's [README](projects/render/bench/voxrender-bench-quest/README.md) holds the build and run commands. Gradle needs no install because the crate checks in its wrapper.
 
 1. A JDK starts Gradle. Gradle then fetches the JDK its daemon pins. Adoptium recommends a package manager:
 

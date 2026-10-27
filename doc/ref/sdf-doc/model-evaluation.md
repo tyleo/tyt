@@ -4,9 +4,9 @@ _Part of the [voxel modeling plan](../../plan/open/voxel-modeling/README.md)._
 
 This page sets how vxl builds a model file into an `.sdfj` document and how it
 voxelizes that document into voxj. The
-[sdfj format](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md)
+[sdfj format](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md)
 sets what each entry computes at a point. The
-[TypeScript API](../../../projects/utilities/sdfj-builder/docs/typescript-api.md)
+[TypeScript API](../../../projects/sdf/sdfj-builder/docs/typescript-api.md)
 lists the calls.
 
 ## Building
@@ -21,7 +21,7 @@ lists the calls.
 4. When the runtime exits with code 0, vxl copies the document to the output
    path. Any other exit fails the build and leaves the output path untouched
 
-The [sdfj-builder README](../../../projects/utilities/sdfj-builder/README.md)
+The [sdfj-builder README](../../../projects/sdf/sdfj-builder/README.md)
 sets how the builder writes the document.
 
 ## Voxelizing
@@ -30,7 +30,7 @@ sets how the builder writes the document.
 
 1. The flags and profile merge into the [settings](#settings)
 2. vxl reads the document and the
-   [fonts](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#fonts)
+   [fonts](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#fonts)
    its `text` shapes use, then runs the [checks](#checks)
 3. The [sampling](#sampling) settles the voxel size
 4. Each part's steps fill its [grid](#grids)
@@ -108,7 +108,7 @@ groups errors. The built-in layer embeds `materials`, which holds a material for
 each name the modeling API lists.
 
 vxl validates each library the settings list against the
-[sdfj format](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#validation).
+[sdfj format](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#validation).
 The builder reads the libraries in list order, and a later library wins a name.
 
 `lib` and `mat` copy an entry into the model the first time the model uses its
@@ -139,7 +139,7 @@ path resolves against:
 3. The library file's directory for a file library
 
 The document's
-[`fonts`](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#fonts)
+[`fonts`](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#fonts)
 entry holds that path relative to the document's directory and keeps an absolute
 path as it is.
 
@@ -207,7 +207,7 @@ A few more rules keep results the same everywhere:
 Each part voxelizes into its own grid.
 
 Once `g` settles, each 3D shape's
-[box](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#boxes)
+[box](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#boxes)
 moves by `P` and rounds out to whole cells. A shape's distance then reads at
 least its distance to that rounded box. This clamp changes no sign, and it
 leaves an exact distance exact. vxl skips a `mirror`, `repeat`, or `repeatPolar`
@@ -218,7 +218,7 @@ A part's grid spans the rounded boxes of its `add` shapes and the cells of its
 only visit the grid's cells, so they can take an unbounded shape.
 
 Each cell takes what the part's
-[steps](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#steps)
+[steps](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#steps)
 set at `P^-1(c)`. A `speckle` reads `c` as its sample position.
 
 After the part's last step, `--fill-mode surface` empties each live cell that
@@ -281,7 +281,7 @@ object come at the part's first place. vxl writes the document with the run's
 
 ## The report
 
-The [modeling API](../../../projects/utilities/vxl/docs/modeling-api.md#report)
+The [modeling API](../../../projects/vxl/docs/modeling-api.md#report)
 shows the report and what each field means. These rules pin the rest.
 
 The report always reads grids sampled under `--frame world`, before the fill
@@ -322,7 +322,7 @@ live cell, shows in the report and stops nothing.
 3. A runtime that fails to start stops the build with the system's message
 
 While the model runs, the builder makes the
-[checks](../../../projects/utilities/sdfj-builder/README.md#errors) its README
+[checks](../../../projects/sdf/sdfj-builder/README.md#errors) its README
 lists. An error the model throws stops the build with its message.
 
 ### Voxelize
@@ -332,7 +332,7 @@ lists. An error the model throws stops the build with its message.
 2. `--voxel-size` and `--resolution` exclude each other, and `--flatten nodes`
    and `--flatten objects` need `--frame world`
 3. The document passes the
-   [sdfj format's validation](../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md#validation).
+   [sdfj format's validation](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#validation).
    A failing `shades` reports the largest spread that fits, rounded down to
    three decimals
 4. A `--resolution` reference side is above zero

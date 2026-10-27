@@ -7,7 +7,7 @@ ty-color-model plan, which re-land there against the new color types rather than
 the now-deleted `TySrgbaColor`. The original plan follows.
 
 This plan captures a math-consolidation pass over the voxsmith
-converters, driven by an audit of `projects/utilities/voxsmith/src/convert`
+converters, driven by an audit of `projects/voxel/voxsmith/src/convert`
 against the `ty-math` crate. The converters already use `ty-math` well at the
 `voxcore` boundary, but the same hand-rolled color and vector arithmetic recurs
 across the format readers and writers, and a few reusable primitives live in

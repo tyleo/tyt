@@ -2,8 +2,8 @@
 
 Records a voxel model written in TypeScript as an SDF Json (`.sdfj`) document.
 The [TypeScript API](docs/typescript-api.md) lists every call a model file can
-make. The [sdfj format](../../sdf-formats/sdfj/docs/sdf-json-file-format.md)
-sets what each entry of the document computes.
+make. The [sdfj format](../formats/sdfj/docs/sdf-json-file-format.md) sets what
+each entry of the document computes.
 
 ```sh
 node ts/main.ts chair.ts chair.sdfj

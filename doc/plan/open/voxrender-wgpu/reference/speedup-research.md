@@ -76,8 +76,8 @@ expected gain times confidence.
 Lever 1 gives up bit exactness. Its exact alternative runs the integer DDA at
 the region's level with per-level error terms: two sign tests per exit, no
 divide, no correction loop. It needs F = 12 and DB = 14 so a 16-cell exit
-fits in 30 bits (projects/utilities/voxrender-wgpu/src/grid_walk.wgsl:7,
-projects/utilities/voxrender-wgpu/src/first_hit.wgsl:5). This pass derived
+fits in 30 bits (projects/render/voxrender-wgpu/src/grid_walk.wgsl:7,
+projects/render/voxrender-wgpu/src/first_hit.wgsl:5). This pass derived
 it. No paper publishes it, and nothing has tested it against the reference.
 
 Low expected gain on Quest. A cheap one can still get a test:
@@ -198,23 +198,23 @@ on this Mac, both eyes at 1680x1760.
 
 1. **The region exit path.** Every region larger than a cell goes through
    leave()
-   (projects/utilities/voxrender-bench/src/tree_walk.wgsl:77-146): an f32
+   (projects/render/bench/voxrender-bench/src/tree_walk.wgsl:77-146): an f32
    guess with up to 3 divides, then up to 3 attempts of 2 axes, each with an
    f32 divide and two wrapping-i32 correction loops. error_at then does 6
    i32 multiplies
-   (projects/utilities/voxrender-wgpu/src/grid_walk.wgsl:210-218). The
+   (projects/render/voxrender-wgpu/src/grid_walk.wgsl:210-218). The
    1-cell step takes the other branch
-   (projects/utilities/voxrender-bench/src/tree_walk.wgsl:198-233), so a wave
+   (projects/render/bench/voxrender-bench/src/tree_walk.wgsl:198-233), so a wave
    of mixed sizes pays for both. Fix: the f32 hierarchical DDA of lever
    2.1.1. S1 11.28 to 4.12 ms, S5 1.27 to 0.86 ms
 2. **Every placement walked to the end.** The trace loop runs enter() and the
    full walk for every placement on every pixel
-   (projects/utilities/voxrender-wgpu/src/first_hit.wgsl:166-183). S1 has 8
+   (projects/render/voxrender-wgpu/src/first_hit.wgsl:166-183). S1 has 8
    placements. Fix: a slab test for entry t, a skip past the nearest hit,
    placements front to back, and the nearest distance as the walk's end.
    S1 1.29x on the integer walk, 1.21x on the f32 walk
 3. **A root re-descent and a palette load every iteration.** The loop calls
-   region_at (projects/utilities/voxrender-bench/src/tree_walk.wgsl:241),
+   region_at (projects/render/bench/voxrender-bench/src/tree_walk.wgsl:241),
    which reads the tile slot (:34), mask words (:46-51), child slot (:61),
    leaf index word (:72), and palette (:74). The palette feeds only
    `value != inside` (:243). Fix: a per-leaf occupancy mask, the current tile
@@ -223,18 +223,18 @@ on this Mac, both eyes at 1680x1760.
    here because the Mac's L1 hides the re-descent. Quest has to judge this
    fix
 4. **Runtime signed modulo.**
-   projects/utilities/voxrender-bench/src/tree_walk.wgsl:226 and
-   projects/utilities/voxrender-bench/src/float_march.wgsl:92-93 take
+   projects/render/bench/voxrender-bench/src/tree_walk.wgsl:226 and
+   projects/render/bench/voxrender-bench/src/float_march.wgsl:92-93 take
    `% size` with a runtime i32. naga always wraps signed `%` into SDiv, IMul,
    and ISub with guards, even in trusted modules [25][27]. ir3 lowers a
    runtime divide to about 35 to 45 ops [13]. The float march does it on
    every iteration. Fix: `& ~(size - 1)`. S1 1.06x
 5. **Checked shader modules.** Every timed kernel uses
    create_shader_module
-   (projects/utilities/voxrender-wgpu/src/hit_trace.rs:183,
-   projects/utilities/voxrender-bench/src/ray_query_trace.rs:272,
-   projects/utilities/voxrender-bench/src/step_kernel.rs:49,
-   projects/utilities/voxrender-bench/src/chain_kernel.rs:46). naga adds a
+   (projects/render/voxrender-wgpu/src/hit_trace.rs:183,
+   projects/render/bench/voxrender-bench/src/ray_query_trace.rs:272,
+   projects/render/bench/voxrender-bench/src/step_kernel.rs:49,
+   projects/render/bench/voxrender-bench/src/chain_kernel.rs:46). naga adds a
    vec2<u32> counter to each loop [25], a clamp to each dynamic vector index,
    and tracking to each ray query initialization. The walk nests up to 4
    loops. Fix: create_shader_module_trusted with
@@ -243,53 +243,53 @@ on this Mac, both eyes at 1680x1760.
    (doc/plan/open/voxrender-wgpu/implementation-decisions.md:197-201)
 6. **An ALU-bound yardstick.** The B2 step loop divides by two runtime
    uniforms every step
-   (projects/utilities/voxrender-bench/src/steps.wgsl:30). On this Mac: base
+   (projects/render/bench/voxrender-bench/src/steps.wgsl:30). On this Mac: base
    83.0 Gsteps/s, start hoisted 190, incremental address 207, scattered
    addresses 12.2. B2's "12 steps per iteration" mixes ALU and load cost.
    Fix: add hoisted and two-chain variants to B2 and re-time Quest
 7. **A 16-byte hit per pixel.**
-   projects/utilities/voxrender-wgpu/src/first_hit.wgsl:27, :190, and :200
-   and projects/utilities/voxrender-bench/src/ray_query.wgsl:38 write a
+   projects/render/voxrender-wgpu/src/first_hit.wgsl:27, :190, and :200
+   and projects/render/bench/voxrender-bench/src/ray_query.wgsl:38 write a
    vec4<u32> with one word unused: 94.6 MB per frame, 1.85 ms at 51.2 GB/s.
    Fix: pack to 4 or 8 bytes, or shade in the trace and write 4 B of color
 8. **Placement passed by value.**
-   projects/utilities/voxrender-bench/src/tree_walk.wgsl:152 copies the
+   projects/render/bench/voxrender-bench/src/tree_walk.wgsl:152 copies the
    272-byte Placement
-   (projects/utilities/voxrender-wgpu/src/grid_walk.wgsl:17-35) from a
-   storage binding (projects/utilities/voxrender-wgpu/src/first_hit.wgsl:20).
+   (projects/render/voxrender-wgpu/src/grid_walk.wgsl:17-35) from a
+   storage binding (projects/render/voxrender-wgpu/src/first_hit.wgsl:20).
    The walk keeps 9 change terms live
-   (projects/utilities/voxrender-bench/src/tree_walk.wgsl:201-204). Fix: a
+   (projects/render/bench/voxrender-bench/src/tree_walk.wgsl:201-204). Fix: a
    slim placement record in a uniform buffer under 7 KB [15], change terms
    recomputed from the direction
 9. **Mask rank.** Two popcounts and a branch on bit 32
-   (projects/utilities/voxrender-bench/src/tree_walk.wgsl:46-60). Fix: a
+   (projects/render/bench/voxrender-bench/src/tree_walk.wgsl:46-60). Fix: a
    stored prefix count, or dense child slots
 10. **Root index multiplies.**
-    projects/utilities/voxrender-bench/src/tree_walk.wgsl:32-34 multiplies
+    projects/render/bench/voxrender-bench/src/tree_walk.wgsl:32-34 multiplies
     runtime tile counts. Fix: pad the root to power-of-two tile counts. S1's
     room goes from 10x9x10 tiles to 16^3, 3.6 KB to 16 KB
 11. **Ray-query candidate setup.** Each candidate makes two dependent loads
-    (projects/utilities/voxrender-bench/src/ray_query.wgsl:63), loads the
+    (projects/render/bench/voxrender-bench/src/ray_query.wgsl:63), loads the
     whole Placement, runs at_pixel, enter(), and error_at, descends from the
     root for the start cell and again for the cell before it
-    (projects/utilities/voxrender-bench/src/tree_walk.wgsl:172-181), then
+    (projects/render/bench/voxrender-bench/src/tree_walk.wgsl:172-181), then
     re-descends on every step. Boxes cover whole bricks plus a 1/64-cell pad
-    (projects/utilities/voxrender-bench/src/ray_query_trace.rs:24, :103-118).
+    (projects/render/bench/voxrender-bench/src/ray_query_trace.rs:24, :103-118).
     The query uses RAY_FLAG_NONE
-    (projects/utilities/voxrender-bench/src/ray_query.wgsl:55). Fix: lever
+    (projects/render/bench/voxrender-bench/src/ray_query.wgsl:55). Fix: lever
     table 2.3. Dropping the "before" lookup for rays that start in air is
     reasoned from the code but untested
 12. **Float march divides.** One divide per axis per iteration
-    (projects/utilities/voxrender-bench/src/float_march.wgsl:100) and a
+    (projects/render/bench/voxrender-bench/src/float_march.wgsl:100) and a
     quaternion transform per candidate (:18-20). Fix: per-ray reciprocals and
     a per-placement inverse affine
 13. **Unknown wave size.** The Quest bench does not request SUBGROUP
-    (projects/utilities/voxrender-bench-quest/src/xr_gpu.rs:157), and every
+    (projects/render/bench/voxrender-bench-quest/src/xr_gpu.rs:157), and every
     kernel uses 8x8 groups
-    (projects/utilities/voxrender-wgpu/src/first_hit.wgsl:153). Fix: request
+    (projects/render/voxrender-wgpu/src/first_hit.wgsl:153). Fix: request
     SUBGROUP and log subgroup_size
 14. **The shadow path in the primary pipeline.**
-    projects/utilities/voxrender-wgpu/src/first_hit.wgsl:123-151 and :185-223
+    projects/render/voxrender-wgpu/src/first_hit.wgsl:123-151 and :185-223
     stay compiled in when unlit. Removing them measured 11.27 against
     11.28 ms here. Quest is unmeasured
 
@@ -319,7 +319,7 @@ on this Mac, both eyes at 1680x1760.
    reach f16 on Quest. The only missing bit is
    uniformAndStorageBuffer16BitAccess [19]. wgpu-hal requires it for both
    SHADER_F16 and SHADER_I16 [23]. The Quest bench owns its VkDevice
-   (projects/utilities/voxrender-bench-quest/src/xr_gpu.rs:151-232), so
+   (projects/render/bench/voxrender-bench-quest/src/xr_gpu.rs:151-232), so
    passthrough SPIR-V with shaderFloat16 and shaderInt16 enabled is
    spec-clean. Section 2.1 rates the gain small
 5. **64-bit atomics.** research.md:1021 records int64 atomics false. Quest
@@ -331,7 +331,7 @@ on this Mac, both eyes at 1680x1760.
 6. **Quad views.** B0 found PRIMARY_STEREO alone (benchmarks.md:26-27).
    STEREO_WITH_FOVEATED_INSET is OpenXR 1.1 core and needs a QUAD_VIEWS
    manifest tag [52][65]. The bench creates a 1.0 instance
-   (projects/utilities/voxrender-bench-quest/src/xr_system.rs:54) with no
+   (projects/render/bench/voxrender-bench-quest/src/xr_system.rs:54) with no
    tag, so B0 could not have seen it
 7. **Trusted modules.** research.md:1003 and :1290 plan them for shipping
    and for B2, but every B2 kernel ran checked. Every B2 rate carries the
@@ -342,7 +342,7 @@ on this Mac, both eyes at 1680x1760.
 9. **NAADF.** research.md cites its 7029 Mrays/s. It missed that our tree is
    NAADF's 16, 4, 1 nesting without the distance fields, and that tags 6
    and 7 are free to hold them
-   (projects/utilities/voxrender-bench/src/tree64.rs:14-27) [3]
+   (projects/render/bench/voxrender-bench/src/tree64.rs:14-27) [3]
 10. **The beam.** ESVO's iteration cuts of 14 to 48% gave 1.02 to 1.25x in
     time at 0.8 MP and up to 1.40x at 3.1 MP [6]. Iterations do not turn
     into time one to one. B8's shared stereo beam (research.md:1415) saves
@@ -378,7 +378,7 @@ decision the third. Numbers are Quest p50 rates unless marked.
    subgroup_size. Add B2 step variants: start hoisted, two independent
    chains, vec4 loads, a subgroup-uniform address, and STEPS = 0 launch-only
    kernels in compute and fragment. Log f from XrFovf at
-   projects/utilities/voxrender-bench-quest/src/probe_visibility_mask.rs:78-80.
+   projects/render/bench/voxrender-bench-quest/src/probe_visibility_mask.rs:78-80.
    Probe quad views with a 1.1 instance and the manifest tag. Read tree_walk's
    register footprint and scratch in RenderDoc Meta Fork. Decide: if two
    chains run near 2x one chain, the walk is latency-bound and rung 4 runs

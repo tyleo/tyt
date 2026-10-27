@@ -9,7 +9,7 @@ The app runs B0's device probe and logs each result on a line that starts
 with `b0`. Before the session opens, the app runs B1 and logs its report on
 lines that start with `b1`. Once the session runs, the app logs each window
 of B2's times on `b2` lines. The voxrender-wgpu
-[research](../../../doc/plan/open/voxrender-wgpu/reference/research.md#7-next-phase-benchmarks-and-prototypes-in-order)
+[research](../../../../doc/plan/open/voxrender-wgpu/reference/research.md#7-next-phase-benchmarks-and-prototypes-in-order)
 sets what each benchmark asks.
 
 The crate builds only for Android. The repo README's Quest builds section

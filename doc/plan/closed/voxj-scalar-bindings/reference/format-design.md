@@ -3,7 +3,7 @@
 _Part of the [voxj scalar-bindings plan](../README.md)._
 
 The complete replacement text for every section of
-[voxel-json-file-format.md](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md)
+[voxel-json-file-format.md](../../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md)
 this change touches, drafted against the spec as of commit `7527d30`.
 Approved by the owner 2026-07-16, closing phase 1; phase 2 copies it into the
 spec in one commit. Sections not listed here do not change. A line reading `[unchanged: ...]` splices the named text through from

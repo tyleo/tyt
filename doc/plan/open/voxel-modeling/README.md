@@ -41,13 +41,13 @@ the loop hands back.
 Four pages specify the pipeline:
 
 1. The
-   [TypeScript API](../../../../projects/utilities/sdfj-builder/docs/typescript-api.md)
+   [TypeScript API](../../../../projects/sdf/sdfj-builder/docs/typescript-api.md)
    lists every call a model file can make, with its signature and its effect in
    a line or two.
-2. The [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md)
+2. The [modeling API](../../../../projects/vxl/docs/modeling-api.md)
    sets how vxl runs a model file and how the model lands on the grid.
 3. The
-   [sdfj format](../../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md)
+   [sdfj format](../../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md)
    sets the document the builder writes and what each entry computes at a
    point.
 4. [Model evaluation](../../../ref/sdf-doc/model-evaluation.md) sets how vxl
@@ -270,16 +270,16 @@ solves them ahead of time rather than a fix at a time:
 16. The SDF crates follow the voxel and mesh families. The family keeps that
     structure even with `.sdfj` as its one format. The crates stay thin because
     voxsmith does the work.
-    1. `sdfcore` at `projects/utilities/sdfcore` holds a model's state as tables
+    1. `sdfcore` at `projects/sdf/sdfcore` holds a model's state as tables
        indexed by branded ids
-    2. `sdfj` at `projects/sdf-formats/sdfj` holds the `.sdfj` types.
+    2. `sdfj` at `projects/sdf/formats/sdfj` holds the `.sdfj` types.
        `sdfj-codec` reads and writes `.sdfj` documents over those types.
        `sdfj-sdfcore` converts between a document and the sdfcore state
-    3. `sdfconv` at `projects/utilities/sdfconv` reads and writes SDF formats
+    3. `sdfconv` at `projects/sdf/sdfconv` reads and writes SDF formats
        through the sdfcore state
     4. voxsmith evaluates and samples the sdfcore state under an `sdf_doc`
        feature beside `mesh_doc`
-    5. `sdfj-builder` at `projects/utilities/sdfj-builder` holds the builder as
+    5. `sdfj-builder` at `projects/sdf/sdfj-builder` holds the builder as
        a TypeScript package with the TypeScript API. vxl embeds the builder's
        `.ts` files and the TypeScript API, and holds the skill's workflow and
        the modeling API

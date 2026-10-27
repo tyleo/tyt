@@ -50,7 +50,7 @@ object.
    exports of the same object at different authored scales voxelize alike,
    mirroring [`vxl object mesh`](../../../../../ref/mesh/mesh.md)'s
    `--voxel-size`. See
-   [Coordinate System](../../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#coordinate-system).
+   [Coordinate System](../../../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md#coordinate-system).
 4. `--frame` `world` | `local` (default `world`): the frame each object's grid
    is built in. `world` applies the placing node's rotation and translation to
    the geometry, so every object's voxels align on one lattice and an object

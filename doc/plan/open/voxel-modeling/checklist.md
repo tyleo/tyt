@@ -8,10 +8,10 @@ Code-level choices go in an `implementation-decisions.md` beside this file.
 - The builder only records the model. Every check the `.sdfj` document can carry
   runs in vxl. Every voxj document vxl writes passes `vxl vox-doc validate`.
 - The
-  [TypeScript API](../../../../projects/utilities/sdfj-builder/docs/typescript-api.md),
-  the [modeling API](../../../../projects/utilities/vxl/docs/modeling-api.md),
+  [TypeScript API](../../../../projects/sdf/sdfj-builder/docs/typescript-api.md),
+  the [modeling API](../../../../projects/vxl/docs/modeling-api.md),
   the
-  [sdfj format](../../../../projects/sdf-formats/sdfj/docs/sdf-json-file-format.md),
+  [sdfj format](../../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md),
   and [model evaluation](../../../ref/sdf-doc/model-evaluation.md) lead. A
   change to the commands' surface or behavior lands in them in the same step.
 - The builder has no dependencies and no install step. The builder runs under

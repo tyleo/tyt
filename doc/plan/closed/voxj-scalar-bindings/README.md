@@ -5,7 +5,7 @@ and tests green on the scalar-bindings format. The owner approved
 [reference/format-design.md](reference/format-design.md), the complete target
 spec text, on 2026-07-16, closing phase 1; the phase 2 spec commit landed
 2026-07-17, making the
-[spec](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md)
+[spec](../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md)
 authoritative; and the code phases 3 to 7 landed crate by crate, ending with
 the docs sweep on 2026-07-21 (`9d6b5ba`). All fourteen decisions are settled,
 the former [open questions](#open-questions) included; see
@@ -30,7 +30,7 @@ property and any pool kind.
 ## The format delta
 
 A delta against
-[voxel-json-file-format.md](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md);
+[voxel-json-file-format.md](../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md);
 the full replacement text is in
 [reference/format-design.md](reference/format-design.md).
 

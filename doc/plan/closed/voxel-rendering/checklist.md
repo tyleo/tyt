@@ -23,7 +23,7 @@ resample plan has one.
 
 ## Phase 1
 
-- [x] **S1. voxsurface split.** Create `projects/utilities/voxsurface`. Move
+- [x] **S1. voxsurface split.** Create `projects/voxel/voxsurface`. Move
       `is_solid`, `FaceSpan`, `MeshGeometry`, `Method`, `mesh_slices`,
       `object_to_mesh_geometry`, and the corner rule of `compute_occlusion`
       out of voxsmith's `object_mesh`.
@@ -36,7 +36,7 @@ resample plan has one.
          `merge_rules`, `provenance`, program, records, and writers stay.
          `compute_occlusion` lifts the floats into a value-language array
       5. Tests move with their code. voxsmith's mesh tests pass unchanged
-- [x] **S2. voxrender scaffold.** Create `projects/utilities/voxrender` with a
+- [x] **S2. voxrender scaffold.** Create `projects/render/voxrender` with a
       default `cpu` feature. Add:
       1. The brands `BRenderObject`, `BRenderPlacement`, `BRenderMaterial`,
          `BRenderVoxel`, `BRenderLight`, and `BRenderView`

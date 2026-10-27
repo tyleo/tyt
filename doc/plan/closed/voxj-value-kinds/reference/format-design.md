@@ -1,7 +1,7 @@
 # voxj value kinds format design
 
 The target spec text for every section of
-[voxel-json-file-format.md](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md)
+[voxel-json-file-format.md](../../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md)
 the value-kinds change touches, drafted from the [README](../README.md)
 for the owner's review; iteration 2 lands it in the spec in one commit
 once approved. Each `##` heading below names the spec section whose text

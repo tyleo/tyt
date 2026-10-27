@@ -8,7 +8,7 @@ vxl-model skill. Step S14 runs them five more times, and
 
 ## Running a trial
 
-The [trial harness](../../../../projects/utilities/vxl/trials/README.md) runs
+The [trial harness](../../../../projects/vxl/trials/README.md) runs
 each prompt twice, in fresh headless Claude Code sessions outside the
 repository. A session inside the repository could read the builder and the docs
 in place of the skill.

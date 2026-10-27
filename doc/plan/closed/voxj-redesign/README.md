@@ -8,7 +8,7 @@ were confirmed against the shipped code. All eight decisions are closed; see
 the format diff and a survey of the current code.
 
 The target format is defined in
-[voxel-json-file-format.md](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md),
+[voxel-json-file-format.md](../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md),
 already rewritten on this branch in commit `b853623`. Only the spec doc changed;
 no Rust code has moved yet.
 
@@ -79,14 +79,14 @@ chain lands, so the port is one branch even though it is staged into commits.
    (`internal/voxj_validation.rs`, the twelve checks) is rewritten to the twenty
    new rules covering pools, kinds, min/max, bindings, and material ranges.
 
-3. **`voxcore`** (`projects/utilities/voxcore`): the neutral in-memory pivot
+3. **`voxcore`** (`projects/voxel/voxcore`): the neutral in-memory pivot
    model. Today `VoxPalette` is a rectangular cells-by-attributes grid of untyped
    inline `VoxValue`s, mirroring the old wire format exactly, and `VoxObject`
    forbids referencing the same palette twice. This crate is the crux; see
    [Decisions](#decisions) Q1. It also holds the load-bearing rule
    (no duplicate palette ref) that delta 3 relaxes.
 
-4. **`voxsmith`** (`projects/utilities/voxsmith`): every format converter pivots
+4. **`voxsmith`** (`projects/voxel/voxsmith`): every format converter pivots
    through voxcore. The voxj seam (`internal/voxj`, `convert/voxj`) is rewritten
    to build and read pools plus column-major materials. The glTF pipeline
    (`convert/gltf`, `internal/gltf`, `internal/mesh`) and the shared color
@@ -96,7 +96,7 @@ chain lands, so the port is one branch even though it is staged into commits.
    voxcore palettes with old attribute names; vmax is special because it attaches
    two palette refs per object and is the one place the old merge is load-bearing.
 
-5. **`vxl`** (`projects/utilities/vxl`): the CLI. `palette show` and `palette list`
+5. **`vxl`** (`projects/vxl`): the CLI. `palette show` and `palette list`
    render the old cell grid and hex-only color; `info` and `hierarchy show`
    print cell counts; `mesh` and the texture presets hardwire the old attribute
    names; the value-pool concept is absent. User-facing "cell" terminology is
@@ -359,7 +359,7 @@ port and captured here for follow-up:
 - Read `ior` and `transmissionFactor` and preserve
   `KHR_materials_emissive_strength` on glTF import, rather than dropping the first
   two and collapsing emissive to a unit strength. Addressed by Track B of the
-  [voxj follow-up plan](../../open/voxj-followups/README.md), import and symmetric
+  [voxj follow-up plan](../voxj-followups/README.md), import and symmetric
   export both landed.
 - A value-pool inspector surface in the CLI, for example `vxl palette pools`,
   showing pool kinds, bounds, and sharing.

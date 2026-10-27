@@ -50,7 +50,7 @@ The chain is `vxl` over `voxsmith` over `voxrender` over `voxsurface` over
 `voxcore`. Each layer speaks only to the layers below it. voxsmith's
 `object mesh` reaches `voxsurface` directly.
 
-1. `voxsurface`, a new crate at `projects/utilities/voxsurface`, split out of
+1. `voxsurface`, a new crate at `projects/voxel/voxsurface`, split out of
    voxsmith's `object mesh`. Holds what a grid's surface is: solidity, the
    boundary faces with culled and greedy merging, and the neighbor-occupancy
    corner occlusion as plain floats. Depends on `voxcore`, `ty-math`, and
@@ -64,7 +64,7 @@ The chain is `vxl` over `voxsmith` over `voxrender` over `voxsurface` over
    3. voxsmith keeps the merge rules, provenance, the value-language program,
       the records, and the writers. It lifts the occlusion floats into a
       value-language array where it computed them before.
-2. `voxrender`, a new crate at `projects/utilities/voxrender`. Holds the
+2. `voxrender`, a new crate at `projects/render/voxrender`. Holds the
    contract types, the render scene, and the CPU renderer behind a default
    `cpu` feature. Depends on `voxsurface`, `voxcore`, `ty-math`, and
    `branded-id` only.

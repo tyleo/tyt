@@ -96,7 +96,7 @@ Bridges:
 
 ## Model files and sdfj
 
-The rig exists. Each [part](../../../../projects/utilities/sdfj-builder/docs/typescript-api.md#parts)
+The rig exists. Each [part](../../../../projects/sdf/sdfj-builder/docs/typescript-api.md#parts)
 writes its own object under a node at its pivot, nested as the parts nest. A
 part voxelizes unrotated and its node takes the rotation, so a clip keyed on
 part nodes never re-voxelizes.

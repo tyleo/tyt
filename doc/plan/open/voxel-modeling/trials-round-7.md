@@ -3,7 +3,7 @@
 Step S19 of the [checklist](checklist.md) runs the [prompts](trials.md#prompts)
 a seventh time after steps S16 to S18. [Round 6](trials-round-6.md) logs the
 round before, and the
-[trial harness](../../../../projects/utilities/vxl/trials/README.md) ran all
+[trial harness](../../../../projects/vxl/trials/README.md) ran all
 seven.
 
 ## Changes before round 7

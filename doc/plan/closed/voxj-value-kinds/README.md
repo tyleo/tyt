@@ -13,7 +13,7 @@ and the grep residue in
 [reference/survey.md](reference/survey.md#closeout-grep-residue).
 
 One rule for the voxel-json
-[value pool kinds](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#value-pool-kinds):
+[value pool kinds](../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md#value-pool-kinds):
 a kind is a JSON shape and nothing more. Plain vectors replace the color
 vocabulary, range checks move out to the tools, and the format gains a home
 for non-color data.
@@ -196,7 +196,7 @@ values exact:
 ## What still reads a color
 
 No kind says a value is a color. The property name does, per the
-[glTF vocabulary](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#gltf-conventions).
+[glTF vocabulary](../../../../projects/voxel/formats/voxj/docs/voxel-json-file-format.md#gltf-conventions).
 A `vec-3-float` value pool holds colors under one name and normals under
 another:
 
@@ -386,12 +386,12 @@ exists to assert color for it.
 Every path below is confirmed at the keyboard. The list holds only what has
 been confirmed so far. Expect the implementation to surface more.
 
-1. `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md`: the kind
+1. `projects/voxel/formats/voxj/docs/voxel-json-file-format.md`: the kind
    table, the notes, validation rules 9 and 10, the TypeScript schema, the
    examples, the property names in the glTF conventions table, the
    format-wide sentence fixing the color space, the sentence scoping ranges
    to the property vocabulary, and the texture scope boundary.
-2. `projects/voxel-codecs/voxj/src/`: `voxj_value_pool.rs` carries the six
+2. `projects/voxel/formats/voxj/src/`: `voxj_value_pool.rs` carries the six
    color variants to delete, the six vector variants to add, and the
    `min`/`max` fields to drop. One file arrives, the sentinel serde module,
    and `voxj_bound.rs` is deleted. `voxj_file.rs` uses color kinds in its
@@ -401,10 +401,10 @@ been confirmed so far. Expect the implementation to surface more.
    hold the per-kind value checks and the bound rules. The bound rules
    delete, the per-kind checks shrink to shape checks, and the int rules,
    one spelling and the `2^53` cap, move from validation into the parse.
-4. `projects/utilities/voxcore/src/`: `vox_value_pool_kind.rs`,
+4. `projects/voxel/voxcore/src/`: `vox_value_pool_kind.rs`,
    `vox_value_pool.rs`, `vox_value_pool_value_ref.rs`,
    `vox_value_pool_flaw.rs`, `vox_main.rs`. `vox_bound.rs` is deleted.
-5. `projects/utilities/voxsmith/src/`: `internal/value_pool_color.rs` (see
+5. `projects/voxel/voxsmith/src/`: `internal/value_pool_color.rs` (see
    [what still reads a color](#what-still-reads-a-color)),
    `internal/voxj/vox_value_pool_from_voxj_value_pool.rs`,
    `internal/voxj/voxj_value_pool_from_vox_value_pool.rs`,
@@ -414,12 +414,12 @@ been confirmed so far. Expect the implementation to surface more.
    vocabulary check from [where ranges live](#where-ranges-live), the
    single function the boundaries call; its exact home is not confirmed
    yet.
-6. `projects/utilities/vxl/src/`: `utilities/voxj_color_format.rs` deleted
+6. `projects/vxl/src/`: `utilities/voxj_color_format.rs` deleted
    along with its `--color-format` flag, and `implementation/mesh_object.rs`
    (its channel-kind classification). `implementation/palette_show.rs`
    reworks `classify` to key on the property name, per
    [palette show](#palette-show).
-7. `projects/voxel-codecs/voxj/Cargo.toml` and `voxj-codec/Cargo.toml`: add
+7. `projects/voxel/formats/voxj/Cargo.toml` and `voxj-codec/Cargo.toml`: add
    `float_roundtrip` to `serde_json`. It is on in `vmax-codec` and off in
    both of these. An 8-bit color component decodes to a linear value that
    serializes at 17 significant digits, and without the feature a 1 ULP

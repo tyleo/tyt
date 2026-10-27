@@ -935,7 +935,7 @@ value for value in both directions.
 Pulled forward ahead of S14 per the phase 7 note, since phase 5 ran
 first. The closure was staged in `pathspec` first; on review the
 owner reopened decision 11's homing and chose a dependency-free
-micro crate, `projects/utilities/treeselect` (unclaimed on crates.io
+micro crate, `projects/foundation/treeselect` (unclaimed on crates.io
 as of 2026-07-22), with the sibling utilities' publishable metadata,
 added to workspace `members` and `[patch.crates-io]` and joining the
 deferred publish item. Decision 11 carries the dated amendment.

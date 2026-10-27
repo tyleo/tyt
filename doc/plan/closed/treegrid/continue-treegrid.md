@@ -2,7 +2,7 @@
 
 You are executing a multi-session plan that extracts one shared
 hierarchical-data renderer -- the `treegrid` crate at
-`projects/utilities/treegrid` -- and migrates the read commands onto it:
+`projects/foundation/treegrid` -- and migrates the read commands onto it:
 `vxl palette show`, `vxl hierarchy show`, `vxl palette list`,
 `tyt vmax hierarchy`, `tyt fbx hierarchy`, and the `vxl info` /
 `validate` / `list` tables, plus a small `treeselect` coda. This is
@@ -35,7 +35,7 @@ no checklist item is checked yet, the first session starts at S1.
    `implementation/palette_show.rs`, `hierarchy_show.rs`, and
    `palette_list.rs`; `tyt-vmax/src/commands/hierarchy.rs`;
    `tyt-fbx/src/commands/hierarchy.rs`; and the arena pattern in
-   `projects/utilities/voxcore/src/vox_hierarchy_node.rs`.
+   `projects/voxel/voxcore/src/vox_hierarchy_node.rs`.
 
 ## Pick the work
 

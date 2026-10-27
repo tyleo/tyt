@@ -114,8 +114,10 @@ pub fn add_command_to_crate(
 /// inferred by looking on disk for a scaffolded crate, recognized by its root
 /// command-enum file `src/{module}.rs`. That file also pins down the prefix,
 /// so a command crate like `tyt-vmax` is never confused with a same-named
-/// library crate such as the `vmax` codec. Errors when nothing matches or when
-/// more than one crate does.
+/// library crate such as the `vmax` codec. The search covers each group and
+/// `projects/` itself, which it returns as an empty group, so a crate like
+/// `projects/vxl` is found too. Errors when nothing matches or when more than
+/// one crate does.
 fn find_parent_crate(
     deps: &impl Dependencies,
     root: &Path,
@@ -140,6 +142,7 @@ fn find_parent_crate(
                 })
                 .collect();
             groups.sort();
+            groups.insert(0, String::new());
             groups
         }
     };
@@ -174,10 +177,11 @@ fn find_parent_crate(
             let locations: Vec<String> = many
                 .iter()
                 .map(|(group, prefixed)| {
-                    format!(
-                        "projects/{group}/{}",
-                        CrateNaming::new(*prefixed, suffix).package
-                    )
+                    Path::new(PROJECTS_DIR)
+                        .join(group)
+                        .join(CrateNaming::new(*prefixed, suffix).package)
+                        .display()
+                        .to_string()
                 })
                 .collect();
             Err(Error::Meta(format!(

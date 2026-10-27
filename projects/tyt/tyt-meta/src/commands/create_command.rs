@@ -50,7 +50,7 @@ pub struct CreateCommand {
     pub parent: Vec<String>,
 
     /// Group directory under `projects/` to place the crate in (e.g.
-    /// `utilities`). Defaults to `tyt` when creating; inferred from disk when
+    /// `vxl`). Defaults to `tyt` when creating; inferred from disk when
     /// adding with `--parent`.
     #[arg(value_name = "dir", long)]
     pub dir: Option<String>,

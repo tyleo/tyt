@@ -53,6 +53,8 @@ impl Dependencies for TestDeps {
 struct Fixture {
     root: PathBuf,
 
+    dir: Option<&'static str>,
+
     suffix: String,
 }
 
@@ -60,20 +62,31 @@ impl Fixture {
     /// Scaffolds `projects/utilities/{suffix}` with an empty root command enum
     /// and an empty `commands/mod.rs`, ready for commands to be added.
     fn new(suffix: &str) -> Self {
+        Self::scaffold(Some("utilities"), suffix)
+    }
+
+    /// Scaffolds `projects/{suffix}` directly under `projects/`, with no group
+    /// directory, and leaves `--dir` for the scaffolder to infer.
+    fn flat(suffix: &str) -> Self {
+        Self::scaffold(None, suffix)
+    }
+
+    fn scaffold(dir: Option<&'static str>, suffix: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let root = env::temp_dir().join(format!("tyt-meta-test-{}-{unique}", process::id()));
 
-        let src = root.join(format!("projects/utilities/{suffix}/src"));
+        let fixture = Self {
+            root,
+            dir,
+            suffix: suffix.to_string(),
+        };
+        let src = fixture.src();
         fs::create_dir_all(src.join("commands")).unwrap();
         let root_enum = tyt_enum_template_empty(&kebab_to_pascal_case(suffix), "Demo commands.");
         fs::write(src.join(format!("{suffix}.rs")), root_enum).unwrap();
         fs::write(src.join("commands/mod.rs"), "").unwrap();
-
-        Self {
-            root,
-            suffix: suffix.to_string(),
-        }
+        fixture
     }
 
     fn deps(&self) -> TestDeps {
@@ -92,7 +105,7 @@ impl Fixture {
             command: command.to_string(),
             description: format!("The {command} command."),
             parent: parents.clone(),
-            dir: Some("utilities".to_string()),
+            dir: self.dir.map(String::from),
             prefix: Some(false),
         };
         add_command_to_crate(&cmd, &self.deps(), &parents)
@@ -100,7 +113,10 @@ impl Fixture {
 
     fn src(&self) -> PathBuf {
         self.root
-            .join(format!("projects/utilities/{}/src", self.suffix))
+            .join("projects")
+            .join(self.dir.unwrap_or_default())
+            .join(&self.suffix)
+            .join("src")
     }
 
     fn read(&self, relative: &str) -> String {
@@ -257,6 +273,15 @@ fn a_flat_command_with_no_groups_stays_a_single_file() {
     assert!(!fixture.exists("commands/run/mod.rs"));
     let root_mod = fixture.read("commands/mod.rs");
     assert!(root_mod.contains("mod run;"));
+    assert!(fixture.read("demo.rs").contains("Run(Run),"));
+}
+
+#[test]
+fn finds_a_crate_directly_under_projects() {
+    let fixture = Fixture::flat("demo");
+    fixture.add("Run", "run", &[]).unwrap();
+
+    assert!(fixture.exists("commands/run.rs"));
     assert!(fixture.read("demo.rs").contains("Run(Run),"));
 }
 

@@ -1,7 +1,7 @@
 export const meta = {
   name: 'voxel-trials',
   description: 'Run each voxel-modeling trial prompt twice in headless Claude Code sessions, then analyze and compare the runs',
-  whenToUse: 'A round of the voxel-modeling trials, after setup.sh in projects/utilities/vxl/trials',
+  whenToUse: 'A round of the voxel-modeling trials, after setup.sh in projects/vxl/trials',
   phases: [
     { title: 'Run', detail: 'one headless claude -p session per trial directory, 12 at a time' },
     { title: 'Analyze', detail: 'one agent per prompt reads both runs and compares them' },
@@ -10,7 +10,7 @@ export const meta = {
 }
 
 // Paths read from the repository root because workflow agents start there.
-const HARNESS = 'projects/utilities/vxl/trials'
+const HARNESS = 'projects/vxl/trials'
 const LIMIT = (args && args.concurrency) || 12
 
 let active = 0
