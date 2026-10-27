@@ -1,8 +1,8 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        Bounds3d, FACE_OFFSETS, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfStepRecord, is_exposed,
-        meters, see_through_materials,
+        Bounds3d, FACE_OFFSETS, PlaceFrame, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfStepRecord,
+        is_exposed, meters, see_through_materials,
     },
     utilities::{FillMode, VoxelFrame},
 };
@@ -134,11 +134,12 @@ pub fn report(
     };
 
     let poses = world_poses(&sampling.places);
+    let cell_poses = cell_poses(sampling, &poses);
 
     // Under a turn, the model's box reads posed and has no size in cells.
     let posed = place_cells
         .iter()
-        .zip(&poses)
+        .zip(&cell_poses)
         .filter_map(|(cells, pose)| posed_bounds(cells.iter().copied(), *pose, voxel_size))
         .reduce(|bounds, place| bounds.union(&place))
         .map(|bounds| Field::Text(bounds_text(&bounds)));
@@ -179,6 +180,7 @@ pub fn report(
         detached: &detached,
         see_through: &see_through,
         poses: &poses,
+        cell_poses: &cell_poses,
         place_label: &place_label,
         step_label: &step_label,
         first_places: HashMap::new(),
@@ -368,6 +370,9 @@ struct ReportWriter<'a> {
     /// Each place's pose in the world.
     poses: &'a [TyPoseF64],
 
+    /// The world pose of the frame that holds each place's cells.
+    cell_poses: &'a [TyPoseF64],
+
     /// The path a line gives the place at an index.
     place_label: &'a dyn Fn(usize) -> String,
 
@@ -410,10 +415,14 @@ impl ReportWriter<'_> {
         let extent = extent_fields(cells.iter().copied(), voxel_size);
 
         // A part under a turn adds its posed box.
-        let posed = posed_bounds(cells.iter().copied(), pose, voxel_size)
-            .map(|bounds| bounds_text(&bounds))
-            .filter(|posed| extent[1] != Some(Field::Text(posed.clone())))
-            .map(|posed| Field::Text(format!("posed {posed}")));
+        let posed = posed_bounds(
+            cells.iter().copied(),
+            self.cell_poses[place_index],
+            voxel_size,
+        )
+        .map(|bounds| bounds_text(&bounds))
+        .filter(|posed| extent[1] != Some(Field::Text(posed.clone())))
+        .map(|posed| Field::Text(format!("posed {posed}")));
 
         self.lines.push(ReportLine {
             kind: LineKind::Part,
@@ -675,6 +684,23 @@ fn world_poses(places: &[SdfPlace]) -> Vec<TyPoseF64> {
     poses
 }
 
+/// The world pose of the frame that holds the cells of each place of
+/// `sampling`. A place that flattens into the nearest kept place above it holds
+/// its cells in that place's frame.
+fn cell_poses(sampling: &SdfSampling, poses: &[TyPoseF64]) -> Vec<TyPoseF64> {
+    let frames = PlaceFrame::of_places(&sampling.places, sampling.posed);
+    let mut cell_poses: Vec<TyPoseF64> = Vec::with_capacity(poses.len());
+
+    for (index, place) in sampling.places.iter().enumerate() {
+        cell_poses.push(match place.parent {
+            Some(parent) if !frames[index].kept => cell_poses[parent],
+            _ => poses[index],
+        });
+    }
+
+    cell_poses
+}
+
 /// `bounds` as a report line shows it.
 fn bounds_text(bounds: &Bounds3d) -> String {
     format!("{} .. {}", point_text(bounds.min), point_text(bounds.max))
@@ -932,13 +958,19 @@ mod tests {
 
     /// The report on `main` sampled at `voxel_size` under the world frame.
     fn report_on(main: &SdfMain, voxel_size: f64, fill_mode: FillMode) -> String {
+        report_sampled(main, voxel_size, fill_mode, false)
+    }
+
+    /// The report on `main` sampled at `voxel_size` under the world frame, at
+    /// each part's pose when `posed`.
+    fn report_sampled(main: &SdfMain, voxel_size: f64, fill_mode: FillMode, posed: bool) -> String {
         let sampling = sample(
             &DependenciesImpl,
             main,
             &SdfSampleOptions {
                 resolution: GridResolution::VoxelSize(voxel_size),
                 frame: VoxelFrame::World,
-                posed: false,
+                posed,
                 record_writes: true,
             },
         )
@@ -1042,6 +1074,32 @@ model.voxj  37 voxels of 1 m  2 pieces  [0, 0, -7] .. [4, 3, 0]
   piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
 check  1 line  model 37 voxels, 2 pieces
   piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+"
+        );
+    }
+
+    #[test]
+    fn a_part_posed_onto_its_root_reads_its_turn_once() {
+        // The pebble's quarter turn about y at its pivot carries +x onto -z.
+        let mut state = parts_main().state().clone();
+        state.nodes[U32Id::from_u32(1).to_usize_id()].rotation = vec![SdfAxisRotation {
+            axis: TyAxis3::Y,
+            degrees: 90.0,
+        }];
+
+        assert_eq!(
+            report_sampled(&SdfMain::new(state).unwrap(), 1.0, FillMode::Solid, true),
+            "\
+model.voxj  37 voxels of 1 m  2 pieces  7x3x5  [0, 0, -1] .. [7, 3, 4]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 2, 1] .. [3, 3, 3]  pivot [2, 2, 2]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
+  part  pebble  1 voxel  1x1x1  [6, 0, -1] .. [7, 1, 0]  pivot [6, 0, 0]  detached
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, -1] .. [7, 1, 0]
+  piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]   from body, lid
+  piece 2   1 voxel   1x1x1  [6, 0, -1] .. [7, 1, 0]  from pebble
+check  1 line  model 37 voxels, 2 pieces
+  piece 2  1 voxel  1x1x1  [6, 0, -1] .. [7, 1, 0]  from pebble
 "
         );
     }
