@@ -15,7 +15,9 @@ use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet, VecDeque},
 };
-use ty_math::{TyPoseF64, TyQuaternionExt, TyVector3F64, TyVector3I32};
+use ty_math::{
+    TyPoseF64, TyQuaternionExt, TyQuaternionF64, TyVector3F64, TyVector3I32, ZERO_LENGTH_TOLERANCE,
+};
 
 /// The report on the grids of `sampling` for the voxj document `name` written
 /// under `fill_mode` by model evaluation. Errors on grids sampled under the
@@ -53,11 +55,20 @@ pub fn report(
         })
         .collect();
 
-    let covered: HashSet<TyVector3I32> = place_cells.iter().flatten().copied().collect();
-    let pieces = face_pieces(&covered);
+    let poses = world_poses(&sampling.places);
+    let cell_poses = cell_poses(sampling, &poses);
+    let (lattice_of, lattice_poses) = lattices(&cell_poses);
+
+    let mut covered: Vec<HashSet<TyVector3I32>> = vec![HashSet::new(); lattice_poses.len()];
+
+    for (place_index, cells) in place_cells.iter().enumerate() {
+        covered[lattice_of[place_index]].extend(cells);
+    }
+
+    let pieces = model_pieces(&covered, &lattice_poses, voxel_size);
 
     // A model in one piece leaves no part detached and lists no pieces.
-    let piece_of: HashMap<TyVector3I32, usize> = match pieces.len() {
+    let piece_of: HashMap<(usize, TyVector3I32), usize> = match pieces.len() {
         0 | 1 => HashMap::new(),
         _ => pieces
             .iter()
@@ -65,13 +76,13 @@ pub fn report(
             .flat_map(|(index, piece)| piece.iter().map(move |cell| (*cell, index)))
             .collect(),
     };
-    let detached = detached_places(sampling, &place_cells, &piece_of, pieces.len());
+    let detached = detached_places(sampling, &place_cells, &lattice_of, &piece_of, pieces.len());
 
     let see_through = see_through_materials(&sampling.materials);
 
     // The voxel counts read the cells the document holds.
     let (place_voxels, voxels) = match fill_mode {
-        FillMode::Solid => (Cow::Borrowed(&place_cells[..]), Cow::Borrowed(&covered)),
+        FillMode::Solid => (Cow::Borrowed(&place_cells[..]), Cow::Borrowed(&covered[..])),
 
         FillMode::Surface => {
             let place_voxels: Vec<HashSet<TyVector3I32>> = sampling
@@ -89,11 +100,16 @@ pub fn report(
                         .collect()
                 })
                 .collect();
-            let voxels = place_voxels.iter().flatten().copied().collect();
+            let mut voxels: Vec<HashSet<TyVector3I32>> = vec![HashSet::new(); lattice_poses.len()];
+
+            for (place_index, cells) in place_voxels.iter().enumerate() {
+                voxels[lattice_of[place_index]].extend(cells);
+            }
 
             (Cow::Owned(place_voxels), Cow::Owned(voxels))
         }
     };
+    let voxel_count: u64 = voxels.iter().map(|cells| cells.len() as u64).sum();
 
     let roots: Vec<usize> = (0..sampling.places.len())
         .filter(|&index| sampling.places[index].parent.is_none())
@@ -133,21 +149,14 @@ pub fn report(
             .join("/")
     };
 
-    let poses = world_poses(&sampling.places);
-    let cell_poses = cell_poses(sampling, &poses);
-
-    // Under a turn, the model's box reads posed and has no size in cells.
-    let posed = place_cells
-        .iter()
-        .zip(&cell_poses)
-        .filter_map(|(cells, pose)| posed_bounds(cells.iter().copied(), *pose, voxel_size))
-        .reduce(|bounds, place| bounds.union(&place))
-        .map(|bounds| Field::Text(bounds_text(&bounds)));
-    let mut extent = extent_fields(covered.iter().copied(), voxel_size);
-
-    if extent[1] != posed {
-        extent = vec![None, posed];
-    }
+    let extent = world_extent_fields(
+        covered
+            .iter()
+            .enumerate()
+            .flat_map(|(lattice, cells)| cells.iter().map(move |cell| (lattice, *cell))),
+        &lattice_poses,
+        voxel_size,
+    );
 
     let pieces_label = match pieces.len() {
         1 => "1 piece".to_owned(),
@@ -162,7 +171,7 @@ pub fn report(
                 Some(Field::Text(name.to_owned())),
                 Some(Field::Text(format!(
                     "{} of {} m",
-                    count_text(voxels.len() as u64, "voxel", "voxels"),
+                    count_text(voxel_count, "voxel", "voxels"),
                     meters(voxel_size)
                 ))),
                 Some(Field::Text(pieces_label.clone())),
@@ -212,7 +221,7 @@ pub fn report(
                 for (step_id, record) in object.step_ids.iter().zip(&grid.steps) {
                     let step = &state.steps[step_id.to_usize_id()];
                     let mut reached: Vec<usize> = live_written(grid, record)
-                        .map(|cell| piece_of[&cell])
+                        .map(|cell| piece_of[&(lattice_of[place_index], cell)])
                         .collect();
                     reached.sort_unstable();
                     reached.dedup();
@@ -225,8 +234,11 @@ pub fn report(
         }
 
         let width = pieces.len().to_string().len();
-        let piece_voxels = |piece: &Vec<TyVector3I32>| {
-            piece.iter().filter(|cell| voxels.contains(cell)).count() as u64
+        let piece_voxels = |piece: &Vec<(usize, TyVector3I32)>| {
+            piece
+                .iter()
+                .filter(|(lattice, cell)| voxels[*lattice].contains(cell))
+                .count() as u64
         };
         let mut folds: Vec<(String, Vec<usize>)> = Vec::new();
         let mut piece_lines = Vec::with_capacity(pieces.len());
@@ -249,7 +261,7 @@ pub fn report(
                         Some(Field::Text(format!("piece {:>width$}", index + 1))),
                         Some(count_field(piece_voxels(piece), "voxel", "voxels")),
                     ],
-                    extent_fields(piece.iter().copied(), voxel_size),
+                    world_extent_fields(piece.iter().copied(), &lattice_poses, voxel_size),
                     vec![Some(Field::Text(from))],
                 ]
                 .concat(),
@@ -287,10 +299,11 @@ pub fn report(
                         Some(Field::Text(format!("{} pieces", indices.len()))),
                         Some(Field::Text(size)),
                     ],
-                    extent_fields(
+                    world_extent_fields(
                         indices
                             .iter()
                             .flat_map(|&index| pieces[index].iter().copied()),
+                        &lattice_poses,
                         voxel_size,
                     ),
                     vec![Some(Field::Text(from))],
@@ -308,7 +321,7 @@ pub fn report(
             Some(count_field(checks.len() as u64, "line", "lines")),
             Some(Field::Text(format!(
                 "model {}, {pieces_label}",
-                count_text(voxels.len() as u64, "voxel", "voxels")
+                count_text(voxel_count, "voxel", "voxels")
             ))),
         ],
     });
@@ -643,6 +656,38 @@ fn extent_fields(cells: impl Iterator<Item = TyVector3I32>, voxel_size: f64) -> 
     ]
 }
 
+/// The size and bounds fields of the box in the world around `cells`, each
+/// beside its lattice in `lattice_poses`. Under a turn, the box reads posed and
+/// has no size in cells.
+fn world_extent_fields(
+    cells: impl Iterator<Item = (usize, TyVector3I32)> + Clone,
+    lattice_poses: &[TyPoseF64],
+    voxel_size: f64,
+) -> Vec<Option<Field>> {
+    let extent = extent_fields(cells.clone().map(|(_, cell)| cell), voxel_size);
+    let posed = lattice_poses
+        .iter()
+        .enumerate()
+        .filter_map(|(lattice, pose)| {
+            posed_bounds(
+                cells
+                    .clone()
+                    .filter(|(cell_lattice, _)| *cell_lattice == lattice)
+                    .map(|(_, cell)| cell),
+                *pose,
+                voxel_size,
+            )
+        })
+        .reduce(|bounds, lattice| bounds.union(&lattice))
+        .map(|bounds| Field::Text(bounds_text(&bounds)));
+
+    if extent[1] == posed {
+        extent
+    } else {
+        vec![None, posed]
+    }
+}
+
 /// The box in meters around `cells` posed by `pose`, or `None` for no cells.
 fn posed_bounds(
     cells: impl Iterator<Item = TyVector3I32>,
@@ -699,6 +744,28 @@ fn cell_poses(sampling: &SdfSampling, poses: &[TyPoseF64]) -> Vec<TyPoseF64> {
     }
 
     cell_poses
+}
+
+/// The lattice of each place and the world pose of each lattice, from
+/// `cell_poses`. Places whose cells sit in frames of one pose share a lattice.
+fn lattices(cell_poses: &[TyPoseF64]) -> (Vec<usize>, Vec<TyPoseF64>) {
+    let mut lattice_poses: Vec<TyPoseF64> = Vec::new();
+
+    let lattice_of = cell_poses
+        .iter()
+        .map(
+            |pose| match lattice_poses.iter().position(|lattice| lattice == pose) {
+                Some(lattice) => lattice,
+
+                None => {
+                    lattice_poses.push(*pose);
+                    lattice_poses.len() - 1
+                }
+            },
+        )
+        .collect();
+
+    (lattice_of, lattice_poses)
 }
 
 /// `bounds` as a report line shows it.
@@ -758,11 +825,13 @@ fn grid_cells(grid: &SdfGrid) -> impl Iterator<Item = (TyVector3I32, &SdfCell)> 
 /// Whether each place of `sampling` reads detached: the place and its parent
 /// have live cells, yet no piece holding the cells of the place or a part below
 /// it holds a cell of the parent. `piece_of` holds the piece of every cell in
-/// `place_cells` once the model splits into `piece_count` pieces.
+/// `place_cells`, beside the lattice `lattice_of` gives its place, once the
+/// model splits into `piece_count` pieces.
 fn detached_places(
     sampling: &SdfSampling,
     place_cells: &[HashSet<TyVector3I32>],
-    piece_of: &HashMap<TyVector3I32, usize>,
+    lattice_of: &[usize],
+    piece_of: &HashMap<(usize, TyVector3I32), usize>,
     piece_count: usize,
 ) -> Vec<bool> {
     let place_count = sampling.places.len();
@@ -781,7 +850,13 @@ fn detached_places(
 
     let place_pieces: Vec<HashSet<usize>> = place_cells
         .iter()
-        .map(|cells| cells.iter().map(|cell| piece_of[cell]).collect())
+        .zip(lattice_of)
+        .map(|(cells, &lattice)| {
+            cells
+                .iter()
+                .map(|cell| piece_of[&(lattice, *cell)])
+                .collect()
+        })
         .collect();
 
     (0..place_count)
@@ -843,6 +918,160 @@ fn face_pieces(cells: &HashSet<TyVector3I32>) -> Vec<Vec<TyVector3I32>> {
 
     pieces.sort_by_key(|piece| Reverse(piece.len()));
     pieces
+}
+
+/// The pieces of the cells `covered` holds per lattice, from the largest, with
+/// each cell beside its lattice. Cells of one lattice join across a face, and
+/// cells of two lattices join where their cubes meet in the world.
+fn model_pieces(
+    covered: &[HashSet<TyVector3I32>],
+    lattice_poses: &[TyPoseF64],
+    voxel_size: f64,
+) -> Vec<Vec<(usize, TyVector3I32)>> {
+    let lattice_pieces: Vec<(usize, Vec<TyVector3I32>)> = covered
+        .iter()
+        .enumerate()
+        .flat_map(|(lattice, cells)| {
+            face_pieces(cells)
+                .into_iter()
+                .map(move |piece| (lattice, piece))
+        })
+        .collect();
+    let mut roots: Vec<usize> = (0..lattice_pieces.len()).collect();
+
+    if lattice_poses.len() > 1 {
+        let center = |lattice: usize, cell: TyVector3I32| {
+            let pose = lattice_poses[lattice];
+
+            pose.position + pose.rotation * ((cell.as_dvec3() + 0.5) * voxel_size)
+        };
+
+        // Cubes that meet have centers less than a bucket apart, so a cell's
+        // bucket and the buckets around it hold every cube it can meet.
+        let bucket_size = 2.0 * voxel_size;
+        let bucket_of = |center: TyVector3F64| (center / bucket_size).floor().as_ivec3();
+        let neighbors: Vec<TyVector3I32> = (-1..=1)
+            .flat_map(|x| {
+                (-1..=1).flat_map(move |y| (-1..=1).map(move |z| TyVector3I32::new(x, y, z)))
+            })
+            .collect();
+        let mut buckets: HashMap<TyVector3I32, Vec<(usize, TyVector3F64)>> = HashMap::new();
+
+        for (piece_index, (lattice, piece)) in lattice_pieces.iter().enumerate() {
+            for &cell in piece {
+                let center = center(*lattice, cell);
+                buckets
+                    .entry(bucket_of(center))
+                    .or_default()
+                    .push((piece_index, center));
+            }
+        }
+
+        // Only surface cells look for contact, because where two pieces meet, a
+        // surface cell of one meets a cell of the other.
+        for (piece_index, (lattice, piece)) in lattice_pieces.iter().enumerate() {
+            let cells = &covered[*lattice];
+            let rotation = lattice_poses[*lattice].rotation;
+
+            for &cell in piece {
+                if FACE_OFFSETS
+                    .iter()
+                    .all(|&face| cells.contains(&(cell + face)))
+                {
+                    continue;
+                }
+
+                let center = center(*lattice, cell);
+                let bucket = bucket_of(center);
+
+                for &(other_index, other_center) in neighbors
+                    .iter()
+                    .filter_map(|&neighbor| buckets.get(&(bucket + neighbor)))
+                    .flatten()
+                {
+                    let other_lattice = lattice_pieces[other_index].0;
+                    let root = root_of(&mut roots, piece_index);
+                    let other_root = root_of(&mut roots, other_index);
+
+                    if other_lattice != *lattice
+                        && root != other_root
+                        && cubes_meet(
+                            center,
+                            rotation,
+                            other_center,
+                            lattice_poses[other_lattice].rotation,
+                            voxel_size / 2.0,
+                        )
+                    {
+                        roots[root] = other_root;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut pieces: Vec<Vec<(usize, TyVector3I32)>> = Vec::new();
+    let mut piece_of_root: HashMap<usize, usize> = HashMap::new();
+
+    for (piece_index, (lattice, piece)) in lattice_pieces.iter().enumerate() {
+        let root = root_of(&mut roots, piece_index);
+        let index = *piece_of_root.entry(root).or_insert_with(|| {
+            pieces.push(Vec::new());
+            pieces.len() - 1
+        });
+        pieces[index].extend(piece.iter().map(|&cell| (*lattice, cell)));
+    }
+
+    pieces.sort_by_key(|piece| Reverse(piece.len()));
+    pieces
+}
+
+/// The root of the set holding `index` in the forest `roots`. Each step halves
+/// the path to it.
+fn root_of(roots: &mut [usize], mut index: usize) -> usize {
+    while roots[index] != index {
+        roots[index] = roots[roots[index]];
+        index = roots[index];
+    }
+
+    index
+}
+
+/// Whether the cubes of half side `half` centered at `center` and
+/// `other_center`, turned by `rotation` and `other_rotation`, overlap or touch.
+fn cubes_meet(
+    center: TyVector3F64,
+    rotation: TyQuaternionF64,
+    other_center: TyVector3F64,
+    other_rotation: TyQuaternionF64,
+    half: f64,
+) -> bool {
+    let axes = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z];
+    let edges = axes.map(|axis| rotation * axis);
+    let other_edges = axes.map(|axis| other_rotation * axis);
+    let offset = other_center - center;
+
+    // Cubes that stay apart have a separating axis among the face normals and
+    // the cross products of the edges.
+    let normals = edges.iter().chain(&other_edges).copied().chain(
+        edges
+            .iter()
+            .flat_map(|&edge| other_edges.iter().map(move |&other| edge.cross(other))),
+    );
+
+    !normals
+        .filter(|normal| normal.length() >= ZERO_LENGTH_TOLERANCE)
+        .any(|normal| {
+            let normal = normal.normalize();
+            let reach: f64 = edges
+                .iter()
+                .chain(&other_edges)
+                .map(|edge| edge.dot(normal).abs())
+                .sum();
+
+            // The slack lets faces that touch meet through rounding.
+            offset.dot(normal).abs() > half * (reach + 1e-9)
+        })
 }
 
 /// The name a report gives the kind of `step`.
@@ -1070,10 +1299,10 @@ model.voxj  37 voxels of 1 m  2 pieces  [0, 0, -7] .. [4, 3, 0]
     add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
   part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [0, 0, -6]  posed [0, 0, -7] .. [1, 1, -6]  detached
     add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
-  piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]  from body, lid
-  piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+  piece 1  36 voxels  [0, 0, -4] .. [4, 3, 0]   from body, lid
+  piece 2   1 voxel   [0, 0, -7] .. [1, 1, -6]  from pebble
 check  1 line  model 37 voxels, 2 pieces
-  piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+  piece 2  1 voxel  [0, 0, -7] .. [1, 1, -6]  from pebble
 "
         );
     }
@@ -1100,6 +1329,90 @@ model.voxj  37 voxels of 1 m  2 pieces  7x3x5  [0, 0, -1] .. [7, 3, 4]
   piece 2   1 voxel   1x1x1  [6, 0, -1] .. [7, 1, 0]  from pebble
 check  1 line  model 37 voxels, 2 pieces
   piece 2  1 voxel  1x1x1  [6, 0, -1] .. [7, 1, 0]  from pebble
+"
+        );
+    }
+
+    /// `parts_main` with the pebble's box at `pebble`, turned `degrees` about y
+    /// at `pivot`.
+    fn turned_pebble(pebble: SdfShape3d, pivot: [f64; 3], degrees: f64) -> SdfMain {
+        let mut state = parts_main().state().clone();
+        state.shapes3d[U32Id::from_u32(2).to_usize_id()] = pebble;
+
+        let node = &mut state.nodes[U32Id::from_u32(1).to_usize_id()];
+        node.pivot = Some(TyVector3F64::from_array(pivot));
+        node.rotation = vec![SdfAxisRotation {
+            axis: TyAxis3::Y,
+            degrees,
+        }];
+
+        SdfMain::new(state).unwrap()
+    }
+
+    #[test]
+    fn a_part_turned_against_its_root_reads_attached() {
+        // The quarter turn carries the pebble from x 6 against the body's z 0
+        // face.
+        let main = turned_pebble(
+            cuboid([6.0, 0.0, 0.0], [7.0, 1.0, 1.0]),
+            [4.5, 0.0, 1.5],
+            90.0,
+        );
+
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  37 voxels of 1 m  1 piece  [0, 0, -1] .. [4, 3, 4]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 2, 1] .. [3, 3, 3]  pivot [2, 2, 2]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
+  part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [4.5, 0, 1.5]  posed [3, 0, -1] .. [4, 1, 0]
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
+check  0 lines  model 37 voxels, 1 piece
+"
+        );
+    }
+
+    #[test]
+    fn a_part_at_an_odd_turn_reads_where_its_voxels_reach() {
+        // The turn carries the pebble from x 6 into the body's corner.
+        let main = turned_pebble(
+            cuboid([6.0, 0.0, 0.0], [7.0, 1.0, 1.0]),
+            [5.0, 0.5, 0.5],
+            135.0,
+        );
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  37 voxels of 1 m  1 piece  [0, 0, -1.267767] .. [4.646447, 3, 4]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 2, 1] .. [3, 3, 3]  pivot [2, 2, 2]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
+  part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [5, 0.5, 0.5]  posed [3.232233, 0, -1.267767] .. [4.646447, 1, 0.146447]
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
+check  0 lines  model 37 voxels, 1 piece
+"
+        );
+
+        // The turn swings the pebble off the body's x 4 face.
+        let main = turned_pebble(
+            cuboid([4.0, 0.0, 2.0], [5.0, 1.0, 3.0]),
+            [5.5, 0.5, 2.5],
+            45.0,
+        );
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  37 voxels of 1 m  2 pieces  [0, 0, 0] .. [5.5, 3, 4]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 2, 1] .. [3, 3, 3]  pivot [2, 2, 2]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 2, 1] .. [3, 3, 3]
+  part  pebble  1 voxel  1x1x1  [4, 0, 2] .. [5, 1, 3]  pivot [5.5, 0.5, 2.5]  posed [4.085786, 0, 2.5] .. [5.5, 1, 3.914214]  detached
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [4, 0, 2] .. [5, 1, 3]
+  piece 1  36 voxels  4x3x4  [0, 0, 0] .. [4, 3, 4]                    from body, lid
+  piece 2   1 voxel          [4.085786, 0, 2.5] .. [5.5, 1, 3.914214]  from pebble
+check  1 line  model 37 voxels, 2 pieces
+  piece 2  1 voxel  [4.085786, 0, 2.5] .. [5.5, 1, 3.914214]  from pebble
 "
         );
     }
