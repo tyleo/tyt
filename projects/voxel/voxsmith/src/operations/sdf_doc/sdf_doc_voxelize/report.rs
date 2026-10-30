@@ -56,7 +56,10 @@ pub fn report(
         .collect();
 
     let poses = world_poses(&sampling.places);
-    let cell_poses = cell_poses(sampling, &poses);
+    let node_of = node_places(sampling);
+
+    // A place's cells sit in the frame of the place that keeps its node.
+    let cell_poses: Vec<TyPoseF64> = node_of.iter().map(|&node| poses[node]).collect();
     let (lattice_of, lattice_poses) = lattices(&cell_poses);
 
     let mut covered: Vec<HashSet<TyVector3I32>> = vec![HashSet::new(); lattice_poses.len()];
@@ -81,11 +84,11 @@ pub fn report(
     let see_through = see_through_materials(&sampling.materials);
 
     // The voxel counts read the cells the document holds.
-    let (place_voxels, voxels) = match fill_mode {
-        FillMode::Solid => (Cow::Borrowed(&place_cells[..]), Cow::Borrowed(&covered[..])),
+    let place_voxels: Cow<[HashSet<TyVector3I32>]> = match fill_mode {
+        FillMode::Solid => Cow::Borrowed(&place_cells[..]),
 
-        FillMode::Surface => {
-            let place_voxels: Vec<HashSet<TyVector3I32>> = sampling
+        FillMode::Surface => Cow::Owned(
+            sampling
                 .places
                 .iter()
                 .map(|place| {
@@ -99,17 +102,19 @@ pub fn report(
                         })
                         .collect()
                 })
-                .collect();
-            let mut voxels: Vec<HashSet<TyVector3I32>> = vec![HashSet::new(); lattice_poses.len()];
-
-            for (place_index, cells) in place_voxels.iter().enumerate() {
-                voxels[lattice_of[place_index]].extend(cells);
-            }
-
-            (Cow::Owned(place_voxels), Cow::Owned(voxels))
-        }
+                .collect(),
+        ),
     };
-    let voxel_count: u64 = voxels.iter().map(|cells| cells.len() as u64).sum();
+
+    // Each node holds its voxels apart, so voxels where nodes overlap count once
+    // for each node.
+    let mut node_voxels: Vec<HashSet<TyVector3I32>> = vec![HashSet::new(); place_voxels.len()];
+
+    for (place_index, cells) in place_voxels.iter().enumerate() {
+        node_voxels[node_of[place_index]].extend(cells);
+    }
+
+    let voxel_count: u64 = node_voxels.iter().map(|cells| cells.len() as u64).sum();
 
     let roots: Vec<usize> = (0..sampling.places.len())
         .filter(|&index| sampling.places[index].parent.is_none())
@@ -234,12 +239,13 @@ pub fn report(
         }
 
         let width = pieces.len().to_string().len();
-        let piece_voxels = |piece: &Vec<(usize, TyVector3I32)>| {
-            piece
-                .iter()
-                .filter(|(lattice, cell)| voxels[*lattice].contains(cell))
-                .count() as u64
-        };
+        let mut piece_voxels = vec![0; pieces.len()];
+
+        for (node, cells) in node_voxels.iter().enumerate() {
+            for cell in cells {
+                piece_voxels[piece_of[&(lattice_of[node], *cell)]] += 1;
+            }
+        }
         let mut folds: Vec<(String, Vec<usize>)> = Vec::new();
         let mut piece_lines = Vec::with_capacity(pieces.len());
 
@@ -259,7 +265,7 @@ pub fn report(
                 fields: [
                     vec![
                         Some(Field::Text(format!("piece {:>width$}", index + 1))),
-                        Some(count_field(piece_voxels(piece), "voxel", "voxels")),
+                        Some(count_field(piece_voxels[index], "voxel", "voxels")),
                     ],
                     world_extent_fields(piece.iter().copied(), &lattice_poses, voxel_size),
                     vec![Some(Field::Text(from))],
@@ -279,10 +285,7 @@ pub fn report(
                 continue;
             }
 
-            let counts: Vec<u64> = indices
-                .iter()
-                .map(|&index| piece_voxels(&pieces[index]))
-                .collect();
+            let counts: Vec<u64> = indices.iter().map(|&index| piece_voxels[index]).collect();
             let least = counts.iter().min().expect("a fold holds pieces");
             let most = counts.iter().max().expect("a fold holds pieces");
             let size = if least == most {
@@ -729,21 +732,20 @@ fn world_poses(places: &[SdfPlace]) -> Vec<TyPoseF64> {
     poses
 }
 
-/// The world pose of the frame that holds the cells of each place of
-/// `sampling`. A place that flattens into the nearest kept place above it holds
-/// its cells in that place's frame.
-fn cell_poses(sampling: &SdfSampling, poses: &[TyPoseF64]) -> Vec<TyPoseF64> {
+/// The place whose node holds the voxels of each place of `sampling`: the place
+/// itself when it keeps its node, else the nearest kept place above it.
+fn node_places(sampling: &SdfSampling) -> Vec<usize> {
     let frames = PlaceFrame::of_places(&sampling.places, sampling.posed);
-    let mut cell_poses: Vec<TyPoseF64> = Vec::with_capacity(poses.len());
+    let mut node_of: Vec<usize> = Vec::with_capacity(frames.len());
 
     for (index, place) in sampling.places.iter().enumerate() {
-        cell_poses.push(match place.parent {
-            Some(parent) if !frames[index].kept => cell_poses[parent],
-            _ => poses[index],
+        node_of.push(match place.parent {
+            Some(parent) if !frames[index].kept => node_of[parent],
+            _ => index,
         });
     }
 
-    cell_poses
+    node_of
 }
 
 /// The lattice of each place and the world pose of each lattice, from
@@ -1413,6 +1415,46 @@ model.voxj  37 voxels of 1 m  2 pieces  [0, 0, 0] .. [5.5, 3, 4]
   piece 2   1 voxel          [4.085786, 0, 2.5] .. [5.5, 1, 3.914214]  from pebble
 check  1 line  model 37 voxels, 2 pieces
   piece 2  1 voxel  [4.085786, 0, 2.5] .. [5.5, 1, 3.914214]  from pebble
+"
+        );
+    }
+
+    #[test]
+    fn voxels_where_nodes_overlap_count_once_for_each_node() {
+        // The lid sinks into the body. Flattened, the lid writes into the
+        // body's node.
+        let mut state = parts_main().state().clone();
+        state.shapes3d[U32Id::from_u32(1).to_usize_id()] = cuboid([1.0, 1.0, 1.0], [3.0, 2.0, 3.0]);
+        let main = SdfMain::new(state).unwrap();
+
+        assert_eq!(
+            report_sampled(&main, 1.0, FillMode::Solid, false),
+            "\
+model.voxj  37 voxels of 1 m  2 pieces  7x2x4  [0, 0, 0] .. [7, 2, 4]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 1, 1] .. [3, 2, 3]  pivot [2, 2, 2]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 1, 1] .. [3, 2, 3]
+  part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [6, 0, 0]  detached
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
+  piece 1  36 voxels  4x2x4  [0, 0, 0] .. [4, 2, 4]  from body, lid
+  piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+check  1 line  model 37 voxels, 2 pieces
+  piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+"
+        );
+        assert_eq!(
+            report_sampled(&main, 1.0, FillMode::Solid, true),
+            "\
+model.voxj  33 voxels of 1 m  2 pieces  7x2x4  [0, 0, 0] .. [7, 2, 4]
+  add  body  32 cells  32 kept  32 exposed  4x2x4  [0, 0, 0] .. [4, 2, 4]
+  part  lid  4 voxels  2x1x2  [1, 1, 1] .. [3, 2, 3]  pivot [2, 2, 2]
+    add  lid  4 cells  4 kept  4 exposed  2x1x2  [1, 1, 1] .. [3, 2, 3]
+  part  pebble  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  pivot [6, 0, 0]  detached
+    add  pebble  1 cell  1 kept  1 exposed  1x1x1  [6, 0, 0] .. [7, 1, 1]
+  piece 1  32 voxels  4x2x4  [0, 0, 0] .. [4, 2, 4]  from body, lid
+  piece 2   1 voxel   1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
+check  1 line  model 33 voxels, 2 pieces
+  piece 2  1 voxel  1x1x1  [6, 0, 0] .. [7, 1, 1]  from pebble
 "
         );
     }
