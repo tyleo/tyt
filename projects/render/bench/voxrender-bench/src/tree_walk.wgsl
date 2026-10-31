@@ -10,12 +10,15 @@ const TAG_SHIFT: u32 = 29u;
 const PAYLOAD: u32 = 0x1fffffffu;
 const UNIFORM: u32 = 0u;
 const LEAF: u32 = 2u;
+const EMPTY: u32 = 6u;
 
 // A cell's value, and the side of the aligned cube around it that holds only
-// that value.
+// that value. An empty tile's `reach` packs the tiles its box reaches past the
+// cube, as `Tree64` lays them out.
 struct Region {
     value: u32,
     size: i32,
+    reach: u32,
 }
 
 fn region_at(placement: Placement, position: vec3<i32>) -> Region {
@@ -25,8 +28,14 @@ fn region_at(placement: Placement, position: vec3<i32>) -> Region {
     let tile = at / TILE;
     let slot = cells[base + (tile.x * tiles.y + tile.y) * tiles.z + tile.z];
 
-    if (slot >> TAG_SHIFT) == UNIFORM {
-        return Region(slot & PAYLOAD, 16);
+    let tile_tag = slot >> TAG_SHIFT;
+
+    if tile_tag == UNIFORM {
+        return Region(slot & PAYLOAD, 16, 0u);
+    }
+
+    if tile_tag == EMPTY {
+        return Region(0u, 16, slot & PAYLOAD);
     }
 
     let node = base + (slot & PAYLOAD);
@@ -46,7 +55,7 @@ fn region_at(placement: Placement, position: vec3<i32>) -> Region {
     let shift = bit % 32u;
 
     if ((mask >> shift) & 1u) == 0u {
-        return Region(0u, 4);
+        return Region(0u, 4, 0u);
     }
 
     let rank = before + countOneBits(mask & ((1u << shift) - 1u));
@@ -54,7 +63,7 @@ fn region_at(placement: Placement, position: vec3<i32>) -> Region {
     let tag = child_slot >> TAG_SHIFT;
 
     if tag == UNIFORM {
-        return Region(child_slot & PAYLOAD, 4);
+        return Region(child_slot & PAYLOAD, 4, 0u);
     }
 
     let leaf = base + (child_slot & PAYLOAD);
@@ -63,7 +72,7 @@ fn region_at(placement: Placement, position: vec3<i32>) -> Region {
     let start = (cell.x * 16u + cell.y * 4u + cell.z) * bits;
     let index = (cells[leaf + start / 32u] >> (start % 32u)) & ((1u << bits) - 1u);
 
-    return Region(cells[leaf + 2u * bits + index], 1);
+    return Region(cells[leaf + 2u * bits + index], 1, 0u);
 }
 
 // Whether `ray` misses the placement's grid, padded by a cell, by an f32 slab
@@ -111,12 +120,12 @@ fn tree_walk(placement: Placement, ray: Ray, corner: vec3<i32>, extent: vec3<i32
     // The start cell, or the cell before the entry face. A ray entering the
     // box takes one step in.
     let start_cell = select(cell, bounds - vec3<i32>(1) - cell, flip) + corner;
-    var region = Region(0u, 1);
+    var region = Region(0u, 1, 0u);
 
     if entry < 0 {
         region = region_at(placement, start_cell);
     } else if all(start_cell >= vec3<i32>(0)) && all(start_cell < grid) {
-        region = Region(region_at(placement, start_cell).value, 1);
+        region = Region(region_at(placement, start_cell).value, 1, 0u);
     }
 
     var inside = region.value;
@@ -157,14 +166,17 @@ fn tree_walk(placement: Placement, ray: Ray, corner: vec3<i32>, extent: vec3<i32
             cell += select(vec3<i32>(0), vec3<i32>(1), axis_mask(axis));
             error += select(select(x_change, y_change, axis == 1), z_change, axis == 2);
         } else {
-            // The region's cube in mirrored cells, cut to the box. The cube
-            // aligns in the grid. Its power-of-two size masks the cell down to
-            // its low corner.
+            // The region's cube in mirrored cells, widened by its reach and
+            // cut to the box. The cube aligns in the grid. Its power-of-two
+            // size masks the cell down to its low corner.
             let size = vec3<i32>(region.size);
+            let reach = vec3<u32>(region.reach) >> vec3<u32>(0u, 4u, 8u);
+            let below = vec3<i32>(reach & vec3<u32>(15u)) * i32(TILE);
+            let above = vec3<i32>((reach >> vec3<u32>(12u)) & vec3<u32>(15u)) * i32(TILE);
             let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
             let at = position + corner;
-            let low = (at & ~(size - vec3<i32>(1))) - corner;
-            let high = min(select(low + size, bounds - low, flip), bounds);
+            let low = (at & ~(size - vec3<i32>(1))) - below - corner;
+            let high = min(select(low + below + size + above, bounds - low, flip), bounds);
             let moves = direction > vec3<i32>(0);
             let exits = select(
                 vec3<f32>(3.0e38),

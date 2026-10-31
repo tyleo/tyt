@@ -441,3 +441,10 @@ they land.
   last placement's call, so its walks end where the trace's would
 - The tree walk's wrappers test the ray against the grid, padded by a cell,
   in f32 before the walk's integer entry
+- Each empty tile of the 64-tree's root stores the box of empty tiles
+  around it under tag 6. The builder grows the box a layer at a time on
+  each side in turn, up to 15 tiles a side, against a prefix count of
+  filled tiles. The walk's f32 jump widens the tile's cube by the box. A
+  box covers both sides of its tile because a slot serves every ray
+- Child boxes grown in the walk from a node's mask cut S1's iterations but
+  lost 10% to 16% on the Mac, so the walk keeps tile boxes alone

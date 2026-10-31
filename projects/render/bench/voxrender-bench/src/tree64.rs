@@ -26,6 +26,12 @@ const NODE: u32 = 1;
 /// doubles the bits.
 const LEAF: u32 = 2;
 
+/// The tag of an empty tile's slot holding the box of empty tiles around it.
+const EMPTY: u32 = 6;
+
+/// The most tiles a box reaches past its tile on each side.
+const REACH: u32 = 15;
+
 /// An object's cells in the 64-tree of research section 3.4, flattened into
 /// words for the GPU. A cell's value is 0 when empty, else its material id
 /// plus one.
@@ -42,6 +48,9 @@ const LEAF: u32 = 2;
 ///    The packed cell indices come first, then the palette of values they
 ///    index. Cell `i`'s index sits at bit `i * bits % 32` of the leaf's word
 ///    `i * bits / 32`
+/// 4. Tag 6 marks an empty tile. Its payload holds how many empty tiles the
+///    box around it reaches past the tile, 4 bits a side, in the order -x,
+///    -y, -z, +x, +y, +z from the low bits
 ///
 /// A child's bit, like a cell's, is `x * 16 + y * 4 + z` over its 4^3
 /// positions. Bits 0 to 31 sit in a node's first mask word. Cells past the
@@ -86,6 +95,25 @@ impl Tree64 {
             }
         }
 
+        let filled = FilledTiles::new(tiles, &words);
+
+        for x in 0..tiles.x {
+            for y in 0..tiles.y {
+                for z in 0..tiles.z {
+                    let tile = TyVector3U32::new(x, y, z);
+                    let index = raster(tiles, tile);
+
+                    if words[index] == slot(UNIFORM, 0) {
+                        let reach = filled.empty_reach(tile);
+
+                        if reach != 0 {
+                            words[index] = slot(EMPTY, reach);
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Tree64 { bounds, words })
     }
 
@@ -116,6 +144,8 @@ impl Tree64 {
 
             match slot >> TAG_SHIFT {
                 UNIFORM => break slot & PAYLOAD,
+
+                EMPTY => break 0,
 
                 NODE => {
                     size /= BRANCH;
@@ -201,6 +231,106 @@ fn offset_slot(tag: u32, offset: usize) -> Result<u32> {
     }
 }
 
+/// The count of filled tiles in each box from the grid's low corner, for
+/// counting a box's filled tiles in 8 reads.
+struct FilledTiles {
+    tiles: TyVector3U32,
+
+    counts: Vec<u32>,
+}
+
+impl FilledTiles {
+    /// The counts over the grid of `tiles` whose slots open `words`.
+    fn new(tiles: TyVector3U32, words: &[u32]) -> Self {
+        let size = tiles + 1;
+        let mut counts = vec![0; (size.x * size.y * size.z) as usize];
+
+        for x in 1..size.x {
+            for y in 1..size.y {
+                for z in 1..size.z {
+                    let at = |dx: u32, dy: u32, dz: u32| {
+                        counts[raster(size, TyVector3U32::new(x - dx, y - dy, z - dz))]
+                    };
+
+                    let tile = TyVector3U32::new(x - 1, y - 1, z - 1);
+                    let filled = u32::from(words[raster(tiles, tile)] != slot(UNIFORM, 0));
+
+                    // Inclusion and exclusion over the 7 smaller boxes.
+                    let count = filled + at(1, 0, 0) + at(0, 1, 0) + at(0, 0, 1) + at(1, 1, 1)
+                        - at(1, 1, 0)
+                        - at(1, 0, 1)
+                        - at(0, 1, 1);
+
+                    counts[raster(size, TyVector3U32::new(x, y, z))] = count;
+                }
+            }
+        }
+
+        FilledTiles { tiles, counts }
+    }
+
+    /// Whether every tile from `low` to before `high` is empty.
+    fn is_empty(&self, low: TyVector3U32, high: TyVector3U32) -> bool {
+        let size = self.tiles + 1;
+        let at = |x: u32, y: u32, z: u32| self.counts[raster(size, TyVector3U32::new(x, y, z))];
+
+        at(high.x, high.y, high.z)
+            + at(low.x, low.y, high.z)
+            + at(low.x, high.y, low.z)
+            + at(high.x, low.y, low.z)
+            == at(low.x, low.y, low.z)
+                + at(high.x, high.y, low.z)
+                + at(high.x, low.y, high.z)
+                + at(low.x, high.y, high.z)
+    }
+
+    /// The packed reach of the box grown around the empty `tile`. The box
+    /// grows a layer at a time on each side in turn. A side stops at the
+    /// grid's edge, at a filled tile, or at `REACH` tiles.
+    fn empty_reach(&self, tile: TyVector3U32) -> u32 {
+        let mut low = tile;
+        let mut high = tile + 1;
+        let mut grew = true;
+
+        while grew {
+            grew = false;
+
+            for axis in 0..3 {
+                if tile[axis] - low[axis] < REACH && low[axis] > 0 {
+                    let mut layer = high;
+                    layer[axis] = low[axis];
+
+                    let mut start = low;
+                    start[axis] -= 1;
+
+                    if self.is_empty(start, layer) {
+                        low[axis] -= 1;
+                        grew = true;
+                    }
+                }
+
+                if high[axis] - 1 - tile[axis] < REACH && high[axis] < self.tiles[axis] {
+                    let mut layer = low;
+                    layer[axis] = high[axis];
+
+                    let mut end = high;
+                    end[axis] += 1;
+
+                    if self.is_empty(layer, end) {
+                        high[axis] += 1;
+                        grew = true;
+                    }
+                }
+            }
+        }
+
+        let below = tile - low;
+        let above = high - 1 - tile;
+
+        below.x | below.y << 4 | below.z << 8 | above.x << 12 | above.y << 16 | above.z << 20
+    }
+}
+
 /// Appends the node over a tile's `cells` and its leaves to `words`, and
 /// returns its slot.
 fn push_node(words: &mut Vec<u32>, cells: &[u32]) -> Result<u32> {
@@ -275,7 +405,7 @@ fn push_leaf(words: &mut Vec<u32>, cells: &[u32]) -> Result<u32> {
 mod tests {
     use crate::{
         Tree64, b1_scenes, painted_object,
-        tree64::{LEAF, NODE, slot},
+        tree64::{EMPTY, LEAF, NODE, PAYLOAD, TAG_SHIFT, UNIFORM, raster, slot, tile_counts},
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -301,6 +431,65 @@ mod tests {
                 assert_eq!(tree.material(bounds), None);
             }
         }
+    }
+
+    #[test]
+    fn each_box_holds_only_empty_tiles() {
+        for (name, scene) in b1_scenes() {
+            for (object_id, object) in scene.iter_objects() {
+                let tree = Tree64::new(object).unwrap();
+                let tiles = tile_counts(object.bounds());
+                let words = tree.words();
+                let tile_ids = (0..tiles.x).flat_map(|x| {
+                    (0..tiles.y).flat_map(move |y| (0..tiles.z).map(move |z| (x, y, z)))
+                });
+
+                for (x, y, z) in tile_ids {
+                    let tile = TyVector3U32::new(x, y, z);
+                    let tile_slot = words[raster(tiles, tile)];
+
+                    if tile_slot >> TAG_SHIFT != EMPTY {
+                        continue;
+                    }
+
+                    let reach = tile_slot & PAYLOAD;
+                    let side = |shift: u32| reach >> shift & 15;
+                    let low = tile - TyVector3U32::new(side(0), side(4), side(8));
+                    let high = tile + TyVector3U32::new(side(12), side(16), side(20));
+
+                    for bx in low.x..=high.x {
+                        for by in low.y..=high.y {
+                            for bz in low.z..=high.z {
+                                let inner = words[raster(tiles, TyVector3U32::new(bx, by, bz))];
+
+                                assert!(
+                                    inner == slot(UNIFORM, 0) || inner >> TAG_SHIFT == EMPTY,
+                                    "{name}, object {object_id}, tile {tile}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_empty_tile_reaches_its_empty_neighbors() {
+        let material = U32Id::from_u32(0);
+
+        // Two empty tiles, then a solid one.
+        let object = painted_object("o", TyVector3U32::new(48, 16, 16), |p| {
+            (p.x >= 32).then_some(material)
+        });
+
+        let tree = Tree64::new(&object).unwrap();
+
+        assert_eq!(
+            tree.words(),
+            [slot(EMPTY, 1 << 12), slot(EMPTY, 1), slot(UNIFORM, 1)]
+        );
+        assert_eq!(tree.material(TyVector3U32::new(20, 3, 9)), None);
     }
 
     #[test]

@@ -167,6 +167,9 @@ code-level choices in
             - [ ] Rung 3, boxes. Two chains gained 1.5x on Quest. A
                   latency-bound loop would gain 2x, so boxes stay ahead of
                   rung 4
+                  - [x] Tile boxes win on the desktop, and B1 stays exact
+                  - [x] Child boxes lose on the desktop and drop
+                  - [x] A Quest run confirms tile boxes
             - [ ] Rung 4, register-resident leaves. RenderDoc reads each
                   change's footprint and occupancy on Quest. The walk starts
                   at 20 registers and 50% occupancy

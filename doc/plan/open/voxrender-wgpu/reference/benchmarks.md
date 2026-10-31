@@ -680,8 +680,9 @@ runs:
 
 S1's iterations per ray fall from 18.6 to 16.7, as on this Mac. Rung 2
 leaves the raster's code alone. Yet in both runs after rung 2, the S5
-raster's two-pass and multiview arms run slower. The S1 raster stays within
-8%.
+raster's two-pass and multiview arms run slower. In rung 3, a third run of
+the same build ran those arms 1.16x and 1.09x faster than the second. The S1
+raster stays within 8%.
 
 **Outcomes.**
 
@@ -698,5 +699,76 @@ raster's two-pass and multiview arms run slower. The S1 raster stays within
 5. With its checks, the tree walk runs 1.89x on Quest's S1 and outruns the
    walk without them. Rung 4's footprint reads can show how the checks
    change the compiled walk
-6. The S5 raster's slowdown has no cause in rung 2's code. The S9.3 bar
-   holds until a run finds the cause
+6. The S5 raster's two-pass and multiview arms move by up to 1.16x between
+   runs of one build. The S9.3 bar holds
+
+## S9.4 rung 3, 2026-10-31
+
+Rung 3 adds boxes over the empty space the walk crosses. As in rung 2, this
+Mac times each change against the build before it in three alternating rounds
+of three windows. B1 gives the same tables as before rung 3.
+
+**Tile boxes.** Each empty tile in the root stores the box of empty tiles
+around it, up to 15 tiles a side. The f32 jump crosses the box in one step.
+
+| Kernel | Before | Tile boxes | Gain per round |
+| --- | ---: | ---: | ---: |
+| tree walk, S1 | 4.181 | 3.218 | 1.30x, 1.30x, 1.26x |
+| tree walk, checked, S1 | 4.644 | 3.585 | 1.30x, 1.30x, 1.23x |
+| tree walk, S5 | 1.048 | 1.085 | 0.97x, 0.97x, 0.92x |
+| ray query, integer march, 16^3, S1 | 7.010 | 7.312 | 0.96x, 0.97x, 0.92x |
+| ray query, integer march, 16^3, S5 | 3.681 | 3.776 | 0.97x, 0.99x, 0.94x |
+| ray query, float march, 16^3, S1 | 5.221 | 5.340 | 0.98x, 0.99x, 0.94x |
+| ray query, float march, 16^3, S5 | 3.069 | 3.114 | 0.99x, 0.99x, 0.94x |
+
+S1's iterations per ray fall from 16.7 to 8.6. Its 16^3 skips fall from 9.2
+to 1.1, and its 3.1 cell steps and 4.4 4^3 skips stay. The integer march
+cuts each box down to its brick. The float march leaves the boxes out. Both
+marches pay for the box check in each region lookup.
+
+**Quest.** Tile boxes ran three windows on Quest, off the face at GPU level
+4 as in rung 2. The build before them then ran three more. Those runs land
+within 1% of rung 2's on every walk.
+
+| Kernel | Before | Tile boxes | Gain |
+| --- | ---: | ---: | ---: |
+| tree walk, S1 | 80.297 | 72.110 | 1.11x |
+| tree walk, checked, S1 | 71.890 | 56.002 | 1.28x |
+| tree walk, S5 | 16.413 | 16.026 | 1.02x |
+| tree walk, checked, S5 | 17.345 | 14.308 | 1.21x |
+| ray query, integer march, 16^3, S1 | 58.945 | 60.775 | 0.97x |
+| ray query, integer march, 16^3, S5 | 28.103 | 28.998 | 0.97x |
+| ray query, float march, 16^3, S1 | 37.306 | 38.168 | 0.98x |
+| ray query, float march, 16^3, S5 | 20.295 | 21.147 | 0.96x |
+
+The iteration counts match this Mac's. B1 passes on Quest.
+
+**Child boxes.** The walk grows a box around an empty child from the node's
+mask words. It adds a layer at a time along each axis the ray moves on. Two
+variants ran against tile boxes:
+
+| Variant | S1 iterations | S1 gain per round | S5 gain per round |
+| --- | ---: | ---: | ---: |
+| Up to 3 rounds of growth | 5.6 | 0.84x, 0.84x, 0.84x | 0.86x, 0.86x, 0.86x |
+| 1 round of growth | 6.2 | 0.97x, 0.90x, 0.90x | 0.92x, 0.86x, 0.86x |
+
+The float march leaves the growth off, yet it ran 0.92x with the 3-round
+variant.
+
+**Outcomes.**
+
+1. Tile boxes halve S1's iterations. The research's model predicted 18.2
+   to 9.75. The walk gains 1.30x in time, under the research's 1.6x to 1.9x
+   and over the stop line at half the 1.94x iteration ratio. Tile boxes
+   stay
+2. Child boxes cut S1's 4^3 skips from 4.4 to 1.4 and lose on every
+   kernel. S5's walks rarely grow a box and still lose 14%, so the growth
+   costs the walk even where it does not run. The stop rule fires, and
+   child boxes drop. The research profiles before adding more boxes
+3. 2^3 coalescing needs to know which cells of a leaf are empty without
+   reading their indices. It waits for rung 4's leaf occupancy masks
+4. Quest gains 1.11x on S1 from half the iterations, so each iteration
+   costs 1.73x as much there. Iterations no longer set the walk's time on
+   Quest
+5. The walk with the checks gains more on Quest: 1.28x on S1 and 1.21x on
+   S5. It runs S1 in 56.0 ms against the plain walk's 72.1
