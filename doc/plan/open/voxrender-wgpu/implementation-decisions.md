@@ -430,3 +430,14 @@ they land.
   clears and discards. wgpu's transient textures hold one layer
 - The two-pass arm's module leaves out `view_index`, so B1 can draw it on a
   device without multiview. Its instance picks the eye's matrix
+- The tree walk steps over a single cell with the integer error terms and
+  crosses a larger region in one f32 jump. Each axis's exit time takes the
+  exact integer distance to its face times the ray's reciprocal. The jump
+  sets up these terms inside its branch. An f32 step on every cell lost 9%
+  on S5. Exit times from per-ray offsets flipped up to 0.24% of the
+  precision scenes' shadow samples
+- The trace walks the last placement first and ends each walk one cell past
+  the nearest hit so far. The counted walk returns its real hits until the
+  last placement's call, so its walks end where the trace's would
+- The tree walk's wrappers test the ray against the grid, padded by a cell,
+  in f32 before the walk's integer entry

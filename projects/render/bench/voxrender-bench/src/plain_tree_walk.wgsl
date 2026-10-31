@@ -3,5 +3,9 @@
 fn count(size: i32) {}
 
 fn walk(placement: Placement, ray: Ray) -> Hit {
+    if misses(placement, ray) {
+        return miss();
+    }
+
     return tree_walk(placement, ray, vec3<i32>(0), placement.bounds.xyz);
 }

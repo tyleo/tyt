@@ -120,6 +120,17 @@ fn carry(origin: vec3<i32>, source: Placement, destination: Placement) -> vec3<i
     return vec3<i32>(round(grid * f32(ONE)));
 }
 
+// `ray` cut to end where it reaches `distance` in world units, one cell
+// beyond so that f32 rounding keeps every nearer hit.
+fn ending(placement: Placement, ray: Ray, distance: f32) -> Ray {
+    let meters = length(placement.scale.xyz * vec3<f32>(ray.direction)) / f32(ONE);
+    let reach = (vec3<f32>(ray.origin) + vec3<f32>(ray.direction) * (distance / meters)) / f32(ONE);
+    let grid = vec3<f32>(placement.bounds.xyz);
+    let end = vec3<i32>(floor(clamp(reach, vec3<f32>(-2.0), grid + 1.0))) + sign(ray.direction);
+
+    return Ray(ray.origin, ray.direction, end, true);
+}
+
 // Whether the shadow ray from `origin` in the grid of placement `source`
 // toward light `light` meets no surface in any placement.
 fn sees_light(origin: vec3<i32>, source: u32, light: u32) -> bool {
@@ -163,20 +174,31 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     var nearest = miss();
     var index = NO_HIT;
 
-    for (var p = 0u; p < frame.placements; p++) {
+    // The walks run last placement first. A scene that lists a containing
+    // placement first, as S1 does its room, then ends that walk at the hits
+    // inside it.
+    for (var q = 0u; q < frame.placements; q++) {
+        let p = frame.placements - 1u - q;
         let placement = placements[p];
 
-        let ray = Ray(
+        var ray = Ray(
             at_pixel(placement.origin, x, y),
             at_pixel(placement.direction, x, y),
             vec3<i32>(0),
             false,
         );
 
+        // A walk past the nearest hit so far cannot win.
+        if nearest.found {
+            ray = ending(placement, ray, nearest.distance);
+        }
+
         let hit = walk(placement, ray);
 
         // Hits at one distance go to the earlier placement.
-        if hit.found && (!nearest.found || hit.distance < nearest.distance) {
+        if hit.found
+            && (!nearest.found || hit.distance < nearest.distance
+                || (hit.distance == nearest.distance && p < index)) {
             nearest = hit;
             index = p;
         }

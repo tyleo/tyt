@@ -593,3 +593,110 @@ corner. S3's hits need 34 bits, so B1 leaves it out.
    multiview pass
 5. The march is behind on both scenes. The gap is smallest on S5, whose
    grazing floor holds 0.8 M quads
+
+## S9.4 rung 2, 2026-10-27
+
+Rung 2 makes three changes in turn and times each on this Mac through
+`b2-times`. Each change stays only when it wins. B1 then gives the same ids
+and shadows as before rung 2 on every scene. A Quest run confirms the batch.
+
+- This Mac: the device of B1 desktop. Spotlight and media analysis loaded
+  it through most runs and moved its times by up to 2.6x. Each comparison
+  alternates its builds, three windows a run, and compares builds within a
+  round
+- Quest: the device of B2 re-baseline at GPU level 4, run off the face on
+  2026-10-31. Each window ran 75% to 81% of its time at 640 MHz
+- Times are each build's median p50 in ms
+
+**Masks.** Each region's cube aligns to its power-of-two size. In the tree
+walk and the float march, `& ~(size - 1)` replaces the runtime `% size`.
+
+| Kernel | Before | Masks | Gain |
+| --- | ---: | ---: | ---: |
+| tree walk, S1 | 9.072 | 8.437 | 1.08x |
+| tree walk, S5 | 1.133 | 1.136 | 1.00x |
+| ray query, float march, 16^3, S1 | 6.071 | 5.631 | 1.08x |
+| ray query, float march, 16^3, S5 | 3.498 | 3.304 | 1.06x |
+
+**f32 jumps.** A region larger than a cell ends in one f32 jump in place of
+`leave()`'s guess and correction loops. The jump takes each axis's exit time
+from the exact integer distance to its face times the ray's reciprocal. It
+then floors the ray's point at the soonest exit, clamped into the region. A
+single cell keeps the integer step. Four variants ran:
+
+| Variant | S1 gain | S5 gain | B1 |
+| --- | ---: | ---: | --- |
+| Every step f32, exits from per-ray reciprocals | 1.41x | 0.93x | fails: 0.11% to 0.24% of the precision scenes' shadow samples flip |
+| Every step f32, exits from exact integer distances | 1.38x | 0.91x | passes: up to 0.004% of a scene's ids flip |
+| Integer cell steps, f32 jumps set up once per ray | 1.39x | 0.97x | exact |
+| Integer cell steps, f32 jumps set up in the jump | 1.37x | 1.00x | exact |
+
+The last variant stays. It also gains 1.16x on the integer ray-query march's
+S1 and 1.01x on its S5, since that march runs the tree walk.
+
+**Placement cull.** Three parts ran in turn, against the f32 jumps:
+
+1. Each walk ends one cell past the nearest hit so far: 0.96x on S1. S1
+   lists its room first, so the room's walls set the nearest hit and no
+   walk ends sooner
+2. The walks also run last placement first: 1.02x on S1, 0.97x on S5. S1's
+   iterations per ray fall from 18.6 to 16.7
+3. An f32 slab test against the grid padded by a cell also skips the
+   integer entry of a ray that misses: 1.30x to 1.35x on S1, 0.94x to 1.02x
+   on S5. In forward order, the slab test gains 1.17x on S1
+
+All three stay.
+
+**Rung 2.** Three alternating runs of the build before rung 2 against the
+build after it:
+
+| Kernel | Gain per run |
+| --- | ---: |
+| tree walk, S1 | 1.94x, 2.06x, 1.91x |
+| tree walk, S5 | 0.88x, 1.03x, 0.90x |
+| ray query, integer march, 16^3, S1 | 1.17x, 1.26x, 1.16x |
+| ray query, integer march, 16^3, S5 | 0.99x, 1.01x, 0.97x |
+| ray query, float march, 16^3, S1 | 1.05x, 1.10x, 1.03x |
+| ray query, float march, 16^3, S5 | 1.02x, 1.10x, 1.02x |
+
+**Quest.** The build after rung 2 ran one window, then the build before it
+ran three, then the build after it ran three more. Each kernel's p50s agree
+within 1% across a build's windows. The table compares the three-window
+runs:
+
+| Kernel | Before | After | Gain |
+| --- | ---: | ---: | ---: |
+| tree walk, S1 | 107.187 | 80.683 | 1.33x |
+| tree walk, checked, S1 | 135.617 | 71.912 | 1.89x |
+| tree walk, S5 | 13.715 | 16.456 | 0.83x |
+| tree walk, checked, S5 | 17.175 | 17.585 | 0.98x |
+| ray query, integer march, 16^3, S1 | 75.684 | 58.694 | 1.29x |
+| ray query, integer march, 16^3, S5 | 28.250 | 28.237 | 1.00x |
+| ray query, float march, 16^3, S1 | 42.034 | 37.331 | 1.13x |
+| ray query, float march, 16^3, S5 | 22.245 | 20.519 | 1.08x |
+| raster, two passes, S5 | 10.155 | 13.662 | 0.74x |
+| raster, multiview, S5 | 9.235 | 11.708 | 0.79x |
+| raster, multiview, 4x MSAA, S5 | 11.036 | 11.201 | 0.99x |
+
+S1's iterations per ray fall from 18.6 to 16.7, as on this Mac. Rung 2
+leaves the raster's code alone. Yet in both runs after rung 2, the S5
+raster's two-pass and multiview arms run slower. The S1 raster stays within
+8%.
+
+**Outcomes.**
+
+1. The tree walk runs about 2x on this Mac's S1. The research expected 3.3x
+   on S1 and 1.5x on S5 from the f32 walk and the cull
+2. S5 runs 0.88x to 1.03x on this Mac. Its rays leave 2.7 regions, all
+   single cells, so the f32 jumps never run there. The slab test and the end
+   add their cost to each of its walks
+3. On both devices, the tree walk gives the reference's ids and shadows on
+   every B1 scene. The research's switch to the exact per-level exit does
+   not fire
+4. Quest confirms the batch on S1: 1.33x for the tree walk and 1.29x for
+   the integer march, below the Mac's 2x. S5 loses more on Quest, at 0.83x
+5. With its checks, the tree walk runs 1.89x on Quest's S1 and outruns the
+   walk without them. Rung 4's footprint reads can show how the checks
+   change the compiled walk
+6. The S5 raster's slowdown has no cause in rung 2's code. The S9.3 bar
+   holds until a run finds the cause

@@ -87,10 +87,12 @@ fn march(
 
         inside = region.value;
 
-        // The region's cube, aligned in the grid and cut to the brick.
+        // The region's cube, aligned in the grid and cut to the brick. Its
+        // power-of-two size masks the cell down to its low corner.
         let size = vec3<i32>(region.size);
-        let low = max(cell - cell % size, corner);
-        let high = min(cell - cell % size + size, far_corner);
+        let aligned = cell & ~(size - vec3<i32>(1));
+        let low = max(aligned, corner);
+        let high = min(aligned + size, far_corner);
 
         var exit = 3.0e38;
 

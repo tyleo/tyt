@@ -13,8 +13,8 @@ pub enum Walk {
     /// An f32 DDA over the integer walk's inputs, for the record.
     Float,
 
-    /// The integer walk over each object's [`Tree64`], crossing a region of
-    /// one value in a single jump.
+    /// The walk over each object's [`Tree64`], crossing a region of one value
+    /// in a single jump.
     Tree,
 
     /// The tree walk with wgpu's runtime checks. Its time shows their cost.

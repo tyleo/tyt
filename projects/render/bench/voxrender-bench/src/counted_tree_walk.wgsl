@@ -1,9 +1,10 @@
 // The tree walk, reporting the iterations a pixel's walks take over every
 // placement that leave a region of side `SIDE`. The bench prepends `SIDE` as a
-// const. Each call returns a hit nearer than the last, at the voxel id of the
-// running sum. The pixel's hit then carries the total.
+// const. The last placement's call returns a hit nearer than any other, at the
+// voxel id of the running sum. The earlier calls return their hits, so each
+// walk ends where the trace's would.
 
-var<private> calls: i32;
+var<private> calls: u32;
 
 // The counted iterations of every walk in this invocation so far.
 var<private> iterations: u32;
@@ -15,8 +16,17 @@ fn count(size: i32) {
 }
 
 fn walk(placement: Placement, ray: Ray) -> Hit {
-    _ = tree_walk(placement, ray, vec3<i32>(0), placement.bounds.xyz);
-    calls += 1;
+    var hit = miss();
 
-    return Hit(true, false, -f32(calls), vec3<i32>(0, 0, i32(iterations)), 0, false);
+    if !misses(placement, ray) {
+        hit = tree_walk(placement, ray, vec3<i32>(0), placement.bounds.xyz);
+    }
+
+    calls += 1u;
+
+    if calls < frame.placements {
+        return hit;
+    }
+
+    return Hit(true, false, -1.0, vec3<i32>(0, 0, i32(iterations)), 0, false);
 }

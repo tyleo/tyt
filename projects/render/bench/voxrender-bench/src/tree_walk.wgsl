@@ -1,6 +1,6 @@
-// The integer walk over each object's `Tree64`. It crosses a region of one
-// value in a single jump to the first cell past it, landing on the cell and
-// the error terms the walk would reach one step at a time.
+// The walk over each object's `Tree64`. It enters the box and steps over a
+// single cell in integers. It crosses a larger region of one value in a
+// single f32 jump to the first cell past it.
 // `plain_tree_walk.wgsl` or `counted_tree_walk.wgsl` defines `walk` over it.
 // The WGSL that includes it defines `count`, which each loop iteration calls
 // with the side of the region it leaves.
@@ -16,13 +16,6 @@ const LEAF: u32 = 2u;
 struct Region {
     value: u32,
     size: i32,
-}
-
-// The cell where a mirrored walk leaves the box of cells below `high` that
-// holds `cell`, and the axis it steps along to reach it.
-struct Exit {
-    cell: vec3<i32>,
-    axis: i32,
 }
 
 fn region_at(placement: Placement, position: vec3<i32>) -> Region {
@@ -73,75 +66,22 @@ fn region_at(placement: Placement, position: vec3<i32>) -> Region {
     return Region(cells[leaf + 2u * bits + index], 1);
 }
 
-fn leave(origin: vec3<i32>, direction: vec3<i32>, cell: vec3<i32>, high: vec3<i32>) -> Exit {
-    // The f32 guess of the face the ray leaves across first. A near tie can
-    // pick a face too late, which the correction below finds.
-    var axis = -1;
-    var soonest = 0.0;
+// Whether `ray` misses the placement's grid, padded by a cell, by an f32 slab
+// test. The walk's integer entry decides the rays it keeps.
+fn misses(placement: Placement, ray: Ray) -> bool {
+    let low = vec3<f32>(-f32(ONE));
+    let high = vec3<f32>((placement.bounds.xyz + vec3<i32>(1)) * ONE);
+    let origin = vec3<f32>(ray.origin);
+    let moves = ray.direction != vec3<i32>(0);
+    let inverse = 1.0 / select(vec3<f32>(1.0), vec3<f32>(ray.direction), moves);
+    let near = (low - origin) * inverse;
+    let far = (high - origin) * inverse;
+    let enters = select(vec3<f32>(-3.0e38), min(near, far), moves);
+    let leaves = select(vec3<f32>(3.0e38), max(near, far), moves);
+    let outside = !moves & ((origin < low) | (origin > high));
 
-    for (var a = 0; a < 3; a++) {
-        if direction[a] > 0 {
-            let t = f32(high[a] * ONE - origin[a]) / f32(direction[a]);
-
-            if axis < 0 || t < soonest {
-                axis = a;
-                soonest = t;
-            }
-        }
-    }
-
-    var exit = cell;
-
-    for (var attempt = 0; attempt < 3; attempt++) {
-        let e = axis;
-        let reach = high[e] * ONE - origin[e];
-        let span = ONE * direction[e];
-
-        var past = -1;
-
-        exit = cell;
-        exit[e] = high[e];
-
-        for (var a = 0; a < 3; a++) {
-            if a == e || direction[a] == 0 {
-                continue;
-            }
-
-            let x = (f32(origin[a]) + f32(reach) / f32(direction[e]) * f32(direction[a]))
-                / f32(ONE);
-
-            var c = clamp(i32(floor(x)), cell[a], high[a]);
-
-            // `r` is exact modulo 2^32 and within i32 near the ray. A
-            // crossing at the face on a later axis comes after the exit.
-            var r = (origin[a] - c * ONE) * direction[e] + reach * direction[a];
-
-            for (var k = 0; k <= WINDOW && (r < 0 || (r == 0 && a > e)); k++) {
-                c -= 1;
-                r += span;
-            }
-
-            for (var k = 0; k <= WINDOW && (r > span || (r == span && a < e)); k++) {
-                c += 1;
-                r -= span;
-            }
-
-            exit[a] = c;
-
-            if c >= high[a] {
-                past = a;
-            }
-        }
-
-        if past < 0 {
-            break;
-        }
-
-        // The ray had left across `past` before the guessed face.
-        axis = past;
-    }
-
-    return Exit(exit, axis);
+    return any(outside)
+        || max(max(enters.x, enters.y), max(enters.z, 0.0)) > min(min(leaves.x, leaves.y), leaves.z);
 }
 
 // The walk over the box of `extent` cells from `corner` in the placement's
@@ -218,16 +158,38 @@ fn tree_walk(placement: Placement, ray: Ray, corner: vec3<i32>, extent: vec3<i32
             error += select(select(x_change, y_change, axis == 1), z_change, axis == 2);
         } else {
             // The region's cube in mirrored cells, cut to the box. The cube
-            // aligns in the grid.
+            // aligns in the grid. Its power-of-two size masks the cell down to
+            // its low corner.
             let size = vec3<i32>(region.size);
             let position = select(cell, bounds - vec3<i32>(1) - cell, flip);
             let at = position + corner;
-            let low = at - at % size - corner;
+            let low = (at & ~(size - vec3<i32>(1))) - corner;
             let high = min(select(low + size, bounds - low, flip), bounds);
-            let exit = leave(origin, direction, cell, high);
+            let moves = direction > vec3<i32>(0);
+            let exits = select(
+                vec3<f32>(3.0e38),
+                vec3<f32>(high * ONE - origin) / vec3<f32>(max(direction, vec3<i32>(1))),
+                moves,
+            );
 
-            cell = exit.cell;
-            axis = exit.axis;
+            // A tie goes to the earlier axis, as in the integer step.
+            var t = exits.x;
+
+            if exits.y < t {
+                axis = 1;
+                t = exits.y;
+            }
+
+            if exits.z < t {
+                axis = 2;
+                t = exits.z;
+            }
+
+            // The neighbor across the exit face, clamped into the region on
+            // the other axes.
+            let reached = vec3<i32>(floor((vec3<f32>(origin) + vec3<f32>(direction) * t) / f32(ONE)));
+
+            cell = select(clamp(reached, cell, high - vec3<i32>(1)), high, axis_mask(axis));
             error = error_at(cell, origin, direction);
         }
 

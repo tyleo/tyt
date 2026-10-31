@@ -158,10 +158,12 @@ code-level choices in
             through `b2-times`. A change that wins stays. One short Quest run
             confirms a batch on Quest. B1's ids check every change against
             the reference
-            - [ ] Rung 2 runs as three changes in turn: power-of-two masks
+            - [x] Rung 2 runs as three changes in turn: power-of-two masks
                   for `at % size`, the f32 walk with per-ray reciprocals,
                   and the placement cull. `leave()`, `enter()`, and
                   `at % size` take 65% of the S1 walk on the desktop
+                  - [x] All three win on the desktop, and B1 stays exact
+                  - [x] A Quest run confirms them
             - [ ] Rung 3, boxes. Two chains gained 1.5x on Quest. A
                   latency-bound loop would gain 2x, so boxes stay ahead of
                   rung 4
