@@ -565,19 +565,18 @@ impl ReportWriter<'_> {
                 .concat(),
             };
 
-            // A step in as many pieces as its shape draws copies reads whole.
-            let copies = match step {
+            // A step in more pieces than the forms it draws has broken apart.
+            let forms = match step {
                 SdfStep::Add { shape_id, .. } | SdfStep::Paint { shape_id, .. } => {
-                    copies(self.state, *shape_id)
+                    forms(self.state, *shape_id)
                 }
+
+                SdfStep::Set { points, .. } => points.len() as u64,
 
                 _ => 1,
             };
 
-            if kept.is_empty()
-                || exposed == Some(0)
-                || (piece_count > 1 && piece_count as u64 != copies)
-            {
+            if kept.is_empty() || exposed == Some(0) || piece_count as u64 > forms {
                 self.checks
                     .push(line((self.step_label)(place_index, step), 1));
             }
@@ -587,8 +586,8 @@ impl ReportWriter<'_> {
     }
 }
 
-/// How many copies of one form the shape at `shape_id` draws.
-fn copies(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
+/// How many forms the shape at `shape_id` draws.
+fn forms(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
     match &state.shapes3d[shape_id.to_usize_id()] {
         SdfShape3d::Mirror { shape_id, axes, .. } => {
             let reflections = match axes {
@@ -597,21 +596,26 @@ fn copies(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
                 SdfAxes3d::Xyz => 8,
             };
 
-            reflections * copies(state, *shape_id)
+            reflections * forms(state, *shape_id)
         }
 
         SdfShape3d::Repeat {
             shape_id, count, ..
-        } => (count.x * count.y * count.z) as u64 * copies(state, *shape_id),
+        } => (count.x * count.y * count.z) as u64 * forms(state, *shape_id),
 
         SdfShape3d::RepeatPolar {
             shape_id, count, ..
-        } => *count as u64 * copies(state, *shape_id),
+        } => *count as u64 * forms(state, *shape_id),
 
         SdfShape3d::Orient { shape_id, .. }
         | SdfShape3d::Rotate { shape_id, .. }
         | SdfShape3d::Scale { shape_id, .. }
-        | SdfShape3d::Translate { shape_id, .. } => copies(state, *shape_id),
+        | SdfShape3d::Translate { shape_id, .. } => forms(state, *shape_id),
+
+        SdfShape3d::SmoothUnion { shape_ids, .. } | SdfShape3d::Union { shape_ids } => shape_ids
+            .iter()
+            .map(|&shape_id| forms(state, shape_id))
+            .sum(),
 
         _ => 1,
     }
@@ -1685,6 +1689,59 @@ model.voxj  10 voxels of 1 m  3 pieces  12x2x1  [-6, 0, 0] .. [6, 2, 1]
   piece 2  1 voxel   1x1x1  [-6, 0, 0] .. [-5, 1, 1]  from links
   piece 3  1 voxel   1x1x1  [5, 0, 0] .. [6, 1, 1]    from links
 check  1 line  model 10 voxels, 3 pieces
+  2 pieces  1 voxel each  12x1x1  [-6, 0, 0] .. [6, 1, 1]  from links
+"
+        );
+    }
+
+    #[test]
+    fn union_operands_and_set_points_in_no_more_pieces_than_forms_leave_the_step_out() {
+        // Two posts stand on the slab, a cap tops one, and two links float off
+        // each end.
+        let main = single_part_main(
+            vec![
+                cuboid([-3.0, 0.0, 0.0], [3.0, 1.0, 1.0]),
+                cuboid([-2.0, 1.0, 0.0], [-1.0, 2.0, 1.0]),
+                cuboid([1.0, 1.0, 0.0], [2.0, 2.0, 1.0]),
+                cuboid([-2.0, 2.0, 0.0], [-1.0, 3.0, 1.0]),
+                SdfShape3d::Union {
+                    shape_ids: vec![U32Id::from_u32(1), U32Id::from_u32(2), U32Id::from_u32(3)],
+                },
+            ],
+            vec![
+                SdfStep::Add {
+                    name: "slab".to_string(),
+                    shape_id: U32Id::from_u32(0),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Add {
+                    name: "posts".to_string(),
+                    shape_id: U32Id::from_u32(4),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Set {
+                    name: "links".to_string(),
+                    points: vec![
+                        TyVector3F64::new(-5.5, 0.5, 0.5),
+                        TyVector3F64::new(5.5, 0.5, 0.5),
+                    ],
+                    size: 1.0,
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+            ],
+        );
+
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  11 voxels of 1 m  3 pieces  12x3x1  [-6, 0, 0] .. [6, 3, 1]
+  add  slab   6 cells  6 kept  6 exposed            6x1x1   [-3, 0, 0] .. [3, 1, 1]
+  add  posts  3 cells  3 kept  3 exposed  2 pieces  4x2x1   [-2, 1, 0] .. [2, 3, 1]
+  set  links  2 cells  2 kept  2 exposed  2 pieces  12x1x1  [-6, 0, 0] .. [6, 1, 1]
+  piece 1  9 voxels  6x3x1  [-3, 0, 0] .. [3, 3, 1]   from slab, posts
+  piece 2  1 voxel   1x1x1  [-6, 0, 0] .. [-5, 1, 1]  from links
+  piece 3  1 voxel   1x1x1  [5, 0, 0] .. [6, 1, 1]    from links
+check  1 line  model 11 voxels, 3 pieces
   2 pieces  1 voxel each  12x1x1  [-6, 0, 0] .. [6, 1, 1]  from links
 "
         );

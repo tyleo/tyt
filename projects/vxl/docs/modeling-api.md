@@ -216,8 +216,9 @@ counts. Under it, the report repeats the lines a review has to clear:
 
 1. Each step line at `0 kept`
 2. Each step line at `0 exposed`
-3. Each step line with more `pieces` than the copies its `mirror`, `repeat`, or
-   `repeatPolar` draws
+3. Each step line with more `pieces` than the forms it draws. Each copy of a
+   `mirror`, `repeat`, or `repeatPolar` draws a form, as does each operand of a
+   `union` or `smoothUnion` and each point of a `set`
 4. Each piece line past the first. Pieces from the same steps fold into one line
    with their count, sizes, and box
 
