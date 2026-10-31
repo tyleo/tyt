@@ -1,6 +1,6 @@
 [package]
 name = "sdfj-codec"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -18,7 +18,7 @@ serde_json = { version = "1", features = [
     "float_roundtrip",
     "preserve_order",
 ], optional = true }
-sdfj = { version = "0.3.0", default-features = false }
+sdfj = { version = "0.4.0", default-features = false }
 ttf-parser = { version = "0.25.1", optional = true }
 ty-zip = "0.1.0"
 

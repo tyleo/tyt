@@ -1,6 +1,6 @@
 [package]
 name = "goxl-codec"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -17,7 +17,7 @@ categories = [
 independent = true
 
 [dependencies]
-goxl = "0.2.0"
+goxl = "0.3.0"
 png = { version = "0.18", optional = true }
 
 [features]

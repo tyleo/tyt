@@ -1,6 +1,6 @@
 [package]
 name = "meshconv"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -13,12 +13,12 @@ independent = true
 
 [dependencies]
 branded-id = { version = "0.2.0", optional = true }
-gltf-meshdoc = { version = "0.3.0", default-features = false, optional = true }
-meshdoc = "0.3.0"
+gltf-meshdoc = { version = "0.4.0", default-features = false, optional = true }
+meshdoc = "0.4.0"
 
 [dev-dependencies]
 branded-id = "0.2.0"
-ty-math = { version = "0.4.0", default-features = false }
+ty-math = { version = "0.5.0", default-features = false }
 
 [features]
 default = ["ext", "gltf", "impl"]

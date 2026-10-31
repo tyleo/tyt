@@ -1,6 +1,6 @@
 [package]
 name = "goxl-voxcore"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -13,14 +13,14 @@ independent = true
 
 [dependencies]
 branded-id = "0.2.0"
-goxl = "0.2.0"
-goxl-codec = { version = "0.3.0", default-features = false, optional = true }
+goxl = "0.3.0"
+goxl-codec = { version = "0.4.0", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
-ty-math = { version = "0.4.0", default-features = false, features = ["color"] }
-voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
+ty-math = { version = "0.5.0", default-features = false, features = ["color"] }
+voxcore = { version = "0.5.0", default-features = false, features = ["color"] }
 
 [dev-dependencies]
-goxl-codec = { version = "0.3.0", features = ["impl"] }
+goxl-codec = { version = "0.4.0", features = ["impl"] }
 serde_json = "1"
 
 [features]

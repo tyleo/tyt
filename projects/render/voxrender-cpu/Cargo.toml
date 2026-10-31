@@ -1,6 +1,6 @@
 [package]
 name = "voxrender-cpu"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -15,10 +15,10 @@ all-features = true
 [dependencies]
 branded-id = "0.2.0"
 rayon = { version = "1.12.0", optional = true }
-ty-math = { version = "0.4.0", default-features = false, features = ["color"] }
-voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
-voxrender = "0.5.0"
-voxsurface = "0.3.0"
+ty-math = { version = "0.5.0", default-features = false, features = ["color"] }
+voxcore = { version = "0.5.0", default-features = false, features = ["color"] }
+voxrender = "0.6.0"
+voxsurface = "0.4.0"
 
 [features]
 default = ["impl"]
@@ -27,4 +27,4 @@ impl = ["dep:rayon"]
 
 [dev-dependencies]
 png = "0.18"
-voxrender = { version = "0.5.0", features = ["fixtures"] }
+voxrender = { version = "0.6.0", features = ["fixtures"] }

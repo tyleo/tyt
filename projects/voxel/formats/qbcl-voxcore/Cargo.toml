@@ -1,6 +1,6 @@
 [package]
 name = "qbcl-voxcore"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -13,22 +13,22 @@ independent = true
 
 [dependencies]
 branded-id = "0.2.0"
-qbcl = { version = "0.2.0", default-features = false, features = [
+qbcl = { version = "0.3.0", default-features = false, features = [
     "qb",
     "qbt",
     "qbcl",
 ] }
-qbcl-codec = { version = "0.3.0", default-features = false, features = [
+qbcl-codec = { version = "0.4.0", default-features = false, features = [
     "qb",
     "qbt",
     "qbcl",
 ], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
-ty-math = "0.4.0"
-voxcore = { version = "0.4.0", default-features = false, features = ["color"] }
+ty-math = "0.5.0"
+voxcore = { version = "0.5.0", default-features = false, features = ["color"] }
 
 [dev-dependencies]
-qbcl-codec = { version = "0.3.0", features = ["impl"] }
+qbcl-codec = { version = "0.4.0", features = ["impl"] }
 
 [features]
 default = ["codec", "serde"]

@@ -14,11 +14,11 @@ base64 = "0.22"
 crossterm = "0.29"
 image = "0.25"
 lzfse = "0.2"
-pathspec = "0.3.0"
+pathspec = "0.4.0"
 plist = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-ty-math = { version = "0.4.0" }
+ty-math = { version = "0.5.0" }
 ty-math-serde = { version = "0.4.0" }
 tyt-common = { version = "0.4.0" }
 ureq = { version = "3" }

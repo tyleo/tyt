@@ -1,6 +1,6 @@
 [package]
 name = "mvox-codec"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -12,4 +12,4 @@ categories = ["parser-implementations", "encoding", "game-development", "graphic
 independent = true
 
 [dependencies]
-mvox = "0.2.0"
+mvox = "0.3.0"

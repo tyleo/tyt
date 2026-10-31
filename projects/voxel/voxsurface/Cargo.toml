@@ -1,6 +1,6 @@
 [package]
 name = "voxsurface"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -11,5 +11,5 @@ independent = true
 
 [dependencies]
 branded-id = "0.2.0"
-ty-math = { version = "0.4.0", default-features = false }
-voxcore = { version = "0.4.0", default-features = false }
+ty-math = { version = "0.5.0", default-features = false }
+voxcore = { version = "0.5.0", default-features = false }

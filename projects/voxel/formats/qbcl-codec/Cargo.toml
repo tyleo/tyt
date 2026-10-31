@@ -1,6 +1,6 @@
 [package]
 name = "qbcl-codec"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -13,7 +13,7 @@ independent = true
 
 [dependencies]
 flate2 = { version = "1", optional = true }
-qbcl = { version = "0.2.0", default-features = false }
+qbcl = { version = "0.3.0", default-features = false }
 
 [features]
 default = ["impl", "qb", "qbt", "qbcl"]
