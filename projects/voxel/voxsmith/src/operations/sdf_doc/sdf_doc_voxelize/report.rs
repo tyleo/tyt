@@ -8,7 +8,8 @@ use crate::{
 };
 use branded_id::{IdSlice, U32Id};
 use sdfcore::{
-    BSdfMaterial, BSdfNode, BSdfShape3d, SdfAxes3d, SdfMain, SdfShape3d, SdfState, SdfStep,
+    BSdfMaterial, BSdfNode, BSdfShape2d, BSdfShape3d, SdfAxes2d, SdfAxes3d, SdfMain, SdfShape2d,
+    SdfShape3d, SdfState, SdfStep,
 };
 use std::{
     borrow::Cow,
@@ -624,6 +625,10 @@ fn forms(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
         | SdfShape3d::Translate { shape_id, .. }
         | SdfShape3d::Twist { shape_id, .. } => forms(state, *shape_id),
 
+        SdfShape3d::Extrude { profile_id, .. }
+        | SdfShape3d::Revolve { profile_id, .. }
+        | SdfShape3d::Sweep { profile_id, .. } => profile_forms(state, *profile_id),
+
         // An intersect clips one operand's copies to the others.
         SdfShape3d::Intersect { shape_ids } | SdfShape3d::SmoothIntersect { shape_ids, .. } => {
             shape_ids
@@ -637,6 +642,60 @@ fn forms(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
             .iter()
             .map(|&shape_id| forms(state, shape_id))
             .sum(),
+
+        _ => 1,
+    }
+}
+
+/// How many forms the 2D shape at `shape_id` draws.
+fn profile_forms(state: &SdfState, shape_id: U32Id<BSdfShape2d>) -> u64 {
+    match &state.shapes2d[shape_id.to_usize_id()] {
+        SdfShape2d::Mirror { shape_id, axes, .. } => {
+            let reflections = match axes {
+                SdfAxes2d::U | SdfAxes2d::V => 2,
+                SdfAxes2d::Uv => 4,
+            };
+
+            reflections * profile_forms(state, *shape_id)
+        }
+
+        SdfShape2d::Repeat {
+            shape_id, count, ..
+        } => (count.x * count.y) as u64 * profile_forms(state, *shape_id),
+
+        SdfShape2d::RepeatPolar {
+            shape_id, count, ..
+        } => *count as u64 * profile_forms(state, *shape_id),
+
+        SdfShape2d::Offset { shape_id, .. }
+        | SdfShape2d::Rotate { shape_id, .. }
+        | SdfShape2d::Scale { shape_id, .. }
+        | SdfShape2d::Shell { shape_id, .. }
+        | SdfShape2d::SmoothSubtract {
+            base_id: shape_id, ..
+        }
+        | SdfShape2d::Subtract {
+            base_id: shape_id, ..
+        }
+        | SdfShape2d::Translate { shape_id, .. } => profile_forms(state, *shape_id),
+
+        SdfShape2d::Intersect { shape_ids } | SdfShape2d::SmoothIntersect { shape_ids, .. } => {
+            shape_ids
+                .iter()
+                .map(|&shape_id| profile_forms(state, shape_id))
+                .max()
+                .expect("an intersect has a shape")
+        }
+
+        SdfShape2d::SmoothUnion { shape_ids, .. } | SdfShape2d::Union { shape_ids } => shape_ids
+            .iter()
+            .map(|&shape_id| profile_forms(state, shape_id))
+            .sum(),
+
+        // Each letter draws a form, so a letter in parts reads broken.
+        SdfShape2d::Text { string, .. } => {
+            string.chars().filter(|char| !char.is_whitespace()).count() as u64
+        }
 
         _ => 1,
     }
@@ -1197,12 +1256,12 @@ mod tests {
         },
         utilities::{FillMode, GridResolution, VoxelFrame},
     };
-    use branded_id::U32Id;
+    use branded_id::{IdVec, U32Id};
     use sdfcore::{
-        SdfAxes3d, SdfAxisRotation, SdfMain, SdfMaterial, SdfProperty, SdfPropertyValue,
-        SdfShape3d, SdfStep, SdfStepMaterial,
+        SdfAxes2d, SdfAxes3d, SdfAxisRotation, SdfMain, SdfMaterial, SdfProperty, SdfPropertyValue,
+        SdfShape2d, SdfShape3d, SdfStep, SdfStepMaterial,
     };
-    use ty_math::{TyAxis3, TyVector3F64};
+    use ty_math::{TyAxis3, TyVector2F64, TyVector3F64};
 
     fn cuboid(min: [f64; 3], max: [f64; 3]) -> SdfShape3d {
         SdfShape3d::Box {
@@ -1821,6 +1880,58 @@ model.voxj  6 voxels of 1 m  1 piece  2x4x1  [0, 0, 0] .. [2, 4, 1]
   add  hoops  2 cells  2 kept  2 exposed  2 pieces  1x3x1  [0, 0, 0] .. [1, 3, 1]
   add  rungs  2 cells  2 kept  2 exposed  2 pieces  1x3x1  [1, 0, 0] .. [2, 3, 1]
 check  0 lines  model 6 voxels, 1 piece
+"
+        );
+    }
+
+    #[test]
+    fn a_profile_counts_its_forms() {
+        // Two posts extruded from one mirrored square stand on the slab.
+        let mut state = single_part_main(
+            vec![cuboid([-3.0, 0.0, 0.0], [3.0, 1.0, 1.0])],
+            vec![SdfStep::Add {
+                name: "slab".to_string(),
+                shape_id: U32Id::from_u32(0),
+                material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+            }],
+        )
+        .into_state();
+        state.shapes2d = IdVec::from_vec(vec![
+            SdfShape2d::Rect {
+                min: TyVector2F64::new(1.0, 1.0),
+                max: TyVector2F64::new(2.0, 2.0),
+                chamfer: None,
+                round: None,
+            },
+            SdfShape2d::Mirror {
+                shape_id: U32Id::from_u32(0),
+                axes: SdfAxes2d::U,
+                center: None,
+            },
+        ]);
+        state.shapes3d.push(SdfShape3d::Extrude {
+            profile_id: U32Id::from_u32(1),
+            axis: None,
+            from: 0.0,
+            to: 1.0,
+        });
+        state.steps.push(SdfStep::Add {
+            name: "posts".to_string(),
+            shape_id: U32Id::from_u32(1),
+            material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+        });
+        state.objects[U32Id::from_u32(0).to_usize_id()]
+            .step_ids
+            .push(U32Id::from_u32(1));
+        let main = SdfMain::new(state).unwrap();
+
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  8 voxels of 1 m  1 piece  6x2x1  [-3, 0, 0] .. [3, 2, 1]
+  add  slab   6 cells  6 kept  6 exposed            6x1x1  [-3, 0, 0] .. [3, 1, 1]
+  add  posts  2 cells  2 kept  2 exposed  2 pieces  4x1x1  [-2, 1, 0] .. [2, 2, 1]
+check  0 lines  model 8 voxels, 1 piece
 "
         );
     }
