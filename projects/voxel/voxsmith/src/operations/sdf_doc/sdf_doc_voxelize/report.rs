@@ -607,10 +607,31 @@ fn forms(state: &SdfState, shape_id: U32Id<BSdfShape3d>) -> u64 {
             shape_id, count, ..
         } => *count as u64 * forms(state, *shape_id),
 
-        SdfShape3d::Orient { shape_id, .. }
+        SdfShape3d::Bend { shape_id, .. }
+        | SdfShape3d::Displace { shape_id, .. }
+        | SdfShape3d::Elongate { shape_id, .. }
+        | SdfShape3d::Offset { shape_id, .. }
+        | SdfShape3d::Orient { shape_id, .. }
         | SdfShape3d::Rotate { shape_id, .. }
         | SdfShape3d::Scale { shape_id, .. }
-        | SdfShape3d::Translate { shape_id, .. } => forms(state, *shape_id),
+        | SdfShape3d::Shell { shape_id, .. }
+        | SdfShape3d::SmoothSubtract {
+            base_id: shape_id, ..
+        }
+        | SdfShape3d::Subtract {
+            base_id: shape_id, ..
+        }
+        | SdfShape3d::Translate { shape_id, .. }
+        | SdfShape3d::Twist { shape_id, .. } => forms(state, *shape_id),
+
+        // An intersect clips one operand's copies to the others.
+        SdfShape3d::Intersect { shape_ids } | SdfShape3d::SmoothIntersect { shape_ids, .. } => {
+            shape_ids
+                .iter()
+                .map(|&shape_id| forms(state, shape_id))
+                .max()
+                .expect("an intersect has a shape")
+        }
 
         SdfShape3d::SmoothUnion { shape_ids, .. } | SdfShape3d::Union { shape_ids } => shape_ids
             .iter()
@@ -1743,6 +1764,63 @@ model.voxj  11 voxels of 1 m  3 pieces  12x3x1  [-6, 0, 0] .. [6, 3, 1]
   piece 3  1 voxel   1x1x1  [5, 0, 0] .. [6, 1, 1]    from links
 check  1 line  model 11 voxels, 3 pieces
   2 pieces  1 voxel each  12x1x1  [-6, 0, 0] .. [6, 1, 1]  from links
+"
+        );
+    }
+
+    #[test]
+    fn clipped_and_cut_operands_keep_their_forms() {
+        // Two bands clip to the post as hoops, and two rungs beside it lose
+        // their far ends.
+        let main = single_part_main(
+            vec![
+                cuboid([0.0, 0.0, 0.0], [1.0, 4.0, 1.0]),
+                cuboid([-1.0, 0.0, 0.0], [2.0, 1.0, 1.0]),
+                cuboid([-1.0, 2.0, 0.0], [2.0, 3.0, 1.0]),
+                SdfShape3d::Union {
+                    shape_ids: vec![U32Id::from_u32(1), U32Id::from_u32(2)],
+                },
+                SdfShape3d::Intersect {
+                    shape_ids: vec![U32Id::from_u32(0), U32Id::from_u32(3)],
+                },
+                cuboid([1.0, 0.0, 0.0], [3.0, 1.0, 1.0]),
+                cuboid([1.0, 2.0, 0.0], [3.0, 3.0, 1.0]),
+                SdfShape3d::Union {
+                    shape_ids: vec![U32Id::from_u32(5), U32Id::from_u32(6)],
+                },
+                cuboid([2.0, 0.0, 0.0], [3.0, 3.0, 1.0]),
+                SdfShape3d::Subtract {
+                    base_id: U32Id::from_u32(7),
+                    cutter_ids: vec![U32Id::from_u32(8)],
+                },
+            ],
+            vec![
+                SdfStep::Add {
+                    name: "post".to_string(),
+                    shape_id: U32Id::from_u32(0),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Add {
+                    name: "hoops".to_string(),
+                    shape_id: U32Id::from_u32(4),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+                SdfStep::Add {
+                    name: "rungs".to_string(),
+                    shape_id: U32Id::from_u32(9),
+                    material: SdfStepMaterial::Material(U32Id::from_u32(0)),
+                },
+            ],
+        );
+
+        assert_eq!(
+            report_on(&main, 1.0, FillMode::Solid),
+            "\
+model.voxj  6 voxels of 1 m  1 piece  2x4x1  [0, 0, 0] .. [2, 4, 1]
+  add  post   4 cells  2 kept  2 exposed            1x4x1  [0, 0, 0] .. [1, 4, 1]  lost to hoops
+  add  hoops  2 cells  2 kept  2 exposed  2 pieces  1x3x1  [0, 0, 0] .. [1, 3, 1]
+  add  rungs  2 cells  2 kept  2 exposed  2 pieces  1x3x1  [1, 0, 0] .. [2, 3, 1]
+check  0 lines  model 6 voxels, 1 piece
 "
         );
     }
