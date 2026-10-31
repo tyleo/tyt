@@ -28,6 +28,8 @@ voxelize in minutes. A large scene under a voxel budget keeps its real size with
 The `hero` view looks from the front-right-top. The detail the prompt is about
 faces +z or +x with nothing between it and that corner. A room or a hull opens
 the walls facing that corner or adds a view from [other views](#other-views).
+A close-up of a detail leaves the hero view still hiding it. Turning the model
+or moving what blocks the detail clears the hero view.
 
 A first pass of boxes settles the proportions cheaply. Shapes, openings, small
 details, and patterns then replace the boxes.
@@ -70,7 +72,8 @@ reads as the prompt. Color goes wrong in a few known ways:
 
 1. A large face of one flat color reads unfinished. `shades`, `noise`, or a
    pattern breaks the face up, and `bands` or `gradient` give a terrain's cut
-   sides strata
+   sides strata. A `noise` scale of one or two voxels reads as grain, and a
+   scale of four or more draws camouflage patches
 2. Neighboring materials need colors far apart in lightness or hue. Two dark
    tones or two metals side by side merge
 3. A thin pane of glass or sheet of water reads faintly. A darker rim outlines
@@ -82,7 +85,8 @@ reads as the prompt. Color goes wrong in a few known ways:
    `baseColor`. A lower `emissiveStrength` also drops the glow's halo
 
 The model is done when every view shows the prompt with no flaw a review can
-name and every line under the report's `check` line is intended.
+name and every line under the report's `check` line is intended. The final
+message lists each line left under `check` and why it is intended.
 
 ## Other views
 
