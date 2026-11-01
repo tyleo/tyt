@@ -54,7 +54,9 @@ sh projects/vxl/trials/archive.sh 2026-10-04
    or skill. It ranks once with each label in each listed position. With
    `reference` set to an archived round, the judge ranks that round's runs
    too. `round` judges an archived round alone. `judge-stats.py` unblinds the
-   rankings and tests one arm against the other over the prompts
+   rankings and tests one arm against the other over the prompts.
+   `process-metrics.py` reads each run's transcript and files and compares the
+   arms on cost, time, failed commands, and the checks left open
 5. `build-gallery.py` writes the gallery. `--findings <dir>` adds the ranked
    findings in the folder's `findings.json`. Each finding lists the ids of the
    analysis items behind it. The build errors when an item sits in no finding.
