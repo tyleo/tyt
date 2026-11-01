@@ -28,8 +28,6 @@ voxelize in minutes. A large scene under a voxel budget keeps its real size with
 The `hero` view looks from the front-right-top. The detail the prompt is about
 faces +z or +x with nothing between it and that corner. A room or a hull opens
 the walls facing that corner or adds a view from [other views](#other-views).
-A close-up of a detail leaves the hero view still hiding it. Turning the model
-or moving what blocks the detail clears the hero view.
 
 A first pass of boxes settles the proportions cheaply. Shapes, openings, small
 details, and patterns then replace the boxes.
