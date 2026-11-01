@@ -11,6 +11,7 @@ finding.
 import base64, json, os, re, shutil, statistics, subprocess, sys
 
 from analysis_items import items
+from final_renders import find_sheet, other_renders
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.environ.get("VOXEL_TRIALS", os.path.expanduser("~/voxel-trials"))
@@ -52,14 +53,6 @@ def size_label(value):
 VIEWS = ["hero", "front", "right", "back", "top"]
 
 
-def find_sheet(folder):
-    """Returns the folder's first review sheet, the PNG named for a report's
-    model with or without `-review`, or None."""
-    names = sorted(os.listdir(folder))
-    models = {n[: -len("-report.txt")] for n in names if n.endswith("-report.txt")}
-    return next((n for n in names if n.endswith(".png") and n[:-4].removesuffix("-review") in models), None)
-
-
 def crop_tile(sheet, index, *convert):
     """Runs magick on one view of a review sheet, which tiles its views three to
     a row with a border between them."""
@@ -90,10 +83,9 @@ def copy_images(run):
             crop_tile(os.path.join(slot_dir(run), sheet), index, os.path.join(out, view + ".png"))
             views.append(view)
     extras = []
-    for name in sorted(os.listdir(slot_dir(run))):
-        if name.endswith(".png") and name != sheet:
-            shutil.copy(os.path.join(slot_dir(run), name), os.path.join(out, f"extra-{name[:-4]}.png"))
-            extras.append(f"extra-{name[:-4]}")
+    for name in other_renders(slot_dir(run), sheet):
+        shutil.copy(os.path.join(slot_dir(run), name), os.path.join(out, f"extra-{name[:-4]}.png"))
+        extras.append(f"extra-{name[:-4]}")
     passes = []
     passes_dir = os.path.join(runs_dir, run, "passes")
     for snapshot in sorted(os.listdir(passes_dir)) if os.path.isdir(passes_dir) else []:

@@ -41,19 +41,25 @@ sh projects/vxl/trials/archive.sh 2026-10-04
    records the round. It takes the model and the effort, `claude-opus-5-5` and
    `high` by default. A `vxl-model` skill under `~/.claude/skills` replaces each
    slot's copy, and `setup.sh` errors when that skill differs from the installed
-   vxl's. A skill file as the third argument goes into each `-2` slot in place
-   of the installed vxl's, so a round can compare two skill texts
+   vxl's. A third argument, a `SKILL.md` or a folder holding one, goes into
+   each `-2` slot in place of the installed vxl's skill, so a round can compare
+   two skills
 3. A Claude Code session in this repository runs `workflow.js` with the
    contents of `prompts.json` as its `trials` argument. The workflow runs 12
    sessions at a time, analyzes both runs of each prompt, and synthesizes the
    findings. `only` limits the round to some directories, and `concurrency`
-   sets how many sessions run at once. The analysts rank each prompt's runs
-   against the gallery of the archived round in `reference`
-4. `build-gallery.py` writes the gallery. `--findings <dir>` adds the ranked
+   sets how many sessions run at once
+4. A judge ranks each prompt's final models, which `blind-views.py` renders
+   with the installed vxl under shuffled labels. The judge sees no transcript
+   or skill. It ranks once with each label in each listed position. With
+   `reference` set to an archived round, the judge ranks that round's runs
+   too. `round` judges an archived round alone. `judge-stats.py` unblinds the
+   rankings and tests one arm against the other over the prompts
+5. `build-gallery.py` writes the gallery. `--findings <dir>` adds the ranked
    findings in the folder's `findings.json`. Each finding lists the ids of the
    analysis items behind it. The build errors when an item sits in no finding.
    `analysis_items.py` prints the items with their ids
-5. `archive.sh <round>` moves the round to `rounds/<round>` and copies each
+6. `archive.sh <round>` moves the round to `rounds/<round>` and copies each
    session's full transcript beside its record. It moves any memory a session
    wrote there too because the next session in the slot would load it
 

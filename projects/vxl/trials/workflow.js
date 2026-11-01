@@ -5,6 +5,7 @@ export const meta = {
   phases: [
     { title: 'Run', detail: 'one headless claude -p session per trial directory, 12 at a time' },
     { title: 'Analyze', detail: 'one agent per prompt reads both runs and compares them' },
+    { title: 'Judge', detail: 'each prompt\'s final models, rendered under shuffled labels and ranked once per label position' },
     { title: 'Synthesize', detail: 'cross-trial patterns for the Phase 2 design' },
   ],
 }
@@ -120,30 +121,12 @@ const TRIAL_ANALYSIS = {
   },
   required: ['num', 'dir', 'runs', 'comparison', 'stressFindings', 'better'],
 }
-if (REFERENCE) {
-  TRIAL_ANALYSIS.properties.referenceRanking = {
-    type: 'array',
-    items: { type: 'string', enum: ['run 1', 'run 2', 'reference 1', 'reference 2'] },
-    minItems: 4, maxItems: 4, uniqueItems: true,
-    description: 'the four final models, best first',
-  }
-  TRIAL_ANALYSIS.properties.referenceComparison = { type: 'string', description: 'two to four sentences on what sets the ranking' }
-  TRIAL_ANALYSIS.required.push('referenceRanking', 'referenceComparison')
-}
 
 const RUBRIC = `Grade each run's final renders with this rubric:
 1. good: every element the prompt names is present and reads at first glance in the hero view, with believable proportions and colors and no defect the prompt's writer would notice
 2. fair: every named element is present, but one or two read weakly, such as a hidden or tiny detail, an off proportion, a flat or wrong color, or a visible defect
 3. poor: a named element is missing or unrecognizable, or the subject reads as something else
 4. failed: the session left no final model or renders`
-
-function referencePrompt(t) {
-  if (!REFERENCE) return ''
-  const views = run => `~/voxel-trials/rounds/${REFERENCE}/gallery/runs/${run}`
-  return `
-The reference round ${REFERENCE} ran the same prompt. Its final views are hero.png, front.png, right.png, back.png, top.png, and any extra-*.png in ${views(t.dir)} for reference 1 and ${views(`${t.dir}-2`)} for reference 2. Look at them, but not at that round's analyses. Rank the four final models best first as the prompt's writer would, and say what sets the ranking.
-`
-}
 
 function analysisPrompt(t, runResults) {
   const runs = [t.dir, `${t.dir}-2`]
@@ -155,17 +138,90 @@ For each run:
 1. Run \`python3 ${HARNESS}/summarize-transcript.py <run directory> > ~/voxel-trials/_runs/<run directory>/transcript.txt\` from the repository root, then read transcript.txt in full, in chunks with Read offsets when it is long. It holds the session's messages, commands, model edits, and reports, with images left out.
 2. Read the final model file. Look at the final renders with Read (the review sheet, which tiles the hero, front, right, back, and top views, and any other PNG the session rendered last), and at the sheet in passes/01 to see how far the model came.
 3. Each run followed the skill in its slot, ~/voxel-trials/<run directory>/.claude/skills/vxl-model/SKILL.md, and the two runs' skills can differ. Before listing an operation as lacking, confirm in that run's SKILL.md that the API lacks it. When the API has it and the session missed it, list it under skillMisses instead.
-${t.stress ? `\nThe prompt was chosen to stress this: ${t.stress}. Report how each run fared against each point.\n` : ''}${t.check ? `\n${t.check} Stay read-only.\n` : ''}${referencePrompt(t)}
+${t.stress ? `\nThe prompt was chosen to stress this: ${t.stress}. Report how each run fared against each point.\n` : ''}${t.check ? `\n${t.check} Stay read-only.\n` : ''}
 ${RUBRIC}
 
 Judge the model, not the process. A session may use any tools in any order, and a skipped skill step counts only where the model or the session's time suffered. Judge each result from the renders the way the person who wrote the prompt would. Be concrete and critical, and keep each list item to one or two sentences. Then write the whole object you return as JSON to ~/voxel-trials/_runs/${t.dir}/analysis.json and return it.`
 }
 
+// The judge sees each prompt's final models under shuffled labels, and the
+// reference round's too when the caller passes one. `round` judges an archived
+// round without running or analyzing anything.
+const ROUND = args && args.round
+const SOURCES = REFERENCE ? ['1', '2', 'r1', 'r2'] : ['1', '2']
+const NAMES = { 1: 'run 1', 2: 'run 2', r1: 'reference 1', r2: 'reference 2' }
+const LABELS = SOURCES.map((_, i) => 'ABCD'[i])
+const RUNS_DIR = ROUND ? `~/voxel-trials/rounds/${ROUND}/runs` : '~/voxel-trials/_runs'
+
+function permutations(items) {
+  if (items.length <= 1) return [items]
+  return items.flatMap((item, i) =>
+    permutations([...items.slice(0, i), ...items.slice(i + 1)]).map(rest => [item, ...rest]))
+}
+const ORDERS = permutations(SOURCES)
+
+const COPY_SCHEMA = {
+  type: 'object',
+  properties: { listing: { type: 'string', description: 'the script output, unchanged' } },
+  required: ['listing'],
+}
+
+const JUDGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    ranks: {
+      type: 'object',
+      properties: Object.fromEntries(LABELS.map(label => [label, { type: 'integer', minimum: 1, maximum: LABELS.length }])),
+      required: LABELS,
+      description: 'each label\'s rank, 1 for the best, with models you cannot tell apart sharing a rank',
+    },
+    reasons: { type: 'string', description: 'two to four sentences on what sets the ranks' },
+  },
+  required: ['ranks', 'reasons'],
+}
+
+// Each judging rotates the label listing by one place. Every model then sits in
+// every position once.
+async function judge(t) {
+  const order = ORDERS[(t.num * 7) % ORDERS.length]
+  const flags = `${ROUND ? ` --round ${ROUND}` : ''}${REFERENCE ? ` --reference ${REFERENCE}` : ''}`
+  const copied = await agent(
+    `Run \`python3 ${HARNESS}/blind-views.py ${t.dir} ${order.join(',')}${flags}\` from the repository root and return its output unchanged as listing. Do nothing else.`,
+    { label: `blind:${t.dir}`, phase: 'Judge', effort: 'low', schema: COPY_SCHEMA },
+  )
+  const lines = Object.fromEntries(copied.listing.trim().split('\n').map(line => [line[0], line]))
+  const missing = LABELS.filter(label => !lines[label])
+  if (missing.length) throw new Error(`blind-views listed no ${missing.join(', ')}: ${copied.listing}`)
+  const verdicts = await Promise.all(LABELS.map((_, k) => {
+    const listing = LABELS.map((_, i) => lines[LABELS[(i + k) % LABELS.length]]).join('\n')
+    return agent(`You judge ${LABELS.length} voxel models made from the prompt "${t.prompt}". Each label holds one run's renders. <label>-sheet-<n>.png is a review sheet of one of its models, tiling the hero, front, right, back, and top views. <label>-extra-<n>.png is a render the modeling session chose, such as a close-up or a cutaway. A label with no files left no model.
+
+${listing}
+
+Look at every listed file with Read, and read nothing else. Rank the models as the prompt's writer would, 1 for the best:
+1. Every element the prompt names is present and reads at first glance
+2. Proportions, scale, and colors are believable
+3. No part floats, breaks apart, or shows a visible defect
+
+A finer voxel grid earns no credit, and neither does the number of renders or the choice of camera. Models you cannot tell apart share a rank. Write the object you return as JSON to ${RUNS_DIR}/${t.dir}/judge/verdict-${k + 1}.json too.`,
+      { label: `judge:${t.dir}:${k + 1}`, phase: 'Judge', effort: 'high', schema: JUDGE_SCHEMA },
+    )
+  }))
+  return verdicts.map(verdict => verdict && {
+    ranks: Object.fromEntries(LABELS.map(label => [NAMES[order[LABELS.indexOf(label)]], verdict.ranks[label]])),
+    reasons: verdict.reasons,
+  })
+}
+
 async function trialPipeline(t, runPromises) {
   const results = await Promise.all(runPromises)
-  return agent(analysisPrompt(t, results), {
-    label: `analyze:${t.dir}`, phase: 'Analyze', effort: 'high', schema: TRIAL_ANALYSIS,
-  })
+  const [analysis, judgment] = await Promise.all([
+    agent(analysisPrompt(t, results), {
+      label: `analyze:${t.dir}`, phase: 'Analyze', effort: 'high', schema: TRIAL_ANALYSIS,
+    }).catch(e => { log(`analysis of ${t.dir} failed: ${e}`); return null }),
+    judge(t).catch(e => { log(`judging ${t.dir} failed: ${e}`); return null }),
+  ])
+  return { dir: t.dir, analysis, judgment }
 }
 
 const LOAD_SCHEMA = {
@@ -186,7 +242,6 @@ const LOAD_SCHEMA = {
   required: ['trials'],
 }
 
-phase('Run')
 // The caller passes prompts.json as args.trials for an exact copy. An agent
 // reads it otherwise.
 const listed = (args && args.trials) || (await agent(
@@ -195,11 +250,20 @@ const listed = (args && args.trials) || (await agent(
 )).trials
 const only = args && args.only ? new Set(args.only) : null
 const trials = listed.filter(t => !only || only.has(t.dir))
+
+if (ROUND) {
+  phase('Judge')
+  const judged = await Promise.all(trials.map(t =>
+    judge(t).catch(e => { log(`judging ${t.dir} failed: ${e}`); return null })))
+  return { judgments: trials.map((t, i) => ({ dir: t.dir, verdicts: judged[i] })) }
+}
+
+phase('Run')
 const firstRuns = trials.map(t => runTrial(t.dir))
 const secondRuns = trials.map(t => runTrial(`${t.dir}-2`))
-const analyses = (await Promise.all(trials.map((t, i) =>
-  trialPipeline(t, [firstRuns[i], secondRuns[i]]).catch(e => { log(`analysis of ${t.dir} failed: ${e}`); return null })
-))).filter(Boolean)
+const outcomes = await Promise.all(trials.map((t, i) => trialPipeline(t, [firstRuns[i], secondRuns[i]])))
+const analyses = outcomes.map(o => o.analysis).filter(Boolean)
+const judgments = outcomes.map(o => ({ dir: o.dir, verdicts: o.judgment }))
 
 phase('Synthesize')
 const SYNTHESIS = {
@@ -220,4 +284,4 @@ const synthesis = await agent(`You synthesize the voxel-modeling trials. ${trial
 
 ${JSON.stringify(analyses)}`, { label: 'synthesize', phase: 'Synthesize', effort: 'high', schema: SYNTHESIS })
 
-return { analyses, synthesis }
+return { analyses, judgments, synthesis }
