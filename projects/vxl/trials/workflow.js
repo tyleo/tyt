@@ -12,6 +12,7 @@ export const meta = {
 // Paths read from the repository root because workflow agents start there.
 const HARNESS = 'projects/vxl/trials'
 const LIMIT = (args && args.concurrency) || 12
+const REFERENCE = args && args.reference
 
 let active = 0
 const waiters = []
@@ -83,7 +84,7 @@ const RUN_ANALYSIS = {
     voxels: { type: 'integer', description: 'voxel count in the final report' },
     pieces: { type: 'integer', description: 'piece count in the final report' },
     usedParts: { type: 'boolean' },
-    verdict: { type: 'string', enum: ['good', 'fair', 'poor', 'failed'] },
+    verdict: { type: 'string', enum: ['good', 'fair', 'poor', 'failed'], description: 'the grade the rubric in the prompt gives the final renders' },
     assessment: { type: 'string', description: 'two to four sentences on how well the final renders match the prompt, naming what reads right and what reads wrong' },
     caption: { type: 'string', description: 'one short sentence for a gallery card' },
     progress: { type: 'string', description: 'one sentence on how the model changed from the first pass to the last' },
@@ -119,6 +120,30 @@ const TRIAL_ANALYSIS = {
   },
   required: ['num', 'dir', 'runs', 'comparison', 'stressFindings', 'better'],
 }
+if (REFERENCE) {
+  TRIAL_ANALYSIS.properties.referenceRanking = {
+    type: 'array',
+    items: { type: 'string', enum: ['run 1', 'run 2', 'reference 1', 'reference 2'] },
+    minItems: 4, maxItems: 4, uniqueItems: true,
+    description: 'the four final models, best first',
+  }
+  TRIAL_ANALYSIS.properties.referenceComparison = { type: 'string', description: 'two to four sentences on what sets the ranking' }
+  TRIAL_ANALYSIS.required.push('referenceRanking', 'referenceComparison')
+}
+
+const RUBRIC = `Grade each run's final renders with this rubric:
+1. good: every element the prompt names is present and reads at first glance in the hero view, with believable proportions and colors and no defect the prompt's writer would notice
+2. fair: every named element is present, but one or two read weakly, such as a hidden or tiny detail, an off proportion, a flat or wrong color, or a visible defect
+3. poor: a named element is missing or unrecognizable, or the subject reads as something else
+4. failed: the session left no final model or renders`
+
+function referencePrompt(t) {
+  if (!REFERENCE) return ''
+  const views = run => `~/voxel-trials/rounds/${REFERENCE}/gallery/runs/${run}`
+  return `
+The reference round ${REFERENCE} ran the same prompt. Its final views are hero.png, front.png, right.png, back.png, top.png, and any extra-*.png in ${views(t.dir)} for reference 1 and ${views(`${t.dir}-2`)} for reference 2. Look at them, but not at that round's analyses. Rank the four final models best first as the prompt's writer would, and say what sets the ranking.
+`
+}
 
 function analysisPrompt(t, runResults) {
   const runs = [t.dir, `${t.dir}-2`]
@@ -130,7 +155,9 @@ For each run:
 1. Run \`python3 ${HARNESS}/summarize-transcript.py <run directory> > ~/voxel-trials/_runs/<run directory>/transcript.txt\` from the repository root, then read transcript.txt in full, in chunks with Read offsets when it is long. It holds the session's messages, commands, model edits, and reports, with images left out.
 2. Read the final model file. Look at the final renders with Read (the review sheet, which tiles the hero, front, right, back, and top views, and any other PNG the session rendered last), and at the sheet in passes/01 to see how far the model came.
 3. Each run followed the skill in its slot, ~/voxel-trials/<run directory>/.claude/skills/vxl-model/SKILL.md, and the two runs' skills can differ. Before listing an operation as lacking, confirm in that run's SKILL.md that the API lacks it. When the API has it and the session missed it, list it under skillMisses instead.
-${t.stress ? `\nThe prompt was chosen to stress this: ${t.stress}. Report how each run fared against each point.\n` : ''}${t.check ? `\n${t.check} Stay read-only.\n` : ''}
+${t.stress ? `\nThe prompt was chosen to stress this: ${t.stress}. Report how each run fared against each point.\n` : ''}${t.check ? `\n${t.check} Stay read-only.\n` : ''}${referencePrompt(t)}
+${RUBRIC}
+
 Judge the model, not the process. A session may use any tools in any order, and a skipped skill step counts only where the model or the session's time suffered. Judge each result from the renders the way the person who wrote the prompt would. Be concrete and critical, and keep each list item to one or two sentences. Then write the whole object you return as JSON to ~/voxel-trials/_runs/${t.dir}/analysis.json and return it.`
 }
 

@@ -47,7 +47,8 @@ sh projects/vxl/trials/archive.sh 2026-10-04
    contents of `prompts.json` as its `trials` argument. The workflow runs 12
    sessions at a time, analyzes both runs of each prompt, and synthesizes the
    findings. `only` limits the round to some directories, and `concurrency`
-   sets how many sessions run at once
+   sets how many sessions run at once. The analysts rank each prompt's runs
+   against the gallery of the archived round in `reference`
 4. `build-gallery.py` writes the gallery. `--findings <dir>` adds the ranked
    findings in the folder's `findings.json`. Each finding lists the ids of the
    analysis items behind it. The build errors when an item sits in no finding.
