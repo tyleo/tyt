@@ -50,11 +50,13 @@ sh projects/vxl/trials/archive.sh 2026-10-04
    findings. `only` limits the round to some directories, and `concurrency`
    sets how many sessions run at once
 4. A judge ranks each prompt's final models, which `blind-views.py` renders
-   with the installed vxl under shuffled labels. The judge sees no transcript
-   or skill. It ranks once with each label in each listed position. With
-   `reference` set to an archived round, the judge ranks that round's runs
-   too. `round` judges an archived round alone. `judge-stats.py` unblinds the
-   rankings and tests one arm against the other over the prompts.
+   with the installed vxl under shuffled labels. A shot agent renders the
+   close-ups and inside views a prompt lists under `shots` in `prompts.json`,
+   once for each model. The judge sees no transcript or skill. It ranks once
+   with each label in each listed position. With `reference` set to an
+   archived round, the judge ranks that round's runs too. `round` judges an
+   archived round alone. `judge-stats.py` unblinds the rankings and tests one
+   arm against the other over the prompts.
    `process-metrics.py` reads each run's transcript and files and compares the
    arms on cost, time, failed commands, and the checks left open
 5. `build-gallery.py` writes the gallery. `--findings <dir>` adds the ranked

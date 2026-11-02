@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Run', detail: 'one headless claude -p session per trial directory, 12 at a time' },
     { title: 'Analyze', detail: 'one agent per prompt reads both runs and compares them' },
-    { title: 'Judge', detail: 'each prompt\'s final models, rendered under shuffled labels and ranked once per label position' },
+    { title: 'Judge', detail: 'each prompt\'s final models and shots, rendered under shuffled labels and ranked once per label position' },
     { title: 'Synthesize', detail: 'cross-trial patterns for the Phase 2 design' },
   ],
 }
@@ -180,6 +180,40 @@ const JUDGE_SCHEMA = {
   required: ['ranks', 'reasons'],
 }
 
+const SHOT_SCHEMA = {
+  type: 'object',
+  properties: {
+    shots: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          shown: { type: 'boolean', description: 'false when the model has no such feature to show' },
+          note: { type: 'string', description: 'one sentence on what the shot shows, or on what the model lacks' },
+        },
+        required: ['shown', 'note'],
+      },
+    },
+  },
+  required: ['shots'],
+}
+
+// A shot agent renders a prompt's shots of one label's model without learning
+// which run made it. Every label gets the same instructions.
+function shotPrompt(t, label) {
+  const judgeDir = `${RUNS_DIR}/${t.dir}/judge`
+  const models = `${judgeDir}/models/${label}`
+  const shots = t.shots.map((shot, i) => `${i + 1}. ${shot}`).join('\n')
+  return `You render camera shots of a voxel model made from the prompt "${t.prompt}" so a judge can compare it with other models of the same prompt. ${models} holds model-<n>.voxj documents with their TypeScript model files and voxelize reports. Read the reports and model files to learn where each part sits, in meters. Never edit them.
+
+The shots:
+${shots}
+
+For each shot k, render it from the .voxj that holds its subject with \`vxl object render <voxj> --lights-from review --bloom-strength 1 --to png --file-stem shot-<k>\` and the view flags it takes, such as --view-orbit, --view-look-at, --view-select, --view-frame world with --view-position, --view-fov, or --rotate. \`vxl object render --help\` lists them. The PNG lands beside the .voxj. Look at it with Read and adjust, up to 4 renders a shot, until the subject fills the frame and nothing hides it. Then copy the last render to ${judgeDir}/${label}-shot-<k>.png. When the model has no such feature, render nothing for that shot and return shown=false.
+
+Frame each shot plainly, as a photographer would show the feature to its buyer. A flattering or unflattering angle misleads the judge. When every shot is done, delete ${models}. Return one entry per shot in order.`
+}
+
 // Each judging rotates the label listing by one place. Every model then sits in
 // every position once.
 async function judge(t) {
@@ -192,9 +226,19 @@ async function judge(t) {
   const lines = Object.fromEntries(copied.listing.trim().split('\n').map(line => [line[0], line]))
   const missing = LABELS.filter(label => !lines[label])
   if (missing.length) throw new Error(`blind-views listed no ${missing.join(', ')}: ${copied.listing}`)
+  if (t.shots) {
+    await Promise.all(LABELS.filter(label => !lines[label].endsWith('no model')).map(async label => {
+      const result = await agent(shotPrompt(t, label), { label: `shots:${t.dir}:${label}`, phase: 'Judge', effort: 'medium', schema: SHOT_SCHEMA })
+      if (!result || result.shots.length !== t.shots.length) throw new Error(`shots of ${t.dir} ${label} returned ${JSON.stringify(result)}`)
+      const shots = result.shots.map((shot, i) => shot.shown
+        ? `${RUNS_DIR}/${t.dir}/judge/${label}-shot-${i + 1}.png`
+        : `shot ${i + 1} not modeled`)
+      lines[label] += `, ${shots.join(', ')}`
+    }))
+  }
   const verdicts = await Promise.all(LABELS.map((_, k) => {
     const listing = LABELS.map((_, i) => lines[LABELS[(i + k) % LABELS.length]]).join('\n')
-    return agent(`You judge ${LABELS.length} voxel models made from the prompt "${t.prompt}". Each label holds one run's renders. <label>-sheet-<n>.png is a review sheet of one of its models, tiling the hero, front, right, back, and top views. A label with no files left no model.
+    return agent(`You judge ${LABELS.length} voxel models made from the prompt "${t.prompt}". Each label holds one run's renders. <label>-sheet-<n>.png is a review sheet of one of its models, tiling the hero, front, right, back, and top views. ${t.shots ? `<label>-shot-<k>.png shows shot k of every model: ${t.shots.map((shot, i) => `${i + 1}. ${shot}`).join('; ')}. "shot k not modeled" marks a model with no such feature. ` : ''}A label with no files left no model.
 
 ${listing}
 
@@ -234,6 +278,7 @@ const LOAD_SCHEMA = {
         properties: {
           num: { type: 'integer' }, dir: { type: 'string' }, prompt: { type: 'string' },
           stress: { type: 'string' }, check: { type: 'string' },
+          shots: { type: 'array', items: { type: 'string' } },
         },
         required: ['num', 'dir', 'prompt'],
       },
