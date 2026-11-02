@@ -8,10 +8,11 @@ holds findings.json and the images it references. Each finding lists its
 evidence by the ids analysis_items.py prints. Every item has to sit in some
 finding.
 """
-import base64, json, os, re, shutil, statistics, subprocess, sys
+import base64, json, os, re, shutil, statistics, sys
 
 from analysis_items import items
 from final_renders import find_sheet, other_renders
+from review_sheet import VIEWS, crop_tile
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.environ.get("VOXEL_TRIALS", os.path.expanduser("~/voxel-trials"))
@@ -48,26 +49,6 @@ def size_label(value):
     if value >= 0.01:
         return f"{value * 100:g} cm"
     return f"{value * 1000:g} mm"
-
-
-VIEWS = ["hero", "front", "right", "back", "top"]
-
-
-def crop_tile(sheet, index, *convert):
-    """Runs magick on one view of a review sheet, which tiles its views three to
-    a row with a border between them."""
-    width, height = map(int, subprocess.run(
-        ["magick", "identify", "-format", "%w %h", sheet], check=True, capture_output=True, text=True,
-    ).stdout.split())
-    border = 2 * width - 3 * height
-    tile = (width - 2 * border) // 3
-    if border < 0 or 3 * tile + 2 * border != width:
-        sys.exit(f"{sheet} at {width}x{height} is no five-view review sheet")
-    x, y = index % 3 * (tile + border), index // 3 * (tile + border)
-    return subprocess.run(
-        ["magick", sheet, "-crop", f"{tile}x{tile}+{x}+{y}", "+repage", *convert],
-        check=True, capture_output=True,
-    ).stdout
 
 
 def copy_images(run):

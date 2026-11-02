@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trial viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 12px; background: #111; color: #eee; font: 14px system-ui, sans-serif; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.prompt { color: #bbb; flex: 1 1 300px; }
+button, select { background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
+button.on { background: #3a6df0; border-color: #3a6df0; }
+button:disabled { opacity: 0.4; cursor: default; }
+.label { color: #888; margin-right: 2px; }
+#pic { width: min(100%, calc(100vh - 210px)); aspect-ratio: 1; margin: 0 auto; background-repeat: no-repeat; background-color: #1b1b1b; border-radius: 6px; }
+#status, #count { color: #888; }
+.keys { color: #666; font-size: 12px; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="row">
+  <button id="prev">&lt; Prev</button>
+  <select id="pick"></select>
+  <button id="next">Next &gt;</button>
+  <span class="prompt" id="prompt"></span>
+  <span id="count"></span>
+</div>
+<div class="row" id="models"></div>
+<div class="row" id="views"></div>
+<div class="row" id="places"></div>
+<div id="pic" role="img"></div>
+<div class="keys">Keys: 1 to 4 pick a model, left and right arrows switch views, [ and ] switch prompts. <span id="status"></span></div>
+<script>
+const DATA = /*DATA*/[];
+const ORDINALS = ['1st', '2nd', '3rd', '4th'];
+let p = 0, m = 0, v = 0, db = null, loaded = false;
+const ranks = {};
+const $ = id => document.getElementById(id);
+
+for (const [i, d] of DATA.entries()) $('pick').add(new Option(`${i + 1}. ${d.dir}`, i));
+
+function strip(d, label) { return `img/${d.dir}-${label}.webp`; }
+
+function preload(i) {
+  const d = DATA[i];
+  if (d) for (const label of d.labels) new Image().src = strip(d, label);
+}
+
+function done(d) { const r = ranks[d.dir] || {}; return d.labels.every(label => r[label]); }
+
+function draw() {
+  const d = DATA[p], label = d.labels[m], n = d.views.length;
+  $('pick').value = p;
+  $('prompt').textContent = `"${d.prompt}"`;
+  $('count').textContent = `${DATA.filter(done).length} of ${DATA.length} ranked`;
+  $('models').replaceChildren(Object.assign(document.createElement('span'), { className: 'label', textContent: 'Model' }),
+    ...d.labels.map((l, i) => {
+      const place = (ranks[d.dir] || {})[l];
+      const b = Object.assign(document.createElement('button'), { textContent: `${l}${place ? ' (' + ORDINALS[place - 1] + ')' : ''}` });
+      b.className = i === m ? 'on' : '';
+      b.onclick = () => { m = i; draw(); };
+      return b;
+    }));
+  $('views').replaceChildren(Object.assign(document.createElement('span'), { className: 'label', textContent: 'View' }),
+    ...d.views.map((name, i) => {
+      const b = Object.assign(document.createElement('button'), { textContent: name, className: i === v ? 'on' : '' });
+      b.onclick = () => { v = i; draw(); };
+      return b;
+    }));
+  $('places').replaceChildren(Object.assign(document.createElement('span'), { className: 'label', textContent: `Place model ${label}` }),
+    ...d.labels.map((_, i) => {
+      const b = Object.assign(document.createElement('button'), { textContent: ORDINALS[i], disabled: !loaded });
+      b.className = (ranks[d.dir] || {})[label] === i + 1 ? 'on' : '';
+      b.onclick = () => place(d.dir, label, i + 1);
+      return b;
+    }));
+  const pic = $('pic');
+  pic.style.backgroundImage = `url(${strip(d, label)})`;
+  pic.style.backgroundSize = `${n * 100}% 100%`;
+  pic.style.backgroundPosition = `${n > 1 ? (v / (n - 1)) * 100 : 0}% 0`;
+  pic.setAttribute('aria-label', `Model ${label}, ${d.views[v]}`);
+}
+
+function go(i) {
+  p = (i + DATA.length) % DATA.length;
+  v = Math.min(v, DATA[p].views.length - 1);
+  m = Math.min(m, DATA[p].labels.length - 1);
+  draw();
+  preload(p + 1);
+}
+
+function say(text) { $('status').textContent = text; }
+
+// One write runs at a time per prompt. A pick made mid-write goes out after it.
+const writing = {}, again = {};
+async function persist(dir) {
+  if (writing[dir]) { again[dir] = true; return; }
+  writing[dir] = true;
+  say('Saving...');
+  try {
+    do { again[dir] = false; await db.doc('ranks/' + dir).set({ ...ranks[dir] }); } while (again[dir]);
+    say('Saved');
+  } catch (e) { say(`Not saved: ${e.message || e.code}`); }
+  finally { writing[dir] = false; }
+}
+
+function place(dir, label, rank) {
+  ranks[dir] = { ...(ranks[dir] || {}) };
+  if (ranks[dir][label] === rank) delete ranks[dir][label];
+  else ranks[dir][label] = rank;
+  draw();
+  persist(dir);
+}
+
+$('prev').onclick = () => go(p - 1);
+$('next').onclick = () => go(p + 1);
+$('pick').onchange = e => go(+e.target.value);
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT') return;
+  const d = DATA[p];
+  if (/^[1-4]$/.test(e.key) && +e.key <= d.labels.length) { m = +e.key - 1; draw(); }
+  else if (e.key === 'ArrowRight') { v = (v + 1) % d.views.length; draw(); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { v = (v - 1 + d.views.length) % d.views.length; draw(); e.preventDefault(); }
+  else if (e.key === ']') go(p + 1);
+  else if (e.key === '[') go(p - 1);
+});
+
+go(0);
+preload(0);
+
+(async () => {
+  db = await claude.use('db');
+  if (!db) { say('Saving is unavailable in this view. Open the page on claude.ai while signed in.'); draw(); return; }
+  say('Loading saved places...');
+  db.collection('ranks').onSnapshot(snap => {
+    for (const doc of snap.docs) if (!writing[doc.id]) ranks[doc.id] = { ...doc.data() };
+    loaded = true;
+    if (!snap.metadata.fromCache) say('Places save as you click');
+    draw();
+  }, e => say(`Saved places unavailable: ${e.message || e.code}`));
+})();
+</script>
+</body>
+</html>
