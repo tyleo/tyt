@@ -194,7 +194,7 @@ async function judge(t) {
   if (missing.length) throw new Error(`blind-views listed no ${missing.join(', ')}: ${copied.listing}`)
   const verdicts = await Promise.all(LABELS.map((_, k) => {
     const listing = LABELS.map((_, i) => lines[LABELS[(i + k) % LABELS.length]]).join('\n')
-    return agent(`You judge ${LABELS.length} voxel models made from the prompt "${t.prompt}". Each label holds one run's renders. <label>-sheet-<n>.png is a review sheet of one of its models, tiling the hero, front, right, back, and top views. <label>-extra-<n>.png is a render the modeling session chose, such as a close-up or a cutaway. A label with no files left no model.
+    return agent(`You judge ${LABELS.length} voxel models made from the prompt "${t.prompt}". Each label holds one run's renders. <label>-sheet-<n>.png is a review sheet of one of its models, tiling the hero, front, right, back, and top views. A label with no files left no model.
 
 ${listing}
 
@@ -203,7 +203,7 @@ Look at every listed file with Read, and read nothing else. Rank the models as t
 2. Proportions, scale, and colors are believable
 3. No part floats, breaks apart, or shows a visible defect
 
-A finer voxel grid earns no credit, and neither does the number of renders or the choice of camera. Models you cannot tell apart share a rank. Write the object you return as JSON to ${RUNS_DIR}/${t.dir}/judge/verdict-${k + 1}.json too.`,
+A finer voxel grid earns no credit. Models you cannot tell apart share a rank. Write the object you return as JSON to ${RUNS_DIR}/${t.dir}/judge/verdict-${k + 1}.json too.`,
       { label: `judge:${t.dir}:${k + 1}`, phase: 'Judge', effort: 'high', schema: JUDGE_SCHEMA },
     )
   }))

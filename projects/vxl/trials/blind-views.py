@@ -6,17 +6,15 @@ Usage: blind-views.py <directory> <order> [--round <round>] [--reference <round>
 <order> lists one source per label A, B, and so on, comma-separated: 1 and 2 for
 the round's runs, r1 and r2 for the reference round's. `--round` reads an
 archived round in place of the live one. Each model a run reported renders under
-the review profile with the installed vxl as <label>-sheet-<n>.png. Every run
-then shows the same views. The run's two newest other renders, such as
-cutaways, copy as <label>-extra-<n>.png. The files land in the round's
-runs/<directory>/judge. judge-order.json beside that folder maps each label to
-its source. Prints the files by label.
+the review profile with the installed vxl as <label>-sheet-<n>.png, so every
+run shows the same views. The files land in the round's runs/<directory>/judge.
+judge-order.json beside that folder maps each label to its source. Prints the
+files by label.
 """
 import json, os, shutil, string, subprocess, sys
 
-from final_renders import extra_renders, models
+from final_renders import models
 
-EXTRAS = 2
 NAMES = {"1": "run 1", "2": "run 2", "r1": "reference 1", "r2": "reference 2"}
 
 root = os.environ.get("VOXEL_TRIALS", os.path.expanduser("~/voxel-trials"))
@@ -61,10 +59,6 @@ for label, source in zip(string.ascii_uppercase, order):
         )
         os.remove(model)
         files.append(name + ".png")
-    for index, extra in enumerate(extra_renders(folder)[:EXTRAS]):
-        name = f"{label}-extra-{index + 1}.png"
-        shutil.copy(os.path.join(folder, extra), os.path.join(out, name))
-        files.append(name)
     print(f"{label}: {', '.join(os.path.join(out, f) for f in files) or 'no model'}")
 
 with open(os.path.join(runs_dir, directory, "judge-order.json"), "w") as f:

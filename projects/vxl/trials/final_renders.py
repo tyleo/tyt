@@ -20,9 +20,3 @@ def find_sheet(folder):
 
 def other_renders(folder, sheet):
     return [n for n in sorted(os.listdir(folder)) if n.endswith(".png") and n != sheet]
-
-
-def extra_renders(folder):
-    stems = set(models(folder))
-    names = [n for n in os.listdir(folder) if n.endswith(".png") and not is_sheet(n, stems)]
-    return sorted(names, key=lambda n: os.path.getmtime(os.path.join(folder, n)), reverse=True)
