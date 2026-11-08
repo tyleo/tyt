@@ -152,7 +152,8 @@ code-level choices in
       - [x] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and
             S5 on Quest gives the march a rate to beat
       - [ ] **S9.4. Experiments.** The experiments follow the research's
-            [ladder](reference/speedup-research.md#5-experiment-ladder).
+            [ladder](reference/speedup-research.md#5-experiment-ladder),
+            with a profile and a round of new approaches after rung 3.
             They rework the tree walk, the 64-tree, and the ray query march,
             one change at a time. Each change is timed on the desktop
             through `b2-times`. A change that wins stays. One short Quest run
@@ -164,12 +165,43 @@ code-level choices in
                   `at % size` take 65% of the S1 walk on the desktop
                   - [x] All three win on the desktop, and B1 stays exact
                   - [x] A Quest run confirms them
-            - [ ] Rung 3, boxes. Two chains gained 1.5x on Quest. A
+            - [x] Rung 3, boxes. Two chains gained 1.5x on Quest. A
                   latency-bound loop would gain 2x, so boxes stay ahead of
                   rung 4
                   - [x] Tile boxes win on the desktop, and B1 stays exact
                   - [x] Child boxes lose on the desktop and drop
                   - [x] A Quest run confirms tile boxes
+            - [ ] A profile after rung 3. Tile boxes halved S1's
+                  iterations, yet the walk gained 1.11x on Quest against
+                  1.30x on the desktop. The profile finds what sets the
+                  walk's time on Quest
+                  - [ ] `ovrgpuprofiler` reads the tree walk's counters on
+                        Quest before and after tile boxes
+                  - [ ] RenderDoc Meta Fork reads the registers and
+                        occupancy of the tree walk with and without the
+                        checks. The walk with the checks runs S1 in 56.0 ms
+                        against the plain walk's 72.1
+                  - [ ] A wave test groups each ray's iterations into
+                        Quest's 64-wide waves. It reports the mean ray's
+                        iterations against those of each wave's slowest
+                        ray. It also counts how often a wave's rays split
+                        between the jump and the single-cell step
+                  - [ ] The report lands in benchmarks.md. Its findings
+                        order the rungs that follow
+            - [ ] New approaches. Each gets a prototype of about one
+                  session. B1's ids check each prototype. Start bounds
+                  wait for S9.5. The ray-tracing unit waits for rung 8
+                  - [ ] Raster, then march. A fragment pass rasterizes the
+                        boxes of each object's non-empty tiles and marches
+                        each pixel's ray inside the box. The depth test
+                        keeps the nearest hit
+                  - [ ] Tiles of pixels walk together. An 8x8 tile walks
+                        the empty space its rays share. Each ray then walks
+                        on alone. The prototype runs only if the wave test
+                        finds split waves
+                  - [ ] A Quest run times the prototypes against the tree
+                        walk and S9.3's raster. Its findings reorder the
+                        rungs that follow
             - [ ] Rung 4, register-resident leaves. RenderDoc reads each
                   change's footprint and occupancy on Quest. The walk starts
                   at 20 registers and 50% occupancy
