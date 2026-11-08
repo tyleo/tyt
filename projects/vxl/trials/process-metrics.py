@@ -4,7 +4,7 @@ compares two arms prompt by prompt.
 
 Usage: process-metrics.py <round>:<slot>=<arm> ... [--runs]
 Each spec puts one slot of a round, 1 or 2, in arm A or B. `live` names the
-round in $VOXEL_TRIALS/_runs. A round with its -2 slots on a second skill reads
+round in $VOXEL_TRIALS/_runs. A round with its -2 slots on a second arm reads
 `r:1=A r:2=B`. A slot-swapped pair adds `s:1=B s:2=A`. Each prompt scores
 the mean of arm B's runs minus arm A's for every metric. The scores take a
 sign-flip permutation test and a bootstrap interval. `--runs` prints every run's
@@ -50,6 +50,19 @@ def transcript(record, slot):
     if not os.path.exists(path):
         sys.exit(f"no transcript at {path}")
     return path
+
+
+# A session can read its skill's files with the Read or Grep tool or with a
+# shell command, which may reach them by a path relative to the skill.
+def skill_read(name, data):
+    if name in ("Read", "Grep"):
+        return "/.claude/skills/" in data.get("file_path", data.get("path", ""))
+    if name == "Bash":
+        return bool(re.search(
+            r"\b(cat|head|tail|sed|grep|rg|awk|less)\b[^;&|]*(\.claude/skills/|references/)\S*\.md",
+            data.get("command", ""),
+        ))
+    return False
 
 
 def measure(round_name, run):
@@ -101,8 +114,7 @@ def measure(round_name, run):
         "staleRender": int(stale),
         "peakContext": peak / 1000,
         "compactions": compactions,
-        "skillReads": sum(1 for name, data in calls.values()
-                          if name == "Read" and "/.claude/skills/" in data.get("file_path", "")),
+        "skillReads": sum(1 for name, data in calls.values() if skill_read(name, data)),
     }
 
 

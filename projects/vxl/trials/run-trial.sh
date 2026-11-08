@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs one trial headless in its slot and records the run in _runs/<run>. The
-# model and effort come from _runs/round.json. A run stops after two hours.
+# model and effort come from _runs/round.json. The run puts its arm's vxl first
+# on PATH and stops after two hours.
 # Usage: run-trial.sh <run>
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -12,6 +13,11 @@ prompt=$(jq -r --arg dir "${run%-2}" '.[] | select(.dir == $dir) | .prompt' "$he
 [ -d "$root/$run/.claude" ] || { echo "no slot for $run; run setup.sh" >&2; exit 2; }
 model=$(jq -r .model "$root/_runs/round.json")
 effort=$(jq -r .effort "$root/_runs/round.json")
+case $run in
+  *-2) bin=$root/_harness/arm-2/bin ;;
+  *) bin=$root/_harness/arm-1/bin ;;
+esac
+[ -x "$bin/vxl" ] || { echo "no vxl at $bin; run setup.sh" >&2; exit 2; }
 
 mkdir -p "$out"
 rm -rf "$out/exit" "$out/finished" "$out/passes" "$out/voxelized" "$out/voxelizes"
@@ -25,7 +31,7 @@ env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_MESSAGING_SOCKET \
   -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_EXECPATH -u CLAUDE_CODE_SESSION_ID \
   -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_SESSION_ATTENDED -u CLAUDE_PID \
   -u CLAUDE_EFFORT -u AI_AGENT \
-  perl -e 'alarm shift; exec @ARGV' 7200 \
+  PATH="$bin:$PATH" perl -e 'alarm shift; exec @ARGV' 7200 \
   claude -p --model "$model" --effort "$effort" --output-format json \
   < "$out/prompt.txt" > "$out/result.json" 2> "$out/stderr.log"
 code=$?

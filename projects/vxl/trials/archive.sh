@@ -1,7 +1,7 @@
 #!/bin/sh
-# Moves the round in $VOXEL_TRIALS aside to rounds/<round>, with each session's
-# full transcript and any memory it wrote. Each slot keeps its .claude folder for
-# the next round.
+# Moves the round in $VOXEL_TRIALS aside to rounds/<round> with each session's
+# full transcript, any memory it wrote, and each arm's vxl binary and skill.
+# Each slot keeps its .claude folder for the next round.
 # Usage: archive.sh <round>
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -9,11 +9,11 @@ root=${VOXEL_TRIALS:-$HOME/voxel-trials}
 dest=$root/rounds/$1
 [ -d "$root/_runs" ] || { echo "no round in $root" >&2; exit 1; }
 [ ! -e "$dest" ] || { echo "$dest exists" >&2; exit 1; }
+for n in 1 2; do
+  [ -d "$root/_harness/arm-$n" ] || { echo "no arm $n in $root/_harness; set the round up with setup.sh" >&2; exit 1; }
+done
 mkdir -p "$dest/slots"
-cp "$root/chair/.claude/skills/vxl-model/SKILL.md" "$dest/SKILL.md"
-if ! diff -rq "$root/chair/.claude/skills/vxl-model" "$root/chair-2/.claude/skills/vxl-model" > /dev/null; then
-  cp -R "$root/chair-2/.claude/skills/vxl-model" "$dest/skill-2"
-fi
+cp -R "$root/_harness/arm-1" "$root/_harness/arm-2" "$dest/"
 
 for dir in $(jq -r '.[].dir' "$here/prompts.json"); do
   for run in "$dir" "$dir-2"; do

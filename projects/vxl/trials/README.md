@@ -13,7 +13,8 @@ the builder and the docs in place of the skill. `$VOXEL_TRIALS`,
 
 1. `<directory>` and `<directory>-2`, the slots the two runs of a prompt work in
 2. `_harness/snapshot.sh`, the hook that copies each pass's renders, model
-   file, and report into `_runs/<run>/passes`
+   file, and report into `_runs/<run>/passes`, and `_harness/arm-<n>`, the
+   vxl binary and skill of each arm
 3. `_runs`, the round's `round.json` and one record per run
 4. `findings`, the round's ranked findings and the images they show
 5. `gallery`, the page `build-gallery.py` writes
@@ -37,13 +38,10 @@ sh projects/vxl/trials/archive.sh 2026-10-04
 
 1. The commit under test is checked out, and `npm run vxl:install` installs its
    vxl
-2. `setup.sh` clears the slots, prints the installed vxl's skill into each, and
-   records the round. It takes the model and the effort, `claude-opus-5-5` and
-   `high` by default. A `vxl-model` skill under `~/.claude/skills` replaces each
-   slot's copy, and `setup.sh` errors when that skill differs from the installed
-   vxl's. A third argument, a `SKILL.md` or a folder holding one, goes into
-   each `-2` slot in place of the installed vxl's skill, so a round can compare
-   two skills
+2. `setup.sh` clears the slots, gives each its arm, and records the round. It
+   takes `--model` and `--effort`, `claude-opus-5-5` and `high` by default. A
+   `vxl-model` skill under `~/.claude/skills` replaces each slot's copy, and
+   `setup.sh` errors when that skill differs from an arm's
 3. A Claude Code session in this repository runs `workflow.js` with the
    contents of `prompts.json` as its `trials` argument. The workflow runs 12
    sessions at a time, analyzes both runs of each prompt, and synthesizes the
@@ -64,8 +62,8 @@ sh projects/vxl/trials/archive.sh 2026-10-04
    findings in the folder's `findings.json`. Each finding lists the ids of the
    analysis items behind it. The build errors when an item sits in no finding.
    `analysis_items.py` prints the items with their ids
-6. `archive.sh <round>` moves the round to `rounds/<round>` and copies each
-   session's full transcript beside its record. It moves any memory a session
+6. `archive.sh <round>` moves the round and its arms to `rounds/<round>` and
+   copies each session's full transcript beside its record. It moves any memory a session
    wrote there too because the next session in the slot would load it
 
 `run-trial.sh <run>` runs one session by hand, and `wait-trial.sh <run>` waits
@@ -73,14 +71,29 @@ for it. `summarize-transcript.py <run>` prints a run's transcript without its
 images, and `errors.sh <run>` lists the run's failed tool calls. Both take
 `--round <round>` for an archived round.
 
+## Arms
+
+Slot 1 of each prompt runs arm 1, and the `-2` slot runs arm 2. An arm pairs a
+vxl binary with a skill:
+
+| Flag          | Sets                                 | Default            |
+| ------------- | ------------------------------------ | ------------------ |
+| `--vxl-<n>`   | The binary first on the arm's PATH   | The installed vxl  |
+| `--skill-<n>` | A `SKILL.md` or a folder holding one | The binary's skill |
+
+With both on their defaults, the round runs one arm twice. A skill change sets
+`--skill-2`, and a tool change sets `--vxl-2` to the candidate build. A second
+round swaps the arms to cancel any lean toward a slot.
+
 ## Exact reruns
 
 `round.json` records the date, the repository commit, and whether the tree held
-local edits. It also records the vxl version in the skill, the Claude Code
-version, the model, and the effort. `run-trial.sh` passes the model and the
+local edits. It also records the Claude Code version, the model, the effort, and
+each arm's source, version, and hashes. `run-trial.sh` passes the model and the
 effort to every session.
 
 A rerun checks out the recorded commit and installs its vxl. It installs the
 recorded Claude Code with `claude install <version>` and runs `setup.sh` with
-the recorded model and effort. The rerun repeats the conditions. The sessions
-still sample, and their models differ from run to run.
+the recorded model and effort. An archived round keeps its arms in `arm-1` and
+`arm-2` for `--vxl-<n>` and `--skill-<n>`. The rerun repeats the conditions. The sessions still sample,
+and their models differ from run to run.
