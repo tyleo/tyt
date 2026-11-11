@@ -6,6 +6,11 @@
 // lets the depth test run before the march. `exact` writes the hit's depth.
 // `solid` marches nothing.
 //
+// `inside` shades the back faces of a box a ray can start inside. A hit in
+// such a box lies before the box's back face. The front face of the box
+// behind can share that face's plane. A vertex entry for `inside` scales its
+// depth by `NEARER`, which keeps the hit ahead of that box's.
+//
 // The WGSL that includes this file defines:
 //
 // 1. `Box`, the fragment's inputs: `clip`, its position. `point`, its point
@@ -20,6 +25,10 @@
 
 // The most cells a ray crosses in a tile.
 const STEPS: i32 = 48;
+
+// What a perspective view's reversed depth scales by to come a part in 1024
+// nearer.
+const NEARER: f32 = 1.0 + 1.0 / 1024.0;
 
 struct Fragment {
     @location(0) hit: vec4<f32>,

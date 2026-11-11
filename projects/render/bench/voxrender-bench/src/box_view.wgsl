@@ -60,16 +60,11 @@ struct Box {
 // Each material's base color.
 @group(0) @binding(3) var<storage, read> colors: array<vec4<f32>>;
 
-// Bit `a` of `corner` picks the box's high face on axis `a`. `low` holds the
-// box's low cell and its placement's index. `high` holds the corner past the
-// box's high cell and the offset of its tile's words.
-@vertex
-fn place(
-    @builtin(view_index) eye: u32,
-    @location(0) corner: u32,
-    @location(1) low: vec4<u32>,
-    @location(2) high: vec4<u32>,
-) -> Box {
+// The box's corner `corner` for `eye`. Bit `a` of `corner` picks the box's
+// high face on axis `a`. `low` holds the box's low cell and its placement's
+// index. `high` holds the corner past the box's high cell and the offset of
+// its tile's words.
+fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
     let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
     let grid = select(low.xyz, high.xyz, far);
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
@@ -83,6 +78,31 @@ fn place(
         vec4<u32>(high.xyz - tile, index),
         0.0,
     );
+}
+
+@vertex
+fn place(
+    @builtin(view_index) eye: u32,
+    @location(0) corner: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+) -> Box {
+    return corner_of(eye, corner, low, high);
+}
+
+// `place` for the back faces `inside` shades.
+@vertex
+fn place_near(
+    @builtin(view_index) eye: u32,
+    @location(0) corner: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+) -> Box {
+    var box = corner_of(eye, corner, low, high);
+
+    box.clip.z *= NEARER;
+
+    return box;
 }
 
 // The contract's tonemap, Khronos PBR Neutral.

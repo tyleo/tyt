@@ -11,9 +11,13 @@ use wgpu::{
 /// The bytes of one of `box_view.wgsl`'s `Place`s.
 const PLACE_BYTES: usize = 128;
 
+/// The bytes at the start of a `Place` that follow the eye: its matrix and
+/// its ray.
+const EYE_BYTES: usize = 80;
+
 /// The meters past the eyes within which a box counts as holding an eye.
 /// The reach covers the near plane.
-const REACH: f64 = 0.02;
+const REACH: f32 = 0.02;
 
 /// A shaded view of a scene's boxes for both eyes of a headset: the box
 /// raster with solid boxes, a mask march, and face depth. Each frame takes
@@ -28,65 +32,83 @@ pub struct BoxView {
     /// Each eye's `Place` for each placement.
     places: Buffer,
 
+    /// The bytes of `places`. A frame rewrites each `Place`'s matrix and
+    /// ray.
+    place_bytes: Vec<u8>,
+
     /// Each placement's transform and its grid-to-world matrix.
     placements: Vec<(TyTransformF64, TyMatrix4x4F64)>,
 
-    /// The solid boxes, then the marched ones.
-    solid: Vec<ViewBox>,
-    marched: Vec<ViewBox>,
+    solid: ViewBoxes,
 
-    /// The last frame's boxes, kept for their room.
+    /// The marched boxes that cross no other placement's box.
+    apart: ViewBoxes,
+
+    /// The marched boxes that cross another placement's box, 32 bytes each.
+    crossing: Vec<u8>,
+
+    /// The last sort's boxes and keys, kept for their room.
     sorted: Vec<u8>,
-
-    /// The last frame's solid and marched boxes that draw front faces, by
-    /// distance, kept for their room.
-    near_solid: Vec<(f32, u32)>,
-    near_marched: Vec<(f32, u32)>,
+    solid_keys: Vec<u64>,
+    apart_keys: Vec<u64>,
 
     sky: Color,
 }
 
-/// One box as a frame sorts it.
-struct ViewBox {
-    /// The low and high corners of the world box around the box.
-    low: [f32; 3],
-    high: [f32; 3],
+/// Boxes as a sort reads them.
+#[derive(Default)]
+struct ViewBoxes {
+    /// The low and then the high corner of the world box around each box.
+    bounds: Vec<[f32; 6]>,
 
-    /// The box's two `vec4<u32>`s.
-    words: [u8; 32],
-
-    /// Whether the box crosses another placement's box.
-    crosses: bool,
+    /// Each box's two `vec4<u32>`s.
+    words: Vec<[u8; 32]>,
 }
 
-impl ViewBox {
-    fn new(placed: &PlacedBox, words: [u32; 8], crosses: bool) -> Self {
+impl ViewBoxes {
+    fn push(&mut self, placed: &PlacedBox, words: [u32; 8]) {
         let (low, high) = placed.world();
+        let [low_x, low_y, low_z] = low.as_vec3().to_array();
+        let [high_x, high_y, high_z] = high.as_vec3().to_array();
         let mut bytes = [0; 32];
 
         for (bytes, word) in bytes.chunks_exact_mut(4).zip(words) {
             bytes.copy_from_slice(&word.to_le_bytes());
         }
 
-        ViewBox {
-            low: low.as_vec3().to_array(),
-            high: high.as_vec3().to_array(),
-            words: bytes,
-            crosses,
-        }
+        self.bounds
+            .push([low_x, low_y, low_z, high_x, high_y, high_z]);
+        self.words.push(bytes);
     }
 
-    /// How far `point` lies from the box's world box, or zero inside it.
-    fn distance_from(&self, point: [f32; 3]) -> f32 {
-        let square: f32 = (0..3)
-            .map(|axis| {
-                let off = point[axis].clamp(self.low[axis], self.high[axis]) - point[axis];
+    /// Fills `keys` with a key per box, nearest to `point` first, and
+    /// returns how many of the boxes lie within `reach` of `point`. A key
+    /// holds the bits of its box's squared distance above the box's index.
+    fn nearest_first(&self, point: [f32; 3], reach: f32, keys: &mut Vec<u64>) -> usize {
+        keys.clear();
 
-                off * off
-            })
-            .sum();
+        // A square is no less than zero, so its bits order as it does.
+        keys.extend((0u64..).zip(&self.bounds).map(|(index, bounds)| {
+            let square: f32 = (0..3)
+                .map(|axis| {
+                    let off = point[axis].clamp(bounds[axis], bounds[axis + 3]) - point[axis];
 
-        square.sqrt()
+                    off * off
+                })
+                .sum();
+
+            u64::from(square.to_bits()) << 32 | index
+        }));
+
+        keys.sort_unstable();
+        keys.partition_point(|&key| f32::from_bits((key >> 32) as u32) <= reach * reach)
+    }
+
+    /// Appends the boxes of `keys` to `sorted`.
+    fn extend(&self, keys: &[u64], sorted: &mut Vec<u8>) {
+        for &key in keys {
+            sorted.extend_from_slice(&self.words[(key & 0xffff_ffff) as usize]);
+        }
     }
 }
 
@@ -160,17 +182,28 @@ impl BoxView {
             .map(|placed| placed.words(placed.placement, tile(placed, false)))
             .collect();
 
-        let solid: Vec<_> = solid
-            .iter()
-            .zip(&solid_words)
-            .map(|(placed, &words)| ViewBox::new(placed, words, false))
-            .collect();
+        let mut solid_boxes = ViewBoxes::default();
+        let mut apart = ViewBoxes::default();
+        let mut apart_words = Vec::new();
+        let mut crossing_words = Vec::new();
 
-        let marched: Vec<_> = marched
+        for (placed, &words) in solid.iter().zip(&solid_words) {
+            solid_boxes.push(placed, words);
+        }
+
+        for ((placed, &words), crosses) in marched.iter().zip(&march_words).zip(crossings) {
+            if crosses {
+                crossing_words.push(words);
+            } else {
+                apart.push(placed, words);
+                apart_words.push(words);
+            }
+        }
+
+        let crossing: Vec<u8> = crossing_words
             .iter()
-            .zip(&march_words)
-            .zip(crossings)
-            .map(|((placed, &words), crosses)| ViewBox::new(placed, words, crosses))
+            .flatten()
+            .flat_map(|word| word.to_le_bytes())
             .collect();
 
         let mut sun = (TyVector3F64::Y, TyLinSrgbF64::new(0.0, 0.0, 0.0));
@@ -275,6 +308,22 @@ impl BoxView {
             mapped_at_creation: false,
         });
 
+        // A `Place` ends with the world directions of its grid's axes.
+        let mut place_bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
+        let each = placements.iter().chain(&placements);
+
+        for (place, (transform, _)) in place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
+            let axes = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
+                .map(|axis| (transform.rotation * axis).extend(0.0).to_array());
+
+            for (bytes, value) in place[EYE_BYTES..]
+                .chunks_exact_mut(4)
+                .zip(axes.as_flattened())
+            {
+                bytes.copy_from_slice(&(*value as f32).to_le_bytes());
+            }
+        }
+
         // SAFETY: a fragment reads only within its tile's words because each
         // step keeps its cell inside the tile's box. Its loop ends within
         // the box's extent. A tile's words hold its cells' materials, which
@@ -300,32 +349,37 @@ impl BoxView {
         let storage = BufferBindingType::Storage { read_only: true };
         let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
 
-        // Every box starts in its first run, which holds the buffer's room.
-        // Each frame then sorts the boxes into their runs.
+        // The runs start with every box that crosses no other in the run
+        // that draws its front faces. Each sort then deals the boxes out
+        // again.
         let boxes = BoxDraw::new(
             device,
             &module,
             format,
             &[
                 BoxPart {
-                    fragment: "solid",
-                    backs: false,
-                    boxes: solid_words,
-                },
-                BoxPart {
-                    fragment: "front",
-                    backs: false,
-                    boxes: march_words,
-                },
-                BoxPart {
+                    vertex: "place_near",
                     fragment: "inside",
                     backs: true,
                     boxes: Vec::new(),
                 },
                 BoxPart {
+                    vertex: "place",
+                    fragment: "solid",
+                    backs: false,
+                    boxes: solid_words,
+                },
+                BoxPart {
+                    vertex: "place",
+                    fragment: "front",
+                    backs: false,
+                    boxes: apart_words,
+                },
+                BoxPart {
+                    vertex: "place",
                     fragment: "exact",
                     backs: true,
-                    boxes: Vec::new(),
+                    boxes: crossing_words,
                 },
             ],
             &[
@@ -346,12 +400,14 @@ impl BoxView {
         Ok(BoxView {
             boxes,
             places,
+            place_bytes,
             placements,
-            solid,
-            marched,
+            solid: solid_boxes,
+            apart,
+            crossing,
             sorted: Vec::new(),
-            near_solid: Vec::new(),
-            near_marched: Vec::new(),
+            solid_keys: Vec::new(),
+            apart_keys: Vec::new(),
             sky: Color {
                 r: f64::from(above.red),
                 g: f64::from(above.green),
@@ -370,87 +426,51 @@ impl BoxView {
     /// Readies the next draw for `eyes`: writes each eye's matrices and
     /// sorts the boxes nearest first into their runs.
     pub fn prepare(&mut self, queue: &Queue, eyes: &[ViewEye; 2]) {
-        let mut places = Vec::with_capacity(self.placements.len() * 2 * PLACE_BYTES);
+        let each = eyes.iter().flat_map(|eye| {
+            self.placements
+                .iter()
+                .map(move |placement| (eye, placement))
+        });
 
-        for eye in eyes {
-            for (transform, grid_to_world) in &self.placements {
-                let clip = (eye.world_to_clip * *grid_to_world).to_cols_array();
-                let ray = grid_point(transform, eye.position).extend(1.0);
+        for (place, (eye, (transform, grid_to_world))) in
+            self.place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each)
+        {
+            let clip = (eye.world_to_clip * *grid_to_world).to_cols_array();
+            let ray = grid_point(transform, eye.position).extend(1.0).to_array();
 
-                let axes = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
-                    .map(|axis| (transform.rotation * axis).extend(0.0));
-
-                let floats = clip
-                    .into_iter()
-                    .chain(ray.to_array())
-                    .chain(axes.iter().flat_map(|axis| axis.to_array()));
-
-                for value in floats {
-                    places.extend((value as f32).to_le_bytes());
-                }
+            for (bytes, value) in place[..EYE_BYTES]
+                .chunks_exact_mut(4)
+                .zip(clip.into_iter().chain(ray))
+            {
+                bytes.copy_from_slice(&(value as f32).to_le_bytes());
             }
         }
 
-        queue.write_buffer(&self.places, 0, &places);
+        queue.write_buffer(&self.places, 0, &self.place_bytes);
 
         let head = ((eyes[0].position + eyes[1].position) / 2.0)
             .as_vec3()
             .to_array();
-        let reach = ((eyes[0].position - eyes[1].position).length() / 2.0 + REACH) as f32;
+        let reach = (eyes[0].position - eyes[1].position).length() as f32 / 2.0 + REACH;
+
+        self.sort(queue, head, reach);
+    }
+
+    /// Sorts the boxes nearest to `head` first into their runs. A marched
+    /// box within `reach` of `head` draws its back faces because it can
+    /// hold an eye. Every solid box draws its front faces because a ray
+    /// that starts inside one sees none of it.
+    fn sort(&mut self, queue: &Queue, head: [f32; 3], reach: f32) {
+        self.solid.nearest_first(head, reach, &mut self.solid_keys);
+
+        let inside = self.apart.nearest_first(head, reach, &mut self.apart_keys);
+        let (near, far) = self.apart_keys.split_at(inside);
 
         self.sorted.clear();
-        self.near_solid.clear();
-        self.near_marched.clear();
-
-        // A solid box shows nothing from inside.
-        for (index, solid) in (0u32..).zip(&self.solid) {
-            let distance = solid.distance_from(head);
-
-            if distance > reach {
-                self.near_solid.push((distance, index));
-            }
-        }
-
-        let mut inside = 0;
-        let mut exact = 0;
-
-        for (index, marched) in (0u32..).zip(&self.marched) {
-            let distance = marched.distance_from(head);
-
-            if marched.crosses {
-                exact += 1;
-            } else if distance > reach {
-                self.near_marched.push((distance, index));
-            } else {
-                inside += 1;
-            }
-        }
-
-        self.near_solid
-            .sort_unstable_by(|(a, _), (b, _)| a.total_cmp(b));
-        self.near_marched
-            .sort_unstable_by(|(a, _), (b, _)| a.total_cmp(b));
-
-        for &(_, index) in &self.near_solid {
-            self.sorted
-                .extend_from_slice(&self.solid[index as usize].words);
-        }
-
-        for &(_, index) in &self.near_marched {
-            self.sorted
-                .extend_from_slice(&self.marched[index as usize].words);
-        }
-
-        // The boxes that hold an eye, then the ones that cross.
-        for crossing in [false, true] {
-            for marched in &self.marched {
-                let holds = marched.distance_from(head) <= reach;
-
-                if marched.crosses == crossing && (crossing || holds) {
-                    self.sorted.extend_from_slice(&marched.words);
-                }
-            }
-        }
+        self.apart.extend(near, &mut self.sorted);
+        self.solid.extend(&self.solid_keys, &mut self.sorted);
+        self.apart.extend(far, &mut self.sorted);
+        self.sorted.extend_from_slice(&self.crossing);
 
         let count = |boxes: usize| u32::try_from(boxes).expect("the boxes number under 2^32");
 
@@ -458,10 +478,10 @@ impl BoxView {
             queue,
             &self.sorted,
             &[
-                count(self.near_solid.len()),
-                count(self.near_marched.len()),
-                inside,
-                exact,
+                count(near.len()),
+                count(self.solid_keys.len()),
+                count(far.len()),
+                count(self.crossing.len() / 32),
             ],
         );
     }

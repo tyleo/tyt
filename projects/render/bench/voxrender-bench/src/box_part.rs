@@ -1,6 +1,9 @@
 /// One run of a [`BoxDraw`](crate::BoxDraw)'s boxes and the pipeline that
 /// draws them.
 pub struct BoxPart<'a> {
+    /// The vertex entry that places the run's corners.
+    pub vertex: &'a str,
+
     /// The fragment entry that shades the run's faces.
     pub fragment: &'a str,
 
