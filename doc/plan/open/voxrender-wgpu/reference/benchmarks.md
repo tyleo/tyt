@@ -772,3 +772,183 @@ variant.
    Quest
 5. The walk with the checks gains more on Quest: 1.28x on S1 and 1.21x on
    S5. It runs S1 in 56.0 ms against the plain walk's 72.1
+
+## S9.4 raster then march, 2026-11-11
+
+The first of S9.4's new approaches: a raster of boxes with a march in each
+fragment. B1 checks its ids, and B2 times it beside the tree walk and S9.3's
+raster.
+
+- Device: Meta Quest 3 as in B2 re-baseline, run off the face at GPU level
+  4. Each table gives its window's clock
+- This Mac: the device of B1 desktop, through
+  `cargo run --release -p voxrender-bench-desktop -- b2-times`
+- Times are p10s in ms. The Mac's are the median of three windows
+
+**Timer.** Two copies of one kernel read 3.2 and 4.0 ms at p50 in one Quest
+window. A pass runs about 0.75 ms longer when the compositor interrupts it,
+and which passes it interrupts follows the kernels around them. Two changes
+answer it:
+
+1. Each kernel takes turns of 20 passes in a row, and the first 4 of a turn
+   go untimed
+2. A window reports each kernel's least and p10 times beside its p50 and
+   p99. The copies agree within 1% at p10
+
+The sections before this one hold p50s from single-pass turns.
+
+**Box raster.** Each tile of each object gives the box around its live
+cells. One instanced draw puts each placement's boxes on screen, and each
+fragment marches its pixel's ray through its box. The fragment writes its
+hit as S9.3's raster packs it. Five arms run:
+
+1. The ray query's integer march over the 64-tree along the pixel's
+   quantized ray. Back faces draw, and each fragment writes its hit's depth
+2. The ray query's float march, drawn the same way
+3. A mask march, hit depth. Each tile holds a bit per cell. A fragment
+   starts at the point the rasterizer gives it on its box and steps a cell
+   at a time through the bits. It writes its hit's depth
+4. The mask march, face depth. A fragment discards a miss and keeps its
+   face's depth. The boxes draw front faces, nearest box first. A box that
+   crosses another placement's box draws as arm 3 does
+5. Arm 4 with solid boxes. A tile first gives up to four slabs of live
+   cells alone, which draw as plain faces with no march
+
+**Ids.** B1 passes on both devices. The integer march gives the reference's
+ids on every scene, so the boxes' coverage and depth add no mismatch. The
+other arms' flips count for the record. On Quest at 256 by 256:
+
+| Scene | Raster | Float march | Mask, hit depth | Mask, face depth | Solid and mask |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| precision views | 0.043% | 0.026% | 0.027% | 0.026% | 0.026% |
+| S1 art room | 0.120% | 0.100% | 0.122% | 0.150% | 0.153% |
+| S2 city | 0.320% | 0.238% | 0.315% | 0.315% | 0.315% |
+| S4 foliage | 0.114% | 0.073% | 0.107% | 0.111% | 0.111% |
+| S5 grazing floor | 0.680% | 0.546% | 0.590% | 0.631% | 0.631% |
+
+**Depth probe.** The first box rasters drew front faces under a declared
+depth bound, `@early_depth_test(less_equal)`, and gained nothing. A probe
+then drew four costly layers over both eyes, each behind the last, in the
+open and behind a near layer. Quest at 545 MHz:
+
+| A costly fragment | Open | Behind a near layer |
+| --- | ---: | ---: |
+| writes color alone | 1.615 | 0.519 |
+| can discard | 1.667 | 0.520 |
+| writes depth | 7.079 | 7.445 |
+| writes depth under the bound | 6.951 | 7.430 |
+
+On Quest a fragment that writes depth always runs, with or without the
+bound. A fragment that can discard is rejected like a plain one. On this
+Mac a discarding layer hides behind a near layer and behind no layer of its
+own kind. A depth-writing layer never hides.
+
+**Times.** One Quest window ran every trace at 640 MHz for 87% of its time,
+599 for 3%, and 545 for 10%.
+
+| Kernel | Quest | Quest Grays/s | Mac |
+| --- | ---: | ---: | ---: |
+| tree walk, S1 | 61.715 | 0.096 | 3.215 |
+| ray query, float march, 16^3, S1 | 37.685 | 0.157 | 5.331 |
+| raster, two passes, S1 | 0.916 | 6.456 | 0.053 |
+| box raster, integer march, S1 | 19.373 | 0.305 | 1.776 |
+| box raster, float march, S1 | 10.661 | 0.555 | 1.011 |
+| box raster, mask march, hit depth, S1 | 3.266 | 1.811 | 0.418 |
+| box raster, mask march, face depth, S1 | 2.538 | 2.330 | 0.366 |
+| box raster, solid boxes and mask march, face depth, S1 | 1.372 | 4.310 | 0.195 |
+| tree walk, S5 | 15.477 | 0.382 | 1.072 |
+| ray query, float march, 16^3, S5 | 19.343 | 0.306 | 3.096 |
+| raster, two passes, S5 | 7.870 | 0.751 | 0.698 |
+| box raster, integer march, S5 | 27.344 | 0.216 | 2.446 |
+| box raster, float march, S5 | 20.944 | 0.282 | 2.042 |
+| box raster, mask march, hit depth, S5 | 3.395 | 1.742 | 0.498 |
+| box raster, mask march, face depth, S5 | 3.125 | 1.892 | 0.457 |
+| box raster, solid boxes and mask march, face depth, S5 | 3.183 | 1.858 | 0.456 |
+| raster, two passes, S2 | 136.953 | 0.043 | 14.335 |
+| box raster, integer march, S2 | 146.909 | 0.040 | 12.371 |
+| box raster, float march, S2 | 101.096 | 0.058 | 8.946 |
+| box raster, mask march, hit depth, S2 | 23.293 | 0.254 | 2.967 |
+| box raster, mask march, face depth, S2 | 12.302 | 0.481 | 2.051 |
+| box raster, solid boxes and mask march, face depth, S2 | 14.317 | 0.413 | 1.985 |
+
+S2's 1025 placements take the walks and the ray queries seconds a pass, so
+only the rasters trace it.
+
+Two more windows ran the face-depth arms alone, at 545 MHz for 98% and
+100% of their time. Their p10s agree within 1%:
+
+| Kernel | S1 | S5 | S2 |
+| --- | ---: | ---: | ---: |
+| box raster, mask march, face depth | 2.539 | 3.161 | 14.491 |
+| box raster, solid boxes and mask march, face depth | 1.373 | 3.175 | 14.198 |
+
+**Boxes.** How each scene's view splits its boxes:
+
+| Scene | Tiles | Solid boxes | Marched boxes | Marched boxes that cross |
+| --- | ---: | ---: | ---: | ---: |
+| S1 | 388 | 381 | 45 | 13 |
+| S5 | 4096 | 0 | 4096 | 0 |
+| S2 | 25,301 | 3697 | 21,604 | 6957 |
+
+A slab stays in the march when the cells left would cover over half of the
+face it shows them. Without that rule S5's floor gave a slab under every
+tile, and S5 ran 4.8 ms against 4.0 for the mask march alone, in p50s from
+single-pass turns.
+
+**Counts.** A counting build of arm 3 on this Mac, at 512 by 512, gives the
+work per pixel when every box a ray crosses marches:
+
+| Scene | Fragments | Cell steps | Hits |
+| --- | ---: | ---: | ---: |
+| S1 | 1.32 | 3.90 | 1.26 |
+| S5 | 0.92 | 3.14 | 0.81 |
+| S2 | 6.47 | 30.43 | 5.27 |
+
+About a third of S5's fragments hit behind a nearer hit, and about two
+thirds of S2's do. `ovrgpuprofiler` sampled the face-depth arms on Quest,
+one pass a frame at 90 Hz. Its counters cover every fragment the GPU
+shades. With no kernel fragments they show 16 M fragments a frame at 28
+instructions each:
+
+| Kernel | Instructions per fragment | Wave context occupancy |
+| --- | ---: | ---: |
+| mask march, S1 | 112 | 76% |
+| solid boxes and mask march, S1 | 74 | 88% |
+| mask march, S5 | 140 | 65% |
+| mask march, S2 | 216 | 62% |
+
+**Variants that lost.**
+
+1. Front faces under the declared depth bound, in p50s at 640 MHz from
+   single-pass turns: the integer march ran S1 in 19.3 ms against 19.7 for
+   back faces, the float march in 12.3 against 10.6, and the mask march in
+   3.3 against 3.4. S5 ran 28.0 against 28.0, 24.4 against 21.0, and 4.9
+   against 4.9
+2. Boxes around 8^3 and 4^3 bricks ran S5 in 5.98 and 10.61 ms against
+   3.20 for tiles, at 545 MHz
+3. Sixteen distance bands, each drawing its solid boxes and then its
+   marched ones, ran S5 in 3.92 ms against 3.16 for one draw, and S1 in
+   1.32 against 1.37. The 15 more draws an eye cost S5 about 25 us each
+
+**Outcomes.**
+
+1. The solid and mask arm traces S1 in 1.37 ms and S5 in 3.18 at 545 MHz,
+   both under B3's 3.5 ms. The times hold ids alone, without B3's shading
+   load. The arm runs 45x the tree walk on S1 and 4.9x on S5
+2. Against S9.3's raster the arm runs 0.67x on S1 and 2.5x on S5. On S2 it
+   runs 9.6x and still takes 14.3 ms
+3. Quest rejects a fragment before it runs only when the fragment writes
+   no depth. Face depth follows from that. It gains 1.29x on S1, 1.09x on
+   S5, and 1.89x on S2 over hit depth
+4. A third of S2's marched boxes cross another placement's box and keep
+   hit depth. S2 also runs with no LOD
+5. Solid boxes take about 95% of S1's marched fragments and gain 1.85x
+   there. S5 has none
+6. The mask march's flips stay near the greedy-mesh raster's: 0.15%
+   against 0.12% on S1, and 0.63% against 0.68% on S5
+7. A pass's p50 moves by up to 24% with the compositor. A p10 compares two
+   kernels within 1%
+8. A full-screen draw costs about 25 us on Quest, so the boxes stay in few
+   draws
+9. The mask march runs at 62% to 76% occupancy and 112 to 216 instructions
+   a fragment. Rung 4's register work now applies to this shader

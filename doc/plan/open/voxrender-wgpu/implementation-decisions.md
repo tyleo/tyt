@@ -448,3 +448,39 @@ they land.
   box covers both sides of its tile because a slot serves every ray
 - Child boxes grown in the walk from a node's mask cut S1's iterations but
   lost 10% to 16% on the Mac, so the walk keeps tile boxes alone
+- The box raster draws each box as one instance of 8 corners and 36
+  indices, with two `vec4<u32>`s an instance. A view's boxes share one
+  buffer in draw order, and each run of them has its pipeline. A
+  full-screen draw costs about 25 us on Quest, so a view draws at most four
+  runs
+- The tree-march arms rebuild the pixel's quantized ray from the fragment's
+  position and call the ray query's `march`. Their boxes sit 1/64 cell past
+  their cells because the rasterizer covers the exact projection while the
+  march walks the quantized ray
+- The mask march keeps a bit per cell in 128 words a tile. Cell `(x, y, z)`
+  of a tile is bit `(x * 16 + y) * 16 + z`, so the loop tracks one bit index
+  and adds a stride a step. The vertex stage gives each fragment its point
+  in the tile's cells and the eye from the tile's corner, both under 2^-20
+  of a cell in f32. The loop ends on the ray's distance to the box's far
+  faces, cut by 10^-5 against the drift of its sums
+- A mask march's fragment that writes its hit's depth writes zero for a
+  miss. Depth runs reversed, so zero fails the test, and the fragment needs
+  no discard
+- Under face depth two boxes that share no space order their hits as they
+  order their faces, because a ray crosses one before the other. The
+  crossing test compares the world boxes around two placements' boxes, 0.1
+  mm short so boxes that touch stay apart. It can count a turned box that
+  only comes near, which costs time and no hit. A tile's solid boxes and
+  its marched box can share space because the march reads every live cell
+  of the tile
+- A tile gives a solid box only as a slab across a face of the box around
+  its cells that are left, so a wall, a floor, and a table top each come off
+  whole. The slab must hold 32 cells. A tile gives up to four
+- `PassTimer` gives each kernel turns of 20 passes and drops the first 4 of
+  a turn. On Quest the compositor interrupts some passes for about 0.75 ms,
+  and which ones follows the kernels around them. A window reports least
+  and p10 times because the p50 of one kernel moved by 24%
+- `debug.voxrenderbench.kernels` and `b2-times --kernels` keep the kernels
+  whose labels hold a text. A filtered window drops its closing lines, which
+  index every kernel. The Quest profile takes the same text
+- B2 traces S2 with the rasters alone
