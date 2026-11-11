@@ -22,7 +22,7 @@ pub enum BoxMarch {
 
 impl BoxMarch {
     /// Each march B1 checks and B2 times.
-    pub const ALL: [BoxMarch; 6] = [
+    pub const ALL: [BoxMarch; 5] = [
         BoxMarch::Tree(BrickMarch::Integer),
         BoxMarch::Tree(BrickMarch::Float),
         BoxMarch::Masks {
@@ -32,10 +32,6 @@ impl BoxMarch {
         BoxMarch::Masks {
             solids: false,
             depth: BoxDepth::Face,
-        },
-        BoxMarch::Masks {
-            solids: true,
-            depth: BoxDepth::Hit,
         },
         BoxMarch::Masks {
             solids: true,
