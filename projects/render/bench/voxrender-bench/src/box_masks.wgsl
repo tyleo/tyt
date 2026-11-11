@@ -1,6 +1,6 @@
 // The ids a mask march writes, over `mask_march.wgsl`: a raster of the boxes
 // around each tile's live cells over `TileMasks`. A hit packs as
-// `raster.wgsl`'s does. `BoxRaster` prepends `FACE_BITS`.
+// `raster.wgsl`'s does. `mask_boxes` prepends `FACE_BITS` and `RAY_W`.
 
 struct Frame {
     // The low bits of a packed hit that hold its voxel id.
@@ -26,20 +26,24 @@ struct Box {
     @location(0) point: vec3<f32>,
 
     // `Place::ray` from the tile's low corner.
-    @location(1) @interpolate(flat) ray: vec4<f32>,
+    @location(1) @interpolate(flat) ray: vec3<f32>,
 
-    // The box's low cell in the tile, then the offset of the tile's bits.
-    @location(2) @interpolate(flat) low: vec4<u32>,
-
-    // The corner past the box's high cell in the tile, then the placement's
-    // index above the face's bits.
-    @location(3) @interpolate(flat) high: vec4<u32>,
+    // The box's low cell in the tile, then the corner past its high cell.
+    @location(2) @interpolate(flat) low: vec3<f32>,
+    @location(3) @interpolate(flat) high: vec3<f32>,
 
     // The voxel id of the tile's low cell, then `Place::strides`.
     @location(4) @interpolate(flat) voxel: vec3<u32>,
 
     // The depth an orthographic ray loses over a unit of its direction.
     @location(5) @interpolate(flat) fall: f32,
+
+    // The axis of the fragment's face, plus 4 on the box's high face.
+    @location(6) @interpolate(flat) face: u32,
+
+    // The offset of the tile's bits, then the placement's index above the
+    // face's bits.
+    @location(7) @interpolate(flat) words: vec2<u32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -56,15 +60,21 @@ fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
     let placed = places[low.w];
     let strides = placed.strides.xy;
+    let clip = placed.clip * vec4<f32>(vec3<f32>(grid), 1.0);
+    let ray = placed.ray.xyz - vec3<f32>(tile) * RAY_W;
 
+    // A corner whose position or ray is not finite goes to the origin,
+    // where its box draws nothing.
     return Box(
-        placed.clip * vec4<f32>(vec3<f32>(grid), 1.0),
+        select(vec4<f32>(0.0), clip, sound(clip, vec4<f32>(ray, 0.0))),
         vec3<f32>(grid - tile),
-        vec4<f32>(placed.ray.xyz - vec3<f32>(tile) * placed.ray.w, placed.ray.w),
-        vec4<u32>(low.xyz - tile, high.w),
-        vec4<u32>(high.xyz - tile, low.w << FACE_BITS),
+        ray,
+        vec3<f32>(low.xyz - tile),
+        vec3<f32>(high.xyz - tile),
         vec3<u32>(tile.x * strides.x + tile.y * strides.y + tile.z, strides),
         (placed.clip * vec4<f32>(placed.ray.xyz, 0.0)).z,
+        min(corner, 7u - corner) | (corner & 4u),
+        vec2<u32>(high.w, low.w << FACE_BITS),
     );
 }
 
@@ -99,5 +109,5 @@ fn surface(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> 
     let face = axis * 2u + select(1u, 0u, any(across & ahead));
     let voxel = box.voxel.x + u32(cell.x) * box.voxel.y + u32(cell.y) * box.voxel.z + u32(cell.z);
 
-    return unpack4x8unorm(voxel | ((box.high.w | face) << frame.voxel_bits));
+    return unpack4x8unorm(voxel | ((box.words.y | face) << frame.voxel_bits));
 }

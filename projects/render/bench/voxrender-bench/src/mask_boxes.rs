@@ -136,6 +136,11 @@ pub fn mask_boxes(
         BufferUsages::STORAGE,
     );
 
+    let ray_w = match view.projection {
+        RenderProjection::Perspective { .. } => 1,
+        RenderProjection::Orthographic { .. } => 0,
+    };
+
     // SAFETY: a fragment reads only within its tile's words because each
     // step keeps its cell inside the tile's box. Its loop ends within
     // the box's extent. The vertex stage indexes `places` by a box's
@@ -146,7 +151,7 @@ pub fn mask_boxes(
                 label: Some("box masks"),
                 source: ShaderSource::Wgsl(
                     format!(
-                        "const FACE_BITS: u32 = {}u;\n{}\n{}",
+                        "const FACE_BITS: u32 = {}u;\nconst RAY_W: f32 = {ray_w}.0;\n{}\n{}",
                         HitPacking::FACE_BITS,
                         include_str!("box_masks.wgsl"),
                         include_str!("mask_march.wgsl")
