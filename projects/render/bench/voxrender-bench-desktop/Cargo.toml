@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
+png = "0.18"
 pollster = "0.4"
 voxrender-bench = "0.1.0"
 wgpu = "30.0.1"

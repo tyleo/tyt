@@ -65,7 +65,7 @@ impl BoxRaster {
                 depth,
                 packing,
                 targets.multiview_mask(),
-            ),
+            )?,
         };
 
         Ok(BoxRaster {

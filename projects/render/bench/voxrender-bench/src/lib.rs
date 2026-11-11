@@ -5,6 +5,8 @@
 
 // Public API
 
+mod bench_scene;
+mod box_view;
 mod error;
 mod gpu;
 mod kernel_profile;
@@ -13,7 +15,11 @@ mod result;
 mod run_b1;
 mod timed_bench;
 mod tree64;
+mod view_eye;
+mod view_image;
 
+pub use bench_scene::*;
+pub use box_view::*;
 pub use error::*;
 pub use gpu::*;
 pub use kernel_profile::*;
@@ -22,6 +28,8 @@ pub use result::*;
 pub use run_b1::*;
 pub use timed_bench::*;
 pub use tree64::*;
+pub use view_eye::*;
+pub use view_image::*;
 
 // Internal API
 
@@ -54,6 +62,7 @@ mod hit_packing;
 mod hit_targets;
 mod kernel_work;
 mod live_boxes;
+mod map_readback;
 mod mask_boxes;
 mod mesh_raster;
 mod outdoor_lights;
@@ -105,6 +114,7 @@ pub(crate) use hit_packing::*;
 pub(crate) use hit_targets::*;
 pub(crate) use kernel_work::*;
 pub(crate) use live_boxes::*;
+pub(crate) use map_readback::*;
 pub(crate) use mask_boxes::*;
 pub(crate) use mesh_raster::*;
 pub(crate) use outdoor_lights::*;

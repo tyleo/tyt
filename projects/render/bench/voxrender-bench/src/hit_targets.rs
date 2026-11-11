@@ -1,13 +1,13 @@
-use crate::{Error, RasterArm, Result};
-use std::{num::NonZeroU32, sync::mpsc};
+use crate::{Error, RasterArm, Result, map_readback};
+use std::num::NonZeroU32;
 use wgpu::{
-    Buffer, BufferAddress, BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT, Color,
-    CommandEncoder, CommandEncoderDescriptor, Device, Extent3d, LoadOp, MapMode, Operations,
-    Origin3d, PollType, QuerySet, Queue, RenderPass, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPassTimestampWrites, StoreOp,
-    TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
-    TextureViewDescriptor, TextureViewDimension,
+    BufferAddress, BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT, Color,
+    CommandEncoder, CommandEncoderDescriptor, Device, Extent3d, LoadOp, Operations, Origin3d,
+    QuerySet, Queue, RenderPass, RenderPassColorAttachment, RenderPassDepthStencilAttachment,
+    RenderPassDescriptor, RenderPassTimestampWrites, StoreOp, TexelCopyBufferInfo,
+    TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureViewDimension,
 };
 
 /// Two `width` by `height` eyes of packed hits with their depth, and the
@@ -252,7 +252,7 @@ impl HitTargets {
 
         queue.submit([encoder.finish()]);
 
-        map(device, &readback)?;
+        map_readback(device, &readback)?;
 
         let view = readback.get_mapped_range(..).map_err(Error::MapRange)?;
 
@@ -262,22 +262,4 @@ impl HitTargets {
             .map(|texel| u32::from_le_bytes(texel.try_into().expect("a texel holds four bytes")))
             .collect())
     }
-}
-
-/// Maps `readback` for reading once the GPU has written it.
-fn map(device: &Device, readback: &Buffer) -> Result<()> {
-    let (sender, receiver) = mpsc::channel();
-
-    readback.map_async(MapMode::Read, .., move |result| {
-        sender.send(result).expect("the receiver outlives the wait");
-    });
-
-    device
-        .poll(PollType::wait_indefinitely())
-        .map_err(Error::Poll)?;
-
-    receiver
-        .recv()
-        .expect("the map callback runs during the wait")
-        .map_err(Error::Map)
 }
