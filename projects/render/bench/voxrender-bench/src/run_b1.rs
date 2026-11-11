@@ -1,6 +1,6 @@
 use crate::{
-    BoxArm, BoxRaster, BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh, RayQueryArm,
-    RayQueryTrace, Result, Walk, b1_scenes, reference_hits,
+    BoxArm, BoxMarch, BoxRaster, BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh,
+    RayQueryArm, RayQueryTrace, Result, Walk, b1_scenes, reference_hits,
 };
 use branded_id::U32Id;
 use voxrender::{BRenderView, RenderScene};
@@ -45,9 +45,9 @@ struct Tally {
 /// image, and returns the report in Markdown.
 /// The integer and tree walks' primary ids and corner shadow bits, and the
 /// integer marches' primary ids under the ray queries and the box rasters,
-/// are judged against B1's line. The float walk's, the float marches', and
-/// the greedy-mesh raster's flips are counted for the record. The report
-/// lists the first mismatching pixels of each scene
+/// are judged against B1's line. The float walk's, the float and mask
+/// marches', and the greedy-mesh raster's flips are counted for the record.
+/// The report lists the first mismatching pixels of each scene
 /// and trace.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = b1_scenes();
@@ -107,7 +107,10 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                 .map(|arm| format!(
                     "Box raster {} faces {}",
                     arm.faces.label(),
-                    march_column(arm.march)
+                    match arm.march {
+                        BoxMarch::Tree(march) => march_column(march),
+                        BoxMarch::Masks => "mask id flips",
+                    }
                 ))
                 .collect::<Vec<_>>()
                 .join(" | ")
@@ -295,7 +298,7 @@ fn judged(tracer: Tracer) -> bool {
             })
             | Tracer::Raster
             | Tracer::Boxes(BoxArm {
-                march: BrickMarch::Float,
+                march: BoxMarch::Tree(BrickMarch::Float) | BoxMarch::Masks,
                 ..
             })
     )
