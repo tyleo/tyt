@@ -119,10 +119,9 @@ impl PlacedBox {
         }
     }
 
-    /// How far `point` lies from the world box around the box, or zero
-    /// inside it.
-    pub fn distance_from(&self, point: TyVector3F64) -> f64 {
-        (point.clamp(self.world.0, self.world.1) - point).length()
+    /// The low and high corners of the world box around the box.
+    pub fn world(&self) -> (TyVector3F64, TyVector3F64) {
+        self.world
     }
 
     /// The box's two `vec4<u32>`s: its low cell and `low`, then the corner
