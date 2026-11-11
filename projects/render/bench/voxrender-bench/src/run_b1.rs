@@ -1,6 +1,6 @@
 use crate::{
-    BoxArm, BoxMarch, BoxRaster, BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh,
-    RayQueryArm, RayQueryTrace, Result, Walk, b1_scenes, reference_hits,
+    BoxMarch, BoxRaster, BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh, RayQueryArm,
+    RayQueryTrace, Result, Walk, b1_scenes, reference_hits,
 };
 use branded_id::U32Id;
 use voxrender::{BRenderView, RenderScene};
@@ -28,7 +28,7 @@ enum Tracer {
 
     Raster,
 
-    Boxes(BoxArm),
+    Boxes(BoxMarch),
 }
 
 /// How one trace's samples compare with the reference's over a scene.
@@ -52,16 +52,12 @@ struct Tally {
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = b1_scenes();
 
-    let (box_arms, absent_arms): (Vec<_>, Vec<_>) = BoxArm::ALL
-        .into_iter()
-        .partition(|arm| gpu.device.features().contains(arm.features()));
-
     let tracers: Vec<_> = [Walk::Integer, Walk::Float, Walk::Tree]
         .map(Tracer::Walk)
         .into_iter()
         .chain(RayQueryArm::ALL.map(Tracer::RayQuery))
         .chain([Tracer::Raster])
-        .chain(box_arms.iter().copied().map(Tracer::Boxes))
+        .chain(BoxMarch::ALL.map(Tracer::Boxes))
         .collect();
 
     let info = &gpu.info;
@@ -102,22 +98,17 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
             RayQueryArm::ALL
                 .map(|arm| format!("Ray query {}^3 {}", arm.brick, march_column(arm.march)))
                 .join(" | "),
-            box_arms
-                .iter()
-                .map(|arm| format!(
-                    "Box raster {} faces {}",
-                    arm.faces.label(),
-                    match arm.march {
-                        BoxMarch::Tree(march) => march_column(march),
-                        BoxMarch::Masks => "mask id flips",
-                    }
-                ))
-                .collect::<Vec<_>>()
+            BoxMarch::ALL
+                .map(|march| match march {
+                    BoxMarch::Tree(march) => format!("Box raster {}", march_column(march)),
+                    BoxMarch::Masks { .. } =>
+                        format!("{} id flips", march.label().replacen("box", "Box", 1)),
+                })
                 .join(" | ")
         ),
         format!(
             "| --- | ---: | ---: | ---: | {}",
-            "---: | ".repeat(7 + RayQueryArm::ALL.len() + box_arms.len())
+            "---: | ".repeat(7 + RayQueryArm::ALL.len() + BoxMarch::ALL.len())
         )
         .trim_end()
         .to_owned(),
@@ -217,18 +208,6 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         lines.push(String::new());
     }
 
-    if !absent_arms.is_empty() {
-        lines.push(format!(
-            "The device lacks the features of these box rasters: {}.",
-            absent_arms
-                .iter()
-                .map(|arm| arm.label())
-                .collect::<Vec<_>>()
-                .join("; ")
-        ));
-        lines.push(String::new());
-    }
-
     lines.push(format!("Result: {}.", if pass { "pass" } else { "fail" }));
 
     if !mismatches.is_empty() {
@@ -273,13 +252,13 @@ fn trace(
                 .trace(&gpu.device, &gpu.queue)?
         }
 
-        Tracer::Boxes(arm) => {
+        Tracer::Boxes(march) => {
             // A scene without a mesh has hits past a raster's 32 bits.
             if mesh.is_none() {
                 return Ok(None);
             }
 
-            BoxRaster::new(&gpu.device, scene, view_id, size, size, arm)?
+            BoxRaster::new(&gpu.device, scene, view_id, size, size, march)?
                 .trace(&gpu.device, &gpu.queue)?
         }
     };
@@ -297,10 +276,7 @@ fn judged(tracer: Tracer) -> bool {
                 ..
             })
             | Tracer::Raster
-            | Tracer::Boxes(BoxArm {
-                march: BoxMarch::Tree(BrickMarch::Float) | BoxMarch::Masks,
-                ..
-            })
+            | Tracer::Boxes(BoxMarch::Tree(BrickMarch::Float) | BoxMarch::Masks { .. })
     )
 }
 
@@ -318,7 +294,7 @@ fn label(tracer: Tracer) -> String {
         Tracer::Walk(walk) => format!("{walk:?} walk"),
         Tracer::RayQuery(arm) => arm.label(),
         Tracer::Raster => RASTER.label(),
-        Tracer::Boxes(arm) => arm.label(),
+        Tracer::Boxes(march) => march.label(),
     }
 }
 

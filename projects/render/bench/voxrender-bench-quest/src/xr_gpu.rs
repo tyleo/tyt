@@ -164,7 +164,8 @@ impl XrGpu {
 
         // B2 reports the subgroup sizes when the device has subgroups. It
         // runs its MSAA raster when the device has multisampled arrays, and
-        // its front-face box rasters when the device has early depth tests.
+        // its depth probe's bounded layers when the device has early depth
+        // tests.
         let features = required
             | (exposed.features
                 & (Features::SUBGROUP

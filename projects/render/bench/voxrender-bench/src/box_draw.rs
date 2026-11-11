@@ -1,5 +1,8 @@
-use crate::{BoxFaces, HitTargets, PlacedBox};
-use std::num::{NonZeroU32, NonZeroU64};
+use crate::{BoxPart, HitTargets};
+use std::{
+    num::{NonZeroU32, NonZeroU64},
+    ops::Range,
+};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferUsages, ColorTargetState,
@@ -21,11 +24,8 @@ const TRIANGLES: [u16; 36] = [
 /// A view's boxes and the pipelines that draw their faces into
 /// [`HitTargets`].
 pub struct BoxDraw {
-    /// Draws the front faces of the boxes before `fronts`.
-    front: Option<RenderPipeline>,
-
-    /// Draws the back faces of the boxes from `fronts` on.
-    back: RenderPipeline,
+    /// Each run's pipeline and boxes, in draw order.
+    parts: Vec<(RenderPipeline, Range<u32>)>,
 
     bind_group: BindGroup,
 
@@ -35,53 +35,31 @@ pub struct BoxDraw {
 
     /// Two `vec4<u32>`s per box.
     boxes: Buffer,
-
-    fronts: u32,
-
-    count: u32,
 }
 
 impl BoxDraw {
     /// Builds the pipelines over `module`, whose vertex entry `place`
-    /// takes a corner's bits and a box's two `vec4<u32>`s. Its fragment
-    /// entry `back` shades back faces. Under [`BoxFaces::Front`], its
-    /// fragment entry `front` shades front faces.
+    /// takes a corner's bits and a box's two `vec4<u32>`s.
     ///
     /// # Arguments
     ///
-    /// 1. `boxes`: the boxes in draw order, of which the first `fronts` draw
-    ///    their front faces
-    /// 2. `words`: the last word of each of a box's `vec4<u32>`s. The box's
-    ///    low cell and the corner past its high cell fill the rest
-    /// 3. `bindings`: each binding's stages, type, and buffer, in binding
+    /// 1. `parts`: the runs of boxes in draw order. A run without boxes
+    ///    draws nothing
+    /// 2. `bindings`: each binding's stages, type, and buffer, in binding
     ///    order
-    /// 4. `multiview_mask`: the mask of the passes the boxes draw in
-    #[allow(clippy::too_many_arguments)]
+    /// 3. `multiview_mask`: the mask of the passes the boxes draw in
     pub fn new(
         device: &Device,
         module: &ShaderModule,
-        faces: BoxFaces,
-        boxes: &[PlacedBox],
-        fronts: u32,
-        words: impl Fn(&PlacedBox) -> [u32; 2],
+        parts: &[BoxPart<'_>],
         bindings: &[(ShaderStages, BufferBindingType, &Buffer)],
         multiview_mask: Option<NonZeroU32>,
     ) -> Self {
-        let mut box_bytes = Vec::new();
-
-        for placed in boxes {
-            let [low, high] = words(placed);
-
-            for value in placed
-                .low
-                .extend(low)
-                .to_array()
-                .into_iter()
-                .chain(placed.high.extend(high).to_array())
-            {
-                box_bytes.extend(value.to_le_bytes());
-            }
-        }
+        let mut box_bytes: Vec<u8> = parts
+            .iter()
+            .flat_map(|part| part.boxes.iter().flatten())
+            .flat_map(|word| word.to_le_bytes())
+            .collect();
 
         // A buffer cannot be empty.
         if box_bytes.is_empty() {
@@ -109,7 +87,7 @@ impl BoxDraw {
                 .collect::<Vec<_>>(),
             BufferUsages::INDEX,
         );
-        let box_buffer = init("boxes", &box_bytes, BufferUsages::VERTEX);
+        let boxes = init("boxes", &box_bytes, BufferUsages::VERTEX);
 
         let entries: Vec<_> = (0u32..)
             .zip(bindings)
@@ -125,7 +103,7 @@ impl BoxDraw {
             })
             .collect();
 
-        // Both pipelines share the layout, so one bind group serves both.
+        // The pipelines share the layout, so one bind group serves them all.
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("box raster"),
             entries: &entries,
@@ -137,9 +115,9 @@ impl BoxDraw {
             immediate_size: 0,
         });
 
-        let pipeline = |label, fragment, culled| {
+        let pipeline = |part: &BoxPart<'_>| {
             device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some(label),
+                label: Some(part.fragment),
                 layout: Some(&layout),
                 vertex: VertexState {
                     module,
@@ -175,7 +153,7 @@ impl BoxDraw {
                 },
                 primitive: PrimitiveState {
                     front_face: FrontFace::Ccw,
-                    cull_mode: Some(culled),
+                    cull_mode: Some(if part.backs { Face::Front } else { Face::Back }),
                     ..PrimitiveState::default()
                 },
                 depth_stencil: Some(DepthStencilState {
@@ -188,7 +166,7 @@ impl BoxDraw {
                 multisample: MultisampleState::default(),
                 fragment: Some(FragmentState {
                     module,
-                    entry_point: Some(fragment),
+                    entry_point: Some(part.fragment),
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
                         format: HitTargets::FORMAT,
@@ -201,12 +179,19 @@ impl BoxDraw {
             })
         };
 
-        let front = match faces {
-            BoxFaces::Back => None,
-            BoxFaces::Front => Some(pipeline("box fronts", "front", Face::Back)),
-        };
+        let mut first = 0;
+        let mut runs = Vec::new();
 
-        let back = pipeline("box backs", "back", Face::Front);
+        for part in parts {
+            let end =
+                first + u32::try_from(part.boxes.len()).expect("a scene's boxes number under 2^32");
+
+            if end > first {
+                runs.push((pipeline(part), first..end));
+            }
+
+            first = end;
+        }
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("box raster"),
@@ -221,20 +206,17 @@ impl BoxDraw {
         });
 
         BoxDraw {
-            front,
-            back,
+            parts: runs,
             bind_group,
             corners,
             indices,
-            boxes: box_buffer,
-            fronts,
-            count: u32::try_from(boxes.len()).expect("a scene's boxes number under 2^32"),
+            boxes,
         }
     }
 
     /// Draws every box into `pass`.
     pub fn draw(&self, pass: &mut RenderPass<'_>) {
-        if self.count == 0 {
+        if self.parts.is_empty() {
             return;
         }
 
@@ -243,14 +225,9 @@ impl BoxDraw {
         pass.set_vertex_buffer(1, self.boxes.slice(..));
         pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
 
-        if let Some(front) = self.front.as_ref().filter(|_| self.fronts > 0) {
-            pass.set_pipeline(front);
-            pass.draw_indexed(0..36, 0, 0..self.fronts);
-        }
-
-        if self.fronts < self.count {
-            pass.set_pipeline(&self.back);
-            pass.draw_indexed(0..36, 0, self.fronts..self.count);
+        for (pipeline, boxes) in &self.parts {
+            pass.set_pipeline(pipeline);
+            pass.draw_indexed(0..36, 0, boxes.clone());
         }
     }
 }

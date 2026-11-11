@@ -1,7 +1,7 @@
 use crate::{
-    BenchKernels, BoxArm, BoxRaster, DepthProbe, DepthProbeMode, Error, FragmentLaunch,
+    BenchKernels, BoxMarch, BoxRaster, DepthProbe, DepthProbeMode, Error, FragmentLaunch,
     KernelWork, MeshRaster, RasterArm, RasterMesh, RayQueryArm, RayQueryTrace, Result, StepGrid,
-    StepKernel, StepLoop, Walk, art_room_scene, grazing_floor_scene, subgroup_sizes,
+    StepKernel, StepLoop, Walk, art_room_scene, city_scene, grazing_floor_scene, subgroup_sizes,
 };
 use voxrender::RenderScene;
 use wgpu::{Device, Queue};
@@ -21,8 +21,8 @@ const LAUNCH_STEPS: [u32; 5] = [0, 1, 2, 4, 8];
 const FRAGMENT_LAUNCH: &str = "fragment launch";
 
 /// B2's kernels over a `width` by `height` eye, with the ray queries when
-/// `ray_queries`, with each raster arm the device has the features for, with
-/// the box rasters, and with the depth probes.
+/// `ray_queries`, with each raster arm the device has the features for, and
+/// with the box rasters.
 pub fn b2_kernels(
     device: &Device,
     queue: &Queue,
@@ -35,10 +35,6 @@ pub fn b2_kernels(
     let (raster_arms, absent_arms): (Vec<_>, Vec<_>) = RasterArm::ALL
         .into_iter()
         .partition(|arm| device.features().contains(arm.features()));
-    let (box_arms, absent_box_arms): (Vec<_>, Vec<_>) = BoxArm::ALL
-        .into_iter()
-        .partition(|arm| device.features().contains(arm.features()));
-
     let grid = StepGrid::new(device, queue);
     let mut kernels = Vec::new();
 
@@ -76,57 +72,62 @@ pub fn b2_kernels(
     // per ray leaving each of `REGION_SIDES`.
     let mut traces = Vec::new();
 
-    for (name, scene) in [
-        ("S1 art room", art_room_scene()),
-        ("S5 grazing floor", grazing_floor_scene()),
+    // S2's 1025 placements take the walks and the ray queries seconds a
+    // pass, so only the rasters trace it.
+    for (name, scene, marches) in [
+        ("S1 art room", art_room_scene(), true),
+        ("S5 grazing floor", grazing_floor_scene(), true),
+        ("S2 city", city_scene(), false),
     ] {
         // B2 asks for the primary ray rate.
         let scene = unlit(scene);
         let (view_id, _) = scene.iter_views().next().expect("a bench scene has a view");
 
-        let mut iterations = [0.0; REGION_SIDES.len()];
+        if marches {
+            let mut iterations = [0.0; REGION_SIDES.len()];
 
-        for (mean, side) in iterations.iter_mut().zip(REGION_SIDES) {
-            let counts = Walk::CountedTree { side }
-                .trace(device, &scene, view_id, width, height)?
-                .trace(device, queue)
-                .map_err(Error::Trace)?;
+            for (mean, side) in iterations.iter_mut().zip(REGION_SIDES) {
+                let counts = Walk::CountedTree { side }
+                    .trace(device, &scene, view_id, width, height)?
+                    .trace(device, queue)
+                    .map_err(Error::Trace)?;
 
-            let total: u64 = counts
-                .iter()
-                .map(|hit| {
-                    u64::from(
-                        hit.as_ref()
-                            .expect("the counted walk hits every pixel")
-                            .voxel,
-                    )
-                })
-                .sum();
+                let total: u64 = counts
+                    .iter()
+                    .map(|hit| {
+                        u64::from(
+                            hit.as_ref()
+                                .expect("the counted walk hits every pixel")
+                                .voxel,
+                        )
+                    })
+                    .sum();
 
-            *mean = total as f64 / counts.len() as f64;
-        }
+                *mean = total as f64 / counts.len() as f64;
+            }
 
-        for (walk, label) in [
-            (Walk::Tree, "tree walk"),
-            (Walk::CheckedTree, "tree walk, checked"),
-        ] {
-            let label = format!("{label}, {name}");
+            for (walk, label) in [
+                (Walk::Tree, "tree walk"),
+                (Walk::CheckedTree, "tree walk, checked"),
+            ] {
+                let label = format!("{label}, {name}");
 
-            traces.push((label.clone(), Some(iterations)));
-            kernels.push((
-                label,
-                KernelWork::Walk(walk.trace(device, &scene, view_id, width, height)?),
-            ));
-        }
+                traces.push((label.clone(), Some(iterations)));
+                kernels.push((
+                    label,
+                    KernelWork::Walk(walk.trace(device, &scene, view_id, width, height)?),
+                ));
+            }
 
-        let arms: &[RayQueryArm] = if ray_queries { &RayQueryArm::ALL } else { &[] };
+            let arms: &[RayQueryArm] = if ray_queries { &RayQueryArm::ALL } else { &[] };
 
-        for &arm in arms {
-            let label = format!("{}, {name}", arm.label());
-            let trace = RayQueryTrace::new(device, queue, &scene, view_id, width, height, arm)?;
+            for &arm in arms {
+                let label = format!("{}, {name}", arm.label());
+                let trace = RayQueryTrace::new(device, queue, &scene, view_id, width, height, arm)?;
 
-            traces.push((label.clone(), None));
-            kernels.push((label, KernelWork::RayQuery(trace)));
+                traces.push((label.clone(), None));
+                kernels.push((label, KernelWork::RayQuery(trace)));
+            }
         }
 
         let mesh = RasterMesh::new(device, &scene)?;
@@ -139,9 +140,9 @@ pub fn b2_kernels(
             kernels.push((label, KernelWork::Raster(raster)));
         }
 
-        for &arm in &box_arms {
-            let label = format!("{}, {name}", arm.label());
-            let raster = BoxRaster::new(device, &scene, view_id, width, height, arm)?;
+        for march in BoxMarch::ALL {
+            let label = format!("{}, {name}", march.label());
+            let raster = BoxRaster::new(device, &scene, view_id, width, height, march)?;
 
             traces.push((label.clone(), None));
             kernels.push((label, KernelWork::Boxes(raster)));
@@ -188,16 +189,14 @@ pub fn b2_kernels(
                 lines.push(String::new());
             }
 
-            let absent: Vec<_> = absent_arms
-                .iter()
-                .map(|arm| arm.label())
-                .chain(absent_box_arms.iter().map(|arm| arm.label()))
-                .collect();
-
-            if !absent.is_empty() {
+            if !absent_arms.is_empty() {
                 lines.push(format!(
                     "The device lacks the features of these raster arms: {}.",
-                    absent.join("; ")
+                    absent_arms
+                        .iter()
+                        .map(|arm| arm.label())
+                        .collect::<Vec<_>>()
+                        .join("; ")
                 ));
                 lines.push(String::new());
             }

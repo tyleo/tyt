@@ -1,6 +1,5 @@
 use crate::{
-    BoxArm, BoxDraw, BoxMarch, Error, HitPacking, HitTargets, RasterArm, Result, mask_boxes,
-    tree_boxes,
+    BoxDraw, BoxMarch, Error, HitPacking, HitTargets, RasterArm, Result, mask_boxes, tree_boxes,
 };
 use branded_id::U32Id;
 use voxrender::{BRenderView, Error as RenderError, RenderScene};
@@ -27,22 +26,16 @@ pub struct BoxRaster {
 
 impl BoxRaster {
     /// Builds the raster of `scene` through `view_id` over two `width` by
-    /// `height` eyes as `arm` draws it. Errors unless the device has the
-    /// arm's features and each hit packs into 32 bits.
+    /// `height` eyes with `march` in its fragments. Errors unless each hit
+    /// packs into 32 bits.
     pub fn new(
         device: &Device,
         scene: &RenderScene,
         view_id: U32Id<BRenderView>,
         width: u32,
         height: u32,
-        arm: BoxArm,
+        march: BoxMarch,
     ) -> Result<Self> {
-        let missing = arm.features() - device.features();
-
-        if !missing.is_empty() {
-            return Err(Error::RasterFeatures(missing));
-        }
-
         let targets = HitTargets::new(device, width, height, PASSES)?;
         let packing = HitPacking::new(scene)?;
 
@@ -50,7 +43,7 @@ impl BoxRaster {
             .view(view_id)
             .ok_or(Error::Render(RenderError::UnknownView { view_id }))?;
 
-        let boxes = match arm.march {
+        let boxes = match march {
             BoxMarch::Tree(march) => tree_boxes(
                 device,
                 scene,
@@ -58,18 +51,18 @@ impl BoxRaster {
                 width,
                 height,
                 march,
-                arm.faces,
                 packing,
                 targets.multiview_mask(),
             )?,
 
-            BoxMarch::Masks => mask_boxes(
+            BoxMarch::Masks { solids, depth } => mask_boxes(
                 device,
                 scene,
                 view,
                 width,
                 height,
-                arm.faces,
+                solids,
+                depth,
                 packing,
                 targets.multiview_mask(),
             ),

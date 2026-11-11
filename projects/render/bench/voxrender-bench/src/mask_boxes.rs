@@ -1,4 +1,4 @@
-use crate::{BoxDraw, BoxFaces, HitPacking, PlacedBox, TileMasks, world_to_clip};
+use crate::{BoxDepth, BoxDraw, BoxPart, HitPacking, PlacedBox, TileMasks, world_to_clip};
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyMatrix4x4F64, TyVector3F64};
 use voxrender::{RenderProjection, RenderScene, RenderView, grid_point, grid_vector};
@@ -9,8 +9,9 @@ use wgpu::{
 };
 
 /// The boxes of `scene` as `view` sees them over a `width` by `height`
-/// image, drawn by `box_masks.wgsl`. Each fragment steps through its
-/// tile's [`TileMasks`].
+/// image, drawn by `box_masks.wgsl`. Each fragment steps through its tile's
+/// [`TileMasks`] and leaves `depth`. When `solids`, the solid boxes draw
+/// first, nearest first, and their fragments step through nothing.
 ///
 /// # Arguments
 ///
@@ -23,7 +24,8 @@ pub fn mask_boxes(
     view: &RenderView,
     width: u32,
     height: u32,
-    faces: BoxFaces,
+    solids: bool,
+    depth: BoxDepth,
     packing: HitPacking,
     multiview_mask: Option<NonZeroU32>,
 ) -> BoxDraw {
@@ -32,9 +34,10 @@ pub fn mask_boxes(
     let mut words = Vec::new();
     let mut offsets = HashMap::new();
     let mut object_boxes = HashMap::new();
+    let mut object_solids = HashMap::new();
 
     for (object_id, object) in scene.iter_objects() {
-        let masks = TileMasks::new(object);
+        let masks = TileMasks::new(object, solids);
 
         offsets.insert(
             object_id,
@@ -43,6 +46,7 @@ pub fn mask_boxes(
 
         words.extend(masks.words);
         object_boxes.insert(object_id, masks.boxes);
+        object_solids.insert(object_id, masks.solids);
     }
 
     // Each placement's `Place` in `box_masks.wgsl`, and the offset of its
@@ -91,8 +95,6 @@ pub fn mask_boxes(
         mask_offsets.push(offsets[&placement.object_id]);
     }
 
-    let (placed, fronts) = PlacedBox::list(scene, view, &object_boxes, faces);
-
     // A binding cannot be empty.
     if places.is_empty() {
         places.resize(96, 0);
@@ -137,13 +139,9 @@ pub fn mask_boxes(
                 label: Some("box masks"),
                 source: ShaderSource::Wgsl(
                     format!(
-                        "const FACE_BITS: u32 = {}u;\n{}\n{}",
+                        "const FACE_BITS: u32 = {}u;\n{}",
                         HitPacking::FACE_BITS,
-                        include_str!("box_masks.wgsl"),
-                        match faces {
-                            BoxFaces::Back => "",
-                            BoxFaces::Front => include_str!("box_mask_fronts.wgsl"),
-                        }
+                        include_str!("box_masks.wgsl")
                     )
                     .into(),
                 ),
@@ -152,22 +150,82 @@ pub fn mask_boxes(
         )
     };
 
+    let marched = PlacedBox::list(scene, view, &object_boxes);
+    let solid = PlacedBox::list(scene, view, &object_solids);
+
+    let march_words = |placed: &PlacedBox| {
+        let tile = u32::try_from(placed.brick).expect("an object's tiles number under 2^32");
+
+        placed.words(
+            placed.placement,
+            mask_offsets[placed.placement as usize] + tile * TileMasks::WORDS,
+        )
+    };
+
+    // A solid box shows nothing from inside.
+    let mut shown: Vec<_> = solid.iter().filter(|placed| !placed.inside).collect();
+
+    shown.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+
+    let mut parts = vec![BoxPart {
+        fragment: "solid",
+        backs: false,
+        boxes: shown
+            .iter()
+            .map(|placed| placed.words(placed.placement, 0))
+            .collect(),
+    }];
+
+    match depth {
+        BoxDepth::Hit => parts.push(BoxPart {
+            fragment: "exact",
+            backs: true,
+            boxes: marched.iter().map(march_words).collect(),
+        }),
+
+        BoxDepth::Face => {
+            let crossings = PlacedBox::crossings(&marched, &solid);
+            let (exact, apart): (Vec<_>, Vec<_>) = marched
+                .iter()
+                .zip(crossings)
+                .partition(|&(_, crosses)| crosses);
+
+            let (inside, mut front): (Vec<_>, Vec<_>) = apart
+                .into_iter()
+                .map(|(placed, _)| placed)
+                .partition(|placed| placed.inside);
+
+            front.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+
+            parts.extend([
+                BoxPart {
+                    fragment: "front",
+                    backs: false,
+                    boxes: front.into_iter().map(march_words).collect(),
+                },
+                BoxPart {
+                    fragment: "inside",
+                    backs: true,
+                    boxes: inside.into_iter().map(march_words).collect(),
+                },
+                BoxPart {
+                    fragment: "exact",
+                    backs: true,
+                    boxes: exact
+                        .into_iter()
+                        .map(|(placed, _)| march_words(placed))
+                        .collect(),
+                },
+            ]);
+        }
+    }
+
     let storage = BufferBindingType::Storage { read_only: true };
 
     BoxDraw::new(
         device,
         &module,
-        faces,
-        &placed,
-        fronts,
-        |placed| {
-            let tile = u32::try_from(placed.brick).expect("an object's tiles number under 2^32");
-
-            [
-                placed.placement,
-                mask_offsets[placed.placement as usize] + tile * TileMasks::WORDS,
-            ]
-        },
+        &parts,
         &[
             (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
             (ShaderStages::VERTEX, storage, &places),
