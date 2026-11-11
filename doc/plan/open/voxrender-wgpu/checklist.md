@@ -153,12 +153,11 @@ code-level choices in
             S5 on Quest gives the march a rate to beat
       - [ ] **S9.4. Experiments.** The experiments follow the research's
             [ladder](reference/speedup-research.md#5-experiment-ladder),
-            with a profile and a round of new approaches after rung 3.
-            They rework the tree walk, the 64-tree, and the ray query march,
-            one change at a time. Each change is timed on the desktop
-            through `b2-times`. A change that wins stays. One short Quest run
-            confirms a batch on Quest. B1's ids check every change against
-            the reference
+            with a round of new approaches after rung 3. They rework the
+            tree walk, the 64-tree, and the ray query march, one change at
+            a time. Each change is timed on the desktop through `b2-times`.
+            A change that wins stays. One short Quest run confirms a batch
+            on Quest. B1's ids check every change against the reference
             - [x] Rung 2 runs as three changes in turn: power-of-two masks
                   for `at % size`, the f32 walk with per-ray reciprocals,
                   and the placement cull. `leave()`, `enter()`, and
@@ -171,37 +170,53 @@ code-level choices in
                   - [x] Tile boxes win on the desktop, and B1 stays exact
                   - [x] Child boxes lose on the desktop and drop
                   - [x] A Quest run confirms tile boxes
-            - [ ] A profile after rung 3. Tile boxes halved S1's
-                  iterations, yet the walk gained 1.11x on Quest against
-                  1.30x on the desktop. The profile finds what sets the
-                  walk's time on Quest
+            - [ ] New approaches. Each gets a prototype of about one
+                  session. B1's ids check each prototype. Start bounds
+                  wait for S9.5. The ray-tracing unit waits for rung 8
+                  - [x] Raster, then march. A fragment pass rasterizes the
+                        box around each tile's live cells and marches each
+                        pixel's ray inside the box. The depth test keeps
+                        the nearest hit
+                        - [x] The ray query's marches run in the boxes'
+                              fragments, and B1 stays exact
+                        - [x] A mask march steps through a bit per cell
+                              from the rasterizer's point
+                        - [x] A depth probe shows that Quest rejects early
+                              only fragments that write no depth
+                        - [x] Face depth lets the depth test reject a
+                              fragment behind a nearer hit
+                        - [x] Solid boxes draw as plain faces with no
+                              march
+                        - [x] A Quest run times the arms against the tree
+                              walk and S9.3's raster. S1 takes 1.4 ms and
+                              S5 3.2
+                  - [ ] The box raster's open ends, in order:
+                        - [ ] The trims of rungs 4 and 5 on the mask
+                              march. It runs at 62% to 76% occupancy
+                        - [ ] B3's shading load in the box raster's
+                              fragments, on S1 and S5
+                        - [ ] Each eye's view, in one multiview pass and
+                              in two
+                        - [ ] Boxes that cross another placement's box.
+                              A third of S2's marched boxes keep hit
+                              depth
+                        - [ ] The boxes' draw order and the crossing test
+                              every frame as the head and placements move
+                  - [ ] Tiles of pixels walk together. An 8x8 tile walks
+                        the empty space its rays share. Each ray then walks
+                        on alone. The prototype runs only if the box raster
+                        leaves a compute walk in the frame
+            - [ ] A profile of the tree walk after rung 3. Tile boxes
+                  halved S1's iterations, yet the walk gained 1.11x on
+                  Quest against 1.30x on the desktop. The profile runs
+                  only if a compute walk stays in the frame
                   - [ ] `ovrgpuprofiler` reads the tree walk's counters on
                         Quest before and after tile boxes
                   - [ ] RenderDoc Meta Fork reads the registers and
                         occupancy of the tree walk with and without the
-                        checks. The walk with the checks runs S1 in 56.0 ms
-                        against the plain walk's 72.1
+                        checks
                   - [ ] A wave test groups each ray's iterations into
-                        Quest's 64-wide waves. It reports the mean ray's
-                        iterations against those of each wave's slowest
-                        ray. It also counts how often a wave's rays split
-                        between the jump and the single-cell step
-                  - [ ] The report lands in benchmarks.md. Its findings
-                        order the rungs that follow
-            - [ ] New approaches. Each gets a prototype of about one
-                  session. B1's ids check each prototype. Start bounds
-                  wait for S9.5. The ray-tracing unit waits for rung 8
-                  - [ ] Raster, then march. A fragment pass rasterizes the
-                        boxes of each object's non-empty tiles and marches
-                        each pixel's ray inside the box. The depth test
-                        keeps the nearest hit
-                  - [ ] Tiles of pixels walk together. An 8x8 tile walks
-                        the empty space its rays share. Each ray then walks
-                        on alone. The prototype runs only if the wave test
-                        finds split waves
-                  - [ ] A Quest run times the prototypes against the tree
-                        walk and S9.3's raster. Its findings reorder the
-                        rungs that follow
+                        Quest's 64-wide waves
             - [ ] Rung 4, register-resident leaves. RenderDoc reads each
                   change's footprint and occupancy on Quest. The walk starts
                   at 20 registers and 50% occupancy
