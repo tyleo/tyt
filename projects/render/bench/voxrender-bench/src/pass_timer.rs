@@ -14,13 +14,22 @@ use wgpu::{
 /// The passes before the timer keeps samples.
 const WARM_UP: u32 = 300;
 
+/// The passes a kernel runs in a row before the next kernel's turn. On
+/// Quest, a pass runs up to 1.25x longer after another kernel's pass than
+/// after its own.
+const TURN: u32 = 20;
+
+/// The passes at the start of a turn whose samples the timer drops.
+const SETTLE: u32 = 4;
+
 /// The passes whose timestamps can be in flight at once.
 const SLOTS: u32 = 8;
 
 /// The bytes of one pass's two timestamps.
 const SLOT_BYTES: u64 = 16;
 
-/// A benchmark's timing over both eyes, one kernel per pass.
+/// A benchmark's timing over both eyes, one kernel per pass. The kernels
+/// take turns of several passes in a row.
 pub struct PassTimer {
     title: &'static str,
 
@@ -221,15 +230,18 @@ impl PassTimer {
             self.advance(device, queue)?;
         }
 
-        let kernel =
-            usize::try_from(self.passes).expect("pass counts fit in usize") % self.kernels.len();
+        let kernel = usize::try_from(self.passes / TURN).expect("pass counts fit in usize")
+            % self.kernels.len();
         let first = index * 2;
 
         let Kernel { label, work, .. } = &self.kernels[kernel];
 
         work.record(encoder, label, &self.query_set, first);
 
-        self.slots[slot].pending = Some((kernel, self.passes >= WARM_UP));
+        self.slots[slot].pending = Some((
+            kernel,
+            self.passes >= WARM_UP && self.passes % TURN >= SETTLE,
+        ));
         self.recorded = Some(slot);
         self.passes += 1;
 
@@ -268,8 +280,8 @@ impl PassTimer {
                 self.title, self.windows, self.measured, self.width, self.height
             ),
             String::new(),
-            "| Kernel | p50 ms | p99 ms |".to_owned(),
-            "| --- | ---: | ---: |".to_owned(),
+            "| Kernel | Least ms | p10 ms | p50 ms | p99 ms |".to_owned(),
+            "| --- | ---: | ---: | ---: | ---: |".to_owned(),
         ];
 
         let mut medians = Vec::new();
@@ -280,8 +292,10 @@ impl PassTimer {
             let median = percentile(&kernel.samples, 50);
 
             lines.push(format!(
-                "| {} | {median:.3} | {:.3} |",
+                "| {} | {:.3} | {:.3} | {median:.3} | {:.3} |",
                 kernel.label,
+                kernel.samples[0],
+                percentile(&kernel.samples, 10),
                 percentile(&kernel.samples, 99)
             ));
 
