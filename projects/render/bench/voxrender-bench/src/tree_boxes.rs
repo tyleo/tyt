@@ -1,5 +1,5 @@
 use crate::{
-    BoxDraw, BoxFaces, BrickMarch, Error, HitPacking, PlacedBox, Result, Tree64, live_boxes,
+    BoxDraw, BoxPart, BrickMarch, Error, HitPacking, PlacedBox, Result, Tree64, live_boxes,
     world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
@@ -16,8 +16,8 @@ use wgpu::{
 const TILE: u32 = 16;
 
 /// The boxes of `scene` as `view` sees them over a `width` by `height`
-/// image, drawn by `box_raster.wgsl`. Each fragment runs `march` over its
-/// object's [`Tree64`].
+/// image, drawn by `box_raster.wgsl` in placement order. Each back face's
+/// fragment runs `march` over its object's [`Tree64`].
 ///
 /// # Arguments
 ///
@@ -31,7 +31,6 @@ pub fn tree_boxes(
     width: u32,
     height: u32,
     march: BrickMarch,
-    faces: BoxFaces,
     packing: HitPacking,
     multiview_mask: Option<NonZeroU32>,
 ) -> Result<BoxDraw> {
@@ -68,7 +67,10 @@ pub fn tree_boxes(
         }
     }
 
-    let (placed, fronts) = PlacedBox::list(scene, view, &object_boxes, faces);
+    let boxes = PlacedBox::list(scene, view, &object_boxes)
+        .iter()
+        .map(|placed| placed.words(placed.placement, 0))
+        .collect();
 
     let mut frame = Vec::new();
 
@@ -135,15 +137,11 @@ pub fn tree_boxes(
                 label: Some("box raster"),
                 source: ShaderSource::Wgsl(
                     format!(
-                        "const FACE_BITS: u32 = {}u;\n{GRID_WALK_WGSL}\n{}\n{}\n{}\n{}",
+                        "const FACE_BITS: u32 = {}u;\n{GRID_WALK_WGSL}\n{}\n{}\n{}",
                         HitPacking::FACE_BITS,
                         include_str!("tree_walk.wgsl"),
                         march.wgsl(),
-                        include_str!("box_raster.wgsl"),
-                        match faces {
-                            BoxFaces::Back => "",
-                            BoxFaces::Front => include_str!("box_fronts.wgsl"),
-                        }
+                        include_str!("box_raster.wgsl")
                     )
                     .into(),
                 ),
@@ -157,10 +155,11 @@ pub fn tree_boxes(
     Ok(BoxDraw::new(
         device,
         &module,
-        faces,
-        &placed,
-        fronts,
-        |placed| [placed.placement, 0],
+        &[BoxPart {
+            fragment: "back",
+            backs: true,
+            boxes,
+        }],
         &[
             (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
             (ShaderStages::FRAGMENT, storage, &placements),

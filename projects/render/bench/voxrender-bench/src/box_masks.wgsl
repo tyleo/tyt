@@ -1,9 +1,11 @@
 // A raster of the boxes around each tile's live cells over `TileMasks`. A
-// fragment starts at the point the rasterizer gives it on its box and steps
-// its ray a cell at a time through the tile's bits. It writes the first hit
-// and its depth, so the depth test keeps the nearest hit of every box the
-// ray crosses. A hit packs as `raster.wgsl`'s does. `BoxRaster` prepends
-// `FACE_BITS`.
+// fragment steps its ray a cell at a time through the tile's bits, from the
+// point the rasterizer gives it on its box. A hit packs as `raster.wgsl`'s
+// does. `BoxRaster` prepends `FACE_BITS`.
+//
+// `front` and `inside` discard a miss and keep their face's depth, which
+// lets the depth test run before the march. `exact` writes the hit's depth.
+// `solid` marches nothing.
 
 // The most cells a ray crosses in a tile.
 const STEPS: i32 = 48;
@@ -53,6 +55,12 @@ struct Fragment {
     @builtin(frag_depth) depth: f32,
 }
 
+struct Hit {
+    found: bool,
+    packed: vec4<f32>,
+    depth: f32,
+}
+
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> places: array<Place>;
 // Per object: its `TileMasks` words.
@@ -98,6 +106,17 @@ fn direction_of(box: Box) -> vec3<f32> {
     return box.point * box.ray.w - box.ray.xyz;
 }
 
+// The packed hit of `cell` in the box's tile, across the face on the one axis
+// of `across`. The face's normal points up its axis where the ray moves down
+// the axis.
+fn packed(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
+    let axis = select(select(0u, 1u, across.y), 2u, across.z);
+    let face = axis * 2u + select(1u, 0u, any(across & ahead));
+    let voxel = box.voxel.x + u32(cell.x) * box.voxel.y + u32(cell.y) * box.voxel.z + u32(cell.z);
+
+    return unpack4x8unorm(voxel | ((box.high.w | face) << frame.voxel_bits));
+}
+
 // The first hit of the ray from `start` in the tile's cells along
 // `direction`. `before` is the rasterizer's point along the ray, in units of
 // `direction` from `start`. A ray that `enters` starts on a face of the box.
@@ -109,7 +128,7 @@ fn first_hit(
     direction: vec3<f32>,
     before: f32,
     enters: bool,
-) -> Fragment {
+) -> Hit {
     let low = vec3<i32>(box.low.xyz);
     let high = vec3<i32>(box.high.xyz);
     let ahead = direction >= vec3<f32>(0.0);
@@ -134,17 +153,11 @@ fn first_hit(
         let live = ((column >> (((u32(cell.y) & 1u) << 4u) + u32(cell.z))) & 1u) == 1u;
 
         if live && free {
-            let axis = select(select(0u, 1u, across.y), 2u, across.z);
-
-            // The face's normal points up its axis where the ray moves down
-            // the axis.
-            let face = axis * 2u + select(1u, 0u, any(across & ahead));
-            let voxel = box.voxel.x + u32(cell.x) * box.voxel.y + u32(cell.y) * box.voxel.z
-                + u32(cell.z);
             let past = along - before;
 
-            return Fragment(
-                unpack4x8unorm(voxel | ((box.high.w | face) << frame.voxel_bits)),
+            return Hit(
+                true,
+                packed(box, cell, across, ahead),
                 (box.clip.z - past * box.fall) / (1.0 + past * box.ray.w),
             );
         }
@@ -160,14 +173,13 @@ fn first_hit(
         }
     }
 
-    // A depth of zero fails the depth test, so a miss writes nothing.
-    return Fragment(vec4<f32>(0.0), 0.0);
+    return Hit(false, vec4<f32>(0.0), 0.0);
 }
 
-// The rasterizer's point is where the ray leaves the box. The ray starts
-// where it enters the box, or at its origin when that lies inside the box.
-@fragment
-fn back(box: Box) -> Fragment {
+// The first hit of the ray that leaves the box at the rasterizer's point.
+// The ray starts where it enters the box, or at its origin when that lies
+// inside the box.
+fn hit_from_back(box: Box) -> Hit {
     let direction = direction_of(box);
     let ahead = direction >= vec3<f32>(0.0);
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
@@ -180,4 +192,50 @@ fn back(box: Box) -> Fragment {
     let before = min(entry, origin);
 
     return first_hit(box, box.point - direction * before, direction, before, entry <= origin);
+}
+
+// A front face's fragment. The rasterizer's point is where the ray enters
+// the box.
+@fragment
+fn front(box: Box) -> @location(0) vec4<f32> {
+    let hit = first_hit(box, box.point, direction_of(box), 0.0, true);
+
+    if !hit.found {
+        discard;
+    }
+
+    return hit.packed;
+}
+
+// A back face's fragment of a box a ray can start inside.
+@fragment
+fn inside(box: Box) -> @location(0) vec4<f32> {
+    let hit = hit_from_back(box);
+
+    if !hit.found {
+        discard;
+    }
+
+    return hit.packed;
+}
+
+// A back face's fragment that writes its hit's depth. A depth of zero fails
+// the depth test, so a miss writes nothing.
+@fragment
+fn exact(box: Box) -> Fragment {
+    let hit = hit_from_back(box);
+
+    return Fragment(hit.packed, hit.depth);
+}
+
+// A solid box's fragment. The rasterizer's point lies on a live cell's face.
+@fragment
+fn solid(box: Box) -> @location(0) vec4<f32> {
+    let low = vec3<i32>(box.low.xyz);
+    let high = vec3<i32>(box.high.xyz);
+    let ahead = direction_of(box) >= vec3<f32>(0.0);
+    let across = least(abs(box.point - vec3<f32>(select(high, low, ahead))));
+    let cell = clamp(vec3<i32>(floor(box.point)), low, high - vec3<i32>(1));
+
+    return packed(box, cell, across, ahead);
 }
