@@ -108,7 +108,14 @@ impl XrApp {
 
         let work = if options.profile {
             FrameWork::Profile(
-                KernelProfile::new(&gpu.device, &gpu.queue, width, height).map_err(Error::Bench)?,
+                KernelProfile::new(
+                    &gpu.device,
+                    &gpu.queue,
+                    width,
+                    height,
+                    options.kernels.as_deref(),
+                )
+                .map_err(Error::Bench)?,
             )
         } else {
             FrameWork::Timer {
@@ -283,11 +290,11 @@ impl XrApp {
             }
 
             FrameWork::Profile(profile) => {
-                if let Some(label) = profile
+                if let Some(line) = profile
                     .record(&self.gpu.device, &mut encoder)
                     .map_err(Error::Bench)?
                 {
-                    log::info!("profile {label}");
+                    log::info!("profile {line}");
                 }
 
                 self.gpu.queue.submit([encoder.finish()]);
