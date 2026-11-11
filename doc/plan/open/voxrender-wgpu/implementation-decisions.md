@@ -504,3 +504,13 @@ they land.
   hits' depth
 - A view's sort keys each box by the bits of its squared distance above its
   index and sorts the keys as integers
+- `BoxDraw`'s index buffer starts both triangles of a face at one corner
+  that no other face starts at: corner `a` for the low face on axis `a`,
+  and corner `7 - a` for the high face. A flat vertex output then carries
+  the face to its fragments
+- The mask march's loops have no step counter. Each ends when the ray's
+  distance passes the box's far faces, which a finite ray always does. The
+  vertex stage tests the bits of a corner's position and ray and sends a
+  corner that is not finite to the origin
+- `mask_boxes` builds its module for one view and prepends the view's
+  projection as `RAY_W`

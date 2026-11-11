@@ -1035,6 +1035,58 @@ A stale order costs the GPU nothing. With every sort taken from a point
 25 cm off the head, the app's GPU frame time read 1.62 ms on S1 against
 1.63, 3.77 on S5 against 3.75, and 12.65 on S2 against 12.60.
 
+**Trims.** Five changes to the mask march's fragments, each kept for a
+gain of 3% or more on S1 or S5. Times are Quest p10s in ms at 545 MHz, one
+window a row. B1 passes on both devices after the last.
+
+| State | Mask, S1 | Solid and mask, S1 | Solid and mask, S5 | Solid and mask, S2 |
+| --- | ---: | ---: | ---: | ---: |
+| Before | 2.539 | 1.371 | 3.167 | 14.213 |
+| 1. A flat output gives the face's axis | 2.435 | 1.267 | 2.998 | 13.964 |
+| 2. A loop ahead of the march leaves the first live cells | 2.248 | 1.214 | 2.736 | 12.906 |
+| 3. The loops count no steps | 2.109 | 1.181 | 2.603 | 12.119 |
+| 4. The setup stays in floats | 2.012 | 1.173 | 2.514 | 11.897 |
+| 5. The projection is a constant, and a solid face knows its side | 2.042 | 1.080 | 2.523 | 11.984 |
+
+1. Both triangles of a box's face start at a corner no other face starts
+   at. A flat output of that corner reaches the face's fragments alone,
+   so a fragment reads its face's axis and side where it took 19
+   instructions to find them from its point
+2. A ray that starts inside a box takes no hit in the live cells it starts
+   in. The march's loop tracked that in a flag every step. A loop of its
+   own now steps such a ray to its first empty cell
+3. The loops end on the ray's distance to the box's far faces and count
+   nothing. A finite ray always reaches that distance. The vertex stage
+   sends a corner whose position or ray is not finite to the origin, so no
+   other ray reaches a fragment
+4. The box's low and high cells reach the fragment as floats, and the
+   start cell, its bit, and the distances to the next faces come from
+   them with no integer step
+5. A module is built for one view, so the view's projection folds into
+   it. A solid box's fragment takes the side of its face from the flat
+   output and computes no ray
+
+`ovrgpuprofiler` counts the compositor's fragments with the kernel's. A
+frame with no kernel fragments shows 14 M fragments and 0.34 G
+instructions, so the earlier section's instructions per fragment mix the
+two. The kernel's share of a frame's instructions:
+
+| Kernel | Before | After | Occupancy after |
+| --- | ---: | ---: | ---: |
+| solid boxes and mask march, S1 | 0.74 G | 0.59 G | 86% |
+| solid boxes and mask march, S5 | 1.30 G | 1.05 G | 66% |
+
+**Variants that lost.**
+
+1. Loops that end on a compare of the distance's bits, which a NaN also
+   ends, ran S5 in 2.620 ms against 2.603 for trim 3 and 2.736 before it,
+   and the mask arm on S1 in 2.188 against 2.109
+2. Stray cells as boxes. A face of a tile's box gave up its layer's cells
+   as boxes of live cells when they filled an eighth of the layer or less,
+   up to 16 cells a tile. S5's pebbles came off every tile, and its
+   marched boxes shrank by a layer. S5 ran in 3.160 ms against 2.523, and
+   S2 in 16.855 against 11.984. S5 gained 19,200 boxes and S2 92,512
+
 **Outcomes.**
 
 1. A frame's CPU time on S2 falls from 2.25 ms to 0.24, and to 0.08 on S1
@@ -1043,4 +1095,12 @@ A stale order costs the GPU nothing. With every sort taken from a point
    every 16th frame
 3. A view from inside a box with live cells was wrong under face depth
    and no bench view showed it. B1's new scene covers it
+4. The trims take 21% off S1, 20% off S5, and 16% off S2. The march's
+   occupancy stays at 62% to 66%
+5. A box costs 33 to 53 ns a frame on Quest beyond its fragments, from
+   the stray cells' boxes. S2's 25,301 boxes then cost about 1 ms. A box
+   earns its place only where it saves a few hundred steps a frame
+6. S5's far rays skim its top layer, where pebbles fill 2% of the cells.
+   Those steps wait for B6's LOD because a cell there stands under a pixel
+   tall from about 5 m out
 

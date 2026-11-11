@@ -200,8 +200,10 @@ code-level choices in
                         - [x] A box that holds an eye. A view from inside a
                               bush showed farther leaves until back faces
                               drew a part in 1024 nearer
-                        - [ ] The trims of rungs 4 and 5 on the mask
-                              march. It runs at 62% to 76% occupancy
+                        - [x] The trims of rungs 4 and 5 on the mask
+                              march. Five trims take 21% off S1, 20% off
+                              S5, and 16% off S2. Stray cells as boxes
+                              lose. The occupancy stays at 62% to 66%
                         - [ ] B3's shading load in the box raster's
                               fragments, on S1 and S5
                         - [ ] Boxes that cross another placement's box.
