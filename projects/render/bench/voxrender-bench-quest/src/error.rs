@@ -89,8 +89,8 @@ pub enum Error {
     /// `getprop` would not run.
     Getprop(IOError),
 
-    /// The profile property holds a value other than `true` or `false`.
-    ProfileProperty(String),
+    /// A flag's system property holds a value other than `true` or `false`.
+    FlagProperty { name: &'static str, value: String },
 
     /// The GPU clock's file would not read.
     ClockRead(IOError),
@@ -130,8 +130,8 @@ impl Display for Error {
             Error::Map(error) => write!(f, "a readback buffer would not map: {error}"),
             Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
             Error::Getprop(error) => write!(f, "getprop would not run: {error}"),
-            Error::ProfileProperty(value) => {
-                write!(f, "the profile property holds {value:?}, not true or false")
+            Error::FlagProperty { name, value } => {
+                write!(f, "the property {name} holds {value:?}, not true or false")
             }
             Error::ClockRead(error) => write!(f, "the GPU clock would not read: {error}"),
             Error::ClockParse(text) => write!(f, "the GPU clock file holds {text:?}"),

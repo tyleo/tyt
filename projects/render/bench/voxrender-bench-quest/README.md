@@ -54,6 +54,19 @@ seconds after the session starts, then another every seven seconds. A window
 of B2's times takes 120 timed passes per kernel after a warm-up of 300, and
 the kernels slow the frame rate while they run.
 
+Two more properties shorten a run. `debug.voxrenderbench.b1 false` skips
+B1. `debug.voxrenderbench.kernels` has B2 time only the kernels whose labels
+hold the property's text and log no closing lines. The device's shell takes
+the whole command in quotes because the text can hold spaces:
+
+```sh
+adb shell setprop debug.voxrenderbench.b1 false
+adb shell 'setprop debug.voxrenderbench.kernels "box raster"'
+```
+
+`setprop debug.voxrenderbench.b1 true` and
+`'setprop debug.voxrenderbench.kernels ""'` return the app to the full run.
+
 ### Off the face
 
 Two commands let the session run with the headset on a desk. The first

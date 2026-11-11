@@ -91,6 +91,11 @@ struct Times {
     #[arg(value_name = "count", long, default_value_t = 1)]
     windows: usize,
 
+    /// Times only the kernels whose labels hold this text and leaves out the
+    /// report's closing lines.
+    #[arg(value_name = "text", long)]
+    kernels: Option<String>,
+
     /// Then captures one pass of each kernel in a graphics debugger, such as
     /// Xcode's Metal capture.
     #[arg(value_name = "capture", long)]
@@ -128,6 +133,7 @@ fn time(bench: TimedBench, times: &Times) -> Result<String> {
             times.width,
             times.height,
             times.windows,
+            times.kernels.as_deref(),
             times.capture,
         )
     })

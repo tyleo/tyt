@@ -19,6 +19,9 @@ pub enum Error {
     /// The device lacks timestamp queries, which a timed benchmark needs.
     NoTimestampQuery,
 
+    /// No kernel's label holds the text a timed benchmark was asked for.
+    NoKernel(String),
+
     /// The device lacks ray queries, which the ray-query trace needs.
     NoRayQuery,
 
@@ -54,6 +57,7 @@ impl Display for Error {
             Error::Render(error) => write!(f, "the reference failed: {error}"),
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),
+            Error::NoKernel(text) => write!(f, "no kernel's label holds {text:?}"),
             Error::NoRayQuery => write!(f, "the device lacks ray queries"),
             Error::RasterFeatures(features) => {
                 write!(f, "the device lacks a raster arm's features {features:?}")

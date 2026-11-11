@@ -3,7 +3,8 @@ use voxrender_bench::{Gpu, PassTimer, TimedBench};
 use wgpu::{CommandEncoderDescriptor, PollType};
 
 /// Submits `bench`'s timed passes over `width` by `height` eyes one at a
-/// time until `windows` windows report, and returns the reports. When
+/// time until `windows` windows report, and returns the reports. With
+/// `only`, the passes time the kernels whose labels hold that text. When
 /// `capture`, a graphics debugger then captures one pass of each kernel. The
 /// captured passes join no report.
 pub fn time_passes(
@@ -12,10 +13,11 @@ pub fn time_passes(
     width: u32,
     height: u32,
     windows: usize,
+    only: Option<&str>,
     capture: bool,
 ) -> Result<String> {
-    let mut timer =
-        PassTimer::new(&gpu.device, &gpu.queue, bench, width, height).map_err(Error::Bench)?;
+    let mut timer = PassTimer::new(&gpu.device, &gpu.queue, bench, width, height, only)
+        .map_err(Error::Bench)?;
     let mut reports = Vec::new();
 
     while reports.len() < windows {

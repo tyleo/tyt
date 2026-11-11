@@ -87,14 +87,17 @@ enum Progress {
 }
 
 impl PassTimer {
-    /// Builds `bench`'s kernels for a `width` by `height` eye image. Errors
-    /// unless the device has timestamp queries.
+    /// Builds `bench`'s kernels for a `width` by `height` eye image. With
+    /// `only`, the timer keeps the kernels whose labels hold that text and
+    /// drops the report's closing lines, which need every kernel. Errors
+    /// unless the device has timestamp queries and a kernel is kept.
     pub fn new(
         device: &Device,
         queue: &Queue,
         bench: TimedBench,
         width: u32,
         height: u32,
+        only: Option<&str>,
     ) -> Result<Self> {
         if !device.features().contains(Features::TIMESTAMP_QUERY) {
             return Err(Error::NoTimestampQuery);
@@ -112,14 +115,24 @@ impl PassTimer {
             }
         };
 
-        let kernels = kernels
+        let summary: BenchSummary = match only {
+            Some(_) => Box::new(|_, _| Vec::new()),
+            None => summary,
+        };
+
+        let kernels: Vec<_> = kernels
             .into_iter()
+            .filter(|(label, _)| only.is_none_or(|text| label.contains(text)))
             .map(|(label, work)| Kernel {
                 label,
                 work,
                 samples: Vec::with_capacity(measured),
             })
             .collect();
+
+        if let (Some(text), true) = (only, kernels.is_empty()) {
+            return Err(Error::NoKernel(text.to_owned()));
+        }
 
         let query_set = device.create_query_set(&QuerySetDescriptor {
             label: Some("pass timestamps"),
