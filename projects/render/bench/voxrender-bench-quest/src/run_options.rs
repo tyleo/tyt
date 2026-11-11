@@ -10,6 +10,10 @@ const B1: &str = "debug.voxrenderbench.b1";
 /// The system property that holds the text of the kernels B2 times.
 const KERNELS: &str = "debug.voxrenderbench.kernels";
 
+/// The system property that holds the start of the name of the scene to
+/// view.
+const VIEW: &str = "debug.voxrenderbench.view";
+
 /// What the app runs, from the system properties the README's steps set.
 pub struct RunOptions {
     /// Whether the profile runs in place of B1 and B2's timer.
@@ -20,18 +24,23 @@ pub struct RunOptions {
 
     /// The text a kernel's label must hold for B2 to time it.
     pub kernels: Option<String>,
+
+    /// The start of the name of the bench scene the app shows in place of
+    /// its benchmarks.
+    pub view: Option<String>,
 }
 
 impl RunOptions {
     /// Reads the properties. Errors unless each flag is unset, `true`, or
     /// `false`.
     pub fn read() -> Result<Self> {
-        let kernels = getprop(KERNELS)?;
+        let text = |name| getprop(name).map(|value| (!value.is_empty()).then_some(value));
 
         Ok(RunOptions {
             profile: flag(PROFILE, false)?,
             b1: flag(B1, true)?,
-            kernels: (!kernels.is_empty()).then_some(kernels),
+            kernels: text(KERNELS)?,
+            view: text(VIEW)?,
         })
     }
 }

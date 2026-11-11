@@ -25,6 +25,9 @@ pub struct EyeSwapchain {
 
     /// Each eye's image size.
     pub extent: Extent2Di,
+
+    /// The images' format.
+    pub format: TextureFormat,
 }
 
 impl EyeSwapchain {
@@ -143,6 +146,7 @@ impl EyeSwapchain {
             handle,
             views,
             extent,
+            format,
         })
     }
 }

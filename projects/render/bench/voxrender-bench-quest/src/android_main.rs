@@ -43,8 +43,8 @@ fn run(app: &AndroidApp) -> Result<()> {
 
     let options = RunOptions::read()?;
 
-    // The profile skips B1 to reach the session sooner.
-    if options.b1 && !options.profile {
+    // The profile and the view skip B1 to reach the session sooner.
+    if options.b1 && !options.profile && options.view.is_none() {
         log_b1(&gpu)?;
     }
 

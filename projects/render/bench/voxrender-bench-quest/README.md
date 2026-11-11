@@ -91,6 +91,21 @@ adb shell am broadcast -a com.oculus.vrpowermanager.automation_disable
 
 A reboot also clears the property.
 
+## View
+
+`debug.voxrenderbench.view` holds the start of a bench scene's name. The app
+then skips its benchmarks and shows the scene around the wearer. The box
+raster draws the scene for both eyes each frame:
+
+```sh
+adb shell setprop debug.voxrenderbench.view S1
+adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
+```
+
+The wearer starts at the scene's first view. The app logs the view's time on
+the CPU every 600 frames on a `view` line beside B0's GPU frame times.
+`'setprop debug.voxrenderbench.view ""'` returns the app to its benchmarks.
+
 ## Profile
 
 The profile runs six of B2's kernels in turn, each alone for 10 seconds.

@@ -16,6 +16,9 @@ pub enum Error {
     /// The GPU tier's trace failed.
     Trace(WgpuError),
 
+    /// No bench scene's name starts with the text.
+    NoScene(String),
+
     /// The scene has no view to draw.
     NoView,
 
@@ -62,6 +65,7 @@ impl Display for Error {
         match self {
             Error::Render(error) => write!(f, "the reference failed: {error}"),
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
+            Error::NoScene(name) => write!(f, "no bench scene's name starts with {name:?}"),
             Error::NoView => write!(f, "the scene has no view"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),
             Error::NoKernel(text) => write!(f, "no kernel's label holds {text:?}"),
