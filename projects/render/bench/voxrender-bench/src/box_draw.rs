@@ -16,9 +16,14 @@ use wgpu::{
 
 /// A box's 12 triangles over its 8 corners, wound counterclockwise from
 /// outside. Bit `a` of a corner picks the box's high face on axis `a`.
+///
+/// Both triangles of a face start at one corner, and no other face's
+/// triangles start there. A flat output of that corner then reaches the
+/// face's fragments alone. The low face on axis `a` starts at corner `a`,
+/// and the high face at corner `7 - a`.
 const TRIANGLES: [u16; 36] = [
-    0, 4, 6, 0, 6, 2, 1, 3, 7, 1, 7, 5, 0, 1, 5, 0, 5, 4, 2, 6, 7, 2, 7, 3, 0, 2, 3, 0, 3, 1, 4, 5,
-    7, 4, 7, 6,
+    0, 4, 6, 0, 6, 2, 7, 5, 1, 7, 1, 3, 1, 5, 4, 1, 4, 0, 6, 7, 3, 6, 3, 2, 2, 3, 1, 2, 1, 0, 5, 7,
+    6, 5, 6, 4,
 ];
 
 /// A view's boxes and the pipelines that draw their faces, with depth in

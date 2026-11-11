@@ -3,6 +3,9 @@
 // cell's material, a sun without shadows, and a hemisphere, under the
 // contract's tonemap.
 
+// Every eye is a perspective view.
+const RAY_W: f32 = 1.0;
+
 struct Frame {
     // The unit direction to the sun in the world.
     sun: vec4<f32>,
@@ -40,17 +43,20 @@ struct Box {
     @location(0) point: vec3<f32>,
 
     // `Place::ray` from the tile's low corner.
-    @location(1) @interpolate(flat) ray: vec4<f32>,
+    @location(1) @interpolate(flat) ray: vec3<f32>,
 
-    // The box's low cell in the tile, then the offset of the tile's words.
-    @location(2) @interpolate(flat) low: vec4<u32>,
-
-    // The corner past the box's high cell in the tile, then the index of the
-    // eye's `Place`.
-    @location(3) @interpolate(flat) high: vec4<u32>,
+    // The box's low cell in the tile, then the corner past its high cell.
+    @location(2) @interpolate(flat) low: vec3<f32>,
+    @location(3) @interpolate(flat) high: vec3<f32>,
 
     // Zero, since a perspective ray's depth falls by its distance alone.
     @location(4) @interpolate(flat) fall: f32,
+
+    // The axis of the fragment's face, plus 4 on the box's high face.
+    @location(5) @interpolate(flat) face: u32,
+
+    // The offset of the tile's words, then the index of the eye's `Place`.
+    @location(6) @interpolate(flat) words: vec2<u32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -69,14 +75,20 @@ fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
     let grid = select(low.xyz, high.xyz, far);
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
     let index = eye * frame.placements + low.w;
+    let clip = places[index].clip * vec4<f32>(vec3<f32>(grid), 1.0);
+    let ray = places[index].ray.xyz - vec3<f32>(tile);
 
+    // A corner whose position or ray is not finite goes to the origin,
+    // where its box draws nothing.
     return Box(
-        places[index].clip * vec4<f32>(vec3<f32>(grid), 1.0),
+        select(vec4<f32>(0.0), clip, sound(clip, vec4<f32>(ray, 0.0))),
         vec3<f32>(grid - tile),
-        vec4<f32>(places[index].ray.xyz - vec3<f32>(tile), 1.0),
-        vec4<u32>(low.xyz - tile, high.w),
-        vec4<u32>(high.xyz - tile, index),
+        ray,
+        vec3<f32>(low.xyz - tile),
+        vec3<f32>(high.xyz - tile),
         0.0,
+        min(corner, 7u - corner) | (corner & 4u),
+        vec2<u32>(high.w, index),
     );
 }
 
@@ -126,7 +138,7 @@ fn tonemap(color: vec3<f32>) -> vec3<f32> {
 // axis of `across`. The face's normal points up its axis where the ray moves
 // down the axis.
 fn surface(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
-    let tile = box.low.w;
+    let tile = box.words.x;
     let header = bits[tile + 128u];
     let size = header & 15u;
 
@@ -139,7 +151,7 @@ fn surface(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> 
         material = bits[tile + 129u + 128u * size + entry];
     }
 
-    let index = box.high.w;
+    let index = box.words.y;
     let axis = select(select(places[index].x, places[index].y, across.y), places[index].z, across.z);
     let normal = select(axis.xyz, -axis.xyz, any(across & ahead));
     let up = 0.5 + 0.5 * normal.y;
