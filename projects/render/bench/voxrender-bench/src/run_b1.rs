@@ -1,6 +1,6 @@
 use crate::{
-    BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh, RayQueryArm, RayQueryTrace, Result,
-    Walk, b1_scenes, reference_hits,
+    BoxArm, BoxRaster, BrickMarch, Error, Gpu, MeshRaster, RasterArm, RasterMesh, RayQueryArm,
+    RayQueryTrace, Result, Walk, b1_scenes, reference_hits,
 };
 use branded_id::U32Id;
 use voxrender::{BRenderView, RenderScene};
@@ -27,6 +27,8 @@ enum Tracer {
     RayQuery(RayQueryArm),
 
     Raster,
+
+    Boxes(BoxArm),
 }
 
 /// How one trace's samples compare with the reference's over a scene.
@@ -42,18 +44,24 @@ struct Tally {
 /// Runs B1 on `gpu` over its scenes, each view drawn over a `size` square
 /// image, and returns the report in Markdown.
 /// The integer and tree walks' primary ids and corner shadow bits, and the
-/// integer ray-query marches' primary ids, are judged against B1's line. The
-/// float walk's, the float marches', and the raster's flips are counted for
-/// the record. The report lists the first mismatching pixels of each scene
+/// integer marches' primary ids under the ray queries and the box rasters,
+/// are judged against B1's line. The float walk's, the float marches', and
+/// the greedy-mesh raster's flips are counted for the record. The report
+/// lists the first mismatching pixels of each scene
 /// and trace.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = b1_scenes();
+
+    let (box_arms, absent_arms): (Vec<_>, Vec<_>) = BoxArm::ALL
+        .into_iter()
+        .partition(|arm| gpu.device.features().contains(arm.features()));
 
     let tracers: Vec<_> = [Walk::Integer, Walk::Float, Walk::Tree]
         .map(Tracer::Walk)
         .into_iter()
         .chain(RayQueryArm::ALL.map(Tracer::RayQuery))
         .chain([Tracer::Raster])
+        .chain(box_arms.iter().copied().map(Tracer::Boxes))
         .collect();
 
     let info = &gpu.info;
@@ -83,29 +91,30 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         format!("- Image: {size} by {size} pixels per view"),
         format!(
             "- Line: the integer and tree walks' ids and shadows, and the integer \
-             ray-query marches' ids, differ on at most {}% of a scene's samples",
+             marches' ids, differ on at most {}% of a scene's samples",
             LINE * 100.0
         ),
         String::new(),
         format!(
             "| Scene | Views | Pixels | Shadow samples | Id mismatches | Shadow mismatches \
              | Float id flips | Float shadow flips | Tree id mismatches | Tree shadow mismatches \
-             | {} | Raster id flips |",
+             | {} | Raster id flips | {} |",
             RayQueryArm::ALL
+                .map(|arm| format!("Ray query {}^3 {}", arm.brick, march_column(arm.march)))
+                .join(" | "),
+            box_arms
+                .iter()
                 .map(|arm| format!(
-                    "Ray query {}^3 {}",
-                    arm.brick,
-                    if judged(Tracer::RayQuery(arm)) {
-                        "integer id mismatches"
-                    } else {
-                        "float id flips"
-                    }
+                    "Box raster {} faces {}",
+                    arm.faces.label(),
+                    march_column(arm.march)
                 ))
+                .collect::<Vec<_>>()
                 .join(" | ")
         ),
         format!(
             "| --- | ---: | ---: | ---: | {}",
-            "---: | ".repeat(7 + RayQueryArm::ALL.len())
+            "---: | ".repeat(7 + RayQueryArm::ALL.len() + box_arms.len())
         )
         .trim_end()
         .to_owned(),
@@ -187,6 +196,8 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
                 Tracer::RayQuery(_) => vec![count(tally.ids, pixels)],
                 Tracer::Raster if mesh.is_none() => vec!["n/a".to_owned()],
                 Tracer::Raster => vec![count(tally.ids, pixels)],
+                Tracer::Boxes(_) if mesh.is_none() => vec!["n/a".to_owned()],
+                Tracer::Boxes(_) => vec![count(tally.ids, pixels)],
             })
             .collect();
 
@@ -199,7 +210,19 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     lines.push(String::new());
 
     if unpacked {
-        lines.push("n/a: the scene's hits need more than the raster's 32 bits.".to_owned());
+        lines.push("n/a: the scene's hits need more than a raster's 32 bits.".to_owned());
+        lines.push(String::new());
+    }
+
+    if !absent_arms.is_empty() {
+        lines.push(format!(
+            "The device lacks the features of these box rasters: {}.",
+            absent_arms
+                .iter()
+                .map(|arm| arm.label())
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
         lines.push(String::new());
     }
 
@@ -246,6 +269,16 @@ fn trace(
             MeshRaster::new(&gpu.device, mesh, scene, view_id, size, size, RASTER)?
                 .trace(&gpu.device, &gpu.queue)?
         }
+
+        Tracer::Boxes(arm) => {
+            // A scene without a mesh has hits past a raster's 32 bits.
+            if mesh.is_none() {
+                return Ok(None);
+            }
+
+            BoxRaster::new(&gpu.device, scene, view_id, size, size, arm)?
+                .trace(&gpu.device, &gpu.queue)?
+        }
     };
 
     Ok(Some(hits))
@@ -261,7 +294,19 @@ fn judged(tracer: Tracer) -> bool {
                 ..
             })
             | Tracer::Raster
+            | Tracer::Boxes(BoxArm {
+                march: BrickMarch::Float,
+                ..
+            })
     )
+}
+
+/// The end of the heading of a column that counts `march`'s ids.
+fn march_column(march: BrickMarch) -> &'static str {
+    match march {
+        BrickMarch::Integer => "integer id mismatches",
+        BrickMarch::Float => "float id flips",
+    }
 }
 
 /// `tracer`'s name in the list of mismatches.
@@ -270,6 +315,7 @@ fn label(tracer: Tracer) -> String {
         Tracer::Walk(walk) => format!("{walk:?} walk"),
         Tracer::RayQuery(arm) => arm.label(),
         Tracer::Raster => RASTER.label(),
+        Tracer::Boxes(arm) => arm.label(),
     }
 }
 

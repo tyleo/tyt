@@ -162,10 +162,14 @@ impl XrGpu {
             return Err(Error::MissingFeatures(required - exposed.features));
         }
 
-        // B2 reports the subgroup sizes when the device has subgroups, and
-        // runs its MSAA raster when the device has multisampled arrays.
-        let features =
-            required | (exposed.features & (Features::SUBGROUP | Features::MULTISAMPLE_ARRAY));
+        // B2 reports the subgroup sizes when the device has subgroups. It
+        // runs its MSAA raster when the device has multisampled arrays, and
+        // its front-face box rasters when the device has early depth tests.
+        let features = required
+            | (exposed.features
+                & (Features::SUBGROUP
+                    | Features::MULTISAMPLE_ARRAY
+                    | Features::SHADER_EARLY_DEPTH_TEST));
 
         let limits = exposed.capabilities.limits.clone();
         let device_extensions = exposed.adapter.required_device_extensions(features);

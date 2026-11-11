@@ -1,4 +1,4 @@
-use crate::{ChainKernel, FragmentLaunch, MeshRaster, RayQueryTrace, StepKernel};
+use crate::{BoxRaster, ChainKernel, FragmentLaunch, MeshRaster, RayQueryTrace, StepKernel};
 use voxrender_wgpu::HitTrace;
 use wgpu::{
     CommandEncoder, ComputePass, ComputePassDescriptor, ComputePassTimestampWrites, QuerySet,
@@ -23,6 +23,9 @@ pub enum KernelWork {
 
     /// A greedy-mesh raster of a view.
     Raster(MeshRaster),
+
+    /// A raster of a view's boxes with a march in each fragment.
+    Boxes(BoxRaster),
 }
 
 impl KernelWork {
@@ -50,6 +53,7 @@ impl KernelWork {
             }
             KernelWork::Fragments(launch) => launch.record(encoder, query_set, first),
             KernelWork::Raster(raster) => raster.record(encoder, query_set, first),
+            KernelWork::Boxes(raster) => raster.record(encoder, query_set, first),
         }
     }
 }
