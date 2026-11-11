@@ -52,7 +52,11 @@ while the headset senses a face. The app logs B0's visibility mask once the
 session has focus. The app logs the first window of frame times about ten
 seconds after the session starts, then another every seven seconds. A window
 of B2's times takes 120 timed passes per kernel after a warm-up of 300, and
-the kernels slow the frame rate while they run.
+the kernels slow the frame rate while they run. The kernels take turns of 20
+passes in a row, and the first 4 of a turn go untimed. A window's table
+gives each kernel's least, p10, p50, and p99 times. The compositor
+interrupts some passes for about 0.75 ms, so the p10 compares two kernels
+best.
 
 Two more properties shorten a run. `debug.voxrenderbench.b1 false` skips
 B1. `debug.voxrenderbench.kernels` has B2 time only the kernels whose labels
