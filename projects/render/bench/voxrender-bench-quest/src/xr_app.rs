@@ -131,8 +131,9 @@ impl XrApp {
             });
 
             FrameWork::View {
-                view: HeadsetView::new(&gpu.device, scene, swapchain.format)
-                    .map_err(Error::Bench)?,
+                view: Box::new(
+                    HeadsetView::new(&gpu.device, scene, swapchain.format).map_err(Error::Bench)?,
+                ),
                 depth: depth.create_view(&TextureViewDescriptor::default()),
                 prepared: Duration::ZERO,
                 frames: 0,
@@ -458,7 +459,7 @@ enum FrameWork {
 
     /// A scene's view, drawn into the eyes each frame.
     View {
-        view: HeadsetView,
+        view: Box<HeadsetView>,
 
         /// Both eyes' depth, one layer each.
         depth: TextureView,
