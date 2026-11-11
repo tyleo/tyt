@@ -8,11 +8,15 @@ use openxr::{
     Rect2Di, ReferenceSpaceType, Session, SessionState, Space, SwapchainSubImage,
     ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
 };
-use std::num::NonZeroU32;
-use voxrender_bench::{KernelProfile, PassTimer, TimedBench};
+use std::{
+    num::NonZeroU32,
+    time::{Duration, Instant},
+};
+use voxrender_bench::{HeadsetEye, HeadsetView, KernelProfile, PassTimer, TimedBench};
 use wgpu::{
-    Color, CommandEncoderDescriptor, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDescriptor, StoreOp,
+    Color, CommandEncoderDescriptor, Extent3d, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
+    TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 /// The views the app draws.
@@ -20,6 +24,9 @@ const VIEW_TYPE: ViewConfigurationType = ViewConfigurationType::PRIMARY_STEREO;
 
 /// The display rate the app asks for, the rate the frame budget assumes.
 const REFRESH_RATE: f32 = 90.0;
+
+/// The frames between two logs of the view's time on the CPU.
+const VIEW_FRAMES: u32 = 600;
 
 /// The color the pass clears both eyes to.
 const CLEAR: Color = Color {
@@ -29,8 +36,9 @@ const CLEAR: Color = Color {
     a: 1.0,
 };
 
-/// An OpenXR session that clears both eyes each frame, runs B0's session
-/// probes, and times B2's kernels or runs the profile.
+/// An OpenXR session that runs B0's session probes. Each frame clears both
+/// eyes and times B2's kernels or runs the profile, or draws a scene's
+/// view.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
@@ -106,7 +114,30 @@ impl XrApp {
         let width = u32::try_from(swapchain.extent.width).expect("an eye's width is positive");
         let height = u32::try_from(swapchain.extent.height).expect("an eye's height is positive");
 
-        let work = if options.profile {
+        let work = if let Some(scene) = &options.view {
+            let depth = gpu.device.create_texture(&TextureDescriptor {
+                label: Some("view depth"),
+                size: Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 2,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: HeadsetView::DEPTH,
+                usage: TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+
+            FrameWork::View {
+                view: HeadsetView::new(&gpu.device, scene, swapchain.format)
+                    .map_err(Error::Bench)?,
+                depth: depth.create_view(&TextureViewDescriptor::default()),
+                prepared: Duration::ZERO,
+                frames: 0,
+            }
+        } else if options.profile {
             FrameWork::Profile(
                 KernelProfile::new(
                     &gpu.device,
@@ -252,22 +283,91 @@ impl XrApp {
                 label: Some("frame"),
             });
 
-        encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("clear eyes"),
+        let depth = match &self.work {
+            FrameWork::View { depth, .. } => Some(depth),
+            _ => None,
+        };
+
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("eyes"),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &self.swapchain.views[image],
                 depth_slice: None,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(CLEAR),
+                    load: LoadOp::Clear(match &self.work {
+                        FrameWork::View { view, .. } => view.sky(),
+                        _ => CLEAR,
+                    }),
                     store: StoreOp::Store,
                 },
             })],
+            depth_stencil_attachment: depth.map(|depth| RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(Operations {
+                    load: LoadOp::Clear(0.0),
+                    store: StoreOp::Discard,
+                }),
+                stencil_ops: None,
+            }),
             multiview_mask: NonZeroU32::new(0b11),
             ..RenderPassDescriptor::default()
         });
 
+        if let FrameWork::View {
+            view,
+            prepared,
+            frames,
+            ..
+        } = &mut self.work
+        {
+            let headset_eyes = [0, 1].map(|eye: usize| {
+                let pose = eyes[eye].pose;
+                let fov = eyes[eye].fov;
+
+                HeadsetEye {
+                    position: [pose.position.x, pose.position.y, pose.position.z],
+                    rotation: [
+                        pose.orientation.x,
+                        pose.orientation.y,
+                        pose.orientation.z,
+                        pose.orientation.w,
+                    ],
+                    tangents: [
+                        fov.angle_left.tan(),
+                        fov.angle_right.tan(),
+                        fov.angle_up.tan(),
+                        fov.angle_down.tan(),
+                    ],
+                }
+            });
+
+            let start = Instant::now();
+
+            view.prepare(&self.gpu.queue, &headset_eyes);
+            *prepared += start.elapsed();
+            *frames += 1;
+
+            if *frames == VIEW_FRAMES {
+                log::info!(
+                    "view prepare: {:.3} ms a frame on the CPU over {VIEW_FRAMES} frames",
+                    prepared.as_secs_f64() * 1e3 / f64::from(VIEW_FRAMES)
+                );
+
+                *prepared = Duration::ZERO;
+                *frames = 0;
+            }
+
+            view.draw(&mut pass);
+        }
+
+        drop(pass);
+
         match &mut self.work {
+            FrameWork::View { .. } => {
+                self.gpu.queue.submit([encoder.finish()]);
+            }
+
             FrameWork::Timer { pass_timer, clock } => {
                 clock.sample()?;
 
@@ -355,4 +455,19 @@ enum FrameWork {
     /// The profile, which logs each kernel as its stretch starts on
     /// `profile` lines.
     Profile(KernelProfile),
+
+    /// A scene's view, drawn into the eyes each frame.
+    View {
+        view: HeadsetView,
+
+        /// Both eyes' depth, one layer each.
+        depth: TextureView,
+
+        /// The time the frames since the last log spent readying the view
+        /// on the CPU.
+        prepared: Duration,
+
+        /// The frames since the last log.
+        frames: u32,
+    },
 }
