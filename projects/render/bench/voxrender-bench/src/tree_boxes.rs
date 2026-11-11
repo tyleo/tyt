@@ -1,6 +1,6 @@
 use crate::{
-    BoxDraw, BoxPart, BrickMarch, Error, HitPacking, PlacedBox, Result, Tree64, live_boxes,
-    world_to_clip,
+    BoxDraw, BoxPart, BrickMarch, Error, HitPacking, HitTargets, PlacedBox, Result, Tree64,
+    live_boxes, world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::TyMatrix4x4F64;
@@ -67,7 +67,7 @@ pub fn tree_boxes(
         }
     }
 
-    let boxes = PlacedBox::list(scene, view, &object_boxes)
+    let boxes = PlacedBox::list(scene, &object_boxes)
         .iter()
         .map(|placed| placed.words(placed.placement, 0))
         .collect();
@@ -155,6 +155,7 @@ pub fn tree_boxes(
     Ok(BoxDraw::new(
         device,
         &module,
+        HitTargets::FORMAT,
         &[BoxPart {
             fragment: "back",
             backs: true,

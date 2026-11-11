@@ -16,6 +16,9 @@ pub enum Error {
     /// The GPU tier's trace failed.
     Trace(WgpuError),
 
+    /// The scene has no view to draw.
+    NoView,
+
     /// The device lacks timestamp queries, which a timed benchmark needs.
     NoTimestampQuery,
 
@@ -49,6 +52,9 @@ pub enum Error {
 
     /// A tree's word offset is past what its slot holds.
     TreeSize { offset: usize },
+
+    /// A tile holds more materials than its cells' entries index.
+    TileMaterials { materials: usize },
 }
 
 impl Display for Error {
@@ -56,6 +62,7 @@ impl Display for Error {
         match self {
             Error::Render(error) => write!(f, "the reference failed: {error}"),
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
+            Error::NoView => write!(f, "the scene has no view"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),
             Error::NoKernel(text) => write!(f, "no kernel's label holds {text:?}"),
             Error::NoRayQuery => write!(f, "the device lacks ray queries"),
@@ -78,6 +85,9 @@ impl Display for Error {
             }
             Error::TreeSize { offset } => {
                 write!(f, "word offset {offset} is past what a tree's slot holds")
+            }
+            Error::TileMaterials { materials } => {
+                write!(f, "a tile holds {materials} materials, over 256")
             }
         }
     }

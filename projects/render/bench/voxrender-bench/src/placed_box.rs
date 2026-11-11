@@ -1,8 +1,8 @@
 use branded_id::U32Id;
 use std::collections::HashMap;
-use ty_math::{TyVector3F64, TyVector3U32};
+use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::BVoxObject;
-use voxrender::{RenderPlacement, RenderProjection, RenderScene, RenderView, grid_point};
+use voxrender::{RenderProjection, RenderScene, RenderView, grid_point};
 
 /// The cells past a box's cells within which a ray's start counts as inside
 /// the box. The margin covers a raster's pad and the near plane.
@@ -27,31 +27,25 @@ pub struct PlacedBox {
     /// The corner past the box's high cell.
     pub high: TyVector3U32,
 
-    /// Whether a ray of the view can start inside the box.
-    pub inside: bool,
-
-    /// How far the box's nearest point lies from the view.
-    pub distance: f64,
+    /// The placement's transform.
+    transform: TyTransformF64,
 
     /// The low and high corners of the world box around the box.
     world: (TyVector3F64, TyVector3F64),
 }
 
 impl PlacedBox {
-    /// Each placement's boxes in `scene` as `view` sees them, in placement
-    /// order. `boxes` holds each object's boxes as low cells and the corners
-    /// past their high cells.
+    /// Each placement's boxes in `scene`, in placement order. `boxes` holds
+    /// each object's boxes as low cells and the corners past their high
+    /// cells.
     pub fn list(
         scene: &RenderScene,
-        view: &RenderView,
         boxes: &HashMap<U32Id<BVoxObject>, Vec<(TyVector3U32, TyVector3U32)>>,
     ) -> Vec<Self> {
         let mut placed = Vec::new();
 
         for (index, (_, placement)) in (0u32..).zip(scene.iter_placements()) {
             for (brick, &(low, high)) in boxes[&placement.object_id].iter().enumerate() {
-                let (inside, distance) = nearest(view, placement, low, high);
-
                 let corners = (0..8).map(|corner| {
                     let pick = |bit: u32, low: u32, high: u32| {
                         f64::from(if corner & bit == 0 { low } else { high })
@@ -77,14 +71,58 @@ impl PlacedBox {
                     brick,
                     low,
                     high,
-                    inside,
-                    distance,
+                    transform: placement.transform,
                     world,
                 });
             }
         }
 
         placed
+    }
+
+    /// Whether a ray of `view` can start inside the box, and how far the
+    /// box's nearest point lies from the view: from a perspective view's
+    /// eye, or along an orthographic view's axis.
+    pub fn seen(&self, view: &RenderView) -> (bool, f64) {
+        let low = self.low.as_dvec3() - MARGIN;
+        let high = self.high.as_dvec3() + MARGIN;
+        let position = view.pose.position;
+
+        match view.projection {
+            RenderProjection::Perspective { .. } => {
+                let eye = grid_point(&self.transform, position);
+                let nearest = eye.clamp(low, high);
+
+                (
+                    nearest == eye,
+                    (self.transform.transform_point(nearest) - position).length(),
+                )
+            }
+
+            RenderProjection::Orthographic { .. } => {
+                let forward = view.pose.rotation * -TyVector3F64::Z;
+
+                let depth = (0..8)
+                    .map(|corner| {
+                        let point = TyVector3F64::new(
+                            if corner & 1 == 0 { low.x } else { high.x },
+                            if corner & 2 == 0 { low.y } else { high.y },
+                            if corner & 4 == 0 { low.z } else { high.z },
+                        );
+
+                        forward.dot(self.transform.transform_point(point) - position)
+                    })
+                    .fold(f64::INFINITY, f64::min);
+
+                (depth <= 0.0, depth)
+            }
+        }
+    }
+
+    /// How far `point` lies from the world box around the box, or zero
+    /// inside it.
+    pub fn distance_from(&self, point: TyVector3F64) -> f64 {
+        (point.clamp(self.world.0, self.world.1) - point).length()
     }
 
     /// The box's two `vec4<u32>`s: its low cell and `low`, then the corner
@@ -135,57 +173,9 @@ impl PlacedBox {
     }
 }
 
-/// Whether a ray of `view` can start inside the box from `low` to `high` in
-/// `placement`'s grid, and how far the box's nearest point lies from the
-/// view: from a perspective view's eye, or along an orthographic view's
-/// axis.
-fn nearest(
-    view: &RenderView,
-    placement: &RenderPlacement,
-    low: TyVector3U32,
-    high: TyVector3U32,
-) -> (bool, f64) {
-    let transform = &placement.transform;
-    let low = low.as_dvec3() - MARGIN;
-    let high = high.as_dvec3() + MARGIN;
-    let position = view.pose.position;
-
-    match view.projection {
-        RenderProjection::Perspective { .. } => {
-            let eye = grid_point(transform, position);
-            let nearest = eye.clamp(low, high);
-
-            (
-                nearest == eye,
-                (transform.transform_point(nearest) - position).length(),
-            )
-        }
-
-        RenderProjection::Orthographic { .. } => {
-            let forward = view.pose.rotation * -TyVector3F64::Z;
-
-            let depth = (0..8)
-                .map(|corner| {
-                    let point = TyVector3F64::new(
-                        if corner & 1 == 0 { low.x } else { high.x },
-                        if corner & 2 == 0 { low.y } else { high.y },
-                        if corner & 4 == 0 { low.z } else { high.z },
-                    );
-
-                    forward.dot(transform.transform_point(point) - position)
-                })
-                .fold(f64::INFINITY, f64::min);
-
-            (depth <= 0.0, depth)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{
-        PlacedBox, eye_view, painted_object, place_object, retain_matte, retain_next_object,
-    };
+    use crate::{PlacedBox, painted_object, place_object, retain_matte, retain_next_object};
     use std::collections::HashMap;
     use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3U32};
     use voxrender::RenderScene;
@@ -211,9 +201,8 @@ mod tests {
             );
         }
 
-        let view = eye_view(TyVector3F64::new(8.0, 8.0, 60.0), TyVector3F64::splat(8.0));
         let boxes = HashMap::from([(cube, vec![(TyVector3U32::ZERO, TyVector3U32::splat(16))])]);
-        let placed = PlacedBox::list(&scene, &view, &boxes);
+        let placed = PlacedBox::list(&scene, &boxes);
 
         assert_eq!(PlacedBox::crossings(&placed, &[]), [false, true, true]);
         assert_eq!(PlacedBox::crossings(&placed[..1], &placed[1..]), [false]);

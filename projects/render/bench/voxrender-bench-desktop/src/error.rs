@@ -1,6 +1,8 @@
+use png::EncodingError;
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
+    io::Error as IOError,
 };
 use voxrender_bench::Error as BenchError;
 use wgpu::{PollError, RequestAdapterError, RequestDeviceError};
@@ -19,6 +21,15 @@ pub enum Error {
 
     /// Waiting on the GPU failed.
     Poll(PollError),
+
+    /// No bench scene's name starts with the text.
+    NoScene(String),
+
+    /// The image's file would not open.
+    Write(IOError),
+
+    /// The image would not encode.
+    Png(EncodingError),
 }
 
 impl Display for Error {
@@ -28,6 +39,9 @@ impl Display for Error {
             Error::Device(error) => write!(f, "no GPU device: {error}"),
             Error::Bench(error) => write!(f, "{error}"),
             Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
+            Error::NoScene(name) => write!(f, "no bench scene's name starts with {name:?}"),
+            Error::Write(error) => write!(f, "the image's file would not open: {error}"),
+            Error::Png(error) => write!(f, "the image would not encode: {error}"),
         }
     }
 }

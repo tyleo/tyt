@@ -2,8 +2,14 @@
 //! one benchmark of the voxrender-wgpu plan and prints its report.
 
 use clap::{ArgAction, Args, Parser, Subcommand, value_parser};
-use std::process;
-use voxrender_bench::{TimedBench, run_b1};
+use png::{BitDepth, ColorType, Encoder, SrgbRenderingIntent};
+use std::{
+    fs::File,
+    io::BufWriter,
+    path::{Path, PathBuf},
+    process,
+};
+use voxrender_bench::{TimedBench, bench_scene, run_b1, view_image};
 
 // Internal API
 
@@ -65,6 +71,37 @@ enum Command {
         )]
         ray_queries: bool,
     },
+
+    /// Draws a bench scene's first view as a shaded box raster and writes
+    /// the image as a PNG.
+    #[command(name = "view")]
+    View {
+        /// The start of the scene's name in B1's report, such as `S1`.
+        #[arg(value_name = "scene")]
+        scene: String,
+
+        /// The PNG to write.
+        #[arg(value_name = "output-png")]
+        output: PathBuf,
+
+        /// The width of the image.
+        #[arg(
+            value_name = "pixels",
+            long,
+            default_value_t = 1680,
+            value_parser = value_parser!(u32).range(1..=8192)
+        )]
+        width: u32,
+
+        /// The height of the image.
+        #[arg(
+            value_name = "pixels",
+            long,
+            default_value_t = 1760,
+            value_parser = value_parser!(u32).range(1..=8192)
+        )]
+        height: u32,
+    },
 }
 
 #[derive(Clone, Debug, Args)]
@@ -113,6 +150,13 @@ fn main() {
         Command::B1Times(times) => time(TimedBench::B1, &times),
 
         Command::B2Times { times, ray_queries } => time(TimedBench::B2 { ray_queries }, &times),
+
+        Command::View {
+            scene,
+            output,
+            width,
+            height,
+        } => view(&scene, &output, width, height).map(|()| String::new()),
     };
 
     match result {
@@ -137,4 +181,24 @@ fn time(bench: TimedBench, times: &Times) -> Result<String> {
             times.capture,
         )
     })
+}
+
+/// Writes the shaded view of the bench scene whose name starts with `scene`
+/// to the PNG `output`.
+fn view(scene: &str, output: &Path, width: u32, height: u32) -> Result<()> {
+    let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
+    let gpu = headless_gpu()?;
+    let texels = view_image(&gpu, &render_scene, width, height).map_err(Error::Bench)?;
+
+    let file = File::create(output).map_err(Error::Write)?;
+    let mut encoder = Encoder::new(BufWriter::new(file), width, height);
+
+    encoder.set_color(ColorType::Rgba);
+    encoder.set_depth(BitDepth::Eight);
+    encoder.set_source_srgb(SrgbRenderingIntent::Perceptual);
+
+    encoder
+        .write_header()
+        .and_then(|mut writer| writer.write_image_data(&texels))
+        .map_err(Error::Png)
 }

@@ -8,9 +8,9 @@ use wgpu::{
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferUsages, ColorTargetState,
     ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState,
     FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayoutDescriptor,
-    PrimitiveState, RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderModule,
-    ShaderStages, StencilState, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
-    VertexStepMode,
+    PrimitiveState, Queue, RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderModule,
+    ShaderStages, StencilState, TextureFormat, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexState, VertexStepMode,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -21,8 +21,8 @@ const TRIANGLES: [u16; 36] = [
     7, 4, 7, 6,
 ];
 
-/// A view's boxes and the pipelines that draw their faces into
-/// [`HitTargets`].
+/// A view's boxes and the pipelines that draw their faces, with depth in
+/// [`HitTargets::DEPTH`].
 pub struct BoxDraw {
     /// Each run's pipeline and boxes, in draw order.
     parts: Vec<(RenderPipeline, Range<u32>)>,
@@ -43,14 +43,15 @@ impl BoxDraw {
     ///
     /// # Arguments
     ///
-    /// 1. `parts`: the runs of boxes in draw order. A run without boxes
-    ///    draws nothing
-    /// 2. `bindings`: each binding's stages, type, and buffer, in binding
+    /// 1. `format`: the format of the target the fragments write
+    /// 2. `parts`: the runs of boxes in draw order
+    /// 3. `bindings`: each binding's stages, type, and buffer, in binding
     ///    order
-    /// 3. `multiview_mask`: the mask of the passes the boxes draw in
+    /// 4. `multiview_mask`: the mask of the passes the boxes draw in
     pub fn new(
         device: &Device,
         module: &ShaderModule,
+        format: TextureFormat,
         parts: &[BoxPart<'_>],
         bindings: &[(ShaderStages, BufferBindingType, &Buffer)],
         multiview_mask: Option<NonZeroU32>,
@@ -87,7 +88,11 @@ impl BoxDraw {
                 .collect::<Vec<_>>(),
             BufferUsages::INDEX,
         );
-        let boxes = init("boxes", &box_bytes, BufferUsages::VERTEX);
+        let boxes = init(
+            "boxes",
+            &box_bytes,
+            BufferUsages::VERTEX | BufferUsages::COPY_DST,
+        );
 
         let entries: Vec<_> = (0u32..)
             .zip(bindings)
@@ -169,7 +174,7 @@ impl BoxDraw {
                     entry_point: Some(part.fragment),
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
-                        format: HitTargets::FORMAT,
+                        format,
                         blend: None,
                         write_mask: ColorWrites::ALL,
                     })],
@@ -180,16 +185,30 @@ impl BoxDraw {
         };
 
         let mut first = 0;
-        let mut runs = Vec::new();
+        let mut runs: Vec<(RenderPipeline, Range<u32>)> = Vec::new();
+
+        // Each pipeline built so far with its fragment entry and faces, for
+        // a later run to share.
+        let mut built: Vec<(&str, bool, RenderPipeline)> = Vec::new();
 
         for part in parts {
             let end =
                 first + u32::try_from(part.boxes.len()).expect("a scene's boxes number under 2^32");
 
-            if end > first {
-                runs.push((pipeline(part), first..end));
-            }
+            let shared = built
+                .iter()
+                .find(|(fragment, backs, _)| *fragment == part.fragment && *backs == part.backs)
+                .map(|(_, _, pipeline)| pipeline.clone());
 
+            let pipeline = shared.unwrap_or_else(|| {
+                let pipeline = pipeline(part);
+
+                built.push((part.fragment, part.backs, pipeline.clone()));
+
+                pipeline
+            });
+
+            runs.push((pipeline, first..end));
             first = end;
         }
 
@@ -214,9 +233,39 @@ impl BoxDraw {
         }
     }
 
+    /// Replaces each run's boxes with `runs`' two `vec4<u32>`s a box, in
+    /// draw order. Panics unless `runs` has a run for each part and holds
+    /// no more boxes than the draw was built with.
+    pub fn rewrite(&mut self, queue: &Queue, runs: &[Vec<[u32; 8]>]) {
+        assert_eq!(runs.len(), self.parts.len(), "each part has its run");
+
+        let bytes: Vec<u8> = runs
+            .iter()
+            .flatten()
+            .flatten()
+            .flat_map(|word| word.to_le_bytes())
+            .collect();
+
+        assert!(
+            bytes.len() as u64 <= self.boxes.size(),
+            "the runs hold no more boxes than the draw was built with"
+        );
+
+        queue.write_buffer(&self.boxes, 0, &bytes);
+
+        let mut first = 0;
+
+        for ((_, boxes), run) in self.parts.iter_mut().zip(runs) {
+            let end = first + u32::try_from(run.len()).expect("the boxes number under 2^32");
+
+            *boxes = first..end;
+            first = end;
+        }
+    }
+
     /// Draws every box into `pass`.
     pub fn draw(&self, pass: &mut RenderPass<'_>) {
-        if self.parts.is_empty() {
+        if self.parts.iter().all(|(_, boxes)| boxes.is_empty()) {
             return;
         }
 
@@ -226,8 +275,10 @@ impl BoxDraw {
         pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
 
         for (pipeline, boxes) in &self.parts {
-            pass.set_pipeline(pipeline);
-            pass.draw_indexed(0..36, 0, boxes.clone());
+            if !boxes.is_empty() {
+                pass.set_pipeline(pipeline);
+                pass.draw_indexed(0..36, 0, boxes.clone());
+            }
         }
     }
 }
