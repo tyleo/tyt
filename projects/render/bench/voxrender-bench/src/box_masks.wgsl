@@ -47,15 +47,10 @@ struct Box {
 // Per object: its `TileMasks` words.
 @group(0) @binding(2) var<storage, read> bits: array<u32>;
 
-// Bit `a` of `corner` picks the box's high face on axis `a`. `low` holds the
-// box's low cell and its placement's index. `high` holds the corner past the
-// box's high cell and the offset of its tile's bits.
-@vertex
-fn place(
-    @location(0) corner: u32,
-    @location(1) low: vec4<u32>,
-    @location(2) high: vec4<u32>,
-) -> Box {
+// The box's corner `corner`. Bit `a` of `corner` picks the box's high face on
+// axis `a`. `low` holds the box's low cell and its placement's index. `high`
+// holds the corner past the box's high cell and the offset of its tile's bits.
+fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
     let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
     let grid = select(low.xyz, high.xyz, far);
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
@@ -71,6 +66,29 @@ fn place(
         vec3<u32>(tile.x * strides.x + tile.y * strides.y + tile.z, strides),
         (placed.clip * vec4<f32>(placed.ray.xyz, 0.0)).z,
     );
+}
+
+@vertex
+fn place(
+    @location(0) corner: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+) -> Box {
+    return corner_of(corner, low, high);
+}
+
+// `place` for the back faces `inside` shades, under a perspective view.
+@vertex
+fn place_near(
+    @location(0) corner: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+) -> Box {
+    var box = corner_of(corner, low, high);
+
+    box.clip.z *= NEARER;
+
+    return box;
 }
 
 // The packed hit of `cell` in the box's tile, across the face on the one axis

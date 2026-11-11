@@ -1,4 +1,7 @@
-use crate::{art_room_scene, city_scene, foliage_scene, grazing_floor_scene, greenhouse_scene};
+use crate::{
+    art_room_scene, bush_interior_scene, city_scene, foliage_scene, grazing_floor_scene,
+    greenhouse_scene,
+};
 use voxrender::{
     RenderScene, RenderShadow,
     fixtures::{
@@ -40,5 +43,6 @@ pub fn b1_scenes() -> Vec<(&'static str, RenderScene)> {
         ("S3 greenhouse", greenhouse_scene()),
         ("S4 foliage", foliage_scene()),
         ("S5 grazing floor", grazing_floor_scene()),
+        ("inside a bush", bush_interior_scene()),
     ]
 }

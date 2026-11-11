@@ -157,6 +157,7 @@ pub fn tree_boxes(
         &module,
         HitTargets::FORMAT,
         &[BoxPart {
+            vertex: "place",
             fragment: "back",
             backs: true,
             boxes,

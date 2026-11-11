@@ -38,8 +38,8 @@ pub struct BoxDraw {
 }
 
 impl BoxDraw {
-    /// Builds the pipelines over `module`, whose vertex entry `place`
-    /// takes a corner's bits and a box's two `vec4<u32>`s.
+    /// Builds the pipelines over `module`, whose vertex entries take a
+    /// corner's bits and a box's two `vec4<u32>`s.
     ///
     /// # Arguments
     ///
@@ -126,7 +126,7 @@ impl BoxDraw {
                 layout: Some(&layout),
                 vertex: VertexState {
                     module,
-                    entry_point: Some("place"),
+                    entry_point: Some(part.vertex),
                     compilation_options: PipelineCompilationOptions::default(),
                     buffers: &[
                         Some(VertexBufferLayout {
@@ -187,23 +187,25 @@ impl BoxDraw {
         let mut first = 0;
         let mut runs: Vec<(RenderPipeline, Range<u32>)> = Vec::new();
 
-        // Each pipeline built so far with its fragment entry and faces, for
-        // a later run to share.
-        let mut built: Vec<(&str, bool, RenderPipeline)> = Vec::new();
+        // Each pipeline built so far with its entries and faces, for a later
+        // run to share.
+        let mut built: Vec<((&str, &str, bool), RenderPipeline)> = Vec::new();
 
         for part in parts {
             let end =
                 first + u32::try_from(part.boxes.len()).expect("a scene's boxes number under 2^32");
 
+            let key = (part.vertex, part.fragment, part.backs);
+
             let shared = built
                 .iter()
-                .find(|(fragment, backs, _)| *fragment == part.fragment && *backs == part.backs)
-                .map(|(_, _, pipeline)| pipeline.clone());
+                .find(|(built, _)| *built == key)
+                .map(|(_, pipeline)| pipeline.clone());
 
             let pipeline = shared.unwrap_or_else(|| {
                 let pipeline = pipeline(part);
 
-                built.push((part.fragment, part.backs, pipeline.clone()));
+                built.push((key, pipeline.clone()));
 
                 pipeline
             });

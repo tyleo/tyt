@@ -13,7 +13,7 @@ use wgpu::{
 /// The boxes of `scene` as `view` sees them over a `width` by `height`
 /// image, drawn by `box_masks.wgsl`. Each fragment steps through its tile's
 /// [`TileMasks`] and leaves `depth`. When `solids`, the solid boxes draw
-/// first, nearest first, and their fragments step through nothing.
+/// nearest first, and their fragments step through nothing.
 ///
 /// # Arguments
 ///
@@ -167,58 +167,75 @@ pub fn mask_boxes(
         placed.words(placed.placement, object + tiles[placed.brick])
     };
 
-    // A solid box shows nothing from inside.
-    let mut parts = vec![BoxPart {
+    // Every solid box draws its front faces because a ray that starts
+    // inside one sees none of it.
+    let solids = BoxPart {
+        vertex: "place",
         fragment: "solid",
         backs: false,
-        boxes: nearest_first(view, &solid)
+        boxes: nearest_first(view, &solid, false)
             .into_iter()
             .map(|placed| placed.words(placed.placement, 0))
             .collect(),
-    }];
+    };
 
-    match depth {
-        BoxDepth::Hit => parts.push(BoxPart {
-            fragment: "exact",
-            backs: true,
-            boxes: marched.iter().map(march_words).collect(),
-        }),
+    let exact = |boxes: Vec<[u32; 8]>| BoxPart {
+        vertex: "place",
+        fragment: "exact",
+        backs: true,
+        boxes,
+    };
+
+    let parts = match depth {
+        BoxDepth::Hit => vec![solids, exact(marched.iter().map(march_words).collect())],
 
         BoxDepth::Face => {
             let crossings = PlacedBox::crossings(&marched, &solid);
-            let (exact, apart): (Vec<_>, Vec<_>) = marched
+            let (crossing, apart): (Vec<_>, Vec<_>) = marched
                 .iter()
                 .zip(crossings)
                 .partition(|&(_, crosses)| crosses);
 
             let apart = apart.into_iter().map(|(placed, _)| placed);
             let inside = apart.clone().filter(|placed| placed.seen(view).0);
+            let mut crossing: Vec<_> = crossing
+                .into_iter()
+                .map(|(placed, _)| march_words(placed))
+                .collect();
 
-            parts.extend([
+            // An orthographic view's depth has no scale that brings a face
+            // nearer, so a box the view starts inside writes its hits' depth.
+            let inside = match view.projection {
+                RenderProjection::Perspective { .. } => inside.map(march_words).collect(),
+
+                RenderProjection::Orthographic { .. } => {
+                    crossing.extend(inside.map(march_words));
+
+                    Vec::new()
+                }
+            };
+
+            vec![
                 BoxPart {
+                    vertex: "place_near",
+                    fragment: "inside",
+                    backs: true,
+                    boxes: inside,
+                },
+                solids,
+                BoxPart {
+                    vertex: "place",
                     fragment: "front",
                     backs: false,
-                    boxes: nearest_first(view, apart)
+                    boxes: nearest_first(view, apart, true)
                         .into_iter()
                         .map(march_words)
                         .collect(),
                 },
-                BoxPart {
-                    fragment: "inside",
-                    backs: true,
-                    boxes: inside.map(march_words).collect(),
-                },
-                BoxPart {
-                    fragment: "exact",
-                    backs: true,
-                    boxes: exact
-                        .into_iter()
-                        .map(|(placed, _)| march_words(placed))
-                        .collect(),
-                },
-            ]);
+                exact(crossing),
+            ]
         }
-    }
+    };
 
     let storage = BufferBindingType::Storage { read_only: true };
 
@@ -236,16 +253,17 @@ pub fn mask_boxes(
     ))
 }
 
-/// `boxes` nearest first as `view` sees them, without those a ray can start
-/// inside.
+/// `boxes` nearest first as `view` sees them. When `outside`, the boxes a ray
+/// can start inside stay out.
 fn nearest_first<'a>(
     view: &RenderView,
     boxes: impl IntoIterator<Item = &'a PlacedBox>,
+    outside: bool,
 ) -> Vec<&'a PlacedBox> {
     let mut seen: Vec<_> = boxes
         .into_iter()
         .map(|placed| (placed, placed.seen(view)))
-        .filter(|&(_, (inside, _))| !inside)
+        .filter(|&(_, (inside, _))| !(outside && inside))
         .collect();
 
     seen.sort_by(|(_, (_, a)), (_, (_, b))| a.total_cmp(b));
