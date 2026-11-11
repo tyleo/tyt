@@ -3,15 +3,17 @@ export const meta = {
   description: 'Run each voxel-modeling trial prompt twice in headless Claude Code sessions, then analyze and compare the runs',
   whenToUse: 'A round of the voxel-modeling trials, after setup.sh in projects/vxl/trials',
   phases: [
-    { title: 'Run', detail: 'one headless claude -p session per trial directory, 12 at a time' },
-    { title: 'Analyze', detail: 'one agent per prompt reads both runs and compares them' },
-    { title: 'Judge', detail: 'each prompt\'s final models and shots, rendered under shuffled labels and ranked once per label position' },
-    { title: 'Synthesize', detail: 'cross-trial patterns for the Phase 2 design' },
+    { title: 'Run', model: 'opus', detail: 'one headless claude -p session per trial directory, 12 at a time' },
+    { title: 'Analyze', model: 'opus', detail: 'one agent per prompt reads both runs and compares them' },
+    { title: 'Judge', model: 'opus', detail: 'each prompt\'s final models and shots, rendered under shuffled labels and ranked once per label position' },
+    { title: 'Synthesize', model: 'opus', detail: 'cross-trial patterns for the Phase 2 design' },
   ],
 }
 
 // Paths read from the repository root because workflow agents start there.
 const HARNESS = 'projects/vxl/trials'
+// Every agent runs on this model even when the launching session runs another.
+const MODEL = 'opus'
 const LIMIT = (args && args.concurrency) || 12
 const REFERENCE = args && args.reference
 
@@ -53,7 +55,7 @@ async function runOnce(runDir) {
   await acquire()
   try {
     return await agent(runPrompt(runDir), {
-      label: `run:${runDir}`, phase: 'Run', effort: 'low', schema: RUN_SCHEMA,
+      label: `run:${runDir}`, phase: 'Run', model: MODEL, effort: 'low', schema: RUN_SCHEMA,
     })
   } finally {
     release()
@@ -137,7 +139,7 @@ This job is read-only. Never edit, create, or delete anything under ~/voxel-tria
 For each run:
 1. Run \`python3 ${HARNESS}/summarize-transcript.py <run directory> > ~/voxel-trials/_runs/<run directory>/transcript.txt\` from the repository root, then read transcript.txt in full, in chunks with Read offsets when it is long. It holds the session's messages, commands, model edits, and reports, with images left out.
 2. Read the final model file. Look at the final renders with Read (the review sheet, which tiles the hero, front, right, back, and top views, and any other PNG the session rendered last), and at the sheet in passes/01 to see how far the model came.
-3. Each run followed the skill in its slot, ~/voxel-trials/<run directory>/.claude/skills/vxl-model/SKILL.md. Arm 1 in ~/voxel-trials/_runs/round.json gives run 1's vxl version and skill, and arm 2 gives run 2's. The two runs can differ in either. Credit a difference the arms explain to the arm, not the session. Before listing an operation as lacking, confirm in that run's SKILL.md that the API lacks it. When the API has it and the session missed it, list it under skillMisses instead.
+3. Each run followed the skill in its slot, ~/voxel-trials/<run directory>/.claude/skills/vxl-model/SKILL.md. Arm 1 in ~/voxel-trials/_runs/round.json gives run 1's vxl version, skill, model, and effort, and arm 2 gives run 2's. The two runs can differ in any of them. Credit a difference the arms explain to the arm, not the session. Before listing an operation as lacking, confirm in that run's SKILL.md that the API lacks it. When the API has it and the session missed it, list it under skillMisses instead.
 ${t.stress ? `\nThe prompt was chosen to stress this: ${t.stress}. Report how each run fared against each point.\n` : ''}${t.check ? `\n${t.check} Stay read-only.\n` : ''}
 ${RUBRIC}
 
@@ -221,14 +223,14 @@ async function judge(t) {
   const flags = `${ROUND ? ` --round ${ROUND}` : ''}${REFERENCE ? ` --reference ${REFERENCE}` : ''}`
   const copied = await agent(
     `Run \`python3 ${HARNESS}/blind-views.py ${t.dir} ${order.join(',')}${flags}\` from the repository root and return its output unchanged as listing. Do nothing else.`,
-    { label: `blind:${t.dir}`, phase: 'Judge', effort: 'low', schema: COPY_SCHEMA },
+    { label: `blind:${t.dir}`, phase: 'Judge', model: MODEL, effort: 'low', schema: COPY_SCHEMA },
   )
   const lines = Object.fromEntries(copied.listing.trim().split('\n').map(line => [line[0], line]))
   const missing = LABELS.filter(label => !lines[label])
   if (missing.length) throw new Error(`blind-views listed no ${missing.join(', ')}: ${copied.listing}`)
   if (t.shots) {
     await Promise.all(LABELS.filter(label => !lines[label].endsWith('no model')).map(async label => {
-      const result = await agent(shotPrompt(t, label), { label: `shots:${t.dir}:${label}`, phase: 'Judge', effort: 'medium', schema: SHOT_SCHEMA })
+      const result = await agent(shotPrompt(t, label), { label: `shots:${t.dir}:${label}`, phase: 'Judge', model: MODEL, effort: 'medium', schema: SHOT_SCHEMA })
       if (!result || result.shots.length !== t.shots.length) throw new Error(`shots of ${t.dir} ${label} returned ${JSON.stringify(result)}`)
       const shots = result.shots.map((shot, i) => shot.shown
         ? `${RUNS_DIR}/${t.dir}/judge/${label}-shot-${i + 1}.png`
@@ -248,7 +250,7 @@ Look at every listed file with Read, and read nothing else. Rank the models as t
 3. No part floats, breaks apart, or shows a visible defect
 
 A finer voxel grid earns no credit. Models you cannot tell apart share a rank. Write the object you return as JSON to ${RUNS_DIR}/${t.dir}/judge/verdict-${k + 1}.json too.`,
-      { label: `judge:${t.dir}:${k + 1}`, phase: 'Judge', effort: 'high', schema: JUDGE_SCHEMA },
+      { label: `judge:${t.dir}:${k + 1}`, phase: 'Judge', model: MODEL, effort: 'high', schema: JUDGE_SCHEMA },
     )
   }))
   return verdicts.map(verdict => verdict && {
@@ -261,7 +263,7 @@ async function trialPipeline(t, runPromises) {
   const results = await Promise.all(runPromises)
   const [analysis, judgment] = await Promise.all([
     agent(analysisPrompt(t, results), {
-      label: `analyze:${t.dir}`, phase: 'Analyze', effort: 'high', schema: TRIAL_ANALYSIS,
+      label: `analyze:${t.dir}`, phase: 'Analyze', model: MODEL, effort: 'high', schema: TRIAL_ANALYSIS,
     }).catch(e => { log(`analysis of ${t.dir} failed: ${e}`); return null }),
     judge(t).catch(e => { log(`judging ${t.dir} failed: ${e}`); return null }),
   ])
@@ -291,7 +293,7 @@ const LOAD_SCHEMA = {
 // reads it otherwise.
 const listed = (args && args.trials) || (await agent(
   `Read ${HARNESS}/prompts.json from the repository root and return every entry unchanged, character for character, as trials. Do not edit anything.`,
-  { label: 'load prompts', phase: 'Run', effort: 'low', schema: LOAD_SCHEMA },
+  { label: 'load prompts', phase: 'Run', model: MODEL, effort: 'low', schema: LOAD_SCHEMA },
 )).trials
 const only = args && args.only ? new Set(args.only) : null
 const trials = listed.filter(t => !only || only.has(t.dir))
@@ -325,8 +327,8 @@ const SYNTHESIS = {
   },
   required: ['operationsLacked', 'recurringFailures', 'skillMisses', 'reportDataLacked', 'colorIssues', 'consistency', 'worked', 'phase2'],
 }
-const synthesis = await agent(`You synthesize the voxel-modeling trials. ${trials.length} prompts, from single props to scenes and interiors, each ran twice in fresh headless Claude Code sessions with the vxl-model skill (~/voxel-trials/chair/.claude/skills/vxl-model/SKILL.md, and ~/voxel-trials/chair-2/.claude/skills/vxl-model/SKILL.md for every second run). Arm 1 in ~/voxel-trials/_runs/round.json gives every first run's vxl version and skill, and arm 2 gives every second run's. The two can differ in either. Per-trial analyses follow as JSON. Merge duplicates across trials, rank each list by how many trials it touched and how badly, and cite trial numbers. Recommendations for Phase 2 cover operators, patterns, report data, render support, skill text, and the .sdfj format. Spot-check any claim you rely on heavily by reading ~/voxel-trials/_runs/<directory>/analysis.json or the transcript.txt beside it. Write the object you return as JSON to ~/voxel-trials/_runs/synthesis.json too.
+const synthesis = await agent(`You synthesize the voxel-modeling trials. ${trials.length} prompts, from single props to scenes and interiors, each ran twice in fresh headless Claude Code sessions with the vxl-model skill (~/voxel-trials/chair/.claude/skills/vxl-model/SKILL.md, and ~/voxel-trials/chair-2/.claude/skills/vxl-model/SKILL.md for every second run). Arm 1 in ~/voxel-trials/_runs/round.json gives every first run's vxl version, skill, model, and effort, and arm 2 gives every second run's. The two can differ in any of them. Per-trial analyses follow as JSON. Merge duplicates across trials, rank each list by how many trials it touched and how badly, and cite trial numbers. Recommendations for Phase 2 cover operators, patterns, report data, render support, skill text, and the .sdfj format. Spot-check any claim you rely on heavily by reading ~/voxel-trials/_runs/<directory>/analysis.json or the transcript.txt beside it. Write the object you return as JSON to ~/voxel-trials/_runs/synthesis.json too.
 
-${JSON.stringify(analyses)}`, { label: 'synthesize', phase: 'Synthesize', effort: 'high', schema: SYNTHESIS })
+${JSON.stringify(analyses)}`, { label: 'synthesize', phase: 'Synthesize', model: MODEL, effort: 'high', schema: SYNTHESIS })
 
 return { analyses, judgments, synthesis }

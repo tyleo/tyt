@@ -292,10 +292,14 @@ let group = "all";
 
 const s = data.stats;
 const r = data.round;
-// Rounds set up before the arms record a single vxlVersion.
-const vxl = r.arms ? [...new Set(Object.values(r.arms).map(arm => arm.vxlVersion))].join(" and ") : r.vxlVersion;
+// Rounds set up before the arms record a single vxlVersion. Rounds set up
+// before an arm held a model record a single model and effort.
+const arms = Object.values(r.arms ?? {});
+const each = value => [...new Set(arms.map(value))].join(" and ");
+const vxl = r.arms ? each(arm => arm.vxlVersion) : r.vxlVersion;
+const model = r.model ? `${r.model} at ${r.effort} effort` : each(arm => `${arm.model} at ${arm.effort} effort`);
 document.getElementById("eyebrow").textContent =
-  `Voxel-modeling trials \u00B7 vxl ${vxl} at ${r.commit.slice(0, 8)}${r.dirty ? " with local edits" : ""} \u00B7 ${r.model} at ${r.effort} effort \u00B7 ${r.date.slice(0, 10)}`;
+  `Voxel-modeling trials \u00B7 vxl ${vxl} at ${r.commit.slice(0, 8)}${r.dirty ? " with local edits" : ""} \u00B7 ${model} \u00B7 ${r.date.slice(0, 10)}`;
 document.getElementById("lede").textContent =
   `${s.prompts} prompts, each run twice in a fresh headless Claude Code session with only the vxl skill to go on. ${s.loaded} of ${s.runs} runs loaded the skill from its description.`;
 const statItems = [

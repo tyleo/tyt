@@ -2,23 +2,25 @@
 # Prepares a round in $VOXEL_TRIALS, ~/voxel-trials by default. Slot 1 of each
 # prompt runs arm 1, and its -2 slot runs arm 2. An arm's vxl defaults to the
 # installed one and its skill to the one that vxl prints.
-# Usage: setup.sh [--model <model>] [--effort <effort>] [--vxl-1 <binary>]
-#   [--skill-1 <skill>] [--vxl-2 <binary>] [--skill-2 <skill>]
+# Usage: setup.sh [--vxl-1 <binary>] [--skill-1 <skill>] [--model-1 <model>]
+#   [--effort-1 <effort>] [--vxl-2 <binary>] [--skill-2 <skill>]
+#   [--model-2 <model>] [--effort-2 <effort>]
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=${VOXEL_TRIALS:-$HOME/voxel-trials}
-model=claude-opus-5-5
-effort=high
-vxl_1= skill_1= vxl_2= skill_2=
+vxl_1= skill_1= model_1=claude-opus-5-5 effort_1=high
+vxl_2= skill_2= model_2=claude-opus-5-5 effort_2=high
 while [ $# -gt 0 ]; do
   [ $# -ge 2 ] || { echo "$1 takes a value" >&2; exit 1; }
   case $1 in
-    --model) model=$2 ;;
-    --effort) effort=$2 ;;
     --vxl-1) vxl_1=$2 ;;
     --skill-1) skill_1=$2 ;;
+    --model-1) model_1=$2 ;;
+    --effort-1) effort_1=$2 ;;
     --vxl-2) vxl_2=$2 ;;
     --skill-2) skill_2=$2 ;;
+    --model-2) model_2=$2 ;;
+    --effort-2) effort_2=$2 ;;
     *) echo "$1 is no option of setup.sh" >&2; exit 1 ;;
   esac
   shift 2
@@ -37,7 +39,7 @@ mkdir -p "$root/_harness"
 cp "$here/snapshot.sh" "$root/_harness/snapshot.sh"
 arms=
 for n in 1 2; do
-  eval "vxl=\$vxl_$n skill=\$skill_$n"
+  eval "vxl=\$vxl_$n skill=\$skill_$n model=\$model_$n effort=\$effort_$n"
   arm=$root/_harness/arm-$n
   rm -rf "$arm"
   mkdir -p "$arm/bin" "$arm/skill"
@@ -62,7 +64,9 @@ for n in 1 2; do
     --arg skill "${skill:-printed}" \
     --arg skillVersion "$(sed -n 's/^  vxl-version: "\(.*\)"$/\1/p' "$arm/skill/SKILL.md")" \
     --arg skillSha "$(sha "$arm/skill")" \
-    '{($n): {vxl: $vxl, vxlVersion: $version, vxlSha256: $vxlSha, skill: $skill, skillVxlVersion: $skillVersion, skillSha256: $skillSha}}')
+    --arg model "$model" \
+    --arg effort "$effort" \
+    '{($n): {vxl: $vxl, vxlVersion: $version, vxlSha256: $vxlSha, skill: $skill, skillVxlVersion: $skillVersion, skillSha256: $skillSha, model: $model, effort: $effort}}')
 done
 
 # Claude Code loads a user-level skill in place of a slot's skill of the same
@@ -101,9 +105,7 @@ printf '%s' "$arms" | jq -s \
   --arg commit "$(git -C "$here" rev-parse HEAD)" \
   --argjson dirty "$dirty" \
   --arg claude "$(claude --version | cut -d ' ' -f 1)" \
-  --arg model "$model" \
-  --arg effort "$effort" \
-  '{date: $date, commit: $commit, dirty: $dirty, claudeVersion: $claude, model: $model, effort: $effort, arms: add}' \
+  '{date: $date, commit: $commit, dirty: $dirty, claudeVersion: $claude, arms: add}' \
   > "$root/_runs/round.json"
 cat "$root/_runs/round.json"
 

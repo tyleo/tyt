@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs one trial headless in its slot and records the run in _runs/<run>. The
-# model and effort come from _runs/round.json. The run puts its arm's vxl first
-# on PATH and stops after two hours.
+# model and effort come from the run's arm in _runs/round.json. The run puts
+# its arm's vxl first on PATH and stops after two hours.
 # Usage: run-trial.sh <run>
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
@@ -11,13 +11,15 @@ out=$root/_runs/$run
 prompt=$(jq -r --arg dir "${run%-2}" '.[] | select(.dir == $dir) | .prompt' "$here/prompts.json")
 [ -n "$prompt" ] || { echo "no prompt for $run" >&2; exit 2; }
 [ -d "$root/$run/.claude" ] || { echo "no slot for $run; run setup.sh" >&2; exit 2; }
-model=$(jq -r .model "$root/_runs/round.json")
-effort=$(jq -r .effort "$root/_runs/round.json")
 case $run in
-  *-2) bin=$root/_harness/arm-2/bin ;;
-  *) bin=$root/_harness/arm-1/bin ;;
+  *-2) arm=2 ;;
+  *) arm=1 ;;
 esac
+bin=$root/_harness/arm-$arm/bin
 [ -x "$bin/vxl" ] || { echo "no vxl at $bin; run setup.sh" >&2; exit 2; }
+model=$(jq -er --arg arm "$arm" '.arms[$arm].model' "$root/_runs/round.json") \
+  && effort=$(jq -er --arg arm "$arm" '.arms[$arm].effort' "$root/_runs/round.json") \
+  || { echo "round.json holds no model and effort for arm $arm; run setup.sh" >&2; exit 2; }
 
 mkdir -p "$out"
 rm -rf "$out/exit" "$out/finished" "$out/passes" "$out/voxelized" "$out/voxelizes"

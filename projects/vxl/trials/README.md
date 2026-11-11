@@ -38,15 +38,15 @@ sh projects/vxl/trials/archive.sh 2026-10-04
 
 1. The commit under test is checked out, and `npm run vxl:install` installs its
    vxl
-2. `setup.sh` clears the slots, gives each its arm, and records the round. It
-   takes `--model` and `--effort`, `claude-opus-5-5` and `high` by default. A
+2. `setup.sh` clears the slots, gives each its arm, and records the round. A
    `vxl-model` skill under `~/.claude/skills` replaces each slot's copy, and
    `setup.sh` errors when that skill differs from an arm's
 3. A Claude Code session in this repository runs `workflow.js` with the
    contents of `prompts.json` as its `trials` argument. The workflow runs 12
    sessions at a time, analyzes both runs of each prompt, and synthesizes the
-   findings. `only` limits the round to some directories, and `concurrency`
-   sets how many sessions run at once
+   findings. Its agents run on Opus even when the session runs another model.
+   `only` limits the round to some directories, and `concurrency` sets how many
+   sessions run at once
 4. A judge ranks each prompt's final models, which `blind-views.py` renders
    with the installed vxl under shuffled labels. A shot agent renders the
    close-ups and inside views a prompt lists under `shots` in `prompts.json`,
@@ -73,27 +73,30 @@ images, and `errors.sh <run>` lists the run's failed tool calls. Both take
 
 ## Arms
 
-Slot 1 of each prompt runs arm 1, and the `-2` slot runs arm 2. An arm pairs a
-vxl binary with a skill:
+Slot 1 of each prompt runs arm 1, and the `-2` slot runs arm 2. An arm holds a
+vxl binary, a skill, a model, and an effort:
 
-| Flag          | Sets                                 | Default            |
-| ------------- | ------------------------------------ | ------------------ |
-| `--vxl-<n>`   | The binary first on the arm's PATH   | The installed vxl  |
-| `--skill-<n>` | A `SKILL.md` or a folder holding one | The binary's skill |
+| Flag           | Sets                                 | Default            |
+| -------------- | ------------------------------------ | ------------------ |
+| `--vxl-<n>`    | The binary first on the arm's PATH   | The installed vxl  |
+| `--skill-<n>`  | A `SKILL.md` or a folder holding one | The binary's skill |
+| `--model-<n>`  | The model of the arm's sessions      | `claude-opus-5-5`  |
+| `--effort-<n>` | The effort of the arm's sessions     | `high`             |
 
-With both on their defaults, the round runs one arm twice. A skill change sets
-`--skill-2`, and a tool change sets `--vxl-2` to the candidate build. A second
-round swaps the arms to cancel any lean toward a slot.
+With every flag on its default, the round runs one arm twice. A skill change
+sets `--skill-2`, a tool change sets `--vxl-2` to the candidate build, and a
+model comparison sets `--model-2`. A second round swaps the arms to cancel any
+lean toward a slot.
 
 ## Exact reruns
 
 `round.json` records the date, the repository commit, and whether the tree held
-local edits. It also records the Claude Code version, the model, the effort, and
-each arm's source, version, and hashes. `run-trial.sh` passes the model and the
-effort to every session.
+local edits. It also records the Claude Code version and each arm's source,
+version, hashes, model, and effort. `run-trial.sh` passes each session its arm's
+model and effort.
 
 A rerun checks out the recorded commit and installs its vxl. It installs the
 recorded Claude Code with `claude install <version>` and runs `setup.sh` with
-the recorded model and effort. An archived round keeps its arms in `arm-1` and
-`arm-2` for `--vxl-<n>` and `--skill-<n>`. The rerun repeats the conditions. The sessions still sample,
-and their models differ from run to run.
+each arm's recorded model and effort. An archived round keeps its arms in
+`arm-1` and `arm-2` for `--vxl-<n>` and `--skill-<n>`. The rerun repeats the
+conditions. The sessions still sample, and their models differ from run to run.
