@@ -190,18 +190,20 @@ code-level choices in
                         - [x] A Quest run times the arms against the tree
                               walk and S9.3's raster. S1 takes 1.4 ms and
                               S5 3.2
+                  - [x] A headset view. The Quest app draws a scene around
+                        the wearer each frame, from each eye's pose, with
+                        plain shading. S1 and S5 hold 90 Hz
                   - [ ] The box raster's open ends, in order:
+                        - [ ] The frame's CPU time. S2's sort and uploads
+                              take 6.3 ms
                         - [ ] The trims of rungs 4 and 5 on the mask
                               march. It runs at 62% to 76% occupancy
                         - [ ] B3's shading load in the box raster's
                               fragments, on S1 and S5
-                        - [ ] Each eye's view, in one multiview pass and
-                              in two
                         - [ ] Boxes that cross another placement's box.
                               A third of S2's marched boxes keep hit
                               depth
-                        - [ ] The boxes' draw order and the crossing test
-                              every frame as the head and placements move
+                        - [ ] The crossing test as placements move
                   - [ ] Tiles of pixels walk together. An 8x8 tile walks
                         the empty space its rays share. Each ray then walks
                         on alone. The prototype runs only if the box raster

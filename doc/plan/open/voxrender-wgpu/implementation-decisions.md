@@ -484,3 +484,14 @@ they land.
   whose labels hold a text. A filtered window drops its closing lines, which
   index every kernel. The Quest profile takes the same text
 - B2 traces S2 with the rasters alone
+- `BoxView` shades in `box_view.wgsl` over the march the ids share. Each
+  tile's words hold its cells' materials after its bits, as entries of 0 to
+  8 bits into the tile's list of material ids. The benchmarks' tiles hold
+  bits alone
+- The Quest app's view passes each eye's pose and frustum tangents to
+  `HeadsetView` as plain numbers, which keeps the stereo math in the bench
+  library and under its tests. The tracking space's origin stands at the
+  scene's first view, turned level to face the way it does
+- A view's frame treats a box as holding an eye when the world box around
+  it lies within 2 cm of either eye. Such a box draws its back faces, and a
+  solid one draws nothing
