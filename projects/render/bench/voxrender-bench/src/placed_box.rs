@@ -133,9 +133,54 @@ impl PlacedBox {
         [x, y, z, low, far_x, far_y, far_z, high]
     }
 
+    /// Whether some axis parts the box from `other`: an axis along which
+    /// their spans share at most [`TOUCH`]. Two boxes share space unless
+    /// one of 15 axes parts them: either box's three, and the cross of each
+    /// pair of them.
+    fn parted_from(&self, other: &Self) -> bool {
+        let (center, axes, halves) = self.oriented();
+        let (other_center, other_axes, other_halves) = other.oriented();
+        let between = other_center - center;
+
+        let parts = |axis: TyVector3F64| {
+            let reach = |axes: &[TyVector3F64; 3], halves: TyVector3F64| -> f64 {
+                (0..3).map(|at| axes[at].dot(axis).abs() * halves[at]).sum()
+            };
+
+            between.dot(axis).abs() + TOUCH
+                >= reach(&axes, halves) + reach(&other_axes, other_halves)
+        };
+
+        let crosses = axes.iter().flat_map(|&axis| {
+            other_axes
+                .iter()
+                .map(move |&other_axis| axis.cross(other_axis))
+        });
+
+        // The cross of two axes that run alike has no direction.
+        axes.iter()
+            .chain(&other_axes)
+            .copied()
+            .chain(crosses.filter_map(|axis| axis.try_normalize()))
+            .any(parts)
+    }
+
+    /// The box in the world: its center, its axes, and its half extent
+    /// along each.
+    fn oriented(&self) -> (TyVector3F64, [TyVector3F64; 3], TyVector3F64) {
+        let low = self.low.as_dvec3();
+        let high = self.high.as_dvec3();
+
+        (
+            self.transform.transform_point((low + high) / 2.0),
+            [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
+                .map(|axis| self.transform.rotation * axis),
+            (high - low) / 2.0 * self.transform.scale,
+        )
+    }
+
     /// Whether each of `boxes` shares space with a box of another placement
-    /// among `boxes` or `others`. The test compares the world boxes around
-    /// the boxes, so it can also count a turned box that only comes near.
+    /// among `boxes` or `others`.
     pub fn crossings(boxes: &[Self], others: &[Self]) -> Vec<bool> {
         // Every box's low and high x, placement, and index in `boxes`. A
         // sweep along x then compares only boxes whose spans meet.
@@ -158,7 +203,8 @@ impl PlacedBox {
 
                 let apart = a.placement == b.placement
                     || (a.world.0 + TOUCH).cmpge(b.world.1).any()
-                    || (b.world.0 + TOUCH).cmpge(a.world.1).any();
+                    || (b.world.0 + TOUCH).cmpge(a.world.1).any()
+                    || a.parted_from(b);
 
                 if !apart {
                     for index in [a_index, b_index].into_iter().flatten() {
