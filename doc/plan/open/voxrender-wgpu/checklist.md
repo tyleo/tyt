@@ -194,8 +194,12 @@ code-level choices in
                         the wearer each frame, from each eye's pose, with
                         plain shading. S1 and S5 hold 90 Hz
                   - [ ] The box raster's open ends, in order:
-                        - [ ] The frame's CPU time. S2's sort and uploads
-                              take 6.3 ms
+                        - [x] The frame's CPU time. A view sorts its boxes
+                              when the head has moved 25 cm. A frame
+                              between sorts takes S2 0.24 ms
+                        - [x] A box that holds an eye. A view from inside a
+                              bush showed farther leaves until back faces
+                              drew a part in 1024 nearer
                         - [ ] The trims of rungs 4 and 5 on the mask
                               march. It runs at 62% to 76% occupancy
                         - [ ] B3's shading load in the box raster's
