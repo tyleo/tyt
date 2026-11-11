@@ -19,10 +19,15 @@ const EYE_BYTES: usize = 80;
 /// The reach covers the near plane.
 const REACH: f32 = 0.02;
 
+/// The meters a head moves from where the boxes last sorted before they
+/// sort again.
+const SLACK: f32 = 0.25;
+
 /// A shaded view of a scene's boxes for both eyes of a headset: the box
 /// raster with solid boxes, a mask march, and face depth. Each frame takes
-/// its eyes, sorts the boxes nearest first, and draws in one multiview pass
-/// over a two-layer target with depth in [`BoxView::DEPTH`].
+/// its eyes and draws in one multiview pass over a two-layer target with
+/// depth in [`BoxView::DEPTH`]. The boxes draw nearest first. They sort
+/// again once the head has moved [`SLACK`] from where they last sorted.
 ///
 /// A hit takes its cell's base color, the scene's first sun without shadows,
 /// and its hemispheres, under the contract's tonemap.
@@ -46,6 +51,10 @@ pub struct BoxView {
 
     /// The marched boxes that cross another placement's box, 32 bytes each.
     crossing: Vec<u8>,
+
+    /// Where the head stood when the boxes last sorted, and how far from
+    /// there a box drew its back faces.
+    sorted_for: Option<([f32; 3], f32)>,
 
     /// The last sort's boxes and keys, kept for their room.
     sorted: Vec<u8>,
@@ -405,6 +414,7 @@ impl BoxView {
             solid: solid_boxes,
             apart,
             crossing,
+            sorted_for: None,
             sorted: Vec::new(),
             solid_keys: Vec::new(),
             apart_keys: Vec::new(),
@@ -423,8 +433,8 @@ impl BoxView {
         self.sky
     }
 
-    /// Readies the next draw for `eyes`: writes each eye's matrices and
-    /// sorts the boxes nearest first into their runs.
+    /// Readies the next draw for `eyes`: writes each eye's matrices, and
+    /// sorts the boxes when the head has left the last sort's reach.
     pub fn prepare(&mut self, queue: &Queue, eyes: &[ViewEye; 2]) {
         let each = eyes.iter().flat_map(|eye| {
             self.placements
@@ -453,17 +463,30 @@ impl BoxView {
             .to_array();
         let reach = (eyes[0].position - eyes[1].position).length() as f32 / 2.0 + REACH;
 
-        self.sort(queue, head, reach);
+        // A sort holds while each box an eye can enter draws its back faces.
+        let holds = self.sorted_for.is_some_and(|(from, covered)| {
+            let moved: f32 = (0..3).map(|axis| (head[axis] - from[axis]).powi(2)).sum();
+
+            moved.sqrt() + reach <= covered
+        });
+
+        if !holds {
+            self.sort(queue, head, reach + SLACK);
+        }
     }
 
     /// Sorts the boxes nearest to `head` first into their runs. A marched
-    /// box within `reach` of `head` draws its back faces because it can
-    /// hold an eye. Every solid box draws its front faces because a ray
-    /// that starts inside one sees none of it.
-    fn sort(&mut self, queue: &Queue, head: [f32; 3], reach: f32) {
-        self.solid.nearest_first(head, reach, &mut self.solid_keys);
+    /// box within `covered` of `head` draws its back faces because an eye
+    /// can come to stand inside it before the next sort. Every solid box
+    /// draws its front faces because a ray that starts inside one sees none
+    /// of it.
+    fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32) {
+        self.solid
+            .nearest_first(head, covered, &mut self.solid_keys);
 
-        let inside = self.apart.nearest_first(head, reach, &mut self.apart_keys);
+        let inside = self
+            .apart
+            .nearest_first(head, covered, &mut self.apart_keys);
         let (near, far) = self.apart_keys.split_at(inside);
 
         self.sorted.clear();
@@ -484,6 +507,8 @@ impl BoxView {
                 count(self.crossing.len() / 32),
             ],
         );
+
+        self.sorted_for = Some((head, covered));
     }
 
     /// Draws the boxes [`prepare`](Self::prepare) sorted into `pass`, a
