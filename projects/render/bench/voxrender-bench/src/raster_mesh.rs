@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{HitPacking, Result};
 use branded_id::U32Id;
 use std::{collections::HashMap, ops::Range};
 use ty_math::TyVector3U32;
@@ -28,15 +28,11 @@ pub struct RasterMesh {
     /// Each placement's grid size, one `vec4<u32>` each.
     pub bounds: Buffer,
 
-    /// The low bits of a packed hit that hold its voxel id. The face sits
-    /// above them, then the placement's index.
-    pub voxel_bits: u32,
+    /// How a hit of the scene packs into a texel.
+    pub packing: HitPacking,
 }
 
 impl RasterMesh {
-    /// The bits of a packed hit that hold its face.
-    pub const FACE_BITS: u32 = 3;
-
     /// Meshes each object of `scene` that a placement draws. Errors unless
     /// each hit packs into 32 bits.
     pub fn new(device: &Device, scene: &RenderScene) -> Result<Self> {
@@ -51,25 +47,7 @@ impl RasterMesh {
             })
             .collect();
 
-        let largest = objects
-            .iter()
-            .map(|(_, object)| {
-                let bounds = object.bounds();
-
-                u64::from(bounds.x) * u64::from(bounds.y) * u64::from(bounds.z)
-            })
-            .max()
-            .unwrap_or(0);
-
-        let voxel_bits = u64::BITS - largest.saturating_sub(1).leading_zeros();
-        let placement_bits = usize::BITS - objects.len().saturating_sub(1).leading_zeros();
-
-        if voxel_bits + Self::FACE_BITS + placement_bits > u32::BITS {
-            return Err(Error::RasterHit {
-                placements: objects.len(),
-                voxel_bits,
-            });
-        }
+        let packing = HitPacking::new(scene)?;
 
         let mut ranges = HashMap::new();
         let mut vertices = Vec::new();
@@ -130,7 +108,7 @@ impl RasterMesh {
             indices: init("raster indices", &indices, BufferUsages::INDEX),
             draws,
             bounds: init("raster bounds", &bounds, BufferUsages::STORAGE),
-            voxel_bits,
+            packing,
         })
     }
 }
