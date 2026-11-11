@@ -999,3 +999,48 @@ of the time. On S2 it reports 22 stale frames a second and the GPU busy
    adds each eye's frustum, a material read, and the shading
 3. S2 misses 90 Hz on both the GPU and the CPU. Its 25,301 boxes take
    6.3 ms a frame to sort and upload
+
+## Box raster open ends, 2026-11-11
+
+The open ends the raster-then-march round left, in the checklist's order.
+
+- Device, commands, and GPU times: as in the two sections above
+- CPU times are a frame's `BoxView::prepare` on Quest in ms, averaged over
+  600 frames
+
+**A box that holds an eye.** No bench view stood inside a box with live
+cells, so B1 gained one: S4's garden from an empty cell inside a bush.
+Under face depth the view showed a farther leaf on 38.7% of its pixels on
+this Mac, at 64 by 64. The box that holds the eye draws its back faces.
+The box behind it draws a front face on the same plane, and the two tied
+in depth. Back faces now draw first and a part in 1024 nearer. The view
+then flips no pixel on this Mac and 1 of 65,536 on Quest, and B1 passes on
+both. The headset view also dropped a solid box within 2 cm of an eye. It
+now draws every solid box.
+
+**Frame CPU.** The view sorted and uploaded every box each frame. S2's
+2.2 ms split into 0.56 for the placements' matrices, 0.27 for the boxes'
+distances, 0.66 for the sort, 0.57 to copy the boxes in order, and 0.12 to
+upload them. The order only feeds the depth test, so a sort now holds
+until the head has moved 25 cm. The boxes within that reach draw their
+back faces meanwhile.
+
+| Scene | Boxes | Each frame sorts | A frame between sorts | A frame that sorts |
+| --- | ---: | ---: | ---: | ---: |
+| S1 | 426 | 0.25 | 0.08 | |
+| S5 | 4096 | 0.45 | 0.08 | 0.28 |
+| S2 | 25,301 | 2.25 | 0.24 | 1.11 |
+
+A stale order costs the GPU nothing. With every sort taken from a point
+25 cm off the head, the app's GPU frame time read 1.62 ms on S1 against
+1.63, 3.77 on S5 against 3.75, and 12.65 on S2 against 12.60.
+
+**Outcomes.**
+
+1. A frame's CPU time on S2 falls from 2.25 ms to 0.24, and to 0.08 on S1
+   and S5. The earlier section's 6.3 ms predates the f32 sort
+2. A frame that sorts takes S2 1.1 ms. A head at walking pace sorts about
+   every 16th frame
+3. A view from inside a box with live cells was wrong under face depth
+   and no bench view showed it. B1's new scene covers it
+

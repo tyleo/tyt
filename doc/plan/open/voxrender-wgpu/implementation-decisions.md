@@ -492,6 +492,15 @@ they land.
   `HeadsetView` as plain numbers, which keeps the stereo math in the bench
   library and under its tests. The tracking space's origin stands at the
   scene's first view, turned level to face the way it does
-- A view's frame treats a box as holding an eye when the world box around
-  it lies within 2 cm of either eye. Such a box draws its back faces, and a
-  solid one draws nothing
+- A view's sort treats a marched box as holding an eye when the world box
+  around it lies within 2 cm of either eye, plus 25 cm of slack. Such a box
+  draws its back faces. The sort holds until the head has moved the slack.
+  A solid box always draws its front faces because a ray that starts
+  inside one sees none of it
+- Back faces under face depth draw first and a part in 1024 nearer. A hit
+  in the box that holds the eye lies before the box's back face, which can
+  share its plane with the front face of the box behind. An orthographic
+  view's depth has no such scale, so its boxes of this kind write their
+  hits' depth
+- A view's sort keys each box by the bits of its squared distance above its
+  index and sorts the keys as integers
