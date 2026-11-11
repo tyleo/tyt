@@ -139,9 +139,10 @@ pub fn mask_boxes(
                 label: Some("box masks"),
                 source: ShaderSource::Wgsl(
                     format!(
-                        "const FACE_BITS: u32 = {}u;\n{}",
+                        "const FACE_BITS: u32 = {}u;\n{}\n{}",
                         HitPacking::FACE_BITS,
-                        include_str!("box_masks.wgsl")
+                        include_str!("box_masks.wgsl"),
+                        include_str!("mask_march.wgsl")
                     )
                     .into(),
                 ),
