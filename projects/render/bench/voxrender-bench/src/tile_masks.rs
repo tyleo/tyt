@@ -41,7 +41,9 @@ impl TileMasks {
     /// The masks of `object`'s non-empty tiles. When `solids`, each tile
     /// first gives up to four solid boxes. Each is the largest slab of live
     /// cells alone off a face of the box around the tile's other live
-    /// cells, as long as one holds 32 cells or more.
+    /// cells, as long as one holds 32 cells or more. A slab stays in the
+    /// march when the cells left would cover over half of the face it shows
+    /// them.
     pub fn new(object: &RenderObject, solids: bool) -> Self {
         let bounds = object.bounds();
         let cells = dense_cells(object);
@@ -77,7 +79,6 @@ impl TileMasks {
                     };
 
                     masks.solids.push((corner + low, corner + high));
-                    tile.remove(low, high);
                 }
             }
 
@@ -126,10 +127,12 @@ impl Tile {
         (low.x < high.x).then_some((low, high))
     }
 
-    /// The largest slab of live cells alone off a face of `around`, or
-    /// `None` when the largest holds under [`SOLID_CELLS`] cells. A slab
-    /// spans the box across its face.
-    fn slab(&self, (low, high): CellBox) -> Option<CellBox> {
+    /// Takes the largest slab of live cells alone off a face of `around`,
+    /// the box around the cells left, and returns it. A slab spans the box
+    /// across its face. Takes nothing and returns `None` when the largest
+    /// slab holds under [`SOLID_CELLS`] cells, or when the cells left
+    /// behind it would cover over half of the face it shows them.
+    fn slab(&mut self, (low, high): CellBox) -> Option<CellBox> {
         let extent = high - low;
         let mut best = None;
         let mut most = SOLID_CELLS - 1;
@@ -165,12 +168,31 @@ impl Tile {
                     }
 
                     most = depth * across;
-                    best = Some(slab);
+                    best = Some((slab, axis, across));
                 }
             }
         }
 
-        best
+        let ((slab_low, slab_high), axis, across) = best?;
+        let left = self.left.clone();
+
+        self.remove(slab_low, slab_high);
+
+        // The cells left cover the slab's inner face where their box meets
+        // it.
+        let covered = self.around().map_or(0, |(rest_low, rest_high)| {
+            let rest = rest_high - rest_low;
+
+            rest.x * rest.y * rest.z / rest[axis]
+        });
+
+        if covered * 2 > across {
+            self.left = left;
+
+            return None;
+        }
+
+        Some((slab_low, slab_high))
     }
 
     /// Whether every cell from `low` to before `high` is live.
@@ -294,5 +316,23 @@ mod tests {
             ]
         );
         assert!(masks.boxes.is_empty());
+    }
+
+    #[test]
+    fn a_slab_under_cells_that_cover_it_stays_in_the_march() {
+        let material = U32Id::from_u32(0);
+
+        // A floor under a checkered layer.
+        let object = painted_object("o", TyVector3U32::new(16, 3, 16), |p| {
+            (p.y < 2 || (p.x + p.z) % 2 == 0).then_some(material)
+        });
+
+        let masks = TileMasks::new(&object, true);
+
+        assert!(masks.solids.is_empty());
+        assert_eq!(
+            masks.boxes,
+            [(TyVector3U32::ZERO, TyVector3U32::new(16, 3, 16))]
+        );
     }
 }

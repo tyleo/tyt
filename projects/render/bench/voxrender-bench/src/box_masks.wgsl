@@ -132,15 +132,24 @@ fn first_hit(
     let low = vec3<i32>(box.low.xyz);
     let high = vec3<i32>(box.high.xyz);
     let ahead = direction >= vec3<f32>(0.0);
-    let step = select(vec3<i32>(-1), vec3<i32>(1), ahead);
 
     // The ray's units per cell on each axis.
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
 
-    var cell = clamp(vec3<i32>(floor(start)), low, high - vec3<i32>(1));
+    let cell = clamp(vec3<i32>(floor(start)), low, high - vec3<i32>(1));
+
+    // The cell's bit in the tile, and what a step along each axis adds to
+    // it.
+    var bit = (cell.x * 16 + cell.y) * 16 + cell.z;
+    let strides = select(vec3<i32>(-256, -16, -1), vec3<i32>(256, 16, 1), ahead);
 
     // How far along the ray each axis's next cell face lies.
     var next = abs(vec3<f32>(cell) + select(vec3<f32>(0.0), vec3<f32>(1.0), ahead) - start) * rate;
+
+    // How far along the ray the box ends, short by more than the sums of
+    // `next` can drift. A step that ends before it stays in the box.
+    let ends = abs(vec3<f32>(select(low, high, ahead)) - start) * rate;
+    let end = min(ends.x, min(ends.y, ends.z)) * 0.99999;
 
     // The axis of the face the ray last crossed. An entering ray starts on
     // the face that holds its start.
@@ -149,28 +158,29 @@ fn first_hit(
     var free = enters;
 
     for (var n = 0; n < STEPS; n++) {
-        let column = bits[box.low.w + (u32(cell.x) << 3u) + (u32(cell.y) >> 1u)];
-        let live = ((column >> (((u32(cell.y) & 1u) << 4u) + u32(cell.z))) & 1u) == 1u;
+        let live = ((bits[box.low.w + (u32(bit) >> 5u)] >> (u32(bit) & 31u)) & 1u) == 1u;
 
         if live && free {
+            let at = vec3<i32>(bit >> 8u, (bit >> 4u) & 15, bit & 15);
             let past = along - before;
 
             return Hit(
                 true,
-                packed(box, cell, across, ahead),
+                packed(box, at, across, ahead),
                 (box.clip.z - past * box.fall) / (1.0 + past * box.ray.w),
             );
         }
 
         free = free || !live;
         across = least(next);
-        along = dot(next, vec3<f32>(across));
-        next += select(vec3<f32>(0.0), rate, across);
-        cell += select(vec3<i32>(0), step, across);
+        along = min(next.x, min(next.y, next.z));
 
-        if any(cell < low) || any(cell >= high) {
+        if along >= end {
             break;
         }
+
+        next += select(vec3<f32>(0.0), rate, across);
+        bit += select(select(strides.z, strides.y, across.y), strides.x, across.x);
     }
 
     return Hit(false, vec4<f32>(0.0), 0.0);
