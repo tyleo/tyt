@@ -233,33 +233,29 @@ impl BoxDraw {
         }
     }
 
-    /// Replaces each run's boxes with `runs`' two `vec4<u32>`s a box, in
-    /// draw order. Panics unless `runs` has a run for each part and holds
-    /// no more boxes than the draw was built with.
-    pub fn rewrite(&mut self, queue: &Queue, runs: &[Vec<[u32; 8]>]) {
-        assert_eq!(runs.len(), self.parts.len(), "each part has its run");
-
-        let bytes: Vec<u8> = runs
-            .iter()
-            .flatten()
-            .flatten()
-            .flat_map(|word| word.to_le_bytes())
-            .collect();
-
+    /// Replaces the boxes with `boxes`, 32 bytes of two `vec4<u32>`s each,
+    /// of which each run takes its count of `counts` in draw order. Panics
+    /// unless `counts` has a count for each part and `boxes` holds those
+    /// boxes and no more than the draw was built with.
+    pub fn rewrite(&mut self, queue: &Queue, boxes: &[u8], counts: &[u32]) {
+        assert_eq!(counts.len(), self.parts.len(), "each part has its count");
+        assert_eq!(
+            boxes.len() as u64,
+            u64::from(counts.iter().sum::<u32>()) * 32,
+            "the counts cover the boxes"
+        );
         assert!(
-            bytes.len() as u64 <= self.boxes.size(),
+            boxes.len() as u64 <= self.boxes.size(),
             "the runs hold no more boxes than the draw was built with"
         );
 
-        queue.write_buffer(&self.boxes, 0, &bytes);
+        queue.write_buffer(&self.boxes, 0, boxes);
 
         let mut first = 0;
 
-        for ((_, boxes), run) in self.parts.iter_mut().zip(runs) {
-            let end = first + u32::try_from(run.len()).expect("the boxes number under 2^32");
-
-            *boxes = first..end;
-            first = end;
+        for ((_, run), count) in self.parts.iter_mut().zip(counts) {
+            *run = first..first + count;
+            first += count;
         }
     }
 
