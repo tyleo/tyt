@@ -6,8 +6,8 @@ use wgpu::{
 };
 
 /// The high-performance adapter's device with default limits, and with
-/// timestamp queries, ray queries, subgroups, multiview, and multisampled
-/// arrays when the adapter has them.
+/// timestamp queries, ray queries, subgroups, multiview, multisampled
+/// arrays, and early depth tests when the adapter has them.
 pub fn headless_gpu() -> Result<Gpu> {
     let instance = Instance::default();
 
@@ -22,7 +22,8 @@ pub fn headless_gpu() -> Result<Gpu> {
             | Features::EXPERIMENTAL_RAY_QUERY
             | Features::SUBGROUP
             | Features::MULTIVIEW
-            | Features::MULTISAMPLE_ARRAY);
+            | Features::MULTISAMPLE_ARRAY
+            | Features::SHADER_EARLY_DEPTH_TEST);
 
     let mut limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
         Limits::default().using_acceleration_structure_values(adapter.limits())

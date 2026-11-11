@@ -1,7 +1,7 @@
 use crate::{
-    BenchKernels, Error, FragmentLaunch, KernelWork, MeshRaster, RasterArm, RasterMesh,
-    RayQueryArm, RayQueryTrace, Result, StepGrid, StepKernel, StepLoop, Walk, art_room_scene,
-    grazing_floor_scene, subgroup_sizes,
+    BenchKernels, BoxArm, BoxRaster, Error, FragmentLaunch, KernelWork, MeshRaster, RasterArm,
+    RasterMesh, RayQueryArm, RayQueryTrace, Result, StepGrid, StepKernel, StepLoop, Walk,
+    art_room_scene, grazing_floor_scene, subgroup_sizes,
 };
 use voxrender::RenderScene;
 use wgpu::{Device, Queue};
@@ -21,7 +21,8 @@ const LAUNCH_STEPS: [u32; 5] = [0, 1, 2, 4, 8];
 const FRAGMENT_LAUNCH: &str = "fragment launch";
 
 /// B2's kernels over a `width` by `height` eye, with the ray queries when
-/// `ray_queries`, and with each raster arm the device has the features for.
+/// `ray_queries`, with each raster arm the device has the features for, and
+/// with the box rasters.
 pub fn b2_kernels(
     device: &Device,
     queue: &Queue,
@@ -34,6 +35,10 @@ pub fn b2_kernels(
     let (raster_arms, absent_arms): (Vec<_>, Vec<_>) = RasterArm::ALL
         .into_iter()
         .partition(|arm| device.features().contains(arm.features()));
+    let (box_arms, absent_box_arms): (Vec<_>, Vec<_>) = BoxArm::ALL
+        .into_iter()
+        .partition(|arm| device.features().contains(arm.features()));
+
     let grid = StepGrid::new(device, queue);
     let mut kernels = Vec::new();
 
@@ -133,6 +138,14 @@ pub fn b2_kernels(
             traces.push((label.clone(), None));
             kernels.push((label, KernelWork::Raster(raster)));
         }
+
+        for &arm in &box_arms {
+            let label = format!("{}, {name}", arm.label());
+            let raster = BoxRaster::new(device, &scene, view_id, width, height, arm)?;
+
+            traces.push((label.clone(), None));
+            kernels.push((label, KernelWork::Boxes(raster)));
+        }
     }
 
     Ok(BenchKernels {
@@ -160,14 +173,16 @@ pub fn b2_kernels(
                 lines.push(String::new());
             }
 
-            if !absent_arms.is_empty() {
+            let absent: Vec<_> = absent_arms
+                .iter()
+                .map(|arm| arm.label())
+                .chain(absent_box_arms.iter().map(|arm| arm.label()))
+                .collect();
+
+            if !absent.is_empty() {
                 lines.push(format!(
                     "The device lacks the features of these raster arms: {}.",
-                    absent_arms
-                        .iter()
-                        .map(|arm| arm.label())
-                        .collect::<Vec<_>>()
-                        .join("; ")
+                    absent.join("; ")
                 ));
                 lines.push(String::new());
             }
