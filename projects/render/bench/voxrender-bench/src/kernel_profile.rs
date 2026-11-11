@@ -30,6 +30,9 @@ const IN_FLIGHT: usize = 2;
 pub struct KernelProfile {
     kernels: Vec<Profiled>,
 
+    // The batches the current kernel's stretch has recorded.
+    batches: u32,
+
     // Timestamps the passes write and no one reads.
     query_set: QuerySet,
 
@@ -54,26 +57,50 @@ struct Profiled {
 }
 
 impl KernelProfile {
-    /// Builds the profiled kernels for a `width` by `height` eye image.
-    pub fn new(device: &Device, queue: &Queue, width: u32, height: u32) -> Result<Self> {
+    /// Builds the profiled kernels for a `width` by `height` eye image. With
+    /// `only`, the profile runs the kernels whose labels hold that text, and
+    /// each of their batches records one pass. Errors unless a kernel runs.
+    pub fn new(
+        device: &Device,
+        queue: &Queue,
+        width: u32,
+        height: u32,
+        only: Option<&str>,
+    ) -> Result<Self> {
         let mut kernels = b2_kernels(device, queue, width, height, true)?.kernels;
 
-        let kernels = PROFILED
-            .iter()
-            .map(|&(label, passes)| {
-                let at = kernels
-                    .iter()
-                    .position(|(kernel, _)| kernel == label)
-                    .expect("B2 has every profiled kernel");
-                let (label, work) = kernels.swap_remove(at);
-
-                Profiled {
+        let kernels: Vec<_> = match only {
+            Some(text) => kernels
+                .into_iter()
+                .filter(|(label, _)| label.contains(text))
+                .map(|(label, work)| Profiled {
                     label,
                     work,
-                    passes,
-                }
-            })
-            .collect();
+                    passes: 1,
+                })
+                .collect(),
+
+            None => PROFILED
+                .iter()
+                .map(|&(label, passes)| {
+                    let at = kernels
+                        .iter()
+                        .position(|(kernel, _)| kernel == label)
+                        .expect("B2 has every profiled kernel");
+                    let (label, work) = kernels.swap_remove(at);
+
+                    Profiled {
+                        label,
+                        work,
+                        passes,
+                    }
+                })
+                .collect(),
+        };
+
+        if let (Some(text), true) = (only, kernels.is_empty()) {
+            return Err(Error::NoKernel(text.to_owned()));
+        }
 
         let query_set = device.create_query_set(&QuerySetDescriptor {
             label: Some("profile timestamps"),
@@ -83,6 +110,7 @@ impl KernelProfile {
 
         Ok(KernelProfile {
             kernels,
+            batches: 0,
             query_set,
             current: 0,
             started: None,
@@ -92,13 +120,14 @@ impl KernelProfile {
     }
 
     /// Records the current kernel's next batch into `encoder`, unless
-    /// enough batches are in flight. Returns the kernel's label when the
-    /// batch starts its stretch.
+    /// enough batches are in flight. When the batch starts a stretch,
+    /// returns a line that holds the kernel's label, after the batches the
+    /// last stretch recorded and its seconds.
     pub fn record(
         &mut self,
         device: &Device,
         encoder: &mut CommandEncoder,
-    ) -> Result<Option<&str>> {
+    ) -> Result<Option<String>> {
         assert!(
             !self.recorded,
             "`submitted` follows each submit of a recorded batch"
@@ -110,19 +139,23 @@ impl KernelProfile {
             return Ok(None);
         }
 
-        let starts = match self.started {
-            Some(started) if started.elapsed() < STRETCH => false,
+        let mut line = None;
 
-            Some(_) => {
+        match self.started {
+            Some(started) if started.elapsed() < STRETCH => {}
+
+            Some(started) => {
+                line = Some(format!(
+                    "{} batches in {:.2} s. ",
+                    self.batches,
+                    started.elapsed().as_secs_f64()
+                ));
+
                 self.current = (self.current + 1) % self.kernels.len();
-                true
+                self.started = None;
             }
 
-            None => true,
-        };
-
-        if starts {
-            self.started = Some(Instant::now());
+            None => {}
         }
 
         let Profiled {
@@ -131,13 +164,24 @@ impl KernelProfile {
             passes,
         } = &self.kernels[self.current];
 
+        if self.started.is_none() {
+            self.started = Some(Instant::now());
+            self.batches = 0;
+
+            line = Some(format!(
+                "{}{label}, {passes} passes a batch",
+                line.unwrap_or_default()
+            ));
+        }
+
         for _ in 0..*passes {
             work.record(encoder, label, &self.query_set, 0);
         }
 
+        self.batches += 1;
         self.recorded = true;
 
-        Ok(starts.then_some(label.as_str()))
+        Ok(line)
     }
 
     /// Call after submitting the encoder `record` wrote into.

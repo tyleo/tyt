@@ -92,7 +92,10 @@ A reboot also clears the property.
 The profile runs six of B2's kernels in turn, each alone for 10 seconds.
 `ovrgpuprofiler` samples its counters each second, so each sample sees one
 kernel. The app skips B1 and logs each kernel as it starts on `profile`
-lines:
+lines. Each line also gives the batches the kernel before it recorded and
+their seconds. With `debug.voxrenderbench.kernels` set, the profile runs the
+kernels whose labels hold that text in place of the six. Each of their
+batches records one pass:
 
 ```sh
 adb shell setprop debug.voxrenderbench.profile true
