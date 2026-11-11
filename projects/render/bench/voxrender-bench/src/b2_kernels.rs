@@ -1,7 +1,7 @@
 use crate::{
-    BenchKernels, BoxArm, BoxRaster, Error, FragmentLaunch, KernelWork, MeshRaster, RasterArm,
-    RasterMesh, RayQueryArm, RayQueryTrace, Result, StepGrid, StepKernel, StepLoop, Walk,
-    art_room_scene, grazing_floor_scene, subgroup_sizes,
+    BenchKernels, BoxArm, BoxRaster, DepthProbe, DepthProbeMode, Error, FragmentLaunch,
+    KernelWork, MeshRaster, RasterArm, RasterMesh, RayQueryArm, RayQueryTrace, Result, StepGrid,
+    StepKernel, StepLoop, Walk, art_room_scene, grazing_floor_scene, subgroup_sizes,
 };
 use voxrender::RenderScene;
 use wgpu::{Device, Queue};
@@ -21,8 +21,8 @@ const LAUNCH_STEPS: [u32; 5] = [0, 1, 2, 4, 8];
 const FRAGMENT_LAUNCH: &str = "fragment launch";
 
 /// B2's kernels over a `width` by `height` eye, with the ray queries when
-/// `ray_queries`, with each raster arm the device has the features for, and
-/// with the box rasters.
+/// `ray_queries`, with each raster arm the device has the features for, with
+/// the box rasters, and with the depth probes.
 pub fn b2_kernels(
     device: &Device,
     queue: &Queue,
@@ -148,6 +148,20 @@ pub fn b2_kernels(
         }
     }
 
+    let probe_modes: Vec<_> = DepthProbeMode::ALL
+        .into_iter()
+        .filter(|mode| device.features().contains(mode.features()))
+        .collect();
+
+    for &mode in &probe_modes {
+        for (occluded, layers) in [(false, "open"), (true, "behind a near layer")] {
+            kernels.push((
+                format!("depth probe, {}, {layers}", mode.label()),
+                KernelWork::Depth(DepthProbe::new(device, width, height, mode, occluded)?),
+            ));
+        }
+    }
+
     Ok(BenchKernels {
         title: "B2 times",
         kernels,
@@ -155,7 +169,8 @@ pub fn b2_kernels(
         measured: 120,
         summary: Box::new(move |medians, rays| {
             let (steps, rest) = medians.split_at(StepLoop::ALL.len() * COUNTS.len());
-            let (launches, trace_medians) = rest.split_at(LAUNCH_STEPS.len() + 1);
+            let (launches, rest) = rest.split_at(LAUNCH_STEPS.len() + 1);
+            let (trace_medians, probes) = rest.split_at(traces.len());
 
             let mut lines = vec![
                 match subgroups {
@@ -192,6 +207,8 @@ pub fn b2_kernels(
             lines.extend(launch_lines(launches, rays));
             lines.push(String::new());
             lines.extend(trace_lines(&traces, trace_medians, rays));
+            lines.push(String::new());
+            lines.extend(probe_lines(&probe_modes, probes));
 
             lines
         }),
@@ -303,6 +320,26 @@ fn trace_lines(traces: &[(String, Option<[f64; 3]>)], medians: &[f64], rays: f64
 
             None => format!("| {label} | {rate:.3} | | | | | |"),
         });
+    }
+
+    lines
+}
+
+/// Each depth probe's row from its `medians`: the mode's four costly layers
+/// in the open, then behind a near layer.
+fn probe_lines(modes: &[DepthProbeMode], medians: &[f64]) -> Vec<String> {
+    let mut lines = vec![
+        "| Depth probe | Open ms | Behind a near layer ms |".to_owned(),
+        "| --- | ---: | ---: |".to_owned(),
+    ];
+
+    for (mode, times) in modes.iter().zip(medians.chunks(2)) {
+        lines.push(format!(
+            "| {} | {:.3} | {:.3} |",
+            mode.label(),
+            times[0],
+            times[1]
+        ));
     }
 
     lines

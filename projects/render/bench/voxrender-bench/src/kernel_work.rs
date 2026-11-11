@@ -1,4 +1,6 @@
-use crate::{BoxRaster, ChainKernel, FragmentLaunch, MeshRaster, RayQueryTrace, StepKernel};
+use crate::{
+    BoxRaster, ChainKernel, DepthProbe, FragmentLaunch, MeshRaster, RayQueryTrace, StepKernel,
+};
 use voxrender_wgpu::HitTrace;
 use wgpu::{
     CommandEncoder, ComputePass, ComputePassDescriptor, ComputePassTimestampWrites, QuerySet,
@@ -26,6 +28,9 @@ pub enum KernelWork {
 
     /// A raster of a view's boxes with a march in each fragment.
     Boxes(BoxRaster),
+
+    /// Costly layers that a depth test can reject.
+    Depth(DepthProbe),
 }
 
 impl KernelWork {
@@ -54,6 +59,7 @@ impl KernelWork {
             KernelWork::Fragments(launch) => launch.record(encoder, query_set, first),
             KernelWork::Raster(raster) => raster.record(encoder, query_set, first),
             KernelWork::Boxes(raster) => raster.record(encoder, query_set, first),
+            KernelWork::Depth(probe) => probe.record(encoder, query_set, first),
         }
     }
 }
