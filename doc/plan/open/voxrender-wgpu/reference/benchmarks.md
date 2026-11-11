@@ -952,3 +952,40 @@ instructions each:
    draws
 9. The mask march runs at 62% to 76% occupancy and 112 to 216 instructions
    a fragment. Rung 4's register work now applies to this shader
+
+## Headset view, 2026-11-11
+
+The box raster as a live view. The Quest app draws a bench scene around the
+wearer each frame, in place of its benchmarks.
+
+- Device: Meta Quest 3 as in B2 re-baseline, off the face on a desk with
+  tracking on, at 90 Hz and GPU level 4
+- Command: the View steps in `voxrender-bench-quest`'s README
+- Each frame sorts the scene's boxes nearest first on the CPU and draws
+  both eyes in one multiview pass, from each eye's tracked pose and
+  frustum. The pass runs the solid boxes and the mask march under face
+  depth
+- A hit takes its cell's base color, the sun without shadows, and the
+  hemisphere, under the contract's tonemap. B3's shading load asks for
+  more
+- GPU times are the app's frame time from XR_META_performance_metrics over
+  windows of 600 frames, in ms. The CPU time is the sort and the uploads
+
+| Scene | Frame rate | GPU p50 | GPU p99 | CPU | GPU clock |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| S1 | 90 Hz | 1.71 to 1.92 | 2.09 | 0.25 | 545 MHz |
+| S5 | 90 Hz | 3.69 to 3.74 | 3.84 | 1.48 | 545 MHz |
+| S2 | 71 Hz | 12.57 to 12.60 | 13.58 | 6.29 | 640 MHz |
+
+VrApi reports no stale frames on S1 and S5, with the GPU busy 18% and 43%
+of the time. On S2 it reports 22 stale frames a second and the GPU busy
+97%.
+
+**Outcomes.**
+
+1. S1 and S5 hold 90 Hz in the headset with both eyes' own views. S1 leaves
+   82% of the GPU idle, and S5 57%
+2. The shaded S5 frame takes 3.7 ms against 3.2 for B2's ids. The view
+   adds each eye's frustum, a material read, and the shading
+3. S2 misses 90 Hz on both the GPU and the CPU. Its 25,301 boxes take
+   6.3 ms a frame to sort and upload
