@@ -201,8 +201,11 @@ code-level choices in
                         - [ ] B3's shading load in the box raster's
                               fragments, on S1 and S5
                         - [ ] Boxes that cross another placement's box.
-                              A third of S2's marched boxes keep hit
-                              depth
+                              They cost S2 about 10 of its 14.5 ms.
+                              Three candidates: a raster of the tile's
+                              cell faces layer by layer, a second pass
+                              that reads the first's depth, and one march
+                              through both placements' cells
                         - [ ] The crossing test as placements move
                   - [ ] Tiles of pixels walk together. An 8x8 tile walks
                         the empty space its rays share. Each ray then walks

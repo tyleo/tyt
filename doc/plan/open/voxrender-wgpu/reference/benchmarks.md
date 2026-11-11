@@ -917,6 +917,12 @@ instructions each:
 | mask march, S5 | 140 | 65% |
 | mask march, S2 | 216 | 62% |
 
+**Crossing boxes.** A build that keeps every box under face depth, right
+or wrong, ran S2's mask march in 4.35 ms at 545 MHz against 14.49. The
+boxes that cross cost S2 about 10 ms. The tiles share real space: S2's
+tree crowns reach 1.9 m from trunks that stand 0.95 m inside a block's
+corner, and its buildings start 0.55 to 1.95 m inside it.
+
 **Variants that lost.**
 
 1. Front faces under the declared depth bound, in p50s at 640 MHz from
@@ -929,6 +935,9 @@ instructions each:
 3. Sixteen distance bands, each drawing its solid boxes and then its
    marched ones, ran S5 in 3.92 ms against 3.16 for one draw, and S1 in
    1.32 against 1.37. The 15 more draws an eye cost S5 about 25 us each
+4. A crossing tile's box gave way to the boxes of its 4^3 bricks, and only
+   the bricks that still crossed kept hit depth. Of S2's 226,647 such
+   boxes, 80,718 still crossed
 
 **Outcomes.**
 
@@ -941,7 +950,8 @@ instructions each:
    no depth. Face depth follows from that. It gains 1.29x on S1, 1.09x on
    S5, and 1.89x on S2 over hit depth
 4. A third of S2's marched boxes cross another placement's box and keep
-   hit depth. S2 also runs with no LOD
+   hit depth, which costs S2 about 10 of its 14.5 ms. S2 also runs with no
+   LOD
 5. Solid boxes take about 95% of S1's marched fragments and gain 1.85x
    there. S5 has none
 6. The mask march's flips stay near the greedy-mesh raster's: 0.15%
