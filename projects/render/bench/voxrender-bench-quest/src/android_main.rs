@@ -1,5 +1,5 @@
 use crate::{
-    Result, XrApp, XrGpu, XrSystem, log_b1, probe_gpu, probe_indirect, probe_system, profile_mode,
+    Result, RunOptions, XrApp, XrGpu, XrSystem, log_b1, probe_gpu, probe_indirect, probe_system,
 };
 use android_activity::{AndroidApp, MainEvent, PollEvent};
 use android_logger::Config;
@@ -41,14 +41,14 @@ fn run(app: &AndroidApp) -> Result<()> {
     probe_gpu(&gpu)?;
     probe_indirect(&gpu)?;
 
-    let profile = profile_mode()?;
+    let options = RunOptions::read()?;
 
     // The profile skips B1 to reach the session sooner.
-    if !profile {
+    if options.b1 && !options.profile {
         log_b1(&gpu)?;
     }
 
-    let mut xr_app = XrApp::new(xr, gpu, profile)?;
+    let mut xr_app = XrApp::new(xr, gpu, &options)?;
 
     let mut destroyed = false;
 

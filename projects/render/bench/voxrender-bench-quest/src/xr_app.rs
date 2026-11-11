@@ -1,6 +1,6 @@
 use crate::{
-    Error, EyeSwapchain, FrameTimes, GpuClock, Result, XrGpu, XrSystem, probe_focal_lengths,
-    probe_session, probe_visibility_mask,
+    Error, EyeSwapchain, FrameTimes, GpuClock, Result, RunOptions, XrGpu, XrSystem,
+    probe_focal_lengths, probe_session, probe_visibility_mask,
 };
 use openxr::{
     CompositionLayerProjection, CompositionLayerProjectionView, Duration as XrDuration,
@@ -61,8 +61,8 @@ pub struct XrApp {
 
 impl XrApp {
     /// Opens a session on the GPU and the eyes' swapchain. The frames run
-    /// the profile when `profile`.
-    pub fn new(xr: XrSystem, gpu: XrGpu, profile: bool) -> Result<Self> {
+    /// what `options` picks.
+    pub fn new(xr: XrSystem, gpu: XrGpu, options: &RunOptions) -> Result<Self> {
         let blend_modes = xr
             .instance
             .enumerate_environment_blend_modes(xr.system, VIEW_TYPE)
@@ -106,7 +106,7 @@ impl XrApp {
         let width = u32::try_from(swapchain.extent.width).expect("an eye's width is positive");
         let height = u32::try_from(swapchain.extent.height).expect("an eye's height is positive");
 
-        let work = if profile {
+        let work = if options.profile {
             FrameWork::Profile(
                 KernelProfile::new(&gpu.device, &gpu.queue, width, height).map_err(Error::Bench)?,
             )
@@ -118,6 +118,7 @@ impl XrApp {
                     TimedBench::B2 { ray_queries: true },
                     width,
                     height,
+                    options.kernels.as_deref(),
                 )
                 .map_err(Error::Bench)?,
                 clock: GpuClock::new()?,
