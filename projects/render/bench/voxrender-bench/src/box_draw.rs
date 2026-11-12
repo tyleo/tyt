@@ -29,10 +29,12 @@ const TRIANGLES: [u16; 36] = [
 /// A view's boxes and the pipelines that draw their faces, with depth in
 /// [`HitTargets::DEPTH`].
 ///
-/// Each run draws in a pass of its own, which loads what the pass before it
-/// stored. On Quest a pass of one draw runs in a faster mode. A second draw
-/// in a pass, even of one box, cost S5 0.65 ms over its 4096 boxes and S2
-/// 2.8 ms over its 25,301. The passes between cost under 0.02 ms each.
+/// From [`APART`](Self::APART) boxes up, each run draws in a pass of its
+/// own, which loads what the pass before it stored. On Quest a pass of one
+/// draw runs in a mode that costs less a box and more a pixel. A second
+/// draw in a pass, even of one box, cost S5 0.65 ms over its 4096 boxes and
+/// S2 2.8 ms over its 25,301. The passes between cost under 0.02 ms each.
+/// S1's 426 boxes ran 10% faster in one pass.
 pub struct BoxDraw {
     /// Each run's pipeline and boxes, in draw order.
     parts: Vec<(RenderPipeline, Range<u32>)>,
@@ -279,24 +281,48 @@ impl BoxDraw {
         }
     }
 
-    /// How many of the runs hold boxes.
-    pub fn runs(&self) -> u32 {
-        u32::try_from(self.drawn().count()).expect("a draw's runs number under 2^32")
+    /// The boxes from which each run draws in a pass of its own.
+    pub const APART: u32 = 1024;
+
+    /// How many passes draw the boxes: one for each run that holds boxes
+    /// from [`APART`](Self::APART) boxes up, and one below that.
+    pub fn passes(&self) -> u32 {
+        if self.apart() {
+            u32::try_from(self.drawn().count()).expect("a draw's runs number under 2^32")
+        } else {
+            1
+        }
     }
 
-    /// Draws the `run`th of the runs that hold boxes into `pass`, a pass of
-    /// its own. Draws nothing past the last such run.
-    pub fn draw(&self, pass: &mut RenderPass<'_>, run: u32) {
-        let Some((pipeline, boxes)) = self.drawn().nth(run as usize) else {
-            return;
+    /// Draws the `at`th of the draw's [`passes`](Self::passes) into `pass`.
+    /// Draws nothing past the last of them.
+    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
+        let (first, count) = match (self.apart(), at) {
+            (true, at) => (at as usize, 1),
+            (false, 0) => (0, usize::MAX),
+            (false, _) => (0, 0),
         };
 
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.set_vertex_buffer(0, self.corners.slice(..));
-        pass.set_vertex_buffer(1, self.boxes.slice(..));
-        pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
-        pass.set_pipeline(pipeline);
-        pass.draw_indexed(0..36, 0, boxes.clone());
+        for (run, (pipeline, boxes)) in self.drawn().skip(first).take(count).enumerate() {
+            if run == 0 {
+                pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_vertex_buffer(0, self.corners.slice(..));
+                pass.set_vertex_buffer(1, self.boxes.slice(..));
+                pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
+            }
+
+            pass.set_pipeline(pipeline);
+            pass.draw_indexed(0..36, 0, boxes.clone());
+        }
+    }
+
+    /// Whether each run draws in a pass of its own.
+    fn apart(&self) -> bool {
+        self.parts
+            .iter()
+            .map(|(_, boxes)| boxes.end - boxes.start)
+            .sum::<u32>()
+            >= Self::APART
     }
 
     /// The runs that hold boxes, in draw order.
