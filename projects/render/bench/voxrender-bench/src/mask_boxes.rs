@@ -1,6 +1,6 @@
 use crate::{
-    BoxCrosser, BoxDepth, BoxDraw, BoxFaces, BoxPart, HitPacking, HitTargets, PlacedBox, Result,
-    TileMasks, world_to_clip,
+    BoxBindings, BoxCrosser, BoxDepth, BoxDraw, BoxFaces, BoxPart, HitPacking, HitTargets,
+    PlacedBox, Result, TileMasks, world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyMatrix4x4F64, TyVector3F64};
@@ -218,6 +218,7 @@ pub fn mask_boxes(
     let solids = BoxPart {
         fragment: "solid",
         faces: BoxFaces::Front,
+        module: 0,
         boxes: nearest_first(solid.iter().map(|placed| (placed.seen(view).1, placed)))
             .into_iter()
             .map(solid_words)
@@ -227,6 +228,7 @@ pub fn mask_boxes(
     let exact = |boxes: Vec<[u32; 12]>| BoxPart {
         fragment: "exact",
         faces: BoxFaces::Back,
+        module: 0,
         boxes,
     };
 
@@ -274,6 +276,7 @@ pub fn mask_boxes(
             let fronts = |fragment, boxes: Vec<(f64, (usize, [u32; 2]))>| BoxPart {
                 fragment,
                 faces: BoxFaces::Front,
+                module: 0,
                 boxes: nearest_first(boxes)
                     .into_iter()
                     .map(|(index, span)| march_words(index, span))
@@ -284,6 +287,7 @@ pub fn mask_boxes(
                 BoxPart {
                     fragment: "inside",
                     faces: BoxFaces::NearBack,
+                    module: 0,
                     boxes: inside,
                 },
                 solids,
@@ -317,21 +321,24 @@ pub fn mask_boxes(
 
     Ok(BoxDraw::new(
         device,
-        &module,
+        &[&module],
         HitTargets::FORMAT,
         &parts,
-        &[
-            (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
-            (
-                ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                storage,
-                &places,
-            ),
-            (ShaderStages::FRAGMENT, storage, &bits),
-            (ShaderStages::FRAGMENT, storage, &boxes),
-            (ShaderStages::FRAGMENT, storage, &crossers),
-        ],
-        None,
+        &BoxBindings {
+            buffers: &[
+                (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
+                (
+                    ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                    storage,
+                    &places,
+                ),
+                (ShaderStages::FRAGMENT, storage, &bits),
+                (ShaderStages::FRAGMENT, storage, &boxes),
+                (ShaderStages::FRAGMENT, storage, &crossers),
+            ],
+            sampled: None,
+            tlas: None,
+        },
         multiview_mask,
     ))
 }

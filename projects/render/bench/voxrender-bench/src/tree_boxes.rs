@@ -1,6 +1,6 @@
 use crate::{
-    BoxDraw, BoxFaces, BoxPart, BrickMarch, Error, HitPacking, HitTargets, PlacedBox, Result,
-    Tree64, live_boxes, world_to_clip,
+    BoxBindings, BoxDraw, BoxFaces, BoxPart, BrickMarch, Error, HitPacking, HitTargets, PlacedBox,
+    Result, Tree64, live_boxes, world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::TyMatrix4x4F64;
@@ -154,20 +154,24 @@ pub fn tree_boxes(
 
     Ok(BoxDraw::new(
         device,
-        &module,
+        &[&module],
         HitTargets::FORMAT,
         &[BoxPart {
             fragment: "back",
             faces: BoxFaces::Back,
+            module: 0,
             boxes,
         }],
-        &[
-            (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
-            (ShaderStages::FRAGMENT, storage, &placements),
-            (ShaderStages::FRAGMENT, storage, &cells),
-            (ShaderStages::VERTEX, storage, &clips),
-        ],
-        None,
+        &BoxBindings {
+            buffers: &[
+                (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
+                (ShaderStages::FRAGMENT, storage, &placements),
+                (ShaderStages::FRAGMENT, storage, &cells),
+                (ShaderStages::VERTEX, storage, &clips),
+            ],
+            sampled: None,
+            tlas: None,
+        },
         multiview_mask,
     ))
 }

@@ -7,6 +7,9 @@ pub struct BoxPart<'a> {
 
     pub faces: BoxFaces,
 
+    /// Which of the draw's shader modules holds the run's entries.
+    pub module: usize,
+
     /// Each box's three `vec4<u32>`s, in draw order.
     pub boxes: Vec<[u32; 12]>,
 }

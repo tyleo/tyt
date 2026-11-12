@@ -2146,3 +2146,83 @@ GPU frame time at p50 in ms at 545 MHz, 90 Hz on each:
    ids faster and S5's four times slower, and its 4x MSAA costs S5 4.7 ms
    more. The ray query over triangles stays for second rays. No arm
    marches in compute
+
+## Mirror rays, 2026-11-12
+
+A first cut of the reference's traced reflection in the box view.
+
+- Devices and method: this Mac for the image check, over the 35 trial
+  models as in Trial models, and Quest 3 as in Records by row. A model's
+  Quest time comes from the gallery with the model held for 22 s
+- The reference: a face whose roughness is under 1 traces its mirror ray
+  and shades what the ray meets in full. The face shows that light by its
+  smooth share, one less its roughness squared, times its reflectance,
+  and the hemispheres along the mirror ray by the rest
+- The view: a fragment casts the mirror ray through a hardware ray query
+  where that share of its reflectance passes 1 in 64. The scene's
+  placements make a TLAS, and each object's BLAS holds the greedy quads of
+  its opaque cells as triangles, each quad of one material. The quad the
+  ray meets shades flat: its emission, and its color under the sun and
+  the hemispheres with no shadow and no occlusion. A ray that leaves the
+  scene sees the hemispheres
+
+**Image check.** The pixels off by over 8 of 255, over the 35 models:
+
+| Mirror rays | Pixels off |
+| --- | ---: |
+| None, with the hemispheres under the face's occlusion | 65,263 |
+| Where it passes 1 in 64 | 43,224 |
+
+With the hemispheres unoccluded wherever no ray was cast, the count read
+66,083 at 1 in 8 and 63,637 at 1 in 16.
+
+| Model | Before | Where the share passes 1 in 64 |
+| --- | ---: | ---: |
+| candelabra | 1702 | 37 |
+| chess set | 2386 | 381 |
+| chest | 4536 | 1001 |
+| ramen stand | 3779 | 989 |
+| cart | 964 | 319 |
+| robot | 699 | 170 |
+| dragon | 3599 | 1881 |
+| pocket watch | 2592 | 1685 |
+| lantern | 5534 | 3110 |
+| spaceship bridge | 4718 | 3635 |
+| potion | 8066 | 8066 |
+| fish tank | 14,121 | 13,958 |
+
+The four models with glass hold 28,769 of the 43,224 pixels left. The
+bench scenes' materials are rough, and their images hold as they were.
+
+**Quest.** A ray query in a fragment's module costs the fragment whether
+or not it casts a ray. The view keeps two modules: a tile draws through
+the one with the query where one of its materials can cast a ray.
+
+| View | No mirror rays | The query in every module, no ray cast | Rays, the query in every module | Rays, the query in the mirror tiles' module |
+| --- | ---: | ---: | ---: | ---: |
+| S1 | 2.03 | 2.80 | 2.80 | 2.07 |
+| S5 | 3.43 | 4.06 | 3.98 | 3.41 |
+| S2 | 6.72 | 8.5 at 599 MHz | 8.5 at 599 MHz | 6.74 |
+| S4 | 3.14 | 4.23 | 4.23 | 3.17 |
+| knight | 0.52 | | | 0.51 |
+| candelabra | 0.49 | 0.58 | 1.02 | 1.05 |
+| pocket watch | 0.52 | 0.64 | 1.25 | 1.25 |
+| chest | 0.71 | 0.89 | 1.96 | 1.99 |
+| valley | 1.09 | 1.44 | 2.26 | 1.95 |
+| chess set | 0.85 | 0.98 | 2.61 | 2.65 |
+
+A model with mirror tiles loads in about twice its time: the chess set in
+5.7 s from 3.3, and the candelabra in 2.3 s from 0.7.
+
+**Outcomes.**
+
+1. Mirror rays take the models' pixels off the reference from 65,263 to
+   43,224. Most of the gain comes from faint reflections on smooth
+   dielectrics, which fall between 1 in 64 and 1 in 16
+2. A model on its table takes 0.5 to 1.8 ms more and holds 90 Hz. A scene
+   with no mirror tile takes what it took
+3. The query's weight in a module costs S1 0.77 ms with no ray cast. A
+   second ray belongs in a module of its own
+4. Left for the plan's study: shadows and occlusion at what the ray
+   meets, glass along the ray, a TLAS that follows a placement that
+   moves, a model's load time, and a line in the frame budget

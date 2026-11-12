@@ -1,4 +1,4 @@
-use crate::{Error, Occupancy, RayQueryArm, Result, Tree64};
+use crate::{Error, Occupancy, QuadTlas, RayQueryArm, Result, Tree64};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
 use ty_math::{TyVector3F64, TyVector3U32};
@@ -10,12 +10,11 @@ use wgpu::{
     AccelerationStructureFlags, AccelerationStructureGeometryFlags,
     AccelerationStructureUpdateMode, BindGroup, BindGroupDescriptor, BindGroupEntry,
     BindingResource, Blas, BlasAABBGeometrySizeDescriptor, BlasAabbGeometry, BlasBuildEntry,
-    BlasGeometries, BlasGeometrySizeDescriptors, BlasTriangleGeometry,
-    BlasTriangleGeometrySizeDescriptor, Buffer, BufferDescriptor, BufferUsages,
+    BlasGeometries, BlasGeometrySizeDescriptors, Buffer, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, CreateBlasDescriptor, CreateTlasDescriptor, Device, Features,
-    IndexFormat, MapMode, PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor,
-    ShaderRuntimeChecks, ShaderSource, Tlas, TlasInstance, VertexFormat,
+    MapMode, PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource, Tlas, TlasInstance,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -329,92 +328,17 @@ impl RayQueryTrace {
             words.iter().flat_map(|word| word.to_le_bytes()).collect()
         };
 
-        let count = |value: usize| u32::try_from(value).expect("a scene's quads number under 2^30");
+        let quads = QuadTlas::new(
+            device,
+            queue,
+            scene,
+            |object| mesh_grid(&Occupancy(object), SurfaceMethod::Greedy),
+            |placement, _| placement,
+        );
 
-        let mut faces: Vec<u32> = Vec::new();
-        let mut quad_offsets = HashMap::new();
-        let mut blases = HashMap::new();
-        let mut meshes = Vec::new();
-
-        for (object_id, object) in scene.iter_objects() {
-            let mesh = mesh_grid(&Occupancy(object), SurfaceMethod::Greedy);
-
-            if mesh.spans.is_empty() {
-                continue;
-            }
-
-            quad_offsets.insert(object_id, count(faces.len()));
-
-            faces.extend(
-                mesh.spans
-                    .iter()
-                    .map(|span| count(span.d) * 2 + u32::from(span.sign > 0)),
-            );
-
-            let size = BlasTriangleGeometrySizeDescriptor {
-                vertex_format: VertexFormat::Float32x3,
-                vertex_count: count(mesh.positions.len()),
-                index_format: Some(IndexFormat::Uint32),
-                index_count: Some(count(mesh.indices.len())),
-                flags: AccelerationStructureGeometryFlags::OPAQUE,
-            };
-
-            let blas = device.create_blas(
-                &CreateBlasDescriptor {
-                    label: Some("quads"),
-                    flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
-                    update_mode: AccelerationStructureUpdateMode::Build,
-                },
-                BlasGeometrySizeDescriptors::Triangles {
-                    descriptors: vec![size.clone()],
-                },
-            );
-
-            let vertices = init(
-                "quad vertices",
-                &mesh
-                    .positions
-                    .iter()
-                    .flat_map(|position| position.to_array())
-                    .flat_map(f32::to_le_bytes)
-                    .collect::<Vec<_>>(),
-                BufferUsages::BLAS_INPUT,
-            );
-            let indices = init(
-                "quad indices",
-                &bytes(&mesh.indices),
-                BufferUsages::BLAS_INPUT,
-            );
-
-            meshes.push((object_id, size, vertices, indices));
-            blases.insert(object_id, blas);
-        }
-
-        let entries: Vec<_> = meshes
-            .iter()
-            .map(|(object_id, size, vertices, indices)| BlasBuildEntry {
-                blas: &blases[object_id],
-                geometry: BlasGeometries::TriangleGeometries(vec![BlasTriangleGeometry {
-                    size,
-                    vertex_buffer: vertices,
-                    first_vertex: 0,
-                    vertex_stride: 12,
-                    index_buffer: Some(indices),
-                    first_index: Some(0),
-                    transform_buffer: None,
-                    transform_buffer_offset: None,
-                }]),
-            })
-            .collect();
-
-        let tlas = tlas_of(device, scene, &blases);
-
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("ray query structures"),
-        });
-
-        encoder.build_acceleration_structures(&entries, [&tlas]);
-        queue.submit([encoder.finish()]);
+        let tlas = quads.tlas;
+        let quad_offsets = quads.first_quads;
+        let mut faces = quads.faces;
 
         let mut bounds: Vec<u32> = Vec::new();
         let mut first_quads: Vec<u32> = Vec::new();

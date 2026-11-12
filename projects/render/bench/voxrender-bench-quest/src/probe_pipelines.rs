@@ -41,12 +41,12 @@ const PIPELINES: [(&str, &str, bool); 5] = [
     ("place_front", "crossed", false),
     ("place_front", "solid", false),
     ("place_near", "inside", true),
-    ("place", "exact", true),
+    ("place_held", "held", true),
 ];
 
 /// The buffers `box_view_shader` binds in group 0. Its texture and its
 /// sampler follow them.
-const BUFFERS: u32 = 7;
+const BUFFERS: u32 = 8;
 
 /// Logs the driver's statistics for each pipeline of the headset view's
 /// shader: on Adreno, a stage's instructions, its registers, and the share
@@ -63,7 +63,9 @@ pub fn probe_pipelines(gpu: &XrGpu) -> Result<()> {
         return Ok(());
     }
 
-    let module = wgsl::parse_str(&box_view_shader())
+    // The probe reads the shader whose mirror rays see the sky alone, which
+    // binds no acceleration structure.
+    let module = wgsl::parse_str(&box_view_shader(false))
         .map_err(|error| Error::ProbeShader(error.to_string()))?;
 
     let info = Validator::new(ValidationFlags::all(), Capabilities::all())

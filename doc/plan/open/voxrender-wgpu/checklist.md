@@ -364,8 +364,11 @@ The steps after S9 get their detail when S9 lands. They run in this order:
    against a line of 1.0 ms
 6. Traced reflections. The reference traces a mirror ray from each smooth
    face. The research gives the ray no step and no line in the frame
-   budget. The box view reflects the sky alone. A study comes first: what
-   a second ray from a hit costs in the box raster, which cheaper forms
-   hold up, and the line they fit. The realtime tier's reflections can be
-   coarser than the reference's
+   budget. A first cut runs in the box view: a ray query over the opaque
+   faces, with the face it meets shaded flat. The trial models' pixels off
+   the reference fall by a third, and a model on its table takes 0.5 to
+   1.8 ms more on Quest. A study settles the rest: shadows and occlusion
+   at what the ray meets, glass along the ray, placements that move, and
+   the line they fit. The realtime tier's reflections can be coarser than
+   the reference's
 7. B8 to B12
