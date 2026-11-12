@@ -2482,12 +2482,54 @@ keeps the tint that reaches it. The glass chart is the bench's
 The models load in the same time. `lit-check` counts the same corners as
 before on the scenes it ran: S1 differs on 15 of 107,743.
 
+**Where a glass fragment's time goes.** The fish tank on Quest, with more
+of the glass fragment's work switched on in each row. App GPU p50 in ms:
+
+| The glass fragments | ms |
+| --- | ---: |
+| Drop out at once | 2.18 |
+| Test the surfaces' box and blend nothing | 2.30 |
+| Walk, and shade no surface | 3.00 |
+| Tint by each surface | 4.24 |
+| Add each surface's light from the hemispheres | 5.09 |
+| Add the sun on each surface | 5.68 |
+
+The surfaces' shade took 2.7 of the 3.5 ms. `ovrgpuprofiler` counted
+1.25 G fragment instructions a frame with the walk alone and 1.80 G with
+the shade, at 12 M fragments either way with the compositor's among them:
+the time follows the instructions run. Three changes cut them and leave
+each pixel as it was:
+
+1. A fragment works out its ray's cosines to the faces on each axis once.
+   A surface took them from its placement's axis each time
+2. A material with no diffuse color, no emission, and a reflectance with
+   no hue reads 3 values of its 7, and its Fresnel terms take one channel.
+   The sun's highlight runs where the face's lobe holds the half vector
+3. A ray that leaves a material by the axis it entered on reuses the
+   entry's shade
+
+| Model | Before, ms | After, ms |
+| --- | ---: | ---: |
+| fish tank | 5.73 | 4.90 |
+| potion | 2.70 | 2.46 |
+| lantern | 2.98 | 2.77 |
+| spaceship bridge | 1.96 | 1.94 |
+| glass chart | 2.03 | 1.82 |
+
+Two trials lost on the fish tank. Materials as 8-bit words in the tiles'
+buffer, with one copy of the shade in a loop of a surface a turn, took
+6.95 ms against 5.30: 2.44 G instructions a frame. The terms a face's two
+surfaces share, worked out once in a loop over the two, took 5.32 against
+5.07.
+
 **Outcomes.**
 
 1. Glass, water, and what sits inside them draw as the contract draws
    them, with the sun tinted and shadowed through them
-2. The fish tank takes 5.7 ms on Quest with its holes closed, 3.9 more
-   than with its water opaque. B7's line was 1.0 ms
+2. The fish tank takes 4.9 ms on Quest with its holes closed, 3.2 more
+   than with its water opaque. B7's line was 1.0 ms. A glass fragment
+   costs about what an opaque one does, and the tank shows three to a
+   pixel
 3. Left: the walk's cost, the sun on a glass surface, a mirror ray through
    glass and from it, and an eye inside a material. A pane in the chart
    shows the floor's reflection in the reference and the sky's here
