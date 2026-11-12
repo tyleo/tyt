@@ -14,6 +14,10 @@ const KERNELS: &str = "debug.voxrenderbench.kernels";
 /// view.
 const VIEW: &str = "debug.voxrenderbench.view";
 
+/// The system property that turns on the log of the view's pipeline
+/// statistics.
+const STATISTICS: &str = "debug.voxrenderbench.statistics";
+
 /// What the app runs, from the system properties the README's steps set.
 pub struct RunOptions {
     /// Whether the profile runs in place of B1 and B2's timer.
@@ -28,6 +32,10 @@ pub struct RunOptions {
     /// The start of the name of the bench scene the app shows in place of
     /// its benchmarks.
     pub view: Option<String>,
+
+    /// Whether the app logs the driver's statistics for the view's
+    /// pipelines.
+    pub statistics: bool,
 }
 
 impl RunOptions {
@@ -41,6 +49,7 @@ impl RunOptions {
             b1: flag(B1, true)?,
             kernels: text(KERNELS)?,
             view: text(VIEW)?,
+            statistics: flag(STATISTICS, false)?,
         })
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitCorners, PlacedBox, Result, TileMasks,
-    ViewEye,
+    ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, num::NonZeroU32};
@@ -542,16 +542,7 @@ impl BoxView {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some("box view"),
-                    source: ShaderSource::Wgsl(
-                        format!(
-                            "const SURFACE: u32 = {}u;\nconst MATERIALS: u32 = {}u;\n{}\n{}",
-                            TileMasks::SURFACE,
-                            TileMasks::MATERIALS,
-                            include_str!("box_view.wgsl"),
-                            include_str!("mask_march.wgsl")
-                        )
-                        .into(),
-                    ),
+                    source: ShaderSource::Wgsl(box_view_shader().into()),
                 },
                 ShaderRuntimeChecks::unchecked(),
             )

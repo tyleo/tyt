@@ -7,6 +7,7 @@
 
 mod bench_scene;
 mod box_view;
+mod box_view_shader;
 mod error;
 mod gpu;
 mod headset_eye;
@@ -23,6 +24,7 @@ mod view_image;
 
 pub use bench_scene::*;
 pub use box_view::*;
+pub use box_view_shader::*;
 pub use error::*;
 pub use gpu::*;
 pub use headset_eye::*;
