@@ -38,8 +38,9 @@
 // 6. `other_of`, the `Other` of a `crossers` entry's box: the ray through
 //    the fragment as that box's tile sees it
 // 7. `surface`, what a fragment writes for a hit cell of a source, given the
-//    one axis of the face the ray crossed into the cell and the axes the ray
-//    moves up
+//    one axis of the face the ray crossed into the cell, the axes the ray
+//    moves up, the hit's point in the tile's cells, and the ray's direction
+//    in them
 //
 // Its vertex entries place a corner only when `sound` holds for the corner's
 // position and its `ray`. They take a box's back faces from `BoxDraw`'s
@@ -343,12 +344,19 @@ fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
     return hit;
 }
 
-// What a fragment writes for `hit` in `source`, whose ray moves up the axes
-// of `ahead`.
-fn shade(source: Source, hit: Hit, ahead: vec3<bool>) -> vec4<f32> {
+// What a fragment writes for `hit` in `source`. The hit lies `hit.along`
+// directions past `start` in the source's tile.
+fn shade(source: Source, hit: Hit, start: vec3<f32>, direction: vec3<f32>) -> vec4<f32> {
     let cell = vec3<i32>(hit.bit >> 8u, (hit.bit >> 4u) & 15, hit.bit & 15);
 
-    return surface(source, cell, hit.across, ahead);
+    return surface(
+        source,
+        cell,
+        hit.across,
+        direction >= vec3<f32>(0.0),
+        start + direction * hit.along,
+        direction,
+    );
 }
 
 // The one axis of the fragment's face.
@@ -378,7 +386,9 @@ fn front(box: Box) -> @location(0) vec4<f32> {
 
     loop {
         if live(box.words.x, march.bit) {
-            return shade(source_of(box), Hit(true, march.bit, march.across, 0.0), ahead);
+            let hit = Hit(true, march.bit, march.across, march.along);
+
+            return shade(source_of(box), hit, box.point, direction);
         }
 
         if !advance(&march, rate, strides, end) {
@@ -398,7 +408,10 @@ fn crossed(box: Box) -> @location(0) vec4<f32> {
 
     var hit = first_hit(box.words.x, box.low, box.high, box.point, direction, true, face_of(box));
     var source = source_of(box);
-    var ahead = direction >= vec3<f32>(0.0);
+
+    // The fragment's point and the ray's direction in the hit's tile.
+    var start = box.point;
+    var along = direction;
 
     for (var n = 0u; n < box.crossers.y; n++) {
         let low = crossers[(box.crossers.x + n) * 2u];
@@ -426,7 +439,8 @@ fn crossed(box: Box) -> @location(0) vec4<f32> {
         if nearer.found {
             hit = nearer;
             source = other.source;
-            ahead = other.direction >= vec3<f32>(0.0);
+            start = other.eye + other.direction;
+            along = other.direction;
         }
     }
 
@@ -434,7 +448,7 @@ fn crossed(box: Box) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return shade(source, hit, ahead);
+    return shade(source, hit, start, along);
 }
 
 // A back face's fragment of a box a ray can start inside.
@@ -446,7 +460,7 @@ fn inside(box: Box) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return shade(source_of(box), hit, direction_of(box) >= vec3<f32>(0.0));
+    return shade(source_of(box), hit, box.point, direction_of(box));
 }
 
 // A back face's fragment that writes its hit's depth. A depth of zero fails
@@ -460,7 +474,7 @@ fn exact(box: Box) -> Fragment {
     }
 
     return Fragment(
-        shade(source_of(box), hit, direction_of(box) >= vec3<f32>(0.0)),
+        shade(source_of(box), hit, box.point, direction_of(box)),
         (box.clip.z - hit.along * box.fall * (1.0 - RAY_W)) / (1.0 + hit.along * RAY_W),
     );
 }
@@ -471,5 +485,12 @@ fn solid(box: Box) -> @location(0) vec4<f32> {
     let cell = vec3<i32>(clamp(floor(box.point), box.low, box.high - 1.0));
 
     // A ray meets a box's low face moving up the face's axis.
-    return surface(source_of(box), cell, face_of(box), vec3<bool>(box.face < 4u));
+    return surface(
+        source_of(box),
+        cell,
+        face_of(box),
+        vec3<bool>(box.face < 4u),
+        box.point,
+        direction_of(box),
+    );
 }

@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process,
 };
-use voxrender_bench::{TimedBench, bench_scene, run_b1, view_image};
+use voxrender_bench::{TimedBench, bench_scene, run_b1, view_check, view_image};
 
 // Internal API
 
@@ -102,6 +102,24 @@ enum Command {
         )]
         height: u32,
     },
+
+    /// Compares a bench scene's shaded view with the reference's image of
+    /// it and prints how far they differ.
+    #[command(name = "view-check")]
+    ViewCheck {
+        /// The start of the scene's name in B1's report, such as `S1`.
+        #[arg(value_name = "scene")]
+        scene: String,
+
+        /// The side of the square image.
+        #[arg(
+            value_name = "pixels",
+            long,
+            default_value_t = 256,
+            value_parser = value_parser!(u32).range(1..=4096)
+        )]
+        size: u32,
+    },
 }
 
 #[derive(Clone, Debug, Args)]
@@ -157,6 +175,8 @@ fn main() {
             width,
             height,
         } => view(&scene, &output, width, height).map(|()| String::new()),
+
+        Command::ViewCheck { scene, size } => check(&scene, size),
     };
 
     match result {
@@ -183,12 +203,27 @@ fn time(bench: TimedBench, times: &Times) -> Result<String> {
     })
 }
 
+/// The most placements a scene holds for its sun to cast shadows. The
+/// shadows' fill on the CPU takes too long past that.
+const SHADOWED: usize = 64;
+
+/// Compares the shaded view of the bench scene whose name starts with
+/// `scene` with the reference's image, over a `size` square image.
+fn check(scene: &str, size: u32) -> Result<String> {
+    let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
+    let gpu = headless_gpu()?;
+    let shadows = render_scene.placement_count() <= SHADOWED;
+
+    view_check(&gpu, &render_scene, size, shadows).map_err(Error::Bench)
+}
+
 /// Writes the shaded view of the bench scene whose name starts with `scene`
 /// to the PNG `output`.
 fn view(scene: &str, output: &Path, width: u32, height: u32) -> Result<()> {
     let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
     let gpu = headless_gpu()?;
-    let texels = view_image(&gpu, &render_scene, width, height).map_err(Error::Bench)?;
+    let shadows = render_scene.placement_count() <= SHADOWED;
+    let texels = view_image(&gpu, &render_scene, width, height, shadows).map_err(Error::Bench)?;
 
     let file = File::create(output).map_err(Error::Write)?;
     let mut encoder = Encoder::new(BufWriter::new(file), width, height);

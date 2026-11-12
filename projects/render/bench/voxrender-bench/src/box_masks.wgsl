@@ -176,7 +176,14 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
 // The packed hit of `cell` in `source`'s tile, across the face on the one
 // axis of `across`. The face's normal points up its axis where the ray moves
 // down the axis.
-fn surface(source: Source, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
+fn surface(
+    source: Source,
+    cell: vec3<i32>,
+    across: vec3<bool>,
+    ahead: vec3<bool>,
+    at: vec3<f32>,
+    direction: vec3<f32>,
+) -> vec4<f32> {
     let axis = select(select(0u, 1u, across.y), 2u, across.z);
     let face = axis * 2u + select(1u, 0u, any(across & ahead));
     let voxel = source.voxel.x + u32(cell.x) * source.voxel.y + u32(cell.y) * source.voxel.z + u32(cell.z);
