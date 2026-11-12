@@ -156,62 +156,89 @@ impl HitTargets {
         self.multiview_mask
     }
 
-    /// Records every pass into `encoder`. `record` draws each pass, given
-    /// the pass's eye. The multiview pass draws as eye 0. When `timestamps`
-    /// holds a query set and a first index, the passes write the timestamps
-    /// at that index and the next.
+    /// Records `passes` passes over each eye into `encoder`. `record` draws
+    /// each pass, given the pass's eye and its place among the eye's passes.
+    /// An eye's first pass clears it, and each later one draws over what
+    /// the pass before it stored. The multiview passes draw as eye 0. When
+    /// `timestamps` holds a query set and a first index, the first pass and
+    /// the last write the timestamps at that index and the next.
     pub fn draw(
         &self,
         encoder: &mut CommandEncoder,
         timestamps: Option<(&QuerySet, u32)>,
-        mut record: impl FnMut(&mut RenderPass<'_>, u32),
+        passes: u32,
+        mut record: impl FnMut(&mut RenderPass<'_>, u32, u32),
     ) {
-        let last = self.targets.len() - 1;
+        let passes = passes.max(1);
+        let last_eye = self.targets.len() - 1;
 
         for (eye, target) in (0u32..).zip(&self.targets) {
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("raster"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &target.color,
-                    depth_slice: None,
-                    resolve_target: target.resolve.as_ref(),
-                    ops: Operations {
-                        load: LoadOp::Clear(Color::WHITE),
-                        store: if target.resolve.is_some() {
-                            StoreOp::Discard
-                        } else {
-                            StoreOp::Store
-                        },
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &target.depth,
-                    depth_ops: Some(Operations {
-                        load: LoadOp::Clear(0.0),
-                        store: StoreOp::Discard,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: timestamps.map(|(query_set, first)| RenderPassTimestampWrites {
-                    query_set,
-                    beginning_of_pass_write_index: (eye == 0).then_some(first),
-                    end_of_pass_write_index: (eye as usize == last).then_some(first + 1),
-                }),
-                occlusion_query_set: None,
-                multiview_mask: self.multiview_mask,
-            });
+            for pass in 0..passes {
+                let first = pass == 0;
+                let last = pass + 1 == passes;
+                let starts = eye == 0 && first;
+                let ends = eye as usize == last_eye && last;
 
-            record(&mut pass, eye);
+                let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("raster"),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: &target.color,
+                        depth_slice: None,
+                        resolve_target: target.resolve.as_ref().filter(|_| last),
+                        ops: Operations {
+                            load: if first {
+                                LoadOp::Clear(Color::WHITE)
+                            } else {
+                                LoadOp::Load
+                            },
+                            store: if last && target.resolve.is_some() {
+                                StoreOp::Discard
+                            } else {
+                                StoreOp::Store
+                            },
+                        },
+                    })],
+                    depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                        view: &target.depth,
+                        depth_ops: Some(Operations {
+                            load: if first {
+                                LoadOp::Clear(0.0)
+                            } else {
+                                LoadOp::Load
+                            },
+                            store: if last {
+                                StoreOp::Discard
+                            } else {
+                                StoreOp::Store
+                            },
+                        }),
+                        stencil_ops: None,
+                    }),
+                    // A pass sets `timestamp_writes` only when it writes one.
+                    timestamp_writes: timestamps.filter(|_| starts || ends).map(
+                        |(query_set, index)| RenderPassTimestampWrites {
+                            query_set,
+                            beginning_of_pass_write_index: starts.then_some(index),
+                            end_of_pass_write_index: ends.then_some(index + 1),
+                        },
+                    ),
+                    occlusion_query_set: None,
+                    multiview_mask: self.multiview_mask,
+                });
+
+                record(&mut render_pass, eye, pass);
+            }
         }
     }
 
-    /// Draws once through `record` and reads back the first eye's texels as
-    /// words, row by row.
+    /// Draws `passes` passes an eye through `record` and reads back the
+    /// first eye's texels as words, row by row.
     pub fn read(
         &self,
         device: &Device,
         queue: &Queue,
-        record: impl FnMut(&mut RenderPass<'_>, u32),
+        passes: u32,
+        record: impl FnMut(&mut RenderPass<'_>, u32, u32),
     ) -> Result<Vec<u32>> {
         let row_bytes = (self.width * 4).next_multiple_of(COPY_BYTES_PER_ROW_ALIGNMENT);
 
@@ -226,7 +253,7 @@ impl HitTargets {
             label: Some("raster"),
         });
 
-        self.draw(&mut encoder, None, record);
+        self.draw(&mut encoder, None, passes, record);
 
         encoder.copy_texture_to_buffer(
             TexelCopyTextureInfo {

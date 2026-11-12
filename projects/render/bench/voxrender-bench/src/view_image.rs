@@ -71,23 +71,39 @@ pub fn view_image(gpu: &Gpu, scene: &RenderScene, width: u32, height: u32) -> Re
             label: Some("view"),
         });
 
-    {
+    let color = eyes.create_view(&TextureViewDescriptor::default());
+    let depth = depth.create_view(&TextureViewDescriptor::default());
+    let passes = boxes.passes();
+
+    for at in 0..passes {
         let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("view"),
             color_attachments: &[Some(RenderPassColorAttachment {
-                view: &eyes.create_view(&TextureViewDescriptor::default()),
+                view: &color,
                 depth_slice: None,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(boxes.sky()),
+                    load: if at == 0 {
+                        LoadOp::Clear(boxes.sky())
+                    } else {
+                        LoadOp::Load
+                    },
                     store: StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &depth.create_view(&TextureViewDescriptor::default()),
+                view: &depth,
                 depth_ops: Some(Operations {
-                    load: LoadOp::Clear(0.0),
-                    store: StoreOp::Discard,
+                    load: if at == 0 {
+                        LoadOp::Clear(0.0)
+                    } else {
+                        LoadOp::Load
+                    },
+                    store: if at + 1 == passes {
+                        StoreOp::Discard
+                    } else {
+                        StoreOp::Store
+                    },
                 }),
                 stencil_ops: None,
             }),
@@ -96,7 +112,7 @@ pub fn view_image(gpu: &Gpu, scene: &RenderScene, width: u32, height: u32) -> Re
             multiview_mask: NonZeroU32::new(0b11),
         });
 
-        boxes.draw(&mut pass);
+        boxes.draw(&mut pass, at);
     }
 
     encoder.copy_texture_to_buffer(

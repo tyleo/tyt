@@ -163,7 +163,7 @@ impl DepthProbe {
     /// timestamps at `first` and `first + 1` of `query_set`.
     pub fn record(&self, encoder: &mut CommandEncoder, query_set: &QuerySet, first: u32) {
         self.targets
-            .draw(encoder, Some((query_set, first)), |pass, _| {
+            .draw(encoder, Some((query_set, first)), 1, |pass, _, _| {
                 pass.set_bind_group(0, &self.bind_group, &[]);
 
                 if let Some(near) = &self.near {

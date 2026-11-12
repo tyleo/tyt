@@ -60,8 +60,13 @@ impl HeadsetView {
         self.boxes.prepare(queue, &eyes);
     }
 
-    /// Draws the view into `pass`, a multiview pass over both eyes.
-    pub fn draw(&self, pass: &mut RenderPass<'_>) {
-        self.boxes.draw(pass);
+    /// How many passes draw the view, as [`BoxView::passes`] counts them.
+    pub fn passes(&self) -> u32 {
+        self.boxes.passes()
+    }
+
+    /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
+    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
+        self.boxes.draw(pass, at);
     }
 }

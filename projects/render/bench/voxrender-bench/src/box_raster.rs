@@ -78,10 +78,12 @@ impl BoxRaster {
     /// Records the raster of both eyes into `encoder`, between the
     /// timestamps at `first` and `first + 1` of `query_set`.
     pub fn record(&self, encoder: &mut CommandEncoder, query_set: &QuerySet, first: u32) {
-        self.targets
-            .draw(encoder, Some((query_set, first)), |pass, _| {
-                self.boxes.draw(pass)
-            });
+        self.targets.draw(
+            encoder,
+            Some((query_set, first)),
+            self.boxes.runs(),
+            |pass, _, run| self.boxes.draw(pass, run),
+        );
     }
 
     /// Draws once and reads back the first eye's hit through each pixel,
@@ -89,7 +91,9 @@ impl BoxRaster {
     pub fn trace(&self, device: &Device, queue: &Queue) -> Result<Vec<Option<PixelHit>>> {
         let words = self
             .targets
-            .read(device, queue, |pass, _| self.boxes.draw(pass))?;
+            .read(device, queue, self.boxes.runs(), |pass, _, run| {
+                self.boxes.draw(pass, run)
+            })?;
 
         Ok(words
             .into_iter()
