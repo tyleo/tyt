@@ -538,12 +538,19 @@ they land.
   reaches. A fragment finds its cell's place among the tile's surface
   cells from a bit a cell and a count for each word of bits. No fragment
   reads a neighbor cell
-- `LitCorners` fills on the CPU through the reference's walk. A ray from
-  a lattice point serves every face that shares the point, and an opaque
-  cell beside the face shadows a corner whose ray leaves past it on both
-  axes. Where a sun's direction lets a ray cross two lattice planes at
-  once inside a grid, each corner casts its ray, because the corner's
-  inset then decides which cell the ray crosses first
+- `LitFill` fills the view's lit corners on the GPU. A compute pass casts
+  the contract's ray through voxrender-wgpu's integer walk from each corner
+  of each face the sun can reach. It writes the words into the buffer the
+  view reads. A ray walks only the placements whose box, seen
+  along the light, covers some of its tile's and reaches as far toward
+  the light. The fill submits a dispatch for each 65,536 surface cells
+- `LitCorners` fills the same words on the CPU through the reference's
+  walk, for tests and for `lit-check`. A ray from a lattice point serves
+  every face that shares the point. An opaque cell beside the face shadows
+  a corner whose ray leaves past it on both axes. Where a sun's
+  direction lets a ray cross two lattice planes at once inside a grid,
+  each corner casts its ray, because the corner's inset then decides
+  which cell the ray crosses first
 - A box's third `vec4<u32>` ends with its tile's materials' word and the
   first of the tile's words in `LitCorners`. The materials' word holds the
   bits of a cell's entry and the tile's first material in the view's
