@@ -50,7 +50,9 @@ fn run(app: &AndroidApp) -> Result<()> {
 
     // The profile, the view, and the gallery skip B1 to reach the session
     // sooner.
-    if options.b1 && !options.profile && options.view.is_none() && !options.models {
+    let gallery = options.models || options.tests;
+
+    if options.b1 && !options.profile && options.view.is_none() && !gallery {
         log_b1(&gpu)?;
     }
 

@@ -21,6 +21,9 @@ const STATISTICS: &str = "debug.voxrenderbench.statistics";
 /// The system property that turns on the gallery of models.
 const MODELS: &str = "debug.voxrenderbench.models";
 
+/// The system property that turns on the gallery of test models.
+const TESTS: &str = "debug.voxrenderbench.tests";
+
 /// The system property that holds text from the path of the gallery's first
 /// model.
 const MODEL: &str = "debug.voxrenderbench.model";
@@ -55,6 +58,10 @@ pub struct RunOptions {
     /// Whether the app shows the gallery of the models in its files in
     /// place of its benchmarks.
     pub models: bool,
+
+    /// Whether the gallery shows the test models in the app's files in
+    /// place of the models.
+    pub tests: bool,
 
     /// Text the path of the gallery's first model holds.
     pub model: Option<String>,
@@ -103,6 +110,7 @@ impl RunOptions {
             view: text(VIEW)?,
             statistics: flag(STATISTICS, false)?,
             models: flag(MODELS, false)?,
+            tests: flag(TESTS, false)?,
             model: text(MODEL)?,
             tour,
             scale,
