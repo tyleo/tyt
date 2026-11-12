@@ -38,13 +38,16 @@ pub struct BoxDraw {
 
     indices: Buffer,
 
-    /// Two `vec4<u32>`s per box.
+    /// Three `vec4<u32>`s per box.
     boxes: Buffer,
 }
 
 impl BoxDraw {
+    /// The bytes of a box's three `vec4<u32>`s.
+    pub const BOX_BYTES: usize = 48;
+
     /// Builds the pipelines over `module`, whose vertex entries take a
-    /// corner's bits and a box's two `vec4<u32>`s.
+    /// corner's bits and a box's three `vec4<u32>`s.
     ///
     /// # Arguments
     ///
@@ -69,7 +72,7 @@ impl BoxDraw {
 
         // A buffer cannot be empty.
         if box_bytes.is_empty() {
-            box_bytes.resize(32, 0);
+            box_bytes.resize(Self::BOX_BYTES, 0);
         }
 
         let init = |label, contents: &[u8], usage| {
@@ -144,7 +147,7 @@ impl BoxDraw {
                             }],
                         }),
                         Some(VertexBufferLayout {
-                            array_stride: 32,
+                            array_stride: Self::BOX_BYTES as u64,
                             step_mode: VertexStepMode::Instance,
                             attributes: &[
                                 VertexAttribute {
@@ -156,6 +159,11 @@ impl BoxDraw {
                                     format: VertexFormat::Uint32x4,
                                     offset: 16,
                                     shader_location: 2,
+                                },
+                                VertexAttribute {
+                                    format: VertexFormat::Uint32x4,
+                                    offset: 32,
+                                    shader_location: 3,
                                 },
                             ],
                         }),
@@ -240,7 +248,7 @@ impl BoxDraw {
         }
     }
 
-    /// Replaces the boxes with `boxes`, 32 bytes of two `vec4<u32>`s each,
+    /// Replaces the boxes with `boxes`, [`BOX_BYTES`](Self::BOX_BYTES) each,
     /// of which each run takes its count of `counts` in draw order. Panics
     /// unless `counts` has a count for each part and `boxes` holds those
     /// boxes and no more than the draw was built with.
@@ -248,7 +256,7 @@ impl BoxDraw {
         assert_eq!(counts.len(), self.parts.len(), "each part has its count");
         assert_eq!(
             boxes.len() as u64,
-            u64::from(counts.iter().sum::<u32>()) * 32,
+            u64::from(counts.iter().sum::<u32>()) * Self::BOX_BYTES as u64,
             "the counts cover the boxes"
         );
         assert!(

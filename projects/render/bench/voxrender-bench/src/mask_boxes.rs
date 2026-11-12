@@ -1,5 +1,6 @@
 use crate::{
-    BoxDepth, BoxDraw, BoxPart, HitPacking, HitTargets, PlacedBox, Result, TileMasks, world_to_clip,
+    BoxCrosser, BoxDepth, BoxDraw, BoxPart, HitPacking, HitTargets, PlacedBox, Result, TileMasks,
+    world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyMatrix4x4F64, TyVector3F64};
@@ -96,6 +97,15 @@ pub fn mask_boxes(
             places.extend(value.to_le_bytes());
         }
 
+        for (axis, meters) in [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
+            .into_iter()
+            .zip(transform.scale.to_array())
+        {
+            for value in (transform.rotation * axis).extend(meters).to_array() {
+                places.extend((value as f32).to_le_bytes());
+            }
+        }
+
         mask_offsets.push((
             offsets[&placement.object_id],
             &object_tiles[&placement.object_id],
@@ -104,7 +114,7 @@ pub fn mask_boxes(
 
     // A binding cannot be empty.
     if places.is_empty() {
-        places.resize(96, 0);
+        places.resize(144, 0);
     }
 
     if words.is_empty() {
@@ -141,10 +151,10 @@ pub fn mask_boxes(
         RenderProjection::Orthographic { .. } => 0,
     };
 
-    // SAFETY: a fragment reads only within its tile's words because each
-    // step keeps its cell inside the tile's box. Its loop ends within
-    // the box's extent. The vertex stage indexes `places` by a box's
-    // placement.
+    // SAFETY: a fragment reads only within a tile's words because each step
+    // keeps its cell inside the tile's box. Its loop ends within the box's
+    // extent. A box's entries in `crossers` index `boxes`, and a box's
+    // placement indexes `places`.
     let module = unsafe {
         device.create_shader_module_trusted(
             ShaderModuleDescriptor {
@@ -163,14 +173,45 @@ pub fn mask_boxes(
         )
     };
 
+    let perspective = matches!(view.projection, RenderProjection::Perspective { .. });
     let marched = PlacedBox::list(scene, &object_boxes);
     let solid = PlacedBox::list(scene, &object_solids);
 
-    let march_words = |placed: &PlacedBox| {
+    let tile_of = |placed: &PlacedBox| {
         let (object, tiles) = mask_offsets[placed.placement as usize];
 
-        placed.words(placed.placement, object + tiles[placed.brick])
+        object + tiles[placed.brick]
     };
+
+    // Each marched box's entries in `crosser_words`, as their first and
+    // their count.
+    let crossers = PlacedBox::crossers(&marched, &solid);
+    let mut crosser_words: Vec<u32> = Vec::new();
+    let mut spans = Vec::new();
+
+    for entries in &crossers {
+        let count = |entries: usize| {
+            u32::try_from(entries).expect("a scene's crossing boxes number under 2^32")
+        };
+
+        spans.push([count(crosser_words.len() / 8), count(entries.len())]);
+        crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
+    }
+
+    let march_words = |index: usize, span: [u32; 2]| {
+        let placed = &marched[index];
+
+        placed.words(placed.placement, tile_of(placed), span)
+    };
+
+    let solid_words = |placed: &PlacedBox| placed.words(placed.placement, 0, [0, 0]);
+
+    // `box_masks.wgsl`'s `boxes`: the marched boxes, then the solid ones.
+    let mut box_words: Vec<u32> = (0..marched.len())
+        .map(|index| march_words(index, [0, 0]))
+        .chain(solid.iter().map(solid_words))
+        .flat_map(|words| words.into_iter().take(8))
+        .collect();
 
     // Every solid box draws its front faces because a ray that starts
     // inside one sees none of it.
@@ -178,13 +219,13 @@ pub fn mask_boxes(
         vertex: "place",
         fragment: "solid",
         backs: false,
-        boxes: nearest_first(view, &solid, false)
+        boxes: nearest_first(solid.iter().map(|placed| (placed.seen(view).1, placed)))
             .into_iter()
-            .map(|placed| placed.words(placed.placement, 0))
+            .map(solid_words)
             .collect(),
     };
 
-    let exact = |boxes: Vec<[u32; 8]>| BoxPart {
+    let exact = |boxes: Vec<[u32; 12]>| BoxPart {
         vertex: "place",
         fragment: "exact",
         backs: true,
@@ -192,32 +233,54 @@ pub fn mask_boxes(
     };
 
     let parts = match depth {
-        BoxDepth::Hit => vec![solids, exact(marched.iter().map(march_words).collect())],
+        BoxDepth::Hit => vec![
+            solids,
+            exact(
+                (0..marched.len())
+                    .map(|index| march_words(index, [0, 0]))
+                    .collect(),
+            ),
+        ],
 
         BoxDepth::Face => {
-            let crossings = PlacedBox::crossings(&marched, &solid);
-            let (crossing, apart): (Vec<_>, Vec<_>) = marched
-                .iter()
-                .zip(crossings)
-                .partition(|&(_, crosses)| crosses);
+            let mut inside = Vec::new();
+            let mut front = Vec::new();
+            let mut crossed = Vec::new();
+            let mut deep = Vec::new();
 
-            let apart = apart.into_iter().map(|(placed, _)| placed);
-            let inside = apart.clone().filter(|placed| placed.seen(view).0);
-            let mut crossing: Vec<_> = crossing
-                .into_iter()
-                .map(|(placed, _)| march_words(placed))
-                .collect();
+            for (index, placed) in marched.iter().enumerate() {
+                let (holds, distance) = placed.seen(view);
+                let crosses = !crossers[index].is_empty();
 
-            // An orthographic view's depth has no scale that brings a face
-            // nearer, so a box the view starts inside writes its hits' depth.
-            let inside = match view.projection {
-                RenderProjection::Perspective { .. } => inside.map(march_words).collect(),
+                // A box that crosses others keeps its face's depth only
+                // where its fragment steps through them, which `crossed`
+                // does under a perspective view. An orthographic view's
+                // depth has no scale that brings a back face nearer.
+                let writes = if holds {
+                    crosses || !perspective
+                } else {
+                    crosses && !perspective
+                };
 
-                RenderProjection::Orthographic { .. } => {
-                    crossing.extend(inside.map(march_words));
-
-                    Vec::new()
+                if writes {
+                    deep.push(march_words(index, [0, 0]));
+                } else if holds {
+                    inside.push(march_words(index, [0, 0]));
+                } else if crosses {
+                    crossed.push((distance, (index, spans[index])));
+                } else {
+                    front.push((distance, (index, [0, 0])));
                 }
+            }
+
+            let fronts = |fragment, boxes: Vec<(f64, (usize, [u32; 2]))>| BoxPart {
+                vertex: "place",
+                fragment,
+                backs: false,
+                boxes: nearest_first(boxes)
+                    .into_iter()
+                    .map(|(index, span)| march_words(index, span))
+                    .collect(),
             };
 
             vec![
@@ -228,19 +291,31 @@ pub fn mask_boxes(
                     boxes: inside,
                 },
                 solids,
-                BoxPart {
-                    vertex: "place",
-                    fragment: "front",
-                    backs: false,
-                    boxes: nearest_first(view, apart, true)
-                        .into_iter()
-                        .map(march_words)
-                        .collect(),
-                },
-                exact(crossing),
+                fronts("front", front),
+                fronts("crossed", crossed),
+                exact(deep),
             ]
         }
     };
+
+    // A binding cannot be empty.
+    if box_words.is_empty() {
+        box_words.resize(8, 0);
+    }
+
+    if crosser_words.is_empty() {
+        crosser_words.resize(8, 0);
+    }
+
+    let words_bytes =
+        |words: &[u32]| -> Vec<u8> { words.iter().flat_map(|word| word.to_le_bytes()).collect() };
+
+    let boxes = init("box list", &words_bytes(&box_words), BufferUsages::STORAGE);
+    let crossers = init(
+        "box crossers",
+        &words_bytes(&crosser_words),
+        BufferUsages::STORAGE,
+    );
 
     let storage = BufferBindingType::Storage { read_only: true };
 
@@ -251,27 +326,24 @@ pub fn mask_boxes(
         &parts,
         &[
             (ShaderStages::FRAGMENT, BufferBindingType::Uniform, &frame),
-            (ShaderStages::VERTEX, storage, &places),
+            (
+                ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                storage,
+                &places,
+            ),
             (ShaderStages::FRAGMENT, storage, &bits),
+            (ShaderStages::FRAGMENT, storage, &boxes),
+            (ShaderStages::FRAGMENT, storage, &crossers),
         ],
         multiview_mask,
     ))
 }
 
-/// `boxes` nearest first as `view` sees them. When `outside`, the boxes a ray
-/// can start inside stay out.
-fn nearest_first<'a>(
-    view: &RenderView,
-    boxes: impl IntoIterator<Item = &'a PlacedBox>,
-    outside: bool,
-) -> Vec<&'a PlacedBox> {
-    let mut seen: Vec<_> = boxes
-        .into_iter()
-        .map(|placed| (placed, placed.seen(view)))
-        .filter(|&(_, (inside, _))| !(outside && inside))
-        .collect();
+/// The items of `seen` by their distances, nearest first.
+fn nearest_first<T>(seen: impl IntoIterator<Item = (f64, T)>) -> Vec<T> {
+    let mut seen: Vec<_> = seen.into_iter().collect();
 
-    seen.sort_by(|(_, (_, a)), (_, (_, b))| a.total_cmp(b));
+    seen.sort_by(|(a, _), (b, _)| a.total_cmp(b));
 
-    seen.into_iter().map(|(placed, _)| placed).collect()
+    seen.into_iter().map(|(_, item)| item).collect()
 }

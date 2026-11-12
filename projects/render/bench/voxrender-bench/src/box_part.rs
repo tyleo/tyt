@@ -11,6 +11,6 @@ pub struct BoxPart<'a> {
     /// faces.
     pub backs: bool,
 
-    /// Each box's two `vec4<u32>`s, in draw order.
-    pub boxes: Vec<[u32; 8]>,
+    /// Each box's three `vec4<u32>`s, in draw order.
+    pub boxes: Vec<[u32; 12]>,
 }

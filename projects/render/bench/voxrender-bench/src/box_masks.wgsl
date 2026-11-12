@@ -17,6 +17,21 @@ struct Place {
 
     // What a step along x and a step along y add to a voxel id.
     strides: vec4<u32>,
+
+    // The world direction of each of the grid's axes, then the meters a cell
+    // spans along it.
+    x: vec4<f32>,
+    y: vec4<f32>,
+    z: vec4<f32>,
+}
+
+// Whose cell a hit holds.
+struct Source {
+    // The placement's index above the face's bits.
+    placement: u32,
+
+    // The voxel id of the tile's low cell, then `Place::strides`.
+    voxel: vec3<u32>,
 }
 
 struct Box {
@@ -44,17 +59,28 @@ struct Box {
     // The offset of the tile's bits, then the placement's index above the
     // face's bits.
     @location(7) @interpolate(flat) words: vec2<u32>,
+
+    // The first of the box's entries in `crossers`, then their count.
+    @location(8) @interpolate(flat) crossers: vec2<u32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> places: array<Place>;
 // Per object: its `TileMasks` words.
 @group(0) @binding(2) var<storage, read> bits: array<u32>;
+// Two words per box: its low cell and its placement's index, then the corner
+// past its high cell and the offset of its tile's bits.
+@group(0) @binding(3) var<storage, read> boxes: array<vec4<u32>>;
+// Two words per box that shares space with a box: the low corner of a box
+// around the shared space and the other box's index in `boxes` as bits,
+// plus `SOLID` for a solid one, then the high corner.
+@group(0) @binding(4) var<storage, read> crossers: array<vec4<f32>>;
 
 // The box's corner `corner`. Bit `a` of `corner` picks the box's high face on
 // axis `a`. `low` holds the box's low cell and its placement's index. `high`
 // holds the corner past the box's high cell and the offset of its tile's bits.
-fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
+// `more` holds the first of the box's entries in `crossers` and their count.
+fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<u32>) -> Box {
     let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
     let grid = select(low.xyz, high.xyz, far);
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
@@ -75,6 +101,7 @@ fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
         (placed.clip * vec4<f32>(placed.ray.xyz, 0.0)).z,
         min(corner, 7u - corner) | (corner & 4u),
         vec2<u32>(high.w, low.w << FACE_BITS),
+        more.xy,
     );
 }
 
@@ -83,8 +110,9 @@ fn place(
     @location(0) corner: u32,
     @location(1) low: vec4<u32>,
     @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
 ) -> Box {
-    return corner_of(corner, low, high);
+    return corner_of(corner, low, high, more);
 }
 
 // `place` for the back faces `inside` shades, under a perspective view.
@@ -93,21 +121,51 @@ fn place_near(
     @location(0) corner: u32,
     @location(1) low: vec4<u32>,
     @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
 ) -> Box {
-    var box = corner_of(corner, low, high);
+    var box = corner_of(corner, low, high, more);
 
     box.clip.z *= NEARER;
 
     return box;
 }
 
-// The packed hit of `cell` in the box's tile, across the face on the one axis
-// of `across`. The face's normal points up its axis where the ray moves down
-// the axis.
-fn surface(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
+fn source_of(box: Box) -> Source {
+    return Source(box.words.y, box.voxel);
+}
+
+// The box at `index` of `boxes`, as a perspective view's ray along
+// `direction` through `box` meets it.
+fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
+    let low = boxes[index * 2u];
+    let high = boxes[index * 2u + 1u];
+    let tile = low.xyz & vec3<u32>(0xfffffff0u);
+    let own = places[box.words.y >> FACE_BITS];
+    let its = places[low.w];
+    let strides = its.strides.xy;
+
+    // The direction in meters, then in the other grid's cells.
+    let world = own.x.xyz * (direction.x * own.x.w)
+        + own.y.xyz * (direction.y * own.y.w)
+        + own.z.xyz * (direction.z * own.z.w);
+
+    return Other(
+        high.w,
+        vec3<f32>(low.xyz - tile),
+        vec3<f32>(high.xyz - tile),
+        its.ray.xyz - vec3<f32>(tile),
+        vec3<f32>(dot(its.x.xyz, world) / its.x.w, dot(its.y.xyz, world) / its.y.w, dot(its.z.xyz, world) / its.z.w),
+        Source(low.w << FACE_BITS, vec3<u32>(tile.x * strides.x + tile.y * strides.y + tile.z, strides)),
+    );
+}
+
+// The packed hit of `cell` in `source`'s tile, across the face on the one
+// axis of `across`. The face's normal points up its axis where the ray moves
+// down the axis.
+fn surface(source: Source, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
     let axis = select(select(0u, 1u, across.y), 2u, across.z);
     let face = axis * 2u + select(1u, 0u, any(across & ahead));
-    let voxel = box.voxel.x + u32(cell.x) * box.voxel.y + u32(cell.y) * box.voxel.z + u32(cell.z);
+    let voxel = source.voxel.x + u32(cell.x) * source.voxel.y + u32(cell.y) * source.voxel.z + u32(cell.z);
 
-    return unpack4x8unorm(voxel | ((box.words.y | face) << frame.voxel_bits));
+    return unpack4x8unorm(voxel | ((source.placement | face) << frame.voxel_bits));
 }

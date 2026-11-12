@@ -69,7 +69,7 @@ pub fn tree_boxes(
 
     let boxes = PlacedBox::list(scene, &object_boxes)
         .iter()
-        .map(|placed| placed.words(placed.placement, 0))
+        .map(|placed| placed.words(placed.placement, 0, [0, 0]))
         .collect();
 
     let mut frame = Vec::new();

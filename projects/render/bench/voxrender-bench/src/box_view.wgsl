@@ -30,10 +30,20 @@ struct Place {
     // The eye in the grid, with w = 1.
     ray: vec4<f32>,
 
-    // The world directions of the grid's axes.
+    // The world direction of each of the grid's axes, then the meters a cell
+    // spans along it.
     x: vec4<f32>,
     y: vec4<f32>,
     z: vec4<f32>,
+}
+
+// Whose cell a hit holds.
+struct Source {
+    // The offset of the tile's words.
+    tile: u32,
+
+    // The index of the eye's `Place`.
+    place: u32,
 }
 
 struct Box {
@@ -57,6 +67,10 @@ struct Box {
 
     // The offset of the tile's words, then the index of the eye's `Place`.
     @location(6) @interpolate(flat) words: vec2<u32>,
+
+    // The first of the box's entries in `crossers`, their count, and the
+    // index of the eye's first `Place`.
+    @location(7) @interpolate(flat) crossers: vec3<u32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -65,12 +79,20 @@ struct Box {
 @group(0) @binding(2) var<storage, read> bits: array<u32>;
 // Each material's base color.
 @group(0) @binding(3) var<storage, read> colors: array<vec4<f32>>;
+// Two words per box: its low cell and its placement's index, then the corner
+// past its high cell and the offset of its tile's words.
+@group(0) @binding(4) var<storage, read> boxes: array<vec4<u32>>;
+// Two words per box that shares space with a box: the low corner of a box
+// around the shared space and the other box's index in `boxes` as bits,
+// plus `SOLID` for a solid one, then the high corner.
+@group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
 
 // The box's corner `corner` for `eye`. Bit `a` of `corner` picks the box's
 // high face on axis `a`. `low` holds the box's low cell and its placement's
 // index. `high` holds the corner past the box's high cell and the offset of
-// its tile's words.
-fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
+// its tile's words. `more` holds the first of the box's entries in
+// `crossers` and their count.
+fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<u32>) -> Box {
     let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
     let grid = select(low.xyz, high.xyz, far);
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
@@ -89,6 +111,7 @@ fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>) -> Box {
         0.0,
         min(corner, 7u - corner) | (corner & 4u),
         vec2<u32>(high.w, index),
+        vec3<u32>(more.xy, eye * frame.placements),
     );
 }
 
@@ -98,8 +121,9 @@ fn place(
     @location(0) corner: u32,
     @location(1) low: vec4<u32>,
     @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
 ) -> Box {
-    return corner_of(eye, corner, low, high);
+    return corner_of(eye, corner, low, high, more);
 }
 
 // `place` for the back faces `inside` shades.
@@ -109,8 +133,9 @@ fn place_near(
     @location(0) corner: u32,
     @location(1) low: vec4<u32>,
     @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
 ) -> Box {
-    var box = corner_of(eye, corner, low, high);
+    var box = corner_of(eye, corner, low, high, more);
 
     box.clip.z *= NEARER;
 
@@ -134,11 +159,40 @@ fn tonemap(color: vec3<f32>) -> vec3<f32> {
     return mix(lifted * (compressed / peak), vec3<f32>(compressed), toward_white);
 }
 
-// The shaded color of `cell` in the box's tile, across the face on the one
+fn source_of(box: Box) -> Source {
+    return Source(box.words.x, box.words.y);
+}
+
+// The box at `index` of `boxes`, as the eye's ray along `direction` through
+// `box` meets it.
+fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
+    let low = boxes[index * 2u];
+    let high = boxes[index * 2u + 1u];
+    let tile = low.xyz & vec3<u32>(0xfffffff0u);
+    let place = box.crossers.z + low.w;
+    let own = places[box.words.y];
+    let its = places[place];
+
+    // The direction in meters, then in the other grid's cells.
+    let world = own.x.xyz * (direction.x * own.x.w)
+        + own.y.xyz * (direction.y * own.y.w)
+        + own.z.xyz * (direction.z * own.z.w);
+
+    return Other(
+        high.w,
+        vec3<f32>(low.xyz - tile),
+        vec3<f32>(high.xyz - tile),
+        its.ray.xyz - vec3<f32>(tile),
+        vec3<f32>(dot(its.x.xyz, world) / its.x.w, dot(its.y.xyz, world) / its.y.w, dot(its.z.xyz, world) / its.z.w),
+        Source(high.w, place),
+    );
+}
+
+// The shaded color of `cell` in `source`'s tile, across the face on the one
 // axis of `across`. The face's normal points up its axis where the ray moves
 // down the axis.
-fn surface(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
-    let tile = box.words.x;
+fn surface(source: Source, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
+    let tile = source.tile;
     let header = bits[tile + 128u];
     let size = header & 15u;
 
@@ -151,7 +205,7 @@ fn surface(box: Box, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> 
         material = bits[tile + 129u + 128u * size + entry];
     }
 
-    let index = box.words.y;
+    let index = source.place;
     let axis = select(select(places[index].x, places[index].y, across.y), places[index].z, across.z);
     let normal = select(axis.xyz, -axis.xyz, any(across & ahead));
     let up = 0.5 + 0.5 * normal.y;
