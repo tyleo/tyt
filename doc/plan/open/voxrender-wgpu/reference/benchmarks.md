@@ -1494,3 +1494,75 @@ comes about 2 s after the app starts, on each scene.
    without them. A face with no lit corner skips the sun's term
 3. The fill runs once, as the view is built. A caster that moves needs
    its tiles and the tiles it shadows filled again, which B5 times
+
+## Trial models, 2026-11-11
+
+The box view over models an agent built from prompts: the 35 Voxel Json
+documents of the `fable-5-2-xhigh` run of voxel-creations' prompt trials.
+A model holds 2693 to 4.1 million voxels of 0.5 mm to 2 m, and the 35 hold
+16.7 million.
+
+- Devices: this Mac for the image check, and Quest 3 as in Headset view
+- Scene: `model_scene`. A model's objects stand at their nodes' placements
+  under vxl's studio rig, seen from vxl's hero view
+- Image check: `voxrender-bench-desktop view-check <model>` at 256 by 256
+- Quest: the Models steps in `voxrender-bench-quest`'s README, on a tour
+  of 20 s a model. A model a meter across sits on its table 1.1 m before
+  the headset. The GPU time is the app's frame time at p50 in ms
+  over the windows of 600 frames within a model's stay, at 545 MHz
+- Load: the ms on Quest from a model's document to its view, on a thread
+  beside the frames
+
+| Model | Voxels | Opaque pixels | Off by over 8 | Mean difference of 255 | Load, ms | GPU p50, ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| bridge/bridge | 2,215,101 | 11,562 | 3,106 | 8.31 | 3,183 | 0.77 |
+| candelabra/candelabra | 113,699 | 5,611 | 1,703 | 5.07 | 735 | 0.57 |
+| cart/cart | 29,896 | 14,914 | 962 | 2.69 | 518 | 0.58 |
+| chair/chair | 145,858 | 11,706 | 486 | 1.60 | 678 | 0.53 |
+| chess-set/chess-set | 4,148,552 | 15,752 | 2,386 | 2.07 | 3,610 | 0.91 |
+| chest/chest | 191,641 | 21,827 | 4,536 | 3.89 | 680 | 0.82 |
+| city/city | 882,493 | 17,394 | 1,707 | 1.55 | 1,470 | 1.06 |
+| cottage/mushroom-cottage | 630,474 | 14,883 | 1,507 | 2.26 | 1,096 | 0.86 |
+| crane/crane | 69,084 | 5,256 | 664 | 2.83 | 595 | 0.61 |
+| dollhouse/dollhouse | 689,035 | 20,779 | 517 | 1.53 | 1,246 | 1.36 |
+| dragon/dragon | 880,077 | 12,351 | 3,598 | 4.31 | 1,340 | 1.09 |
+| dungeon-kit/corner | 25,600 | 29,306 | 11 | 0.48 | 550 | 0.52 |
+| dungeon-kit/doorway | 12,480 | 19,302 | 6 | 0.17 | 530 | 0.47 |
+| dungeon-kit/floor | 4,096 | 18,378 | 2 | 0.02 | 533 | 0.34 |
+| dungeon-kit/kit | 58,560 | 10,174 | 3 | 0.29 | 580 | 0.40 |
+| dungeon-kit/room | 58,560 | 25,754 | 20 | 0.30 | 560 | 0.55 |
+| dungeon-kit/wall | 16,384 | 20,722 | 7 | 0.24 | 544 | 0.42 |
+| fish-tank/fish-tank | 531,684 | 18,339 | 14,121 | 59.27 | 1,525 | 0.68 |
+| guitar/guitar | 279,799 | 6,498 | 779 | 1.84 | 853 | 0.56 |
+| knight/knight | 2,693 | 14,998 | 10 | 0.06 | 538 | 0.56 |
+| lantern/lantern | 49,036 | 10,508 | 5,532 | 23.46 | 580 | 0.65 |
+| living-room/living-room | 373,095 | 29,255 | 623 | 1.30 | 876 | 1.20 |
+| log-cabin/log-cabin | 1,277,584 | 15,545 | 70 | 0.50 | 1,698 | 1.21 |
+| pirate-ship/gun-deck | 638,612 | 24,087 | 1,044 | 2.21 | 1,187 | 1.37 |
+| pocket-watch/pocket-watch | 81,882 | 5,365 | 2,592 | 16.67 | 603 | 0.60 |
+| potion/potion | 23,800 | 9,278 | 8,066 | 82.76 | 559 | 0.57 |
+| ramen-stand/ramen-stand | 778,898 | 18,860 | 3,776 | 4.27 | 1,350 | 1.16 |
+| robot/robot | 23,601 | 11,886 | 700 | 1.31 | 550 | 0.55 |
+| spaceship/bridge | 218,965 | 28,748 | 4,719 | 17.11 | 697 | 0.76 |
+| sword/sword | 9,988 | 2,013 | 544 | 7.43 | 542 | 0.34 |
+| tree/oak-tree | 955,675 | 11,000 | 33 | 1.06 | 1,425 | 1.09 |
+| valley/valley | 240,332 | 20,742 | 526 | 1.67 | 1,045 | 1.81 |
+| village/village | 526,157 | 15,834 | 75 | 0.76 | 1,028 | 1.10 |
+| well/well | 192,275 | 14,691 | 633 | 2.23 | 755 | 0.71 |
+| wizard-tower/wizard-tower | 356,340 | 10,241 | 186 | 1.76 | 853 | 0.79 |
+
+**Outcomes.**
+
+1. Every model loads and holds 90 Hz on its table. The GPU takes 0.34 to
+   1.81 ms a frame. A larger model drops 1 to 5 frames in the second it
+   lands
+2. The eight models with no metal, smooth, glass, or glowing material draw
+   as the reference does. Under 0.1% of the pixels differ on the dungeon
+   kit's six and the knight, and 0.3% on the oak
+3. Glass draws opaque. The potion differs on 87% of its pixels, the fish
+   tank on 77%, and the lantern on 53%. Each hides what its glass holds
+4. The other 24 models hold metal, smooth, glass, or glowing materials and
+   differ on 0.5% to 48% of their pixels. The run does not split a model's
+   difference by cause
+5. A load takes 0.5 s for the smallest models and 3.6 s for the chess
+   set's 4.1 million voxels

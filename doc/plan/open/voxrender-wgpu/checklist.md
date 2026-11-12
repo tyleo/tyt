@@ -261,6 +261,11 @@ code-level choices in
                         - [ ] The crossing test as placements move
                         - [ ] Why S1 shades a tenth more fragments over
                               three faces a box than over corners
+                  - [x] A gallery of models. The Quest app shows the
+                        prompt trials' 35 Voxel Json models one at a time
+                        under the view's shading. The controllers step
+                        through them, walk, turn, and resize. Each model
+                        holds 90 Hz on its table
                   - [ ] Tiles of pixels walk together. An 8x8 tile walks
                         the empty space its rays share. Each ray then walks
                         on alone. The prototype runs only if the box raster
