@@ -313,17 +313,15 @@ code-level choices in
                   fragment passes. A compute launch costs Quest 28 ns a
                   workgroup: a pass over both eyes takes 2.55 ms at 8x8
                   groups and 0.64 at 16x16, and a fragment pass 0.25
-      - [ ] **S9.5. Start bounds.** Conservative start bounds join the
+      - [x] **S9.5. Start bounds.** Conservative start bounds join the
             experiments. A bound tells a march where it can start without
-            skipping a hit, so the hits stay exact. Three bounds run:
-            1. The second eye from the first: the left eye, then the right
-               eye
-            2. Crossed halves: the left half of the left eye with the right
-               half of the right eye, then the other two halves
-            3. The previous frame, reprojected through a scripted head move.
-               Each scene renders two frames with a turn at 100 degrees per
-               second and a step at 1 m/s between them. Moving placements
-               wait for the moving scene in Later
+            skipping a hit, so the hits stay exact. Three bounds were to
+            run: the second eye from the first, crossed halves, and the
+            previous frame reprojected. The box raster starts a ray on its
+            box's face, so a bound can only spare a march that misses. The
+            best case ran: a prior frame's depth with the head still. Its
+            read costs more than the marches it spares on every scene.
+            Start bounds drop
       - [ ] **S9.6. Lossy cuts.** Lossy cuts run as tests: the lens-matched
             grid, quad views, stereo hit copying, and iteration caps. Each
             test reports its gain and how many pixels it changes on every

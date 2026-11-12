@@ -2006,3 +2006,29 @@ and 715.
    second ray's cost is not measured
 4. The rung meant to find what fills the march's 2.7 KB of scratch. The
    triangles run no march, and the scratch stays unread
+
+## S9.5 start bounds, 2026-11-12
+
+A start bound's best case on the box raster.
+
+- Device and method: as in Records by row
+- A start bound told a compute march where a ray could start. The box
+  raster starts a ray on its box's face, and a bound can only spare a
+  march that finds no hit in its box
+- Test: a probe that is not checked in. A `front` fragment reads a prior
+  frame's depth at its pixel and discards ahead of its march when its box
+  ends before that depth. The headset rests still, so the prior depth
+  needs no reprojection and spares every such march. The second eye, the
+  crossed halves, and a head that moves can spare no more
+
+| Build | S1 | S5 | S2 | S4 |
+| --- | ---: | ---: | ---: | ---: |
+| No bound | 2.04 | 3.59 | 6.78 | 3.19 |
+| The read alone, of a prior depth that holds nothing | 2.08 | 3.74 | 7.06 | 3.30 |
+| The bound | 2.06 | 3.83 | 6.97 | 3.31 |
+
+**Outcomes.**
+
+1. The read of the prior depth costs 0.04 to 0.28 ms. The marches it
+   spares give back 0.09 ms on S2 and nothing on S1, S4, and S5
+2. Start bounds drop. A box's face is already the bound a march needs
