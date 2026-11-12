@@ -17,6 +17,11 @@ const REGION_SIDES: [i32; 3] = [1, 4, 16];
 /// counts below the step loops' show where a launch's cost ends.
 const LAUNCH_STEPS: [u32; 5] = [0, 1, 2, 4, 8];
 
+/// The workgroup sizes the compute launch's sweep runs the hoisted loop at
+/// with no step, beside [`StepKernel::GROUP`]. The sizes show whether a
+/// launch's cost follows its groups or its invocations.
+const LAUNCH_GROUPS: [[u32; 2]; 3] = [[4, 4], [16, 8], [16, 16]];
+
 /// The fragment launch's label.
 const FRAGMENT_LAUNCH: &str = "fragment launch";
 
@@ -59,6 +64,21 @@ pub fn b2_kernels(
                 width,
                 height,
                 count,
+            )),
+        ));
+    }
+
+    for group in LAUNCH_GROUPS {
+        kernels.push((
+            grouped_launch(group),
+            KernelWork::Steps(StepKernel::grouped(
+                device,
+                &grid,
+                StepLoop::Hoisted,
+                width,
+                height,
+                0,
+                group,
             )),
         ));
     }
@@ -170,7 +190,7 @@ pub fn b2_kernels(
         measured: 120,
         summary: Box::new(move |medians, rays| {
             let (steps, rest) = medians.split_at(StepLoop::ALL.len() * COUNTS.len());
-            let (launches, rest) = rest.split_at(LAUNCH_STEPS.len() + 1);
+            let (launches, rest) = rest.split_at(LAUNCH_STEPS.len() + LAUNCH_GROUPS.len() + 1);
             let (trace_medians, probes) = rest.split_at(traces.len());
 
             let mut lines = vec![
@@ -217,6 +237,10 @@ pub fn b2_kernels(
 /// The label of the compute launch's kernel at `count` steps.
 fn compute_launch(count: u32) -> String {
     format!("compute launch, {count} steps")
+}
+
+fn grouped_launch([across, down]: [u32; 2]) -> String {
+    format!("compute launch, 0 steps, {across}x{down} groups")
 }
 
 /// `scene` without its lights.
@@ -283,6 +307,7 @@ fn launch_lines(medians: &[f64], rays: f64) -> Vec<String> {
     let labels = LAUNCH_STEPS
         .map(compute_launch)
         .into_iter()
+        .chain(LAUNCH_GROUPS.map(grouped_launch))
         .chain([FRAGMENT_LAUNCH.to_owned()]);
 
     for (label, median) in labels.zip(medians) {

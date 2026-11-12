@@ -170,7 +170,7 @@ code-level choices in
                   - [x] Tile boxes win on the desktop, and B1 stays exact
                   - [x] Child boxes lose on the desktop and drop
                   - [x] A Quest run confirms tile boxes
-            - [ ] New approaches. Each gets a prototype of about one
+            - [x] New approaches. Each gets a prototype of about one
                   session. B1's ids check each prototype. Start bounds
                   wait for S9.5. The ray-tracing unit waits for rung 8
                   - [x] Raster, then march. A fragment pass rasterizes the
@@ -286,33 +286,30 @@ code-level choices in
                         under the view's shading. The controllers step
                         through them, walk, turn, and resize. Each model
                         holds 90 Hz on its table
-                  - [ ] Tiles of pixels walk together. An 8x8 tile walks
+                  - [x] Tiles of pixels walk together. An 8x8 tile walks
                         the empty space its rays share. Each ray then walks
                         on alone. The prototype runs only if the box raster
-                        leaves a compute walk in the frame
-            - [ ] A profile of the tree walk after rung 3. Tile boxes
+                        leaves a compute walk in the frame. It leaves
+                        none, so the prototype does not run
+            - [x] A profile of the tree walk after rung 3. Tile boxes
                   halved S1's iterations, yet the walk gained 1.11x on
                   Quest against 1.30x on the desktop. The profile runs
-                  only if a compute walk stays in the frame
-                  - [ ] `ovrgpuprofiler` reads the tree walk's counters on
-                        Quest before and after tile boxes
-                  - [ ] RenderDoc Meta Fork reads the registers and
-                        occupancy of the tree walk with and without the
-                        checks
-                  - [ ] A wave test groups each ray's iterations into
-                        Quest's 64-wide waves
-            - [ ] Rung 4, register-resident leaves. RenderDoc reads each
-                  change's footprint and occupancy on Quest. The walk starts
-                  at 20 registers and 50% occupancy
-            - [ ] Rung 5, fetch and footprint trims. The 16x8 groups drop
-                  because Quest runs an 8x8 group as one 64-wide wave
-            - [ ] Rung 6, the decision
+                  only if a compute walk stays in the frame. None stays,
+                  so the counters, the registers, and the wave test do
+                  not run
+            - [x] Rung 4, register-resident leaves. It does not run: rung 6
+                  stops the walk's tuning
+            - [x] Rung 5, fetch and footprint trims. It does not run
+            - [x] Rung 6, the decision. The tree walk traces S1 at 0.096
+                  Grays/s after rung 3, under the ladder's 0.15, and the
+                  box raster shades it at 2.90. The walk's tuning stops.
+                  The box raster is the front end S9 hands on
             - [ ] Rung 8, the ray-query arm. The rung first finds what fills
                   the march's 2.7 KB of scratch per invocation
-            - [ ] Rung 9, the output path. Moving the march into a fragment
-                  pass also avoids the compute launch's 2.32 ms floor. A
-                  sweep of workgroup sizes over the launch kernel shows
-                  whether the floor falls with fewer groups
+            - [x] Rung 9, the output path. The box raster's march runs in
+                  fragment passes. A compute launch costs Quest 28 ns a
+                  workgroup: a pass over both eyes takes 2.55 ms at 8x8
+                  groups and 0.64 at 16x16, and a fragment pass 0.25
       - [ ] **S9.5. Start bounds.** Conservative start bounds join the
             experiments. A bound tells a march where it can start without
             skipping a hit, so the hits stay exact. Three bounds run:
@@ -348,9 +345,10 @@ The steps after S9 get their detail when S9 lands. They run in this order:
    transparency termination
 5. B4 to B7. A step starts with a study where its line in the frame budget
    is in doubt. B7 is one. The research plans its walk as a compute pass
-   against a line of 1.0 ms. No compute pass over both eyes runs under 2.32
-   ms on Quest. B5 is another. A fill of the tiles one mover changes
-   takes 1.8 to 3.6 ms on Quest against a line of 1.0 ms
+   against a line of 1.0 ms. A compute pass over both eyes takes
+   0.64 ms on Quest before its first step, at 16x16 groups. B5 is another.
+   A fill of the tiles one mover changes takes 1.8 to 3.6 ms on Quest
+   against a line of 1.0 ms
 6. Traced reflections. The reference traces a mirror ray from each smooth
    face. The research gives the ray no step and no line in the frame
    budget. The box view reflects the sky alone. A study comes first: what
