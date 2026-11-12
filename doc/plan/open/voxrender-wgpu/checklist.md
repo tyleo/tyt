@@ -238,7 +238,10 @@ code-level choices in
                                     fragments the eye's ray, and a tile's
                                     cells run by y first. S1 takes 2.12
                                     ms, S5 3.76, and S2 7.1
-                              - [ ] S5 takes 3.76 ms against the 3.5 ms
+                              - [x] The bloom add, from a texture that
+                                    nothing fills yet. S1 takes 2.24 ms,
+                                    S5 3.89, and S2 7.31
+                              - [ ] S5 takes 3.89 ms against the 3.5 ms
                                     line. Past 8 m its floor holds a fifth
                                     of the pixels and 41% of the shading.
                                     The levers left are a record a face
@@ -247,7 +250,6 @@ code-level choices in
                                     1.43. A depth pass of the solid boxes
                                     ahead of the march would leave the
                                     marched boxes' share
-                              - [ ] The bloom add
                               - [ ] A shadow fill on the GPU, which S2 and
                                     moving casters wait for
                         - [ ] A crossing box that holds the eye. It still
