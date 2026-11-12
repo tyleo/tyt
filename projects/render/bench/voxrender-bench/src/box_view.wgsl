@@ -1,10 +1,11 @@
 // A shaded view of the boxes around each tile's live cells, over
 // `mask_march.wgsl`. Multiview passes draw both eyes. A hit shades as the
 // contract's opaque surface under one sun and the hemispheres: corner
-// occlusion, the sun's corner shadows from `LitRows`, Lambert and GGX, and
-// emission, under the contract's tonemap. A smooth face reflects the sky
-// alone. `BoxView` prepends `ROWS` and `MATERIALS`, the offsets in a tile's
-// words of its opaque rows and its materials.
+// occlusion from the tile's words, the sun's corner shadows from
+// `LitCorners`, Lambert and GGX, and emission, under the contract's
+// tonemap. A smooth face reflects the sky alone. `BoxView` prepends
+// `SURFACE` and `MATERIALS`, the offsets in a tile's words of its surface
+// cells and its materials.
 
 // Every eye is a perspective view.
 const RAY_W: f32 = 1.0;
@@ -38,15 +39,6 @@ struct Place {
     x: vec4<f32>,
     y: vec4<f32>,
     z: vec4<f32>,
-
-    // The first word of the placement's tiles' rows in `lit`, the rows a
-    // tile holds, the rows it holds along y, and a bit per axis the sun's
-    // rays stay still along.
-    lit: vec4<u32>,
-
-    // The direction to the sun in the grid, as the reference's walk
-    // quantizes it.
-    sun: vec4<f32>,
 }
 
 // Whose cell a hit holds.
@@ -60,8 +52,8 @@ struct Source {
     // The first word of the tile's materials.
     header: u32,
 
-    // The first of the tile's rows in `lit`.
-    rows: u32,
+    // The first of the tile's words in `lit`.
+    lit: u32,
 }
 
 struct Box {
@@ -90,9 +82,9 @@ struct Box {
     // index of the eye's first `Place`.
     @location(7) @interpolate(flat) crossers: vec3<u32>,
 
-    // The first word of the tile's materials, then the first of its rows in
-    // `lit`. A fragment reads both here, where a read from the tile's words
-    // would hold up the reads that follow from it.
+    // The first word of the tile's materials, then the first of its words
+    // in `lit`. A fragment reads both here, where a read from the tile's
+    // words would hold up the reads that follow from it.
     @location(8) @interpolate(flat) shading: vec2<u32>,
 }
 
@@ -106,21 +98,21 @@ struct Box {
 // Three words per box: its low cell and its placement's index, the corner
 // past its high cell and the offset of its tile's words, and in the last
 // two parts the first word of the tile's materials and the first of its
-// rows in `lit`.
+// words in `lit`.
 @group(0) @binding(4) var<storage, read> boxes: array<vec4<u32>>;
 // Two words per box that shares space with a box: the low corner of a box
 // around the shared space and the other box's index in `boxes` as bits,
 // plus `SOLID` for a solid one, then the high corner.
 @group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
-// Each placement's `LitRows` words.
+// Each placement's `LitCorners` words.
 @group(0) @binding(6) var<storage, read> lit: array<u32>;
 
 // The box's vertex at the grid's `grid` for `eye`, on the face of code
 // `face`. `low` holds the box's low cell and its placement's index. `high`
 // holds the corner past the box's high cell and the offset of its tile's
 // words. `more` holds the first of the box's entries in `crossers`, their
-// count, the first word of the tile's materials, and the first of its rows
-// in `lit`.
+// count, the first word of the tile's materials, and the first of its
+// words in `lit`.
 fn vertex_of(
     eye: u32,
     grid: vec3<u32>,
@@ -242,19 +234,20 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
     );
 }
 
-// Whether `cell` of the tile whose words start at `tile` is opaque. The
-// tile's rows reach one cell past it on every side.
-fn opaque(tile: u32, cell: vec3<i32>) -> bool {
-    let row = bits[tile + ROWS + u32((cell.x + 1) * 18 + cell.y + 1)];
+// A face's four values of `bits` bits each, from the low bits of `packed`
+// up, as a part of their greatest.
+fn corners_of(packed: u32, bits: u32) -> vec4<f32> {
+    let greatest = (1u << bits) - 1u;
 
-    return ((row >> u32(cell.z + 1)) & 1u) == 1u;
+    return vec4<f32>((vec4<u32>(packed) >> (vec4<u32>(0u, 1u, 2u, 3u) * bits)) & vec4<u32>(greatest))
+        / f32(greatest);
 }
 
-// How open a face's corner is, from whether the two cells along the face's
-// edges and the one across the corner are opaque. Both edge cells together
-// close it.
-fn open(first: bool, second: bool, across: bool) -> f32 {
-    return select(f32(3u - u32(first) - u32(second) - u32(across)) / 3.0, 0.0, first && second);
+// The value at a point of a face from its corners' `values`. The point
+// lies `along.x` of the way across the face on the axis after the face's,
+// and `along.y` on the axis after that.
+fn across_face(values: vec4<f32>, along: vec2<f32>) -> f32 {
+    return mix(mix(values.x, values.y, along.x), mix(values.z, values.w, along.x), along.y);
 }
 
 // The hemispheres' light from the unit `direction`, with the sky meeting
@@ -277,11 +270,12 @@ fn surface(
 ) -> vec4<f32> {
     let tile = source.tile;
     let size = source.header & 15u;
+    let index = u32((cell.x * 16 + cell.y) * 16 + cell.z);
 
     var material = source.header >> 4u;
 
     if size != 0u {
-        let entry_at = u32((cell.x * 16 + cell.y) * 16 + cell.z) * size;
+        let entry_at = index * size;
         let entry = (bits[tile + MATERIALS + 1u + (entry_at >> 5u)] >> (entry_at & 31u))
             & ((1u << size) - 1u);
 
@@ -293,40 +287,29 @@ fn surface(
     let gloss = materials[material * 3u + 2u];
     let place = places[source.place];
 
-    // The face's axis, then the two after it, as steps between cells.
-    let d = vec3<i32>(across);
-    let u = vec3<i32>(across.zxy);
-    let v = vec3<i32>(across.yzx);
-
     let up = !any(across & ahead);
     let axis = select(select(place.x, place.y, across.y), place.z, across.z);
     let normal = select(-axis.xyz, axis.xyz, up);
 
-    // The cell the face looks into, and where the hit lies across the face.
-    let front = cell + select(-d, d, up);
+    // Where the hit lies across the face, on the axis after the face's and
+    // on the one after that.
     let within = at - vec3<f32>(cell);
-    let along_u = clamp(dot(within, vec3<f32>(u)), 0.0, 1.0);
-    let along_v = clamp(dot(within, vec3<f32>(v)), 0.0, 1.0);
-
-    // The opaque cells around the one the face looks into.
-    let low_u = opaque(tile, front - u);
-    let high_u = opaque(tile, front + u);
-    let low_v = opaque(tile, front - v);
-    let high_v = opaque(tile, front + v);
-
-    let occlusion = mix(
-        mix(
-            open(low_u, low_v, opaque(tile, front - u - v)),
-            open(high_u, low_v, opaque(tile, front + u - v)),
-            along_u,
-        ),
-        mix(
-            open(low_u, high_v, opaque(tile, front - u + v)),
-            open(high_u, high_v, opaque(tile, front + u + v)),
-            along_u,
-        ),
-        along_v,
+    let along = clamp(
+        vec2<f32>(dot(within, vec3<f32>(across.zxy)), dot(within, vec3<f32>(across.yzx))),
+        vec2<f32>(0.0),
+        vec2<f32>(1.0),
     );
+
+    // The cell's place among its tile's surface cells, and its face.
+    let pair = tile + SURFACE + (index >> 5u) * 2u;
+    let held = bits[pair];
+    let before = bits[pair + 1u];
+    let rank = (before & 0xfffu) + countOneBits(held & ((1u << (index & 31u)) - 1u));
+    let face = dot(vec3<u32>(across), vec3<u32>(0u, 2u, 4u)) + u32(up);
+
+    let open = bits[tile + (before >> 12u) + rank * 2u + (face >> 2u)] >> ((face & 3u) * 8u);
+    let occlusion = across_face(corners_of(open, 2u), along);
+    let lights = (lit[source.lit + rank] >> (face * 4u)) & 15u;
 
     // The world direction to the eye.
     let view = -normalize(
@@ -344,45 +327,9 @@ fn surface(
 
     var color = glow.rgb;
 
-    // The sun, where the face looks at it, scaled by the light that reaches
-    // the face's corners.
-    let sun_d = dot(place.sun.xyz, vec3<f32>(d)) * select(-1.0, 1.0, up);
-
-    if sun_d > 0.0 {
-        let sun_u = dot(place.sun.xyz, vec3<f32>(u));
-        let sun_v = dot(place.sun.xyz, vec3<f32>(v));
-        let still = ((vec3<u32>(place.lit.w) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
-
-        // A ray that leaves the face's cell past a corner on both axes
-        // crosses the cell beside the face on the axis it moves faster
-        // along. A tie goes to the earlier axis.
-        let u_faster = abs(sun_u) > abs(sun_v) || (abs(sun_u) == abs(sun_v) && !across.y);
-
-        var lights = array<f32, 4>();
-
-        for (var corner = 0u; corner < 4u; corner++) {
-            let far_u = (corner & 1u) == 1u;
-            let far_v = (corner & 2u) == 2u;
-            let far = i32(up) * d + i32(far_u) * u + i32(far_v) * v;
-            let key = vec3<u32>(select(cell + far, 2 * cell + far, still));
-            let reaches = ((lit[source.rows + key.x * place.lit.z + key.y] >> key.z) & 1u) == 1u;
-
-            let out_u = select((sun_u < 0.0), (sun_u > 0.0), far_u);
-            let out_v = select((sun_v < 0.0), (sun_v > 0.0), far_v);
-            let beside = select(
-                select(low_v, high_v, far_v),
-                select(low_u, high_u, far_u),
-                u_faster,
-            );
-
-            lights[corner] = f32(reaches && !(out_u && out_v && beside));
-        }
-
-        let light = mix(
-            mix(lights[0], lights[1], along_u),
-            mix(lights[2], lights[3], along_u),
-            along_v,
-        );
+    // The sun, scaled by the light that reaches the face's corners.
+    if lights != 0u {
+        let light = across_face(corners_of(lights, 1u), along);
 
         // The contract's direct term: Lambert, and GGX with Smith
         // visibility and Schlick's Fresnel.
