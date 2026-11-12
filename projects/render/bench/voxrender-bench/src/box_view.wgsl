@@ -223,8 +223,8 @@ fn place_held(
     return box;
 }
 
-// A vertex of one of the box's three faces toward the eye. `vertex` holds
-// the face's axis above its two bits for the face's four vertices.
+// A corner of the box's three faces toward the eye, which `vertex` picks
+// as `front_of` reads it.
 @vertex
 fn place_front(
     @builtin(view_index) eye: u32,

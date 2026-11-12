@@ -2032,3 +2032,67 @@ A start bound's best case on the box raster.
 1. The read of the prior depth costs 0.04 to 0.28 ms. The marches it
    spares give back 0.09 ms on S2 and nothing on S1, S4, and S5
 2. Start bounds drop. A box's face is already the bound a march needs
+
+## S9.6 lossy cuts, and a box's cost, 2026-11-12
+
+The cut that fits the box raster is fewer pixels. Its test also split a
+frame's time into a part for its boxes and a part for its pixels.
+
+- Device, method, and image check: as in Records by row
+- Scale: `debug.voxrenderbench.scale`, the part of the eyes' recommended
+  size the app draws along each side
+
+**The view by its scale.**
+
+| Scale | Each eye | Pixels | S1 | S5 | S2 | S4 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1680 by 1760 | 5.91 M | 2.04 | 3.58 | 6.78 | 3.17 |
+| 0.8 | 1344 by 1408 | 3.78 M | 1.45 | 2.83 | 5.02 | 2.26 |
+| 0.5 | 840 by 880 | 1.48 M | 0.74 | 2.01 | 3.08 | 1.22 |
+
+A line through a scene's times fits all three within 0.01 ms:
+
+| Scene | Boxes | ms at no pixel | ns a pixel |
+| --- | ---: | ---: | ---: |
+| S1 | 426 | 0.31 | 0.29 |
+| S4 | 2345 | 0.57 | 0.44 |
+| S5 | 23,296 | 1.49 | 0.35 |
+| S2 | 26,325 | 1.84 | 0.84 |
+
+The cube's view takes 0.30 ms, so a frame's passes cost that much and a
+box about 55 ns: 1.2 ms of S5's frame and 1.5 of S2's.
+
+**Boxes.** Three changes to what a box costs, at scale 1:
+
+| Build | S1 | S5 | S2 | S4 |
+| --- | ---: | ---: | ---: | ---: |
+| Before | 2.03 | 3.55 | 6.81 | 3.18 |
+| No stray cells as boxes, 8192 boxes on S5 | 2.04 | 4.26 | 6.74 | 3.18 |
+| No solid boxes | 2.87 | 4.23 | 6.49 | 3.01 |
+| Three faces over 7 corners | 2.03 | 3.40 | 6.72 | 3.15 |
+
+A box drew its three faces toward the view over 12 vertices, four a
+face. The faces hold 7 corners. A face's two triangles can start at its
+corner that no other face holds, which keeps the face's flat values.
+B1 passes, and the image check moves by under 6 pixels a scene.
+
+**The other cuts.**
+
+1. Quad views. The runtime offers four views of 840 by 880, 2.96 M pixels
+   where stereo holds 5.91 M. By the lines above, with a box's cost for
+   each pair of views, they would take S1 1.49 ms, S4 2.44, S2 6.15, and
+   S5 4.03. The app does not draw them yet
+2. Stereo hit copying and iteration caps belong to a march from the eye.
+   A raster draws each eye's faces, and a march ends within its box.
+   Neither ran
+
+**Outcomes.**
+
+1. S5 takes 3.40 ms over 7 corners a box, under B3's 3.5 ms line
+2. A box costs Quest about 55 ns a frame, most of it by its triangles.
+   The 7 corners save 6 ns of it. Stray cells as boxes still pay: S5
+   takes 0.7 ms more without them
+3. The scale waits for the project lead's eye. At 0.8 the scenes take 71%
+   to 79% of their time
+4. Quad views pay where pixels set the time, S1 and S4, and cost S5
+   until B6's LOD holds its boxes down

@@ -53,7 +53,7 @@
 // Its vertex entries place a corner only when `sound` holds for the corner's
 // position and its `ray`. They take a box's back faces from `BoxDraw`'s
 // corners through `corner_of` and `corner_face`, and its faces toward the
-// view from `BoxDraw`'s face vertices through `front_of`.
+// view from `BoxDraw`'s front corners through `front_of`.
 
 // What a perspective view's reversed depth scales by to come a part in 1024
 // nearer.
@@ -137,33 +137,35 @@ struct Front {
     face: u32,
 }
 
-// The vertex `vertex` of the box from `low` to `high`, on the box's face
-// toward the view on the vertex's axis. `vertex` holds the axis above two
-// bits for the face's four vertices. `ray` is the placement's `Place::ray`.
+// The vertex `vertex` of the box from `low` to `high`, one of the 7 corners
+// of its three faces toward the view. Bit `b` of `vertex` picks the far
+// side on the axis the bit stands for, and no vertex sets all three. `ray`
+// is the placement's `Place::ray`.
 //
 // A perspective view's eye past the box's middle sees the high face, as
 // does an orthographic view whose reverse direction points up the axis. An
 // eye between the two faces sees neither, and the face then winds away from
 // it.
+//
+// Bit 0 stands for x. Bits 1 and 2 stand for y and z, or for z and y where
+// the view sees an odd count of high faces, which keeps `BoxDraw`'s
+// triangles wound counterclockwise from outside. A face's triangles start
+// at its corner that no other face holds. That corner has a single clear
+// bit, which gives the face.
 fn front_of(vertex: u32, ray: vec3<f32>, low: vec3<u32>, high: vec3<u32>) -> Front {
-    let axis = vertex >> 2u;
     let toward = ray * 2.0 > vec3<f32>(low + high) * RAY_W;
-    let on_high = toward[axis];
+    let odd = (toward.x != toward.y) != toward.z;
+    let bits = ((vec3<u32>(vertex) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
+    let far = vec3<bool>(bits.x, select(bits.y, bits.z, odd), select(bits.z, bits.y, odd));
 
-    // The high face's vertices wind counterclockwise from outside along
-    // the next axis and then the one after. The low face's swap the two.
-    let first = (vertex & 3u) == 1u || (vertex & 3u) == 2u;
-    let second = (vertex & 3u) >= 2u;
-    let next = select(second, first, on_high);
-    let after = select(first, second, on_high);
+    // The clear bit of a corner one face holds, then the axis it stands for.
+    let clear = select(select(2u, 1u, !bits.y), 0u, !bits.x);
+    let axis = select(clear, 3u - clear, odd && clear != 0u);
 
-    let far = vec3<bool>(
-        select(select(after, next, axis == 2u), on_high, axis == 0u),
-        select(select(after, next, axis == 0u), on_high, axis == 1u),
-        select(select(after, next, axis == 1u), on_high, axis == 2u),
+    return Front(
+        select(select(low, high, toward), select(high, low, toward), far),
+        axis | (u32(toward[axis]) << 2u),
     );
-
-    return Front(select(low, high, far), axis | (u32(on_high) << 2u));
 }
 
 // The one axis of the least component of `v`. A tie goes to the earlier
