@@ -2,6 +2,7 @@ use branded_id::U32Id;
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
+    path::PathBuf,
 };
 use voxrender::{BRenderMaterial, Error as RenderError};
 use voxrender_wgpu::Error as WgpuError;
@@ -18,6 +19,9 @@ pub enum Error {
 
     /// No bench scene's name starts with the text.
     NoScene(String),
+
+    /// A model's document gave no scene.
+    Model { path: PathBuf, error: String },
 
     /// The scene has no view to draw.
     NoView,
@@ -69,6 +73,9 @@ impl Display for Error {
             Error::Render(error) => write!(f, "the reference failed: {error}"),
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
             Error::NoScene(name) => write!(f, "no bench scene's name starts with {name:?}"),
+            Error::Model { path, error } => {
+                write!(f, "the model at {} gave no scene: {error}", path.display())
+            }
             Error::NoView => write!(f, "the scene has no view"),
             Error::NoSun => write!(f, "the scene has no directional light"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),

@@ -9,7 +9,10 @@ use std::{
     path::{Path, PathBuf},
     process,
 };
-use voxrender_bench::{TimedBench, bench_scene, lit_check, run_b1, view_check, view_image};
+use voxrender::RenderScene;
+use voxrender_bench::{
+    TimedBench, bench_scene, lit_check, model_scene, run_b1, view_check, view_image,
+};
 
 // Internal API
 
@@ -72,11 +75,12 @@ enum Command {
         ray_queries: bool,
     },
 
-    /// Draws a bench scene's first view as a shaded box raster and writes
-    /// the image as a PNG.
+    /// Draws the first view of a bench scene or of a model as a shaded box
+    /// raster and writes the image as a PNG.
     #[command(name = "view")]
     View {
-        /// The start of the scene's name in B1's report, such as `S1`.
+        /// The start of the scene's name in B1's report, such as `S1`, or
+        /// the path of a Voxel Json model.
         #[arg(value_name = "scene")]
         scene: String,
 
@@ -103,11 +107,12 @@ enum Command {
         height: u32,
     },
 
-    /// Compares a bench scene's shaded view with the reference's image of
-    /// it and prints how far they differ.
+    /// Compares the shaded view of a bench scene or of a model with the
+    /// reference's image of it and prints how far they differ.
     #[command(name = "view-check")]
     ViewCheck {
-        /// The start of the scene's name in B1's report, such as `S1`.
+        /// The start of the scene's name in B1's report, such as `S1`, or
+        /// the path of a Voxel Json model.
         #[arg(value_name = "scene")]
         scene: String,
 
@@ -121,11 +126,13 @@ enum Command {
         size: u32,
     },
 
-    /// Compares the GPU's fill of a bench scene's corner shadows with the
-    /// fill through the reference's walk and prints how far they differ.
+    /// Compares the GPU's fill of the corner shadows of a bench scene or of
+    /// a model with the fill through the reference's walk and prints how far
+    /// they differ.
     #[command(name = "lit-check")]
     LitCheck {
-        /// The start of the scene's name in B1's report, such as `S1`.
+        /// The start of the scene's name in B1's report, such as `S1`, or
+        /// the path of a Voxel Json model.
         #[arg(value_name = "scene")]
         scene: String,
     },
@@ -214,28 +221,34 @@ fn time(bench: TimedBench, times: &Times) -> Result<String> {
     })
 }
 
-/// Compares the shaded view of the bench scene whose name starts with
-/// `scene` with the reference's image, over a `size` square image.
+/// The model at the path `scene`, or else the bench scene whose name starts
+/// with `scene`.
+fn scene_of(scene: &str) -> Result<RenderScene> {
+    let path = Path::new(scene);
+
+    if path.is_file() {
+        return model_scene(path).map_err(Error::Bench);
+    }
+
+    bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))
+}
+
 fn check(scene: &str, size: u32) -> Result<String> {
-    let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
+    let render_scene = scene_of(scene)?;
     let gpu = headless_gpu()?;
 
     view_check(&gpu, &render_scene, size).map_err(Error::Bench)
 }
 
-/// Compares the GPU's fill of the lit corners of the bench scene whose name
-/// starts with `scene` with the fill through the reference's walk.
 fn check_lit(scene: &str) -> Result<String> {
-    let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
+    let render_scene = scene_of(scene)?;
     let gpu = headless_gpu()?;
 
     lit_check(&gpu, &render_scene).map_err(Error::Bench)
 }
 
-/// Writes the shaded view of the bench scene whose name starts with `scene`
-/// to the PNG `output`.
 fn view(scene: &str, output: &Path, width: u32, height: u32) -> Result<()> {
-    let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
+    let render_scene = scene_of(scene)?;
     let gpu = headless_gpu()?;
     let texels = view_image(&gpu, &render_scene, width, height).map_err(Error::Bench)?;
 
