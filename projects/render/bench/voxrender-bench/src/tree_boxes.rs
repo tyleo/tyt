@@ -167,6 +167,7 @@ pub fn tree_boxes(
             (ShaderStages::FRAGMENT, storage, &cells),
             (ShaderStages::VERTEX, storage, &clips),
         ],
+        None,
         multiview_mask,
     ))
 }

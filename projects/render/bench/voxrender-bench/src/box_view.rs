@@ -8,8 +8,10 @@ use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVect
 use voxcore::material;
 use voxrender::{RenderLight, RenderScene, grid_point, grid_vector, quantize_direction, tonemap};
 use wgpu::{
-    Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, Device, Queue, RenderPass,
-    ShaderModuleDescriptor, ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureFormat,
+    AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, Device,
+    Extent3d, FilterMode, Queue, RenderPass, SamplerDescriptor, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages, TextureViewDescriptor,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -36,7 +38,9 @@ const SLACK: f32 = 0.25;
 ///
 /// A hit shades as the contract's opaque surface under the scene's first
 /// sun and its hemispheres, with corner occlusion and the sun's corner
-/// shadows. A smooth face reflects the sky alone.
+/// shadows. A smooth face reflects the sky alone. Each fragment adds the
+/// bloom at its pixel before the tonemap, from a texture a quarter of the
+/// target's size that stays black until a pass fills it.
 pub struct BoxView {
     boxes: BoxDraw,
 
@@ -182,9 +186,9 @@ impl BoxView {
     /// The format of the depth a pass that draws the view clears to zero.
     pub const DEPTH: TextureFormat = HitTargets::DEPTH;
 
-    /// Builds the view of `scene` for a two-layer target of `format`. Errors
-    /// if a tile holds over 256 materials, or if a shadow's ray lies out of
-    /// a grid's range.
+    /// Builds the view of `scene` for a two-layer target of `format` and
+    /// of `size`, its width and height. Errors if a tile holds over 256
+    /// materials, or if a shadow's ray lies out of a grid's range.
     ///
     /// When `shadows`, the sun casts its corner shadows. Their fill runs the
     /// reference's walk, which crosses every placement for each ray, so a
@@ -193,6 +197,7 @@ impl BoxView {
         device: &Device,
         scene: &RenderScene,
         format: TextureFormat,
+        size: [u32; 2],
         shadows: bool,
     ) -> Result<Self> {
         let mut words = Vec::new();
@@ -472,8 +477,13 @@ impl BoxView {
         let placement_count =
             u32::try_from(placements.len()).expect("a scene's placements number under 2^32");
 
-        for value in [placement_count, 0, 0, 0] {
+        // The placements' count, then what a pixel spans of the target.
+        for value in [placement_count, 0] {
             frame.extend(value.to_le_bytes());
+        }
+
+        for side in size {
+            frame.extend((1.0 / side as f32).to_le_bytes());
         }
 
         // A hit the depth test drops can read the words past its tile's
@@ -587,6 +597,33 @@ impl BoxView {
         let storage = BufferBindingType::Storage { read_only: true };
         let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
 
+        // The bloom each eye's fragments add. wgpu clears it to black.
+        let bloom = device
+            .create_texture(&TextureDescriptor {
+                label: Some("view bloom"),
+                size: Extent3d {
+                    width: size[0].div_ceil(4),
+                    height: size[1].div_ceil(4),
+                    depth_or_array_layers: 2,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Rgba16Float,
+                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+            .create_view(&TextureViewDescriptor::default());
+
+        let bloom_sampler = device.create_sampler(&SamplerDescriptor {
+            label: Some("view bloom"),
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            ..SamplerDescriptor::default()
+        });
+
         // The runs start with every marched box in the run that draws its
         // front faces. Each sort then deals the boxes out again.
         let boxes = BoxDraw::new(
@@ -629,6 +666,7 @@ impl BoxView {
                 (ShaderStages::FRAGMENT, storage, &crosser_list),
                 (ShaderStages::FRAGMENT, storage, &lit_corners),
             ],
+            Some((&bloom, &bloom_sampler)),
             NonZeroU32::new(0b11),
         );
 
