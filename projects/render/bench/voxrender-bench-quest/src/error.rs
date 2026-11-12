@@ -95,6 +95,9 @@ pub enum Error {
     /// A system property holds a value other than a positive count of seconds.
     SecondsProperty { name: &'static str, value: String },
 
+    /// A system property holds a value other than a scale over 0 and at most 1.
+    ScaleProperty { name: &'static str, value: String },
+
     /// Android gave the app no external files directory.
     NoFiles,
 
@@ -145,6 +148,10 @@ impl Display for Error {
             Error::SecondsProperty { name, value } => write!(
                 f,
                 "the property {name} holds {value:?}, not a positive count of seconds"
+            ),
+            Error::ScaleProperty { name, value } => write!(
+                f,
+                "the property {name} holds {value:?}, not a scale over 0 and at most 1"
             ),
             Error::NoFiles => write!(f, "the app has no external files directory"),
             Error::ClockRead(error) => write!(f, "the GPU clock would not read: {error}"),
