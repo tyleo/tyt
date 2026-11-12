@@ -1,6 +1,7 @@
+use crate::BoxCrosser;
 use branded_id::U32Id;
 use std::collections::HashMap;
-use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 use voxcore::BVoxObject;
 use voxrender::{RenderProjection, RenderScene, RenderView, grid_point};
 
@@ -124,13 +125,14 @@ impl PlacedBox {
         self.world
     }
 
-    /// The box's two `vec4<u32>`s: its low cell and `low`, then the corner
-    /// past its high cell and `high`.
-    pub fn words(&self, low: u32, high: u32) -> [u32; 8] {
+    /// The box's three `vec4<u32>`s: its low cell and `low`, the corner past
+    /// its high cell and `high`, then `more` and two zeros.
+    pub fn words(&self, low: u32, high: u32, more: [u32; 2]) -> [u32; 12] {
         let [x, y, z] = self.low.to_array();
         let [far_x, far_y, far_z] = self.high.to_array();
+        let [first, count] = more;
 
-        [x, y, z, low, far_x, far_y, far_z, high]
+        [x, y, z, low, far_x, far_y, far_z, high, first, count, 0, 0]
     }
 
     /// Whether some axis parts the box from `other`: an axis along which
@@ -179,21 +181,32 @@ impl PlacedBox {
         )
     }
 
-    /// Whether each of `boxes` shares space with a box of another placement
-    /// among `boxes` or `others`.
-    pub fn crossings(boxes: &[Self], others: &[Self]) -> Vec<bool> {
-        // Every box's low and high x, placement, and index in `boxes`. A
-        // sweep along x then compares only boxes whose spans meet.
-        let mut spans: Vec<(&Self, Option<usize>)> = boxes
-            .iter()
-            .enumerate()
-            .map(|(index, placed)| (placed, Some(index)))
-            .chain(others.iter().map(|placed| (placed, None)))
-            .collect();
+    /// For each of `marched`, the boxes of other placements that share
+    /// space with it. A crosser's entry holds a box's index in `marched`
+    /// followed by `solid`.
+    pub fn crossers(marched: &[Self], solid: &[Self]) -> Vec<Vec<BoxCrosser>> {
+        // Every box with its index. A sweep along x then compares only
+        // boxes whose spans meet.
+        let mut spans: Vec<(&Self, usize)> = marched.iter().chain(solid).zip(0..).collect();
 
         spans.sort_by(|(a, _), (b, _)| a.world.0.x.total_cmp(&b.world.0.x));
 
-        let mut crosses = vec![false; boxes.len()];
+        let mut crossers = vec![Vec::new(); marched.len()];
+
+        let entry = |at: usize| {
+            let index = u32::try_from(at).expect("a scene's boxes number under 2^31");
+
+            assert!(
+                index < BoxCrosser::SOLID,
+                "a scene's boxes number under 2^31"
+            );
+
+            if at < marched.len() {
+                index
+            } else {
+                index | BoxCrosser::SOLID
+            }
+        };
 
         for (first, &(a, a_index)) in spans.iter().enumerate() {
             for &(b, b_index) in &spans[first + 1..] {
@@ -206,23 +219,73 @@ impl PlacedBox {
                     || (b.world.0 + TOUCH).cmpge(a.world.1).any()
                     || a.parted_from(b);
 
-                if !apart {
-                    for index in [a_index, b_index].into_iter().flatten() {
-                        crosses[index] = true;
+                if apart {
+                    continue;
+                }
+
+                for (own, own_index, other, other_index) in
+                    [(a, a_index, b, b_index), (b, b_index, a, a_index)]
+                {
+                    if let Some(of_own) = crossers.get_mut(own_index) {
+                        let (low, high) = own.shared_with(other);
+
+                        of_own.push(BoxCrosser {
+                            entry: entry(other_index),
+                            low,
+                            high,
+                        });
                     }
                 }
             }
         }
 
-        crosses
+        crossers
+    }
+
+    /// The low and high corners of a box around the space the box shares
+    /// with `other`, in the cells of the box's tile. The box holds all of
+    /// that space and can hold more.
+    fn shared_with(&self, other: &Self) -> (TyVector3F32, TyVector3F32) {
+        let (other_low, other_high) = (other.low.as_dvec3(), other.high.as_dvec3());
+
+        let (least, most) = (0..8)
+            .map(|corner| {
+                let pick = |bit: u32, low: f64, high: f64| {
+                    if corner & bit == 0 { low } else { high }
+                };
+
+                let point = TyVector3F64::new(
+                    pick(1, other_low.x, other_high.x),
+                    pick(2, other_low.y, other_high.y),
+                    pick(4, other_low.z, other_high.z),
+                );
+
+                grid_point(&self.transform, other.transform.transform_point(point))
+            })
+            .fold(
+                (
+                    TyVector3F64::splat(f64::INFINITY),
+                    TyVector3F64::splat(f64::NEG_INFINITY),
+                ),
+                |(least, most), corner| (least.min(corner), most.max(corner)),
+            );
+
+        let tile = (self.low / 16 * 16).as_dvec3();
+
+        (
+            (least.max(self.low.as_dvec3()) - tile).as_vec3(),
+            (most.min(self.high.as_dvec3()) - tile).as_vec3(),
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{PlacedBox, painted_object, place_object, retain_matte, retain_next_object};
+    use crate::{
+        BoxCrosser, PlacedBox, painted_object, place_object, retain_matte, retain_next_object,
+    };
     use std::collections::HashMap;
-    use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TyVector3F32, TyVector3F64, TyVector3U32};
     use voxrender::RenderScene;
 
     #[test]
@@ -249,8 +312,26 @@ mod tests {
         let boxes = HashMap::from([(cube, vec![(TyVector3U32::ZERO, TyVector3U32::splat(16))])]);
         let placed = PlacedBox::list(&scene, &boxes);
 
-        assert_eq!(PlacedBox::crossings(&placed, &[]), [false, true, true]);
-        assert_eq!(PlacedBox::crossings(&placed[..1], &placed[1..]), [false]);
-        assert_eq!(PlacedBox::crossings(&placed[1..2], &placed[2..]), [true]);
+        // The second and third cubes share the cells from x = 24 to 32:
+        // the second's 8 to 16, and the third's 0 to 8.
+        let shared = |entry, low: f32, high: f32| BoxCrosser {
+            entry,
+            low: TyVector3F32::new(low, 0.0, 0.0),
+            high: TyVector3F32::new(high, 16.0, 16.0),
+        };
+
+        assert_eq!(
+            PlacedBox::crossers(&placed, &[]),
+            [
+                vec![],
+                vec![shared(2, 8.0, 16.0)],
+                vec![shared(1, 0.0, 8.0)]
+            ]
+        );
+        assert_eq!(PlacedBox::crossers(&placed[..1], &placed[1..]), [vec![]]);
+        assert_eq!(
+            PlacedBox::crossers(&placed[1..2], &placed[2..]),
+            [vec![shared(1 | BoxCrosser::SOLID, 8.0, 16.0)]]
+        );
     }
 }

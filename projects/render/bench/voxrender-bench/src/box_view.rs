@@ -1,4 +1,4 @@
-use crate::{BoxDraw, BoxPart, HitTargets, PlacedBox, Result, TileMasks, ViewEye};
+use crate::{BoxCrosser, BoxDraw, BoxPart, HitTargets, PlacedBox, Result, TileMasks, ViewEye};
 use std::{collections::HashMap, f64::consts::PI, num::NonZeroU32};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxrender::{RenderLight, RenderScene, grid_point, tonemap};
@@ -45,12 +45,10 @@ pub struct BoxView {
     placements: Vec<(TyTransformF64, TyMatrix4x4F64)>,
 
     solid: ViewBoxes,
+    marched: ViewBoxes,
 
-    /// The marched boxes that cross no other placement's box.
-    apart: ViewBoxes,
-
-    /// The marched boxes that cross another placement's box, 32 bytes each.
-    crossing: Vec<u8>,
+    /// Whether each marched box shares space with another placement's box.
+    crossing: Vec<bool>,
 
     /// Where the head stood when the boxes last sorted, and how far from
     /// there a box drew its back faces.
@@ -59,7 +57,7 @@ pub struct BoxView {
     /// The last sort's boxes and keys, kept for their room.
     sorted: Vec<u8>,
     solid_keys: Vec<u64>,
-    apart_keys: Vec<u64>,
+    marched_keys: Vec<u64>,
 
     sky: Color,
 }
@@ -70,16 +68,16 @@ struct ViewBoxes {
     /// The low and then the high corner of the world box around each box.
     bounds: Vec<[f32; 6]>,
 
-    /// Each box's two `vec4<u32>`s.
-    words: Vec<[u8; 32]>,
+    /// Each box's three `vec4<u32>`s.
+    words: Vec<[u8; BoxDraw::BOX_BYTES]>,
 }
 
 impl ViewBoxes {
-    fn push(&mut self, placed: &PlacedBox, words: [u32; 8]) {
+    fn push(&mut self, placed: &PlacedBox, words: [u32; 12]) {
         let (low, high) = placed.world();
         let [low_x, low_y, low_z] = low.as_vec3().to_array();
         let [high_x, high_y, high_z] = high.as_vec3().to_array();
-        let mut bytes = [0; 32];
+        let mut bytes = [0; BoxDraw::BOX_BYTES];
 
         for (bytes, word) in bytes.chunks_exact_mut(4).zip(words) {
             bytes.copy_from_slice(&word.to_le_bytes());
@@ -113,12 +111,33 @@ impl ViewBoxes {
         keys.partition_point(|&key| f32::from_bits((key >> 32) as u32) <= reach * reach)
     }
 
-    /// Appends the boxes of `keys` to `sorted`.
-    fn extend(&self, keys: &[u64], sorted: &mut Vec<u8>) {
-        for &key in keys {
-            sorted.extend_from_slice(&self.words[(key & 0xffff_ffff) as usize]);
+    /// Appends the boxes of `keys` to `sorted` and returns their count.
+    fn extend(&self, keys: impl IntoIterator<Item = u64>, sorted: &mut Vec<u8>) -> u32 {
+        let mut count = 0;
+
+        for key in keys {
+            sorted.extend_from_slice(&self.words[index_of(key)]);
+            count += 1;
         }
+
+        count
     }
+}
+
+/// The index of the box a sort's `key` holds.
+fn index_of(key: u64) -> usize {
+    (key & 0xffff_ffff) as usize
+}
+
+/// The keys of `keys` whose boxes have `crosses` in `crossing`.
+fn crossing_keys<'a>(
+    keys: &'a [u64],
+    crossing: &'a [bool],
+    crosses: bool,
+) -> impl Iterator<Item = u64> + 'a {
+    keys.iter()
+        .copied()
+        .filter(move |&key| crossing[index_of(key)] == crosses)
 }
 
 impl BoxView {
@@ -171,7 +190,6 @@ impl BoxView {
 
         let marched = PlacedBox::list(scene, &object_boxes);
         let solid = PlacedBox::list(scene, &object_solids);
-        let crossings = PlacedBox::crossings(&marched, &solid);
 
         // A box's tile sits past its object's first word.
         let tile = |placed: &PlacedBox, solid: bool| {
@@ -181,39 +199,51 @@ impl BoxView {
             offsets[&object_id] + if solid { solid_tiles } else { tiles }[placed.brick]
         };
 
-        let solid_words: Vec<_> = solid
-            .iter()
-            .map(|placed| placed.words(placed.placement, tile(placed, true)))
-            .collect();
+        // Each marched box's entries in `crosser_words`, as their first and
+        // their count.
+        let crossers = PlacedBox::crossers(&marched, &solid);
+        let mut crosser_words: Vec<u32> = Vec::new();
 
         let march_words: Vec<_> = marched
             .iter()
-            .map(|placed| placed.words(placed.placement, tile(placed, false)))
+            .zip(&crossers)
+            .map(|(placed, entries)| {
+                let count = |entries: usize| {
+                    u32::try_from(entries).expect("a scene's crossing boxes number under 2^32")
+                };
+
+                let span = [count(crosser_words.len() / 8), count(entries.len())];
+
+                crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
+
+                placed.words(placed.placement, tile(placed, false), span)
+            })
+            .collect();
+
+        let solid_words: Vec<_> = solid
+            .iter()
+            .map(|placed| placed.words(placed.placement, tile(placed, true), [0, 0]))
+            .collect();
+
+        // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
+        let mut box_words: Vec<u32> = march_words
+            .iter()
+            .chain(&solid_words)
+            .flat_map(|words| words.iter().copied().take(8))
             .collect();
 
         let mut solid_boxes = ViewBoxes::default();
-        let mut apart = ViewBoxes::default();
-        let mut apart_words = Vec::new();
-        let mut crossing_words = Vec::new();
+        let mut marched_boxes = ViewBoxes::default();
 
         for (placed, &words) in solid.iter().zip(&solid_words) {
             solid_boxes.push(placed, words);
         }
 
-        for ((placed, &words), crosses) in marched.iter().zip(&march_words).zip(crossings) {
-            if crosses {
-                crossing_words.push(words);
-            } else {
-                apart.push(placed, words);
-                apart_words.push(words);
-            }
+        for (placed, &words) in marched.iter().zip(&march_words) {
+            marched_boxes.push(placed, words);
         }
 
-        let crossing: Vec<u8> = crossing_words
-            .iter()
-            .flatten()
-            .flat_map(|word| word.to_le_bytes())
-            .collect();
+        let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
 
         let mut sun = (TyVector3F64::Y, TyLinSrgbF64::new(0.0, 0.0, 0.0));
         let mut sky = TyLinSrgbF64::new(0.0, 0.0, 0.0);
@@ -291,6 +321,14 @@ impl BoxView {
             words.push(0);
         }
 
+        if box_words.is_empty() {
+            box_words.resize(8, 0);
+        }
+
+        if crosser_words.is_empty() {
+            crosser_words.resize(8, 0);
+        }
+
         let init = |label, contents: &[u8], usage| {
             device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(label),
@@ -299,16 +337,23 @@ impl BoxView {
             })
         };
 
+        let words_bytes = |words: &[u32]| -> Vec<u8> {
+            words.iter().flat_map(|word| word.to_le_bytes()).collect()
+        };
+
         let frame = init("view frame", &frame, BufferUsages::UNIFORM);
-        let bits = init(
-            "view bits",
-            &words
-                .iter()
-                .flat_map(|word| word.to_le_bytes())
-                .collect::<Vec<_>>(),
+        let bits = init("view bits", &words_bytes(&words), BufferUsages::STORAGE);
+        let colors = init("view colors", &colors, BufferUsages::STORAGE);
+        let box_list = init(
+            "view boxes",
+            &words_bytes(&box_words),
             BufferUsages::STORAGE,
         );
-        let colors = init("view colors", &colors, BufferUsages::STORAGE);
+        let crosser_list = init(
+            "view crossers",
+            &words_bytes(&crosser_words),
+            BufferUsages::STORAGE,
+        );
 
         let places = device.create_buffer(&BufferDescriptor {
             label: Some("view places"),
@@ -317,13 +362,20 @@ impl BoxView {
             mapped_at_creation: false,
         });
 
-        // A `Place` ends with the world directions of its grid's axes.
+        // A `Place` ends with the world direction of each of its grid's
+        // axes and the meters a cell spans along it.
         let mut place_bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
         let each = placements.iter().chain(&placements);
 
         for (place, (transform, _)) in place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
-            let axes = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
-                .map(|axis| (transform.rotation * axis).extend(0.0).to_array());
+            let [x, y, z] = transform.scale.to_array();
+
+            let axes = [
+                (TyVector3F64::X, x),
+                (TyVector3F64::Y, y),
+                (TyVector3F64::Z, z),
+            ]
+            .map(|(axis, meters)| (transform.rotation * axis).extend(meters).to_array());
 
             for (bytes, value) in place[EYE_BYTES..]
                 .chunks_exact_mut(4)
@@ -333,11 +385,11 @@ impl BoxView {
             }
         }
 
-        // SAFETY: a fragment reads only within its tile's words because each
+        // SAFETY: a fragment reads only within a tile's words because each
         // step keeps its cell inside the tile's box. Its loop ends within
         // the box's extent. A tile's words hold its cells' materials, which
-        // index `colors`. The stages index `places` by an eye and a box's
-        // placement.
+        // index `colors`. A box's entries in `crossers` index `boxes`. The
+        // stages index `places` by an eye and a box's placement.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
@@ -358,9 +410,8 @@ impl BoxView {
         let storage = BufferBindingType::Storage { read_only: true };
         let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
 
-        // The runs start with every box that crosses no other in the run
-        // that draws its front faces. Each sort then deals the boxes out
-        // again.
+        // The runs start with every marched box in the run that draws its
+        // front faces. Each sort then deals the boxes out again.
         let boxes = BoxDraw::new(
             device,
             &module,
@@ -382,13 +433,19 @@ impl BoxView {
                     vertex: "place",
                     fragment: "front",
                     backs: false,
-                    boxes: apart_words,
+                    boxes: march_words,
+                },
+                BoxPart {
+                    vertex: "place",
+                    fragment: "crossed",
+                    backs: false,
+                    boxes: Vec::new(),
                 },
                 BoxPart {
                     vertex: "place",
                     fragment: "exact",
                     backs: true,
-                    boxes: crossing_words,
+                    boxes: Vec::new(),
                 },
             ],
             &[
@@ -396,6 +453,8 @@ impl BoxView {
                 (both, storage, &places),
                 (ShaderStages::FRAGMENT, storage, &bits),
                 (ShaderStages::FRAGMENT, storage, &colors),
+                (ShaderStages::FRAGMENT, storage, &box_list),
+                (ShaderStages::FRAGMENT, storage, &crosser_list),
             ],
             NonZeroU32::new(0b11),
         );
@@ -412,12 +471,12 @@ impl BoxView {
             place_bytes,
             placements,
             solid: solid_boxes,
-            apart,
+            marched: marched_boxes,
             crossing,
             sorted_for: None,
             sorted: Vec::new(),
             solid_keys: Vec::new(),
-            apart_keys: Vec::new(),
+            marched_keys: Vec::new(),
             sky: Color {
                 r: f64::from(above.red),
                 g: f64::from(above.green),
@@ -477,37 +536,37 @@ impl BoxView {
 
     /// Sorts the boxes nearest to `head` first into their runs. A marched
     /// box within `covered` of `head` draws its back faces because an eye
-    /// can come to stand inside it before the next sort. Every solid box
-    /// draws its front faces because a ray that starts inside one sees none
-    /// of it.
+    /// can come to stand inside it before the next sort. Such a box writes
+    /// its hits' depth when it crosses another placement's box because only
+    /// a front face's fragment steps through the boxes it crosses. Every solid
+    /// box draws its front faces because a ray that starts inside one sees
+    /// none of it.
     fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32) {
         self.solid
             .nearest_first(head, covered, &mut self.solid_keys);
 
-        let inside = self
-            .apart
-            .nearest_first(head, covered, &mut self.apart_keys);
-        let (near, far) = self.apart_keys.split_at(inside);
+        let within = self
+            .marched
+            .nearest_first(head, covered, &mut self.marched_keys);
+        let (near, far) = self.marched_keys.split_at(within);
+        let crossing = &self.crossing;
 
         self.sorted.clear();
-        self.apart.extend(near, &mut self.sorted);
-        self.solid.extend(&self.solid_keys, &mut self.sorted);
-        self.apart.extend(far, &mut self.sorted);
-        self.sorted.extend_from_slice(&self.crossing);
 
-        let count = |boxes: usize| u32::try_from(boxes).expect("the boxes number under 2^32");
+        let counts = [
+            self.marched
+                .extend(crossing_keys(near, crossing, false), &mut self.sorted),
+            self.solid
+                .extend(self.solid_keys.iter().copied(), &mut self.sorted),
+            self.marched
+                .extend(crossing_keys(far, crossing, false), &mut self.sorted),
+            self.marched
+                .extend(crossing_keys(far, crossing, true), &mut self.sorted),
+            self.marched
+                .extend(crossing_keys(near, crossing, true), &mut self.sorted),
+        ];
 
-        self.boxes.rewrite(
-            queue,
-            &self.sorted,
-            &[
-                count(near.len()),
-                count(self.solid_keys.len()),
-                count(far.len()),
-                count(self.crossing.len() / 32),
-            ],
-        );
-
+        self.boxes.rewrite(queue, &self.sorted, &counts);
         self.sorted_for = Some((head, covered));
     }
 

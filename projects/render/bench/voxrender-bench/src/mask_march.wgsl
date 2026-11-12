@@ -2,9 +2,16 @@
 // steps its ray a cell at a time, from the point the rasterizer gives it on
 // its box.
 //
-// `front` and `inside` discard a miss and keep their face's depth, which
-// lets the depth test run before the march. `exact` writes the hit's depth.
-// `solid` marches nothing.
+// `front`, `crossed`, and `inside` discard a miss and keep their face's
+// depth, which lets the depth test run before the march. `exact` writes the
+// hit's depth. `solid` marches nothing.
+//
+// Under face depth the nearest face wins a pixel. That face must then hold
+// the pixel's first hit, so a front face's fragment finds the first hit of
+// any placement inside its box. `front` serves a box that shares space with
+// no other placement's box. `crossed` steps through its tile and then
+// through each box of another placement that shares space with its box. A
+// hit past its box is some other box's to find.
 //
 // `inside` shades the back faces of a box a ray can start inside. A hit in
 // such a box lies before the box's back face. The front face of the box
@@ -22,10 +29,18 @@
 //    `fall`, the depth an orthographic ray loses over a unit of its
 //    direction. `face`, the axis of the fragment's face, plus 4 on the box's
 //    high face. `BoxDraw`'s triangles carry it from the corner each face
-//    starts at
+//    starts at. `crossers`, the first of the box's entries in `crossers` and
+//    their count
 // 3. `bits`, whose words hold a tile's cells as `TileMasks` lays them out
-// 4. `surface`, what a fragment writes for a hit cell, given the one axis of
-//    the face the ray crossed into it and the axes the ray moves up
+// 4. `crossers`, whose entries each hold a box of another placement that
+//    shares space with a box, as `BoxCrosser` lays it out
+// 5. `Source`, what tells `surface` whose cell it shades. `source_of` gives
+//    the source of the fragment's box
+// 6. `other_of`, the `Other` of a `crossers` entry's box: the ray through
+//    the fragment as that box's tile sees it
+// 7. `surface`, what a fragment writes for a hit cell of a source, given the
+//    one axis of the face the ray crossed into the cell and the axes the ray
+//    moves up
 //
 // Its vertex entries place a corner only when `sound` holds for the corner's
 // position and its `ray`.
@@ -39,13 +54,40 @@ struct Fragment {
     @builtin(frag_depth) depth: f32,
 }
 
+// The bit of a `crossers` entry that marks a solid box.
+const SOLID: u32 = 0x80000000u;
+
 struct Hit {
     found: bool,
 
-    // What `surface` gives the hit.
-    color: vec4<f32>,
+    // The hit cell's bit in its tile.
+    bit: i32,
 
-    depth: f32,
+    // The one axis of the face the ray crossed into the cell.
+    across: vec3<bool>,
+
+    // How far along the ray the hit lies. A miss holds how far the ray's
+    // box ends.
+    along: f32,
+}
+
+// A box of another placement, as a fragment whose box shares space with it
+// reads it.
+struct Other {
+    // The offset of the box's tile's words in `bits`.
+    tile: u32,
+
+    // The box's low cell in its tile, then the corner past its high cell.
+    low: vec3<f32>,
+    high: vec3<f32>,
+
+    // The view's eye from the tile's low corner, and the ray's direction,
+    // both in the tile's cells. The fragment's point lies one direction
+    // from the eye.
+    eye: vec3<f32>,
+    direction: vec3<f32>,
+
+    source: Source,
 }
 
 // Whether each component of `a` and of `b` is a finite number. The test
@@ -66,6 +108,11 @@ fn least(v: vec3<f32>) -> vec3<bool> {
     return vec3<bool>(x, y, !x && !y);
 }
 
+// The cell's bit in its tile.
+fn bit_of(cell: vec3<f32>) -> i32 {
+    return i32(dot(cell, vec3<f32>(256.0, 16.0, 1.0)));
+}
+
 // A ray's place among a tile's cells.
 struct March {
     // The cell's bit in the tile.
@@ -80,9 +127,9 @@ struct March {
     along: f32,
 }
 
-// Whether the cell at `bit` of the box's tile is live.
-fn live(box: Box, bit: i32) -> bool {
-    return ((bits[box.words.x + (u32(bit) >> 5u)] >> (u32(bit) & 31u)) & 1u) == 1u;
+// Whether the cell at `bit` is live in the tile whose words start at `tile`.
+fn live(tile: u32, bit: i32) -> bool {
+    return ((bits[tile + (u32(bit) >> 5u)] >> (u32(bit) & 31u)) & 1u) == 1u;
 }
 
 // Moves `march` a cell along its ray. `rate` holds the ray's units per cell
@@ -110,16 +157,17 @@ fn direction_of(box: Box) -> vec3<f32> {
     return box.point * RAY_W - box.ray;
 }
 
-// The first hit of the ray from `start` in the tile's cells along
-// `direction`. `before` is the rasterizer's point along the ray, in units of
-// `direction` from `start`. A ray that `enters` starts on the face of the
-// box across the one axis of `entry`. Any other ray starts inside the box,
-// and live cells it starts in are no hit.
+// The first hit of the ray from `start` along `direction` in the box from
+// `low` to `high` of the tile whose words start at `tile`. A hit lies
+// `along` directions from `start`. A ray that `enters` starts on the face
+// of the box across the one axis of `entry`. Any other ray starts inside
+// the box, and live cells it starts in are no hit.
 fn first_hit(
-    box: Box,
+    tile: u32,
+    low: vec3<f32>,
+    high: vec3<f32>,
     start: vec3<f32>,
     direction: vec3<f32>,
-    before: f32,
     enters: bool,
     entry: vec3<bool>,
 ) -> Hit {
@@ -128,11 +176,9 @@ fn first_hit(
     // The ray's units per cell on each axis.
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
 
-    let cell = clamp(floor(start), box.low, box.high - 1.0);
+    let cell = clamp(floor(start), low, high - 1.0);
 
-    // The cell's bit in the tile, and what a step along each axis adds to
-    // it.
-    let bit = i32(dot(cell, vec3<f32>(256.0, 16.0, 1.0)));
+    // What a step along each axis adds to a cell's bit.
     let strides = select(vec3<i32>(-256, -16, -1), vec3<i32>(256, 16, 1), ahead);
 
     // How far along the ray each axis's next cell face lies.
@@ -141,35 +187,28 @@ fn first_hit(
 
     // How far along the ray the box ends, short by more than the sums of
     // `next` can drift. A step that ends before it stays in the box.
-    let ends = abs(select(box.low, box.high, ahead) - start) * rate;
+    let ends = abs(select(low, high, ahead) - start) * rate;
     let end = min(ends.x, min(ends.y, ends.z)) * 0.99999;
 
-    var march = March(bit, next, entry, 0.0);
+    var march = March(bit_of(cell), next, entry, 0.0);
 
     // A ray that starts inside the box first leaves the live cells it
     // starts in.
     if !enters {
         loop {
-            if !live(box, march.bit) {
+            if !live(tile, march.bit) {
                 break;
             }
 
             if !advance(&march, rate, strides, end) {
-                return Hit(false, vec4<f32>(0.0), 0.0);
+                return Hit(false, 0, entry, end);
             }
         }
     }
 
     loop {
-        if live(box, march.bit) {
-            let at = vec3<i32>(march.bit >> 8u, (march.bit >> 4u) & 15, march.bit & 15);
-            let past = march.along - before;
-
-            return Hit(
-                true,
-                surface(box, at, march.across, ahead),
-                (box.clip.z - past * box.fall * (1.0 - RAY_W)) / (1.0 + past * RAY_W),
-            );
+        if live(tile, march.bit) {
+            return Hit(true, march.bit, march.across, march.along);
         }
 
         if !advance(&march, rate, strides, end) {
@@ -177,12 +216,12 @@ fn first_hit(
         }
     }
 
-    return Hit(false, vec4<f32>(0.0), 0.0);
+    return Hit(false, 0, entry, end);
 }
 
-// The first hit of the ray that leaves the box at the rasterizer's point.
-// The ray starts where it enters the box, or at its origin when that lies
-// inside the box.
+// The first hit of the ray that leaves the box at the rasterizer's point,
+// which it lies `along` directions before. The ray starts where it enters
+// the box, or at its origin when that lies inside the box.
 fn hit_from_back(box: Box) -> Hit {
     let direction = direction_of(box);
     let ahead = direction >= vec3<f32>(0.0);
@@ -195,14 +234,67 @@ fn hit_from_back(box: Box) -> Hit {
     let origin = (1.0 - box.clip.z * (1.0 - RAY_W)) / (box.fall * (1.0 - RAY_W) + RAY_W);
     let before = min(entry, origin);
 
-    return first_hit(
-        box,
+    var hit = first_hit(
+        box.words.x,
+        box.low,
+        box.high,
         box.point - direction * before,
         direction,
-        before,
         entry <= origin,
         least(faces),
     );
+
+    hit.along -= before;
+
+    return hit;
+}
+
+// The first hit of a perspective view's ray in `other`, nearer than `reach`
+// directions past the fragment's point. A miss holds `reach`.
+fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
+    // Where the ray crosses each axis's two faces of the box, in directions
+    // from the eye.
+    let turned = select(other.direction, vec3<f32>(1.0e-12), abs(other.direction) < vec3<f32>(1.0e-12));
+    let lows = (other.low - other.eye) / turned;
+    let highs = (other.high - other.eye) / turned;
+    let nears = min(lows, highs);
+    let fars = max(lows, highs);
+    let near = max(nears.x, max(nears.y, nears.z));
+    let far = min(fars.x, min(fars.y, fars.z));
+
+    // The ray's stretch in both boxes starts at the fragment's point or
+    // where the ray enters the other box, whichever comes later.
+    let first = max(near, 1.0);
+
+    // A ray that starts the stretch inside a solid box met its face before
+    // the fragment's point, where another box finds it.
+    if first >= min(far, 1.0 + reach) || (solid && near < 1.0) {
+        return Hit(false, 0, vec3<bool>(false), reach);
+    }
+
+    let start = other.eye + other.direction * first;
+    let entry = least(-nears);
+    var hit = Hit(true, bit_of(clamp(floor(start), other.low, other.high - 1.0)), entry, 0.0);
+
+    if !solid {
+        hit = first_hit(other.tile, other.low, other.high, start, other.direction, true, entry);
+    }
+
+    hit.along += first - 1.0;
+
+    if !hit.found || hit.along >= reach {
+        return Hit(false, 0, vec3<bool>(false), reach);
+    }
+
+    return hit;
+}
+
+// What a fragment writes for `hit` in `source`, whose ray moves up the axes
+// of `ahead`.
+fn shade(source: Source, hit: Hit, ahead: vec3<bool>) -> vec4<f32> {
+    let cell = vec3<i32>(hit.bit >> 8u, (hit.bit >> 4u) & 15, hit.bit & 15);
+
+    return surface(source, cell, hit.across, ahead);
 }
 
 // The one axis of the fragment's face.
@@ -212,15 +304,83 @@ fn face_of(box: Box) -> vec3<bool> {
 
 // A front face's fragment. The rasterizer's point is where the ray enters
 // the box.
+//
+// The march runs in the entry's own loop and shades where it hits. Fewer
+// values then stay live through the loop than `first_hit` hands back, and
+// the fragment ran 8% faster on Quest.
 @fragment
 fn front(box: Box) -> @location(0) vec4<f32> {
-    let hit = first_hit(box, box.point, direction_of(box), 0.0, true, face_of(box));
+    let direction = direction_of(box);
+    let ahead = direction >= vec3<f32>(0.0);
+    let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
+    let cell = clamp(floor(box.point), box.low, box.high - 1.0);
+    let strides = select(vec3<i32>(-256, -16, -1), vec3<i32>(256, 16, 1), ahead);
+    let within = box.point - cell;
+    let next = abs(select(within, 1.0 - within, ahead)) * rate;
+    let ends = abs(select(box.low, box.high, ahead) - box.point) * rate;
+    let end = min(ends.x, min(ends.y, ends.z)) * 0.99999;
+
+    var march = March(bit_of(cell), next, face_of(box), 0.0);
+
+    loop {
+        if live(box.words.x, march.bit) {
+            return shade(source_of(box), Hit(true, march.bit, march.across, 0.0), ahead);
+        }
+
+        if !advance(&march, rate, strides, end) {
+            break;
+        }
+    }
+
+    discard;
+}
+
+// A front face's fragment of a box that shares space with other placements'
+// boxes, under a perspective view.
+@fragment
+fn crossed(box: Box) -> @location(0) vec4<f32> {
+    let direction = direction_of(box);
+    let turned = select(direction, vec3<f32>(1.0e-12), abs(direction) < vec3<f32>(1.0e-12));
+
+    var hit = first_hit(box.words.x, box.low, box.high, box.point, direction, true, face_of(box));
+    var source = source_of(box);
+    var ahead = direction >= vec3<f32>(0.0);
+
+    for (var n = 0u; n < box.crossers.y; n++) {
+        let low = crossers[(box.crossers.x + n) * 2u];
+        let high = crossers[(box.crossers.x + n) * 2u + 1u];
+
+        // Where the ray crosses the space the two boxes share, in
+        // directions past the fragment's point.
+        let lows = (low.xyz - box.point) / turned;
+        let highs = (high.xyz - box.point) / turned;
+        let nears = min(lows, highs);
+        let fars = max(lows, highs);
+        let near = max(nears.x, max(nears.y, nears.z));
+        let far = min(fars.x, min(fars.y, fars.z));
+
+        // The other box can hold a nearer hit only where the ray crosses
+        // that space before its hit so far.
+        if max(near, 0.0) >= min(far, hit.along) {
+            continue;
+        }
+
+        let crosser = bitcast<u32>(low.w);
+        let other = other_of(box, direction, crosser & ~SOLID);
+        let nearer = other_hit(other, (crosser & SOLID) != 0u, hit.along);
+
+        if nearer.found {
+            hit = nearer;
+            source = other.source;
+            ahead = other.direction >= vec3<f32>(0.0);
+        }
+    }
 
     if !hit.found {
         discard;
     }
 
-    return hit.color;
+    return shade(source, hit, ahead);
 }
 
 // A back face's fragment of a box a ray can start inside.
@@ -232,7 +392,7 @@ fn inside(box: Box) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return hit.color;
+    return shade(source_of(box), hit, direction_of(box) >= vec3<f32>(0.0));
 }
 
 // A back face's fragment that writes its hit's depth. A depth of zero fails
@@ -241,7 +401,14 @@ fn inside(box: Box) -> @location(0) vec4<f32> {
 fn exact(box: Box) -> Fragment {
     let hit = hit_from_back(box);
 
-    return Fragment(hit.color, hit.depth);
+    if !hit.found {
+        return Fragment(vec4<f32>(0.0), 0.0);
+    }
+
+    return Fragment(
+        shade(source_of(box), hit, direction_of(box) >= vec3<f32>(0.0)),
+        (box.clip.z - hit.along * box.fall * (1.0 - RAY_W)) / (1.0 + hit.along * RAY_W),
+    );
 }
 
 // A solid box's fragment. The rasterizer's point lies on a live cell's face.
@@ -250,5 +417,5 @@ fn solid(box: Box) -> @location(0) vec4<f32> {
     let cell = vec3<i32>(clamp(floor(box.point), box.low, box.high - 1.0));
 
     // A ray meets a box's low face moving up the face's axis.
-    return surface(box, cell, face_of(box), vec3<bool>(box.face < 4u));
+    return surface(source_of(box), cell, face_of(box), vec3<bool>(box.face < 4u));
 }
