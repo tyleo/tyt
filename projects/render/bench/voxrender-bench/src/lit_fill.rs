@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{Error, Result, TileMasks};
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyVector3F64, TyVector3U32};
@@ -16,7 +16,7 @@ use wgpu::{
 /// The cells along each side of a tile.
 const TILE: u32 = 16;
 
-/// The surface cells one dispatch fills. A dispatch then ends well within a
+/// The record cells one dispatch fills. A dispatch then ends well within a
 /// frame's time on a phone's GPU.
 const BATCH: u32 = 1 << 16;
 
@@ -36,14 +36,16 @@ pub struct LitFill {
     /// The first word of each placement's tiles' words.
     pub places: Vec<u32>,
 
-    /// A word for each surface cell, then a spare word.
+    /// A word for each record cell, then [`TileMasks::SPARE`] spare words.
+    /// The fill writes a word's low 24 bits and keeps the rest, which a
+    /// caller can write beforehand.
     pub lit: Buffer,
 
     pipeline: ComputePipeline,
 
     bind_group: BindGroup,
 
-    /// The scene's surface cells and the first of them a dispatch fills.
+    /// The scene's record cells and the first of them a dispatch fills.
     frame: Buffer,
 
     cells: u32,
@@ -57,7 +59,7 @@ impl LitFill {
     /// # Arguments
     ///
     /// 1. `tiles`: each object's non-empty tiles in the order of their mask
-    ///    words, as a tile's low corner and the indices of its surface
+    ///    words, as a tile's low corner and the indices of its record
     ///    cells
     pub fn new(
         device: &Device,
@@ -153,11 +155,12 @@ impl LitFill {
         let mut places = Vec::new();
         let mut tile_words: Vec<u32> = Vec::new();
         let mut casters: Vec<u32> = Vec::new();
-        let mut surface: Vec<u32> = Vec::new();
+        let mut recorded: Vec<u32> = Vec::new();
 
         for (index, (_, placement)) in scene.iter_placements().enumerate() {
-            places
-                .push(u32::try_from(surface.len()).expect("a scene's lit words number under 2^32"));
+            places.push(
+                u32::try_from(recorded.len()).expect("a scene's lit words number under 2^32"),
+            );
 
             for (corner, cells) in &tiles[&placement.object_id] {
                 let tile = u32::try_from(tile_words.len() / 8)
@@ -198,14 +201,14 @@ impl LitFill {
                     0,
                 ]);
 
-                surface.extend(cells.iter().map(|&cell| tile << 12 | u32::from(cell)));
+                recorded.extend(cells.iter().map(|&cell| tile << 12 | u32::from(cell)));
             }
         }
 
-        let cells = u32::try_from(surface.len()).expect("a scene's lit words number under 2^32");
+        let cells = u32::try_from(recorded.len()).expect("a scene's lit words number under 2^32");
 
         // A binding cannot be empty.
-        for words in [&mut tile_words, &mut casters, &mut surface] {
+        for words in [&mut tile_words, &mut casters, &mut recorded] {
             if words.is_empty() {
                 words.resize(8, 0);
             }
@@ -244,17 +247,21 @@ impl LitFill {
         );
         let tile_words = init("lit fill tiles", &bytes(&tile_words), BufferUsages::STORAGE);
         let casters = init("lit fill casters", &bytes(&casters), BufferUsages::STORAGE);
-        let surface = init("lit fill surface", &bytes(&surface), BufferUsages::STORAGE);
+        let recorded = init(
+            "lit fill record cells",
+            &bytes(&recorded),
+            BufferUsages::STORAGE,
+        );
 
         let lit = device.create_buffer(&BufferDescriptor {
             label: Some("lit corners"),
-            size: (u64::from(cells) + 1) * 4,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            size: u64::from(cells + TileMasks::SPARE) * 4,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        // SAFETY: an invocation past the scene's surface cells returns. A
-        // surface cell indexes its placed tile, which indexes its placement
+        // SAFETY: an invocation past the scene's record cells returns. A
+        // record cell indexes its placed tile, which indexes its placement
         // and its casters. The integer walk reads only its placement's
         // cells, and each of its loops ends within a grid's extent. A face's
         // front cell reads the cells only inside the grid.
@@ -293,7 +300,7 @@ impl LitFill {
                 &lights,
                 &tile_words,
                 &casters,
-                &surface,
+                &recorded,
                 &lit,
             ]
             .iter()
@@ -315,8 +322,8 @@ impl LitFill {
         })
     }
 
-    /// Submits the fill of every surface cell, a dispatch for each batch of
-    /// them.
+    /// Submits the fill of every record cell with a dispatch for each batch
+    /// of them.
     pub fn fill(&self, device: &Device, queue: &Queue) {
         for first in (0..self.cells).step_by(BATCH as usize) {
             // A write lands before the commands of the submit after it.

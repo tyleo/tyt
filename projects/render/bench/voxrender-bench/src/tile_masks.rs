@@ -27,34 +27,45 @@ type CellBox = (TyVector3U32, TyVector3U32);
 
 /// An object's non-empty tiles as a mask march reads them.
 ///
-/// A tile's words start with a bit per cell. Cell `(x, y, z)` has index
-/// `(y * 16 + x) * 16 + z` and is live where bit `index % 32` of word
-/// `index / 32` is set. A layer of cells across y then fills 8 words in a
-/// row, which a floor's far tiles read a few pixels each: S5's view ran 5%
-/// faster on Quest than with x first. For a shaded view, the tile's words
-/// go on:
+/// Cell `(x, y, z)` of a tile has index `(y * 16 + x) * 16 + z`. A layer of
+/// cells across y then sits in words that follow one another, which a
+/// floor's far tiles read a few pixels each. S5's view ran 5% faster on
+/// Quest than with x first.
 ///
-/// 1. From [`SURFACE`](Self::SURFACE), two words for each word of bits.
-///    The first holds a bit per cell, set for a surface cell: a live cell
-///    beside a cell that is not opaque. The second holds in its low 12 bits
-///    the tile's surface cells before the first word's, and above them the
-///    offset of the tile's occlusion words from its first word
-/// 2. At [`FIRST`](Self::FIRST), the surface cells of the object's tiles
+/// A tile's words hold a bit per cell, 32 cells a word: a cell is live
+/// where bit `index % 32` of word `index / 32` is set.
+///
+/// A shaded view's tile holds other words. Its record cells are the live
+/// cells of each row that holds a surface cell. A row is the 16 cells along
+/// z that share an x and a y. A surface cell is a live cell beside a cell
+/// that is not opaque. The words:
+///
+/// 1. A word for each row, 256 in the cells' index order. Its low 16 bits
+///    hold the row's cells, and the bits above them the tile's record cells
+///    before the row. The load that tells a march a cell is live then gives
+///    the cell's place among the record cells: S5's view ran 3% faster on
+///    Quest than with two more loads for that place
+/// 2. At [`FIRST`](Self::FIRST), the record cells of the object's tiles
 ///    before this one
-/// 3. At [`MATERIALS`](Self::MATERIALS), one word of `size | value << 4`.
-///    `size` is the bits of a cell's entry, 0, 1, 2, 4, or 8. At 0, every
-///    live cell holds the material id `value`
-/// 4. `128 * size` words of entries. Cell `index`'s entry sits at bit
-///    `index * size % 32` of word `index * size / 32`
-/// 5. The material ids that the entries index
-/// 6. Two occlusion words for each surface cell, in the cells' index
-///    order. Face `2 * axis` looks down its axis and face `2 * axis + 1`
-///    up it. A face takes 8 bits: faces 0 to 3 fill the first word from
-///    its low bits, and faces 4 and 5 the second. A corner takes 2 of them
-///    for how open it is, in thirds. Corner `u | v << 1` lies at the
-///    face's far edge along the axis after the face's where `u` is set,
-///    and along the axis after that where `v` is. A face that looks into
-///    an opaque cell holds zero
+/// 3. At [`PALETTE`](Self::PALETTE), one word of `offset | count << 16`:
+///    where the tile's material ids start from its first word, and how many
+///    it holds
+/// 4. From [`RECORDS`](Self::RECORDS), two words for each record cell, in
+///    the cells' index order. Face `2 * axis` looks down its axis and face
+///    `2 * axis + 1` up it. A face takes 8 bits of occlusion: faces 0 to 3
+///    fill the first word from its low bits, and faces 4 and 5 the second.
+///    A corner takes 2 of them for how open it is, in thirds. Corner
+///    `u | v << 1` lies at the face's far edge along the axis after the
+///    face's where `u` is set, and along the axis after that where `v` is.
+/// 5. Sixteen more records. A fragment can reach a live cell of a row with
+///    no surface cell, and the place it works out for the cell ends within
+///    these
+/// 6. The tile's material ids
+///
+/// A face that looks into an opaque cell holds open corners, as a spare
+/// record's faces do. A fragment reaches one where it slips between two
+/// boxes' faces, or before a nearer box covers it. It then shades its
+/// material under the sky, where zeros would leave a black pixel.
 pub struct TileMasks {
     /// Boxes that hold only live cells. A raster draws their faces as the
     /// cells' faces, with no march.
@@ -73,9 +84,13 @@ pub struct TileMasks {
     /// Each non-empty tile's low corner, in the order of the tiles' words.
     pub corners: Vec<TyVector3U32>,
 
-    /// The indices of each non-empty tile's surface cells in index order,
+    /// The indices of each non-empty tile's record cells in index order,
     /// in the order of the tiles' words. Empty unless the view is shaded.
-    pub surfaces: Vec<Vec<u16>>,
+    pub recorded: Vec<Vec<u16>>,
+
+    /// Each record cell's material, as its place among its tile's material
+    /// ids, in the order of [`recorded`](Self::recorded).
+    pub entries: Vec<Vec<u8>>,
 
     /// Each non-empty tile's words.
     pub words: Vec<u32>,
@@ -85,15 +100,23 @@ impl TileMasks {
     /// The words of one tile's bits.
     const BIT_WORDS: usize = CELLS / 32;
 
-    /// The offset in a shaded tile's words of its surface cells.
-    pub const SURFACE: u32 = Self::BIT_WORDS as u32;
+    /// The rows of a tile.
+    const ROWS: usize = CELLS / TILE as usize;
 
-    /// The offset in a shaded tile's words of the surface cells before the
+    /// The spare records after a shaded tile's records: the most live
+    /// cells a row holds.
+    pub const SPARE: u32 = TILE;
+
+    /// The offset in a shaded tile's words of the record cells before the
     /// tile.
-    pub const FIRST: u32 = Self::SURFACE + 2 * Self::BIT_WORDS as u32;
+    pub const FIRST: u32 = Self::ROWS as u32;
 
-    /// The offset in a shaded tile's words of its materials.
-    pub const MATERIALS: u32 = Self::FIRST + 1;
+    /// The offset in a shaded tile's words of the word that locates its
+    /// material ids.
+    pub const PALETTE: u32 = Self::FIRST + 1;
+
+    /// The offset in a shaded tile's words of its record cells' records.
+    pub const RECORDS: u32 = Self::PALETTE + 1;
 
     /// The masks of `object`'s non-empty tiles. With `opaque`, which says
     /// whether a material id passes no light, each tile's words go on for
@@ -139,12 +162,13 @@ impl TileMasks {
             boxes: Vec::new(),
             tiles: Vec::new(),
             corners: Vec::new(),
-            surfaces: Vec::new(),
+            recorded: Vec::new(),
+            entries: Vec::new(),
             words: Vec::new(),
         };
 
-        // The object's surface cells so far.
-        let mut surface_cells = 0;
+        // The object's record cells so far.
+        let mut record_cells = 0;
 
         for (low, _) in live_boxes(object, TILE) {
             let corner = low / TILE * TILE;
@@ -167,148 +191,167 @@ impl TileMasks {
             let offset =
                 u32::try_from(masks.words.len()).expect("an object's mask words number under 2^32");
 
-            masks.words.resize(masks.words.len() + Self::BIT_WORDS, 0);
+            let Some(opaque) = opaque else {
+                masks.words.resize(masks.words.len() + Self::BIT_WORDS, 0);
 
-            for index in (0..CELLS).filter(|&index| live[index]) {
-                masks.words[offset as usize + index / 32] |= 1 << (index % 32);
-            }
-
-            if let Some(opaque) = opaque {
-                let [low_x, low_y, low_z] = corner.to_array().map(i64::from);
-
-                // Whether the cell `offset` from the tile's cell `index` is
-                // opaque.
-                let blocks = |index: usize, offset: [i64; 3]| {
-                    let [x, y, z] = position(index).to_array().map(i64::from);
-                    let cell = [
-                        low_x + x + offset[0],
-                        low_y + y + offset[1],
-                        low_z + z + offset[2],
-                    ];
-
-                    value(cell).checked_sub(1).is_some_and(opaque)
-                };
-
-                let surface: Vec<u16> = (0..CELLS)
-                    .filter(|&index| {
-                        live[index] && (0..6).any(|face| !blocks(index, toward(face, 0, 0)))
-                    })
-                    .map(|index| index as u16)
-                    .collect();
-
-                // Each word of bits' surface cells and the surface cells
-                // before them. The occlusion words' offset joins the counts
-                // once the materials are in.
-                let pairs = masks.words.len();
-                let mut held = [0u32; Self::BIT_WORDS];
-
-                for &index in &surface {
-                    held[usize::from(index) / 32] |= 1 << (index % 32);
+                for index in (0..CELLS).filter(|&index| live[index]) {
+                    masks.words[offset as usize + index / 32] |= 1 << (index % 32);
                 }
 
-                let mut before = 0;
+                masks.push_boxes(corner, offset, live, solids);
 
-                for word in held {
-                    masks.words.extend([word, before]);
-                    before += word.count_ones();
-                }
-
-                masks.words.push(surface_cells);
-                surface_cells += u32::try_from(surface.len()).expect("a tile holds 4096 cells");
-
-                push_materials(&mut masks.words, &values)?;
-
-                let occlusion = u32::try_from(masks.words.len())
-                    .expect("an object's mask words number under 2^32")
-                    - offset;
-
-                assert!(
-                    occlusion < 1 << 20,
-                    "a tile's materials end within 2^20 words"
-                );
-
-                for pair in 0..Self::BIT_WORDS {
-                    masks.words[pairs + 2 * pair + 1] |= occlusion << 12;
-                }
-
-                for &index in &surface {
-                    let index = usize::from(index);
-                    let mut words = [0u32; 2];
-
-                    for face in (0..6).filter(|&face| !blocks(index, toward(face, 0, 0))) {
-                        for corner in 0..4 {
-                            let u = if corner & 1 == 1 { 1 } else { -1 };
-                            let v = if corner & 2 == 2 { 1 } else { -1 };
-                            let first = blocks(index, toward(face, u, 0));
-                            let second = blocks(index, toward(face, 0, v));
-                            let across = blocks(index, toward(face, u, v));
-
-                            // Both edge cells together close the corner.
-                            let open = if first && second {
-                                0
-                            } else {
-                                3 - u32::from(first) - u32::from(second) - u32::from(across)
-                            };
-
-                            words[face / 4] |= open << (face % 4 * 8 + corner * 2);
-                        }
-                    }
-
-                    masks.words.extend(words);
-                }
-
-                masks.surfaces.push(surface);
-            }
-
-            masks.corners.push(corner);
-
-            let mut tile = Tile {
-                left: live.clone(),
-                live,
+                continue;
             };
 
-            if solids {
-                let mut strays = 0;
-                let mut slabs = 0;
+            let [low_x, low_y, low_z] = corner.to_array().map(i64::from);
 
-                while let Some(around) = tile.around() {
-                    let boxes = if let Some((cells, boxes)) = tile.strays(around, STRAYS - strays) {
-                        strays += cells;
+            // Whether the cell `offset` from the tile's cell `index` is
+            // opaque.
+            let blocks = |index: usize, offset: [i64; 3]| {
+                let [x, y, z] = position(index).to_array().map(i64::from);
+                let cell = [
+                    low_x + x + offset[0],
+                    low_y + y + offset[1],
+                    low_z + z + offset[2],
+                ];
 
-                        boxes
-                    } else if let Some(slab) = (slabs < SOLIDS).then(|| tile.slab(around)).flatten()
-                    {
-                        slabs += 1;
+                value(cell).checked_sub(1).is_some_and(opaque)
+            };
 
-                        vec![slab]
-                    } else {
-                        break;
-                    };
+            let surface =
+                |index: usize| live[index] && (0..6).any(|face| !blocks(index, toward(face, 0, 0)));
 
-                    for (low, high) in boxes {
-                        masks.solids.push((corner + low, corner + high));
-                        masks.solid_tiles.push(offset);
+            // Each row's word, and the record cells its rows give the tile.
+            let mut recorded: Vec<u16> = Vec::new();
+
+            for row in 0..Self::ROWS {
+                let cells = row * TILE as usize..(row + 1) * TILE as usize;
+                let before = recorded.len() as u32;
+                let mut bits = 0;
+
+                for index in cells.clone().filter(|&index| live[index]) {
+                    bits |= 1 << (index % TILE as usize);
+                }
+
+                if cells.clone().any(surface) {
+                    recorded.extend(cells.filter(|&index| live[index]).map(|index| index as u16));
+                }
+
+                masks.words.push(bits | before << 16);
+            }
+
+            let (entries, palette) = palette_of(&values)?;
+            let count = recorded.len() as u32;
+            let ids = Self::RECORDS + 2 * (count + Self::SPARE);
+
+            masks.words.extend([
+                record_cells,
+                ids | u32::try_from(palette.len()).expect("a tile holds 256 materials") << 16,
+            ]);
+
+            record_cells += count;
+
+            for &index in &recorded {
+                let index = usize::from(index);
+                let mut words = [0; 2];
+
+                for face in 0..6 {
+                    if blocks(index, toward(face, 0, 0)) {
+                        words[face / 4] |= 0xff << (face % 4 * 8);
+
+                        continue;
+                    }
+
+                    for corner in 0..4 {
+                        let u = if corner & 1 == 1 { 1 } else { -1 };
+                        let v = if corner & 2 == 2 { 1 } else { -1 };
+                        let first = blocks(index, toward(face, u, 0));
+                        let second = blocks(index, toward(face, 0, v));
+                        let across = blocks(index, toward(face, u, v));
+
+                        // Both edge cells together close the corner.
+                        let open = if first && second {
+                            0
+                        } else {
+                            3 - u32::from(first) - u32::from(second) - u32::from(across)
+                        };
+
+                        words[face / 4] |= open << (face % 4 * 8 + corner * 2);
                     }
                 }
+
+                masks.words.extend(words);
             }
 
-            if let Some((low, high)) = tile.around() {
-                masks.boxes.push((corner + low, corner + high));
-                masks.tiles.push(offset);
+            for _ in 0..Self::SPARE {
+                masks.words.extend([u32::MAX, 0xffff]);
             }
+
+            masks.words.extend(palette);
+            masks.entries.push(
+                recorded
+                    .iter()
+                    .map(|&index| entries[usize::from(index)])
+                    .collect(),
+            );
+            masks.recorded.push(recorded);
+            masks.push_boxes(corner, offset, live, solids);
         }
 
         Ok(masks)
     }
+
+    /// Appends the boxes of the tile at `corner`, whose words start at
+    /// `offset` and whose cells are `live`: its solid boxes when `solids`,
+    /// then the box around its other live cells.
+    fn push_boxes(&mut self, corner: TyVector3U32, offset: u32, live: Vec<bool>, solids: bool) {
+        self.corners.push(corner);
+
+        let mut tile = Tile {
+            left: live.clone(),
+            live,
+        };
+
+        if solids {
+            let mut strays = 0;
+            let mut slabs = 0;
+
+            while let Some(around) = tile.around() {
+                let boxes = if let Some((cells, boxes)) = tile.strays(around, STRAYS - strays) {
+                    strays += cells;
+
+                    boxes
+                } else if let Some(slab) = (slabs < SOLIDS).then(|| tile.slab(around)).flatten() {
+                    slabs += 1;
+
+                    vec![slab]
+                } else {
+                    break;
+                };
+
+                for (low, high) in boxes {
+                    self.solids.push((corner + low, corner + high));
+                    self.solid_tiles.push(offset);
+                }
+            }
+        }
+
+        if let Some((low, high)) = tile.around() {
+            self.boxes.push((corner + low, corner + high));
+            self.tiles.push(offset);
+        }
+    }
 }
 
-/// Appends a tile's materials to `words`, from each cell's `values`: 0 when
-/// empty, else its material id plus one. Errors if the tile holds over 256
-/// materials.
-fn push_materials(words: &mut Vec<u32>, values: &[u32]) -> Result<()> {
+/// A tile's material ids in the order its cells first hold them, from each
+/// cell's `values`: 0 when empty, else its material id plus one. Returns
+/// each cell's place among the ids, 0 for an empty cell, and then the ids.
+/// Errors if the tile holds over 256 materials.
+fn palette_of(values: &[u32]) -> Result<(Vec<u8>, Vec<u32>)> {
     let mut palette: Vec<u32> = Vec::new();
 
-    let entries: Vec<usize> = values
+    // A place past 255 wraps here, and the count below then errors.
+    let entries = values
         .iter()
         .map(|&value| match value.checked_sub(1) {
             Some(id) => palette
@@ -318,40 +361,19 @@ fn push_materials(words: &mut Vec<u32>, values: &[u32]) -> Result<()> {
                     palette.push(id);
 
                     palette.len() - 1
-                }),
+                }) as u8,
 
             None => 0,
         })
         .collect();
 
-    let size = match palette.len() {
-        0 | 1 => 0,
-        2 => 1,
-        3..=4 => 2,
-        5..=16 => 4,
-        17..=256 => 8,
-        materials => return Err(Error::TileMaterials { materials }),
-    };
-
-    if size == 0 {
-        words.push(palette.first().copied().unwrap_or(0) << 4);
-
-        return Ok(());
+    if palette.len() > 256 {
+        return Err(Error::TileMaterials {
+            materials: palette.len(),
+        });
     }
 
-    words.push(size as u32);
-
-    let first = words.len();
-
-    words.resize(first + CELLS * size / 32, 0);
-
-    for (index, entry) in entries.into_iter().enumerate() {
-        words[first + index * size / 32] |= (entry as u32) << (index * size % 32);
-    }
-
-    words.extend(palette);
-
-    Ok(())
+    Ok((entries, palette))
 }
 
 /// The step from a cell to the cell its face `face` looks into, moved `u`
@@ -585,21 +607,30 @@ mod tests {
     use ty_math::TyVector3U32;
     use voxrender::RenderObject;
 
-    /// The material id a tile's words hold for the cell of index `bit`, as
-    /// the shader reads it.
-    fn material(words: &[u32], tile: u32, bit: u32) -> u32 {
-        let header = words[(tile + TileMasks::MATERIALS) as usize];
-        let size = header & 15;
+    /// Whether a tile's words hold the cell of index `bit` live. `shaded`
+    /// says how the tile's words lie.
+    fn is_set(words: &[u32], tile: u32, bit: u32, shaded: bool) -> bool {
+        let (cells, word) = if shaded { (16, 16) } else { (32, 32) };
 
-        if size == 0 {
-            return header >> 4;
-        }
+        words[(tile + bit / word) as usize] >> (bit % cells) & 1 == 1
+    }
 
-        let at = bit * size;
-        let entries = tile + TileMasks::MATERIALS + 1;
-        let entry = words[(entries + at / 32) as usize] >> (at % 32) & ((1 << size) - 1);
+    /// The place among a shaded tile's record cells of the live cell of
+    /// index `bit`, as the shader reads it.
+    fn rank(words: &[u32], tile: u32, bit: u32) -> u32 {
+        let row = words[(tile + bit / 16) as usize];
 
-        words[(entries + 128 * size + entry) as usize]
+        (row >> 16) + (row & ((1 << (bit % 16)) - 1)).count_ones()
+    }
+
+    /// The material id a shaded tile's words hold for the place `entry`
+    /// among its material ids.
+    fn material(words: &[u32], tile: u32, entry: u8) -> u32 {
+        let palette = words[(tile + TileMasks::PALETTE) as usize];
+
+        assert!(u32::from(entry) < palette >> 16);
+
+        words[(tile + (palette & 0xffff) + u32::from(entry)) as usize]
     }
 
     /// Whether `cell` of `object` is live.
@@ -644,8 +675,7 @@ mod tests {
 
                         for bit in 0..4096 {
                             let at = TyVector3U32::new(bit / 16 % 16, bit / 256, bit % 16);
-                            let word = masks.words[(tile + bit / 32) as usize];
-                            let set = word >> (bit % 32) & 1 == 1;
+                            let set = is_set(&masks.words, tile, bit, materials);
                             let cell = corner + at;
 
                             assert_eq!(
@@ -665,92 +695,86 @@ mod tests {
                         let tiles = masks.tiles.iter().zip(&masks.boxes);
                         let solid_tiles = masks.solid_tiles.iter().zip(&masks.solids);
 
-                        // Each tile's place among the tiles, and the
-                        // surface cells before it.
+                        // Each tile's place among the tiles, and the record
+                        // cells before it.
                         let mut before = 0;
 
                         let ordinals: HashMap<_, _> = (0..)
-                            .zip(masks.corners.iter().zip(&masks.surfaces))
-                            .map(|(ordinal, (&corner, surface))| {
+                            .zip(masks.corners.iter().zip(&masks.recorded))
+                            .map(|(ordinal, (&corner, recorded))| {
                                 let entry = (corner.to_array(), (ordinal, before));
 
-                                before += surface.len() as u32;
+                                before += recorded.len() as u32;
 
                                 entry
                             })
                             .collect();
 
-                        for (&tile, &(low, high)) in tiles.chain(solid_tiles) {
+                        for (&tile, &(low, _)) in tiles.chain(solid_tiles) {
                             let corner = low / 16 * 16;
                             let (ordinal, before): (usize, u32) = ordinals[&corner.to_array()];
+                            let recorded = &masks.recorded[ordinal];
 
                             assert_eq!(masks.words[(tile + TileMasks::FIRST) as usize], before);
 
-                            // Each cell's place among the tile's surface
-                            // cells, as the shader reads it.
-                            let mut surface = Vec::new();
-
-                            for bit in 0..4096u32 {
-                                let pair = (tile + TileMasks::SURFACE + bit / 32 * 2) as usize;
-                                let held = masks.words[pair];
-
-                                if held >> (bit % 32) & 1 == 0 {
-                                    continue;
-                                }
-
-                                let rank = (masks.words[pair + 1] & 0xfff)
-                                    + (held & ((1 << (bit % 32)) - 1)).count_ones();
-
-                                assert_eq!(rank as usize, surface.len());
-
-                                surface.push(bit as u16);
-
-                                // Every live cell is opaque here, so a
-                                // surface cell is a live one beside a cell
-                                // that is not.
+                            // Every live cell is opaque here, so a surface
+                            // cell is a live one beside a cell that is not.
+                            let surface = |bit: u32| {
                                 let at = TyVector3U32::new(bit / 16 % 16, bit / 256, bit % 16);
                                 let cell = corner + at;
 
-                                let open = (0..3).any(|axis| {
-                                    let mut up = cell;
-                                    let mut down = cell;
+                                is_live(object, cell)
+                                    && (0..3).any(|axis| {
+                                        let mut up = cell;
+                                        let mut down = cell;
 
-                                    up[axis] += 1;
-                                    down[axis] = down[axis].wrapping_sub(1);
+                                        up[axis] += 1;
+                                        down[axis] = down[axis].wrapping_sub(1);
 
-                                    !is_live(object, up) || !is_live(object, down)
-                                });
+                                        !is_live(object, up) || !is_live(object, down)
+                                    })
+                            };
 
-                                assert!(
-                                    is_live(object, cell) && open,
-                                    "{name}, object {object_id}, surface cell {cell}"
+                            // A row's live cells are record cells where the
+                            // row holds a surface cell.
+                            let expected: Vec<u16> = (0..4096u32)
+                                .filter(|&bit| {
+                                    let row = bit / 16 * 16;
+
+                                    is_set(&masks.words, tile, bit, true)
+                                        && (row..row + 16).any(surface)
+                                })
+                                .map(|bit| bit as u16)
+                                .collect();
+
+                            assert_eq!(*recorded, expected, "{name}, object {object_id}");
+
+                            for (place, &bit) in recorded.iter().enumerate() {
+                                let bit = u32::from(bit);
+                                let rank = rank(&masks.words, tile, bit);
+                                let at = TyVector3U32::new(bit / 16 % 16, bit / 256, bit % 16);
+                                let cell = corner + at;
+
+                                assert_eq!(rank as usize, place);
+
+                                let entry = masks.entries[ordinal][place];
+
+                                assert_eq!(
+                                    Some(U32Id::from_u32(material(&masks.words, tile, entry))),
+                                    object.voxel_material(object.voxel_id(cell).unwrap()),
+                                    "{name}, object {object_id}, cell {cell}"
                                 );
                             }
 
-                            assert_eq!(surface, masks.surfaces[ordinal]);
-
-                            for x in low.x..high.x {
-                                for y in low.y..high.y {
-                                    for z in low.z..high.z {
-                                        let cell = TyVector3U32::new(x, y, z);
-                                        let at = cell - corner;
-                                        let bit = (at.y * 16 + at.x) * 16 + at.z;
-
-                                        if !is_live(object, cell) {
-                                            continue;
-                                        }
-
-                                        assert_eq!(
-                                            Some(U32Id::from_u32(material(
-                                                &masks.words,
-                                                tile,
-                                                bit
-                                            ))),
-                                            object.voxel_material(object.voxel_id(cell).unwrap()),
-                                            "{name}, object {object_id}, cell {cell}"
-                                        );
-                                    }
-                                }
+                            // A live cell of any other row has a place
+                            // within the spare records.
+                            for bit in
+                                (0..4096).filter(|&bit| is_set(&masks.words, tile, bit, true))
+                            {
+                                assert!(
+                                    rank(&masks.words, tile, bit)
+                                        < recorded.len() as u32 + TileMasks::SPARE
+                                );
                             }
                         }
                     }
@@ -779,20 +803,15 @@ mod tests {
         let masks = TileMasks::new(&object, false, Some(&every)).unwrap();
 
         // The floor's cell at x = 1 and z = 1, beside the wall.
-        let bit = 16 + 1;
-        let pair = (TileMasks::SURFACE + bit / 32 * 2) as usize;
-        let held = masks.words[pair];
-        let second = masks.words[pair + 1];
-        let rank = (second & 0xfff) + (held & ((1 << (bit % 32)) - 1)).count_ones();
-        let words = ((second >> 12) + rank * 2) as usize;
-
-        assert_eq!(held >> (bit % 32) & 1, 1);
+        let rank = rank(&masks.words, 0, 16 + 1);
+        let words = (TileMasks::RECORDS + rank * 2) as usize;
 
         // Its face up y has its corners along z and then x. The wall
         // closes the two at low x by two thirds. Its face down y looks out
-        // of the object, and its other faces into opaque cells.
-        assert_eq!(masks.words[words], 0b1111_0101 << 24 | 0xff << 16);
-        assert_eq!(masks.words[words + 1], 0);
+        // of the object. Its other faces look into opaque cells, which
+        // leaves them open.
+        assert_eq!(masks.words[words], 0b1111_0101 << 24 | 0xff_ffff);
+        assert_eq!(masks.words[words + 1], 0xffff);
     }
 
     #[test]

@@ -1,14 +1,17 @@
-// A scene's lit corners under one directional light, a word a surface cell
+// A scene's lit corners under one directional light, a word a record cell
 // as `LitCorners` lays them out, over `grid_walk.wgsl` and a walk. An
-// invocation fills one surface cell: for each of its faces toward the
+// invocation fills one record cell: for each of its faces toward the
 // light with no live cell before it, it casts the contract's ray from each
 // corner through the placements that can shadow its tile.
 
 // A shadow ray starts this far in from its face's edges.
 const INSET: i32 = 8;
 
+// The bits of a word that hold its lit corners. The fill keeps the rest.
+const LIT: u32 = 0xffffffu;
+
 struct Fill {
-    // The scene's surface cells, then the first of them a dispatch fills.
+    // The scene's record cells, then the first of them a dispatch fills.
     cells: u32,
     first: u32,
 }
@@ -24,10 +27,10 @@ struct Fill {
 @group(0) @binding(4) var<storage, read> tiles: array<vec4<u32>>;
 // The placements that can shadow each placed tile.
 @group(0) @binding(5) var<storage, read> casters: array<u32>;
-// Per surface cell: its placed tile, above the 12 bits of its index in the
+// Per record cell: its placed tile, above the 12 bits of its index in the
 // tile.
-@group(0) @binding(6) var<storage, read> surface: array<u32>;
-// Per surface cell: its word of lit corners.
+@group(0) @binding(6) var<storage, read> recorded: array<u32>;
+// Per record cell: its word of lit corners.
 @group(0) @binding(7) var<storage, read_write> lit: array<u32>;
 
 // Whether a live cell sits at `position` of `placement`'s grid.
@@ -69,7 +72,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
 
-    let entry = surface[at];
+    let entry = recorded[at];
     let tile = tiles[(entry >> 12u) * 2u];
     let shadowers = tiles[(entry >> 12u) * 2u + 1u];
     let source = tile.w;
@@ -115,5 +118,5 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         }
     }
 
-    lit[at] = word;
+    lit[at] = (lit[at] & ~LIT) | word;
 }

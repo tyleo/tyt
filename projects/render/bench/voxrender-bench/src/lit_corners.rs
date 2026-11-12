@@ -19,8 +19,8 @@ const INSET: i32 = ONE >> SHADOW_INSET_BITS;
 const TILE: u32 = 16;
 
 /// A scene's corner shadows under one directional light, as `box_view.wgsl`
-/// reads them: a word for each surface cell of each placement's tiles, in
-/// the order of [`TileMasks`](crate::TileMasks)' occlusion words. Face `f`
+/// reads them: a word for each record cell of each placement's tiles, in
+/// the order of [`TileMasks`](crate::TileMasks)' records. Face `f`
 /// of the cell takes bits `4 * f` to `4 * f + 3`, a bit for each corner in
 /// the occlusion words' order, set where the light reaches the corner. A
 /// face the light cannot reach holds zero.
@@ -55,7 +55,7 @@ impl LitCorners {
     /// # Arguments
     ///
     /// 1. `tiles`: each object's non-empty tiles in the order of their mask
-    ///    words, as a tile's low corner and the indices of its surface
+    ///    words, as a tile's low corner and the indices of its record
     ///    cells
     /// 2. `opaque`: whether a material id passes no light
     pub fn new(
@@ -124,13 +124,13 @@ impl LitCorners {
             let mut cast = vec![0u32; rows];
             let mut reached = vec![0u32; rows];
 
-            for (corner, surface) in &tiles[&placement.object_id] {
+            for (corner, recorded) in &tiles[&placement.object_id] {
                 let corner = corner.as_ivec3().to_array();
 
                 cast.fill(0);
                 reached.fill(0);
 
-                for &index in surface {
+                for &index in recorded {
                     let index = u32::from(index);
                     let local = [index / TILE % TILE, index / (TILE * TILE), index % TILE]
                         .map(|coordinate| coordinate as i32);
@@ -286,7 +286,7 @@ mod tests {
                         masks
                             .corners
                             .into_iter()
-                            .zip(masks.surfaces)
+                            .zip(masks.recorded)
                             .collect::<Vec<_>>(),
                     )
                 })
@@ -319,7 +319,7 @@ mod tests {
                         continue;
                     }
 
-                    // The cell's word, by its place among the surface cells
+                    // The cell's word, by its place among the record cells
                     // of its object's tiles.
                     let tiles = &tiles[&placement.object_id];
                     let at = cell % 16;
@@ -332,7 +332,7 @@ mod tests {
 
                     let before: usize = tiles[..ordinal]
                         .iter()
-                        .map(|(_, surface)| surface.len())
+                        .map(|(_, recorded)| recorded.len())
                         .sum();
 
                     let rank = tiles[ordinal]

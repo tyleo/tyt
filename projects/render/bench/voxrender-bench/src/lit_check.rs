@@ -6,7 +6,7 @@ use wgpu::{BufferDescriptor, BufferUsages, CommandEncoderDescriptor};
 
 /// Compares the GPU's fill of `scene`'s lit corners under its first sun
 /// with [`LitCorners`]' fill through the reference's walk, and returns a
-/// line of the result. The line counts the scene's surface cells, the
+/// line of the result. The line counts the scene's record cells, the
 /// corners the two fills light, and the corners they differ on. Every live
 /// cell counts as opaque. Errors unless the scene has a sun and a view, or
 /// if a ray lies out of a grid's range.
@@ -30,7 +30,7 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
             masks
                 .corners
                 .into_iter()
-                .zip(masks.surfaces)
+                .zip(masks.recorded)
                 .collect::<Vec<_>>(),
         );
     }
@@ -79,7 +79,7 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
     }
 
     Ok(format!(
-        "{} surface cells, {lit} lit corners, {differ} differ ({:.4}%)\n",
+        "{} record cells, {lit} lit corners, {differ} differ ({:.4}%)\n",
         walked.words.len(),
         differ as f64 / lit.max(1) as f64 * 100.0
     ))
