@@ -118,7 +118,8 @@ and its hemispheres. The GPU fills the sun's shadows at start. A face's
 mirror ray traces the scene's opaque faces through a ray query. The face it
 meets shades flat with no shadow. The rougher the face, the nearer what it
 mirrors has to lie to show. A model's emission blooms as vxl's review
-renders bloom it. Glass and water tint what lies behind them.
+renders bloom it. Glass and water tint what lies behind them and the
+sunlight that crosses them.
 
 ## Models
 
@@ -176,6 +177,7 @@ holds their sources:
 
 | Source | Tests |
 | --- | --- |
+| `glass-chart.ts` | Panes that tint their shadows, a tank of water, a block of glass, a lamp in a glass case, and a wall's shadow across a glass slab |
 | `pbr-chart.ts` | Five steps of roughness across metal slabs and gold, steel, and plastic spheres |
 
 vxl builds a source into the document to push:

@@ -608,9 +608,21 @@ they land.
 
 ## Glass
 
-- A shaded `TileMasks` tile holds its opaque cells alone, and `LitFill`
-  walks the opaque cells alone, as `LitCorners` did. What sits inside
-  glass then draws and takes the sun
+- A shaded `TileMasks` tile holds its opaque cells alone. What sits
+  inside glass then draws and takes the sun
+- `LitFill` walks every cell with a walk of its own in place of
+  voxrender-wgpu's, which ends at the first cell. A ray pays each surface
+  it crosses as the contract's shadow ray does: the material it starts in
+  at normal incidence, each material it enters, and each it leaves for an
+  empty cell, the grid's edge, or a material that passes light. An opaque
+  cell ends it. With every cell opaque it lights the corners the old walk
+  lit
+- A corner is lit where some light reaches it. A cell's tint holds the
+  mean of what reaches its lit corners, 8 bits a channel, in a second run
+  of words past the lit ones. A fragment scales the sun's term by it. The
+  contract blends each corner's light across a face, so a tint's edge
+  steps by a cell where the contract's fades. A scene whose materials all
+  block light keeps no tints, and its fragments read none
 - `GlassTiles` keeps a tile's busy cells: the cells with a face where a
   ray enters or leaves a material that passes light, and the opaque cells,
   which end a walk. A body of water keeps its skin. A tile with no surface

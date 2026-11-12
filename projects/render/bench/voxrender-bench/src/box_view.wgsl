@@ -17,6 +17,8 @@
 // 7. `BLOOM_SOURCE`. A module with a `BLOOM_SOURCE` draws the bloom's source
 //    in place of the view: a hit's emission over the threshold, scaled by
 //    `BLOOM_SOURCE`
+// 8. `TINTS`, how far past a cell's word in `lit` its tint lies, or zero
+//    where the scene keeps none
 //
 // `BoxView` adds `mirrored` and `hidden`.
 
@@ -158,7 +160,9 @@ struct Box {
 // plus `SOLID` for a solid one, then the high corner.
 @group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
 // Each placement's `LitCorners` words. A word's high 8 bits hold its
-// cell's place among its tile's materials.
+// cell's place among its tile's materials. With `TINTS`, each cell's tint
+// follows them: what the materials between it and the sun pass of the
+// sun's light, as four 8-bit parts of one.
 @group(0) @binding(6) var<storage, read> lit: array<u32>;
 // The halo each eye's fragments add, a layer an eye: `BoxBloom`'s.
 @group(0) @binding(8) var bloom: texture_2d_array<f32>;
@@ -482,8 +486,14 @@ fn surface(
 
     // The sun, scaled by the light that reaches the face's corners.
     if lights != 0u {
-        color += sun_light(normal, view, base.rgb * (1.0 - metallic), reflectance, alpha2)
+        var sun = sun_light(normal, view, base.rgb * (1.0 - metallic), reflectance, alpha2)
             * across_face(corners_of(lights, 1u), along);
+
+        if TINTS != 0u {
+            sun *= unpack4x8unorm(lit[source.lit + rank + TINTS]).rgb;
+        }
+
+        color += sun;
     }
 
     // The hemispheres on the face.

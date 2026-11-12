@@ -2,9 +2,9 @@ use crate::{Error, Result, TileMasks};
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyVector3F64, TyVector3U32};
-use voxcore::BVoxObject;
+use voxcore::{BVoxObject, material};
 use voxrender::{RenderScene, RenderViewRays, grid_vector, quantize_direction};
-use voxrender_wgpu::{GRID_WALK_WGSL, INTEGER_WALK_WGSL, dense_cells, placement_bytes};
+use voxrender_wgpu::{GRID_WALK_WGSL, dense_cells, placement_bytes};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor,
@@ -28,18 +28,29 @@ const MARGIN: f64 = 0.01;
 /// GPU: [`LitCorners`](crate::LitCorners)' words in a buffer.
 ///
 /// A compute pass casts the contract's ray from each corner of each face
-/// the light can reach, through voxrender-wgpu's integer walk. A ray walks
+/// the light can reach, through voxrender's integer walk. A ray walks
 /// only the placements that can shadow its tile: those whose box, seen
 /// along the light, covers some of the tile's and reaches as far toward
 /// the light.
+///
+/// A material that passes light tints the light a ray carries through it,
+/// as the contract's shadow ray pays each surface. A corner is lit where
+/// some light reaches it. A record cell's tint holds the mean of what
+/// reaches its lit corners in each channel.
 pub struct LitFill {
     /// The first word of each placement's tiles' words.
     pub places: Vec<u32>,
 
     /// A word for each record cell, then [`TileMasks::SPARE`] spare words.
     /// The fill writes a word's low 24 bits and keeps the rest, which a
-    /// caller can write beforehand.
+    /// caller can write beforehand. With [`tints`](Self::tints), as many
+    /// words follow, which the fill writes whole: each record cell's
+    /// tint, 8 bits a channel from the low bits up.
     pub lit: Buffer,
+
+    /// How far past a record cell's word in [`lit`](Self::lit) its tint
+    /// lies, in a scene with a material that passes light.
+    pub tints: Option<u32>,
 
     pipeline: ComputePipeline,
 
@@ -61,8 +72,7 @@ impl LitFill {
     /// 1. `tiles`: each object's non-empty tiles in the order of their mask
     ///    words, as a tile's low corner and the indices of its record
     ///    cells
-    /// 2. `opaque`: whether a material id passes no light. A cell of any
-    ///    other material shadows nothing
+    /// 2. `opaque`: whether a material id passes no light
     pub fn new(
         device: &Device,
         scene: &RenderScene,
@@ -87,16 +97,60 @@ impl LitFill {
                 u32::try_from(dense.len()).expect("a scene's cells number under 2^32"),
             );
 
-            // A cell holds its material's id plus one, and the walk passes
-            // a zero.
-            dense.extend(dense_cells(object).into_iter().map(|value| {
-                if value.checked_sub(1).is_some_and(opaque) {
-                    value
-                } else {
-                    0
-                }
-            }));
+            dense.extend(dense_cells(object));
         }
+
+        // `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each value up
+        // to the greatest a cell holds, its material's id plus one. An id
+        // the scene lacks passes the light whole.
+        let keys = dense.iter().max().map_or(1, |greatest| greatest + 1);
+
+        let passes: Vec<f32> = (0..keys)
+            .flat_map(|key| {
+                let id = key.checked_sub(1);
+                let blocks = if id.is_some_and(opaque) { 1.0 } else { 0.0 };
+
+                id.and_then(|id| scene.material(U32Id::from_u32(id)))
+                    .map_or(
+                        [
+                            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, blocks, 0.0, 0.0, 0.0, 0.0,
+                        ],
+                        |material| {
+                            let base = material.base_color;
+                            let most = base.color
+                                * (base.alpha * material.transmission * (1.0 - material.metallic));
+                            let reflectance = material::normal_reflectance(
+                                base.color,
+                                material.metallic,
+                                material.ior,
+                            );
+
+                            // The reflectance rises toward grazing as far as
+                            // the roughness lets it.
+                            let smooth = 1.0 - material.roughness;
+                            let rise = |at_normal: f64| smooth.max(at_normal) - at_normal;
+
+                            [
+                                most.red,
+                                most.green,
+                                most.blue,
+                                1.0 - base.alpha,
+                                reflectance.red,
+                                reflectance.green,
+                                reflectance.blue,
+                                blocks,
+                                rise(reflectance.red),
+                                rise(reflectance.green),
+                                rise(reflectance.blue),
+                                0.0,
+                            ]
+                        },
+                    )
+            })
+            .map(|value| value as f32)
+            .collect();
+
+        let tinted = scene.iter_materials().any(|(id, _)| !opaque(id.to_u32()));
 
         let cell_offsets: Vec<_> = scene
             .iter_placements()
@@ -105,12 +159,22 @@ impl LitFill {
 
         let placement_bytes = placement_bytes(scene, &grid_rays, &cell_offsets);
 
-        let lights: Vec<i32> = scene
+        // `lit_fill.wgsl`'s `Light` for each placement.
+        let lights: Vec<u8> = scene
             .iter_placements()
             .flat_map(|(_, placement)| {
                 let [x, y, z] = quantize_direction(grid_vector(&placement.transform, toward));
 
+                let fades = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z].map(|axis| {
+                    let cosine = (placement.transform.rotation * axis).dot(toward).abs();
+
+                    (1.0 - cosine).powi(5) as f32
+                });
+
                 [x, y, z, 0]
+                    .into_iter()
+                    .flat_map(i32::to_le_bytes)
+                    .chain(fades.into_iter().chain([0.0]).flat_map(f32::to_le_bytes))
             })
             .collect();
 
@@ -237,9 +301,11 @@ impl LitFill {
             words.iter().flat_map(|word| word.to_le_bytes()).collect()
         };
 
+        let tints = tinted.then_some(cells + TileMasks::SPARE);
+
         let frame = init(
             "lit fill frame",
-            &bytes(&[cells, 0, 0, 0]),
+            &bytes(&[cells, 0, tints.unwrap_or(0), 0]),
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         );
         let placements = init(
@@ -248,9 +314,10 @@ impl LitFill {
             BufferUsages::STORAGE,
         );
         let dense = init("lit fill cells", &bytes(&dense), BufferUsages::STORAGE);
-        let lights = init(
-            "lit fill lights",
-            &lights
+        let lights = init("lit fill lights", &lights, BufferUsages::STORAGE);
+        let passes = init(
+            "lit fill passes",
+            &passes
                 .iter()
                 .flat_map(|value| value.to_le_bytes())
                 .collect::<Vec<_>>(),
@@ -266,26 +333,23 @@ impl LitFill {
 
         let lit = device.create_buffer(&BufferDescriptor {
             label: Some("lit corners"),
-            size: u64::from(cells + TileMasks::SPARE) * 4,
+            size: u64::from(cells + TileMasks::SPARE) * if tinted { 8 } else { 4 },
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         // SAFETY: an invocation past the scene's record cells returns. A
         // record cell indexes its placed tile, which indexes its placement
-        // and its casters. The integer walk reads only its placement's
-        // cells, and each of its loops ends within a grid's extent. A face's
-        // front cell reads the cells only inside the grid.
+        // and its casters. The walk reads only its placement's cells, and
+        // each of its loops ends within a grid's extent. A face's front
+        // cell reads the cells only inside the grid. A cell's value
+        // indexes `passes`, which holds each value up to the greatest.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some("lit fill"),
                     source: ShaderSource::Wgsl(
-                        format!(
-                            "{GRID_WALK_WGSL}\n{}\n{INTEGER_WALK_WGSL}",
-                            include_str!("lit_fill.wgsl")
-                        )
-                        .into(),
+                        format!("{GRID_WALK_WGSL}\n{}", include_str!("lit_fill.wgsl")).into(),
                     ),
                 },
                 ShaderRuntimeChecks::unchecked(),
@@ -313,6 +377,7 @@ impl LitFill {
                 &casters,
                 &recorded,
                 &lit,
+                &passes,
             ]
             .iter()
             .zip(0u32..)
@@ -326,6 +391,7 @@ impl LitFill {
         Ok(LitFill {
             places,
             lit,
+            tints,
             pipeline,
             bind_group,
             frame,

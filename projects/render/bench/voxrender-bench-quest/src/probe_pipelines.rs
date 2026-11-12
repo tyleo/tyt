@@ -65,7 +65,7 @@ pub fn probe_pipelines(gpu: &XrGpu) -> Result<()> {
 
     // The probe reads the shader whose mirror rays see the sky alone, which
     // binds no acceleration structure.
-    let module = wgsl::parse_str(&box_view_shader(false, None, None, false))
+    let module = wgsl::parse_str(&box_view_shader(false, None, None, false, 0))
         .map_err(|error| Error::ProbeShader(error.to_string()))?;
 
     let info = Validator::new(ValidationFlags::all(), Capabilities::all())

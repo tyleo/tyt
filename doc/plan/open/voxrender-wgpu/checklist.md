@@ -381,8 +381,13 @@ in this order:
             lies behind. The trial models' pixels off the reference
             fall from 51,760 to 37,006, and the fish tank takes 5.6 ms on
             Quest
-      - [ ] The light that reaches a face through glass: a pane throws no
-            shadow and no tint, and its own surfaces take the sun whole
+      - [x] A glass box draws behind its tile's opaque box, which closed
+            holes in a tank's tint
+      - [x] The sun through glass. The shadow fill carries the light
+            through each surface a ray crosses. A cell keeps the tint that
+            reaches it. The trial models' pixels off fall to 31,329
+            for 0.03 ms on Quest
+      - [ ] The sun on a glass surface, which takes it whole
       - [ ] The walk's cost, a mirror ray through glass and from it, an
             eye inside a material, and the order of the boxes between
             sorts
