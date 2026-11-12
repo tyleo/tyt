@@ -1,5 +1,5 @@
 use crate::{
-    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitRows, PlacedBox, Result, TileMasks,
+    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitCorners, PlacedBox, Result, TileMasks,
     ViewEye,
 };
 use branded_id::U32Id;
@@ -14,7 +14,7 @@ use wgpu::{
 };
 
 /// The bytes of one of `box_view.wgsl`'s `Place`s.
-const PLACE_BYTES: usize = 160;
+const PLACE_BYTES: usize = 128;
 
 /// The bytes at the start of a `Place` that follow the eye: its matrix and
 /// its ray.
@@ -130,6 +130,38 @@ impl ViewBoxes {
     }
 }
 
+/// The lit words of a scene whose light along `toward` nothing blocks. Each
+/// placement reads one tile's worth of words that light every corner of its
+/// faces toward the light. Placements whose faces look at the light alike
+/// share their words.
+fn unblocked(placements: &[(TyTransformF64, TyMatrix4x4F64)], toward: TyVector3F64) -> LitCorners {
+    let mut firsts = HashMap::new();
+    let mut words = Vec::new();
+
+    let places = placements
+        .iter()
+        .map(|(transform, _)| {
+            let direction = quantize_direction(grid_vector(transform, toward));
+
+            let word = (0..3)
+                .filter(|&axis| direction[axis] != 0)
+                .map(|axis| 0xf << (4 * (2 * axis + usize::from(direction[axis] > 0))))
+                .sum::<u32>();
+
+            *firsts.entry(word).or_insert_with(|| {
+                let first =
+                    u32::try_from(words.len()).expect("the light's words number under 2^32");
+
+                words.resize(words.len() + 4096, word);
+
+                first
+            })
+        })
+        .collect();
+
+    LitCorners { places, words }
+}
+
 /// The index of the box a sort's `key` holds.
 fn index_of(key: u64) -> usize {
     (key & 0xffff_ffff) as usize
@@ -168,7 +200,7 @@ impl BoxView {
         let mut object_boxes = HashMap::new();
         let mut object_solids = HashMap::new();
         let mut object_tiles = HashMap::new();
-        let mut object_corners = HashMap::new();
+        let mut object_surfaces = HashMap::new();
 
         // A material that passes no light at normal incidence.
         let opaque = |material: u32| {
@@ -196,7 +228,14 @@ impl BoxView {
             object_boxes.insert(object_id, masks.boxes);
             object_solids.insert(object_id, masks.solids);
             object_tiles.insert(object_id, (masks.tiles, masks.solid_tiles));
-            object_corners.insert(object_id, masks.corners);
+            object_surfaces.insert(
+                object_id,
+                masks
+                    .corners
+                    .into_iter()
+                    .zip(masks.surfaces)
+                    .collect::<Vec<_>>(),
+            );
         }
 
         let object_ids: Vec<_> = scene
@@ -264,30 +303,28 @@ impl BoxView {
             }
         }
 
-        // The sun's corner shadows. Without them every placement reads one
-        // tile's worth of rows the light reaches.
-        let lit = if shadows && suns > 0 {
-            LitRows::new(scene, sun.0, &object_corners, &opaque)?
+        // The sun's corner shadows.
+        let shadowed = shadows && suns > 0;
+
+        let lit = if shadowed {
+            LitCorners::new(scene, sun.0, &object_surfaces, &opaque)?
         } else {
-            LitRows {
-                places: vec![[0, 0, 32, 0]; placements.len()],
-                directions: placements
-                    .iter()
-                    .map(|(transform, _)| quantize_direction(grid_vector(transform, sun.0)))
-                    .collect(),
-                words: vec![u32::MAX; 32 * 32],
-            }
+            unblocked(&placements, sun.0)
         };
 
         // What a box's fragments read of its tile with no load: the first
-        // word of the tile's materials, and the first of its lit rows.
+        // word of the tile's materials, and the first of its lit words.
         let shading = |placed: &PlacedBox, tile: u32| {
-            let [first, tile_rows, ..] = lit.places[placed.placement as usize];
-            let ordinal = words[(tile + TileMasks::ORDINAL) as usize];
+            let first = lit.places[placed.placement as usize];
 
             [
                 words[(tile + TileMasks::MATERIALS) as usize],
-                first + ordinal * tile_rows,
+                first
+                    + if shadowed {
+                        words[(tile + TileMasks::FIRST) as usize]
+                    } else {
+                        0
+                    },
             ]
         };
 
@@ -408,10 +445,13 @@ impl BoxView {
             }
         }
 
-        // A binding cannot be empty.
-        if words.is_empty() {
-            words.push(0);
-        }
+        // A hit the depth test drops can read the words past its tile's
+        // last surface cell.
+        words.extend([0; 2]);
+
+        let mut lit_words = lit.words;
+
+        lit_words.push(0);
 
         if box_words.is_empty() {
             box_words.resize(12, 0);
@@ -441,9 +481,9 @@ impl BoxView {
         let frame = init("view frame", &frame, BufferUsages::UNIFORM);
         let bits = init("view bits", &words_bytes(&words), BufferUsages::STORAGE);
         let materials = init("view materials", &material_bytes, BufferUsages::STORAGE);
-        let lit_rows = init(
-            "view lit rows",
-            &words_bytes(&lit.words),
+        let lit_corners = init(
+            "view lit corners",
+            &words_bytes(&lit_words),
             BufferUsages::STORAGE,
         );
         let box_list = init(
@@ -466,7 +506,7 @@ impl BoxView {
 
         // A `Place` ends with what holds from frame to frame: the world
         // direction of each of its grid's axes with the meters a cell spans
-        // along it, its lit rows, and the direction to the sun in its grid.
+        // along it.
         let mut place_bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
         let each = (0..placements.len()).chain(0..placements.len());
 
@@ -481,39 +521,31 @@ impl BoxView {
             ]
             .map(|(axis, meters)| (transform.rotation * axis).extend(meters).to_array());
 
-            let floats = |values: &[f64]| -> Vec<u8> {
-                values
-                    .iter()
-                    .flat_map(|value| (*value as f32).to_le_bytes())
-                    .collect()
-            };
-
-            let [sun_x, sun_y, sun_z] = lit.directions[index].map(f64::from);
-
-            let rest: Vec<u8> = floats(axes.as_flattened())
-                .into_iter()
-                .chain(lit.places[index].into_iter().flat_map(u32::to_le_bytes))
-                .chain(floats(&[sun_x, sun_y, sun_z, 0.0]))
-                .collect();
-
-            place[EYE_BYTES..].copy_from_slice(&rest);
+            for (bytes, value) in place[EYE_BYTES..]
+                .chunks_exact_mut(4)
+                .zip(axes.as_flattened())
+            {
+                bytes.copy_from_slice(&(*value as f32).to_le_bytes());
+            }
         }
 
         // SAFETY: a fragment reads only within a tile's words because each
         // step keeps its cell inside the tile's box. Its loop ends within
         // the box's extent. A tile's words hold its cells' materials, which
-        // index `materials`, and its place among the tiles, which with a
-        // face's corner indexes its placement's rows in `lit`. A box's
-        // entries in `crossers` index `boxes`. The stages index `places` by
-        // an eye and a box's placement.
+        // index `materials`. A cell's place among its tile's surface cells
+        // is at most their count. Its occlusion words then end within two
+        // words of the tile's, and its word in `lit` within one of the
+        // placement's. Both buffers end with that many spare words. A
+        // box's entries in `crossers` index `boxes`. The stages index
+        // `places` by an eye and a box's placement.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some("box view"),
                     source: ShaderSource::Wgsl(
                         format!(
-                            "const ROWS: u32 = {}u;\nconst MATERIALS: u32 = {}u;\n{}\n{}",
-                            TileMasks::ROWS,
+                            "const SURFACE: u32 = {}u;\nconst MATERIALS: u32 = {}u;\n{}\n{}",
+                            TileMasks::SURFACE,
                             TileMasks::MATERIALS,
                             include_str!("box_view.wgsl"),
                             include_str!("mask_march.wgsl")
@@ -568,7 +600,7 @@ impl BoxView {
                 (ShaderStages::FRAGMENT, storage, &materials),
                 (ShaderStages::FRAGMENT, storage, &box_list),
                 (ShaderStages::FRAGMENT, storage, &crosser_list),
-                (ShaderStages::FRAGMENT, storage, &lit_rows),
+                (ShaderStages::FRAGMENT, storage, &lit_corners),
             ],
             NonZeroU32::new(0b11),
         );
