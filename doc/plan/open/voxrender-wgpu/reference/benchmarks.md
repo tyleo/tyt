@@ -2119,7 +2119,8 @@ B2 with S9's code, and the headset view R leaves standing.
 | Box raster, solid boxes and mask march, face depth | 1.469 | 4.03 | 1.884 | 3.14 | 5.360 |
 
 The launches read as in S9.4 rungs 6 and 9. A pass a run costs the plain
-ids on S1 0.2 ms, with 1.47 against 1.26 in one pass, and gains S2's 0.7.
+ids on S1 0.2 ms, 1.47 against 1.26 in one pass. S2's last row moved with
+the clock: its least pass took 4.038 ms.
 
 **The headset view.** The box raster with solid boxes under B3's shading
 load: one sun with corner shadows, the hemispheres under corner
