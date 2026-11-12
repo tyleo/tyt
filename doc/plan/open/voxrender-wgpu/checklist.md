@@ -266,8 +266,11 @@ code-level choices in
                                     cell fills in 14 to 68 ns, and one
                                     median mover's tiles in 1.8 to 3.6 ms
                                     against B5's 1.0 ms line
-                        - [ ] A crossing box that holds the eye. It still
-                              writes its hits' depth
+                        - [x] A crossing box that holds the eye. Its back
+                              faces draw first at the nearest depth. Its
+                              fragment steps from the eye through the
+                              boxes it crosses. A view from inside a bush
+                              takes 5.6 to 6.4 ms where it took 8.4
                         - [ ] The crossing test as placements move
                         - [ ] Why S1 shades a tenth more fragments over
                               three faces a box than over corners

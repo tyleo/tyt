@@ -9,6 +9,10 @@
 // Every eye is a perspective view.
 const RAY_W: f32 = 1.0;
 
+// What a clip position's w scales by to give the nearest depth that stays
+// inside the view.
+const HELD: f32 = 0.999999;
+
 struct Frame {
     // The unit direction to the sun in the world.
     sun: vec4<f32>,
@@ -33,7 +37,8 @@ struct Place {
     // The placement's grid-to-clip matrix for the eye.
     clip: mat4x4<f32>,
 
-    // The eye in the grid, with w = 1.
+    // The eye in the grid, and in w the cells of the grid within which a
+    // box holds the eye.
     ray: vec4<f32>,
 
     // The world direction of each of the grid's axes, then the meters a
@@ -193,6 +198,27 @@ fn place_near(
     var box = vertex_of(eye, corner_of(corner, low, high), corner_face(corner), low, high, more);
 
     box.clip.z *= NEARER;
+
+    return box;
+}
+
+// `place` for the back faces `held` shades, at the nearest depth. A box
+// that does not hold the eye draws nothing.
+@vertex
+fn place_held(
+    @builtin(view_index) eye: u32,
+    @location(0) corner: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
+) -> Box {
+    var box = vertex_of(eye, corner_of(corner, low, high), corner_face(corner), low, high, more);
+
+    let ray = places[eye * frame.placements + low.w].ray;
+    let holds = all(ray.xyz >= vec3<f32>(low.xyz) - ray.w) && all(ray.xyz <= vec3<f32>(high.xyz) + ray.w);
+
+    box.clip.z = box.clip.w * HELD;
+    box.clip = select(vec4<f32>(0.0), box.clip, holds);
 
     return box;
 }
