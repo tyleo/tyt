@@ -144,6 +144,17 @@ fn place_front(
     return vertex_of(front.grid, front.face, low, high, more);
 }
 
+// A word of a tile's bits, 32 cells.
+alias Cells = u32;
+
+fn cells_at(tile: u32, bit: i32) -> Cells {
+    return bits[tile + (u32(bit) >> 5u)];
+}
+
+fn live_in(cells: Cells, bit: i32) -> bool {
+    return ((cells >> (u32(bit) & 31u)) & 1u) == 1u;
+}
+
 fn source_of(box: Box) -> Source {
     return Source(box.words.y, box.voxel);
 }
@@ -178,6 +189,7 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
 // down the axis.
 fn surface(
     source: Source,
+    cells: Cells,
     cell: vec3<i32>,
     across: vec3<bool>,
     ahead: vec3<bool>,

@@ -1566,3 +1566,102 @@ A model holds 2693 to 4.1 million voxels of 0.5 mm to 2 m, and the 35 hold
    difference by cause
 5. A load takes 0.5 s for the smallest models and 3.6 s for the chess
    set's 4.1 million voxels
+
+## Records by row, 2026-11-12
+
+The words a shaded fragment reads of its tile, cut from six to three.
+
+- Device, method, image check, and driver statistics: as in Shading load,
+  instructions and reads. Times are the view's GPU frame time at p50 in ms
+  at 545 MHz. Each row's times come from sittings that alternate its build
+  with the one before the change
+- Every layout is a whole build whose image `view-check` compares with the
+  reference's on this Mac
+
+**Layouts.** The words count what a fragment reads of its tile, apart
+from its materials' values.
+
+| Layout | Words | Loads | S1 | S5 | S2 | S4 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before | 6 | 6 | 2.21 | 3.95 | 7.06 | 3.28 |
+| Groups | 6 | 6 | 2.19 | 3.73 | 6.94 | |
+| Groups in one load | 9 | 3 | 2.26 | 3.68 | 7.07 | 3.29 |
+| Rows | 4 | 4 | 2.17 | 3.62 | 6.87 | 3.21 |
+| Rows, with the material in the lit word | 3 | 3 | 2.16 | 3.55 | 6.70 | 3.11 |
+
+1. Before. A fragment read its cell's bit in the march, the cell's entry
+   among the tile's materials, a surface word and a count for the cell's
+   place among the tile's surface cells, an occlusion word, and a word of
+   lit corners. Each sat in words of its kind
+2. Groups. Each 32 cells' bits, surface bits, and count sit in four words
+   in a row. A surface cell's two record words hold its occlusion and its
+   material
+3. Groups in one load. The march loads a group's four words at once and
+   hands them to the shading. Two cells' records fill four words
+4. Rows. A word holds the bits of a row of 16 cells along z under the
+   count of the tile's record cells before the row. A record cell is a
+   live cell of a row that holds a surface cell, so a count of the row's
+   bits gives a cell's place with no surface bits. The march's load
+   then gives the place
+5. The material in the lit word. A lit word's high 8 bits hold the cell's
+   place among its tile's materials, which the view writes before the
+   fill. A fragment then reads one occlusion word
+
+**Driver statistics.** A fragment stage's instructions before and after.
+Each stage's registers and occupancy stayed as they were.
+
+| Fragment stage | Before | After |
+| --- | ---: | ---: |
+| `front` | 604 | 556 |
+| `solid` | 493 | 457 |
+| `crossed` | 1056 | 1034 |
+| `inside` | 700 | 639 |
+| `exact` | 696 | 631 |
+
+**Record cells.** A row's live cells under the surface take records too.
+The record cells for each surface cell, with every live cell opaque:
+
+| Scene or model | Tiles | Surface cells | Record cells | For each surface cell |
+| --- | ---: | ---: | ---: | ---: |
+| S1 | 372 | 166,354 | 181,086 | 1.09 |
+| S2 | 777 | 246,296 | 290,061 | 1.18 |
+| S4 | 1286 | 352,903 | 358,049 | 1.01 |
+| S5 | 4096 | 2,110,883 | 2,917,021 | 1.38 |
+| valley | 807 | 240,323 | 240,332 | 1.00 |
+| chess set | 1239 | 574,068 | 938,024 | 1.63 |
+| dragon | 404 | 101,166 | 257,357 | 2.54 |
+| city | 624 | 187,786 | 563,837 | 3.00 |
+| log cabin | 588 | 156,116 | 531,104 | 3.40 |
+| oak tree | 521 | 86,826 | 369,675 | 4.26 |
+
+A record cell takes 8 bytes of its object's words and 4 of each
+placement's lit words. Rows along the best axis for each tile would take
+1.00 to 3.32 record cells for each surface cell. The view keeps z.
+
+**Probes that misled.** Three probes worked out a cell's place from its
+index alone and read real words there. S5's view ran in 3.30 to 3.38 ms
+under them, against 3.62 for the layout they stood for. The made-up place
+lands on cells under the floor's top layer, whose faces the sun does not
+reach. A face with no lit corner skips the sun's term. A probe has to
+read what the fragment branches on from the cell it shades.
+
+**Hidden faces.** Four pixels of S5's 1680 by 1760 view hit a face that
+looks into an opaque cell, where a ray slips between two boxes' faces. A
+record held zeros for such a face, and under the row layout those pixels
+drew black. A hidden face now holds open corners, and the pixels draw
+their material under the sky. S5's image then differs from the
+reference's on 99 pixels of 31,818, from 100.
+
+**Outcomes.**
+
+1. S5 takes 3.55 ms against the 3.5 ms line, from 3.95. S2 takes 6.70 from
+   7.06, S4 3.11 from 3.28, and S1 2.16 from 2.21
+2. Each word a fragment stopped reading of its tile gave S5 0.05 to
+   0.1 ms. A word beside the one the march had just read was among them.
+   Nine
+   words in three loads ran as six words in six loads did
+3. The two words left are a cell's occlusion, which its object holds, and
+   its lit corners, which each placement holds. One word for both would
+   copy the occlusion to each placement, at 12 bytes a placed record
+   cell. S2 holds 18.9 million of them
+4. B6's LOD remains for the floor past 8 m

@@ -11,9 +11,8 @@ use crate::TileMasks;
 /// 6, a two-layer texture of filterable floats at 7, and its sampler at 8.
 pub fn box_view_shader() -> String {
     format!(
-        "const SURFACE: u32 = {}u;\nconst MATERIALS: u32 = {}u;\n{}\n{}",
-        TileMasks::SURFACE,
-        TileMasks::MATERIALS,
+        "const RECORDS: u32 = {}u;\n{}\n{}",
+        TileMasks::RECORDS,
         include_str!("box_view.wgsl"),
         include_str!("mask_march.wgsl")
     )

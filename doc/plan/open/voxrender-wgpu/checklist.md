@@ -241,11 +241,14 @@ code-level choices in
                               - [x] The bloom add, from a texture that
                                     nothing fills yet. S1 takes 2.24 ms,
                                     S5 3.89, and S2 7.31
-                              - [ ] S5 takes 3.89 ms against the 3.5 ms
-                                    line. Past 8 m its floor holds a fifth
-                                    of the pixels and 41% of the shading.
-                                    The levers left are a record a face
-                                    and B6's LOD
+                              - [x] A fragment reads three words of its
+                                    tile where it read six. A word for
+                                    each row of 16 cells holds their bits
+                                    and the count that places their
+                                    records. S5 takes 3.55 ms against the
+                                    3.5 ms line, S1 2.16, and S2 6.70.
+                                    B6's LOD remains for S5's floor past
+                                    8 m
                               - [ ] S1 shades 1.18 times a pixel and S2
                                     1.43. A depth pass of the solid boxes
                                     ahead of the march would leave the

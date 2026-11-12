@@ -30,7 +30,9 @@
 //    direction. `face`, the axis of the fragment's face, plus 4 on the box's
 //    high face. `crossers`, the first of the box's entries in `crossers` and
 //    their count
-// 3. `bits`, whose words hold a tile's cells as `TileMasks` lays them out
+// 3. `Cells`, what one load gives of a tile's words as `TileMasks` lays
+//    them out. `cells_at` loads the `Cells` that hold a cell's bit, and
+//    `live_in` tells whether the cell is live in them
 // 4. `crossers`, whose entries each hold a box of another placement that
 //    shares space with a box, as `BoxCrosser` lays it out
 // 5. `Source`, what tells `surface` whose cell it shades. `source_of` gives
@@ -38,9 +40,9 @@
 // 6. `other_of`, the `Other` of a `crossers` entry's box: the ray through
 //    the fragment as that box's tile sees it
 // 7. `surface`, what a fragment writes for a hit cell of a source, given the
-//    one axis of the face the ray crossed into the cell, the axes the ray
-//    moves up, the hit's point in the tile's cells, and the ray's direction
-//    in them
+//    `Cells` that hold the cell's bit, the one axis of the face the ray
+//    crossed into the cell, the axes the ray moves up, the hit's point in
+//    the tile's cells, and the ray's direction in them
 //
 // Its vertex entries place a corner only when `sound` holds for the corner's
 // position and its `ray`. They take a box's back faces from `BoxDraw`'s
@@ -71,6 +73,10 @@ struct Hit {
     // How far along the ray the hit lies. A miss holds how far the ray's
     // box ends.
     along: f32,
+
+    // The `Cells` that hold the hit cell's bit. A hit hands them on, where a
+    // second load would hold up the reads that follow from it.
+    cells: Cells,
 }
 
 // A box of another placement, as a fragment whose box shares space with it
@@ -184,7 +190,7 @@ struct March {
 
 // Whether the cell at `bit` is live in the tile whose words start at `tile`.
 fn live(tile: u32, bit: i32) -> bool {
-    return ((bits[tile + (u32(bit) >> 5u)] >> (u32(bit) & 31u)) & 1u) == 1u;
+    return live_in(cells_at(tile, bit), bit);
 }
 
 // Moves `march` a cell along its ray. `rate` holds the ray's units per cell
@@ -256,14 +262,16 @@ fn first_hit(
             }
 
             if !advance(&march, rate, strides, end) {
-                return Hit(false, 0, entry, end);
+                return Hit(false, 0, entry, end, Cells());
             }
         }
     }
 
     loop {
-        if live(tile, march.bit) {
-            return Hit(true, march.bit, march.across, march.along);
+        let cells = cells_at(tile, march.bit);
+
+        if live_in(cells, march.bit) {
+            return Hit(true, march.bit, march.across, march.along, cells);
         }
 
         if !advance(&march, rate, strides, end) {
@@ -271,7 +279,7 @@ fn first_hit(
         }
     }
 
-    return Hit(false, 0, entry, end);
+    return Hit(false, 0, entry, end, Cells());
 }
 
 // The first hit of the ray that leaves the box at the rasterizer's point,
@@ -324,21 +332,24 @@ fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
     // A ray that starts the stretch inside a solid box met its face before
     // the fragment's point, where another box finds it.
     if first >= min(far, 1.0 + reach) || (solid && near < 1.0) {
-        return Hit(false, 0, vec3<bool>(false), reach);
+        return Hit(false, 0, vec3<bool>(false), reach, Cells());
     }
 
     let start = other.eye + other.direction * first;
     let entry = least(-nears);
-    var hit = Hit(true, bit_of(clamp(floor(start), other.low, other.high - 1.0)), entry, 0.0);
+    let bit = bit_of(clamp(floor(start), other.low, other.high - 1.0));
+    var hit = Hit(true, bit, entry, 0.0, Cells());
 
-    if !solid {
+    if solid {
+        hit.cells = cells_at(other.tile, bit);
+    } else {
         hit = first_hit(other.tile, other.low, other.high, start, other.direction, true, entry);
     }
 
     hit.along += first - 1.0;
 
     if !hit.found || hit.along >= reach {
-        return Hit(false, 0, vec3<bool>(false), reach);
+        return Hit(false, 0, vec3<bool>(false), reach, Cells());
     }
 
     return hit;
@@ -351,6 +362,7 @@ fn shade(source: Source, hit: Hit, start: vec3<f32>, direction: vec3<f32>) -> ve
 
     return surface(
         source,
+        hit.cells,
         cell,
         hit.across,
         direction >= vec3<f32>(0.0),
@@ -385,8 +397,10 @@ fn front(box: Box) -> @location(0) vec4<f32> {
     var march = March(bit_of(cell), next, face_of(box), 0.0);
 
     loop {
-        if live(box.words.x, march.bit) {
-            let hit = Hit(true, march.bit, march.across, march.along);
+        let cells = cells_at(box.words.x, march.bit);
+
+        if live_in(cells, march.bit) {
+            let hit = Hit(true, march.bit, march.across, march.along, cells);
 
             return shade(source_of(box), hit, box.point, direction);
         }
@@ -482,12 +496,13 @@ fn exact(box: Box) -> Fragment {
 // A solid box's fragment. The rasterizer's point lies on a live cell's face.
 @fragment
 fn solid(box: Box) -> @location(0) vec4<f32> {
-    let cell = vec3<i32>(clamp(floor(box.point), box.low, box.high - 1.0));
+    let cell = clamp(floor(box.point), box.low, box.high - 1.0);
 
     // A ray meets a box's low face moving up the face's axis.
     return surface(
         source_of(box),
-        cell,
+        cells_at(box.words.x, bit_of(cell)),
+        vec3<i32>(cell),
         face_of(box),
         vec3<bool>(box.face < 4u),
         box.point,

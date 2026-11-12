@@ -1,12 +1,12 @@
 use crate::{
-    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitCorners, LitFill, PlacedBox, Result,
-    TileMasks, ViewEye, box_view_shader,
+    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitFill, PlacedBox, Result, TileMasks,
+    ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxcore::material;
-use voxrender::{RenderLight, RenderScene, grid_point, grid_vector, quantize_direction, tonemap};
+use voxrender::{RenderLight, RenderScene, grid_point, tonemap};
 use wgpu::{
     AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, Device,
     Extent3d, FilterMode, Queue, RenderPass, SamplerDescriptor, ShaderModuleDescriptor,
@@ -134,38 +134,6 @@ impl ViewBoxes {
     }
 }
 
-/// The lit words of a scene whose light along `toward` nothing blocks. Each
-/// placement reads one tile's worth of words that light every corner of its
-/// faces toward the light. Placements whose faces look at the light alike
-/// share their words.
-fn unblocked(placements: &[(TyTransformF64, TyMatrix4x4F64)], toward: TyVector3F64) -> LitCorners {
-    let mut firsts = HashMap::new();
-    let mut words = Vec::new();
-
-    let places = placements
-        .iter()
-        .map(|(transform, _)| {
-            let direction = quantize_direction(grid_vector(transform, toward));
-
-            let word = (0..3)
-                .filter(|&axis| direction[axis] != 0)
-                .map(|axis| 0xf << (4 * (2 * axis + usize::from(direction[axis] > 0))))
-                .sum::<u32>();
-
-            *firsts.entry(word).or_insert_with(|| {
-                let first =
-                    u32::try_from(words.len()).expect("the light's words number under 2^32");
-
-                words.resize(words.len() + 4096, word);
-
-                first
-            })
-        })
-        .collect();
-
-    LitCorners { places, words }
-}
-
 /// The index of the box a sort's `key` holds.
 fn index_of(key: u64) -> usize {
     (key & 0xffff_ffff) as usize
@@ -202,7 +170,8 @@ impl BoxView {
         let mut object_boxes = HashMap::new();
         let mut object_solids = HashMap::new();
         let mut object_tiles = HashMap::new();
-        let mut object_surfaces = HashMap::new();
+        let mut object_recorded = HashMap::new();
+        let mut object_entries = HashMap::new();
 
         // A material that passes no light at normal incidence.
         let opaque = |material: u32| {
@@ -230,12 +199,13 @@ impl BoxView {
             object_boxes.insert(object_id, masks.boxes);
             object_solids.insert(object_id, masks.solids);
             object_tiles.insert(object_id, (masks.tiles, masks.solid_tiles));
-            object_surfaces.insert(
+            object_entries.insert(object_id, masks.entries);
+            object_recorded.insert(
                 object_id,
                 masks
                     .corners
                     .into_iter()
-                    .zip(masks.surfaces)
+                    .zip(masks.recorded)
                     .collect::<Vec<_>>(),
             );
         }
@@ -309,30 +279,49 @@ impl BoxView {
             words.iter().flat_map(|word| word.to_le_bytes()).collect()
         };
 
-        // The sun's corner shadows, which the GPU fills before the view's
-        // first draw. A scene with no sun reads words nothing fills.
-        let shadowed = suns > 0;
+        // `box_view.wgsl`'s `lit`: a word for each record cell of each
+        // placement's tiles, with the cell's material in its high 8 bits.
+        // A hit the depth test drops can read the spare words past its
+        // tile's last record cell's.
+        let mut lit_places = Vec::new();
+        let mut lit_words: Vec<u32> = Vec::new();
 
-        let (lit_places, lit_corners) = if shadowed {
-            let fill = LitFill::new(device, scene, sun.0, &object_surfaces)?;
+        for object_id in &object_ids {
+            lit_places.push(
+                u32::try_from(lit_words.len()).expect("a scene's lit words number under 2^32"),
+            );
 
+            lit_words.extend(
+                object_entries[object_id]
+                    .iter()
+                    .flatten()
+                    .map(|&entry| u32::from(entry) << 24),
+            );
+        }
+
+        lit_words.extend([0; TileMasks::SPARE as usize]);
+
+        // The sun's corner shadows, which the GPU fills into the words' low
+        // bits before the view's first draw. A scene with no sun leaves them
+        // zero, and its faces skip the sun's term.
+        let lit_corners = if suns > 0 {
+            let fill = LitFill::new(device, scene, sun.0, &object_recorded)?;
+
+            assert_eq!(
+                fill.places, lit_places,
+                "the fill lays out the view's words"
+            );
+
+            queue.write_buffer(&fill.lit, 0, &words_bytes(&lit_words));
             fill.fill(device, queue);
 
-            (fill.places, fill.lit)
+            fill.lit
         } else {
-            let mut lit = unblocked(&placements, sun.0);
-
-            // A hit the depth test drops can read the word past its tile's
-            // last surface cell.
-            lit.words.push(0);
-
-            let words = device.create_buffer_init(&BufferInitDescriptor {
+            device.create_buffer_init(&BufferInitDescriptor {
                 label: Some("view lit corners"),
-                contents: &words_bytes(&lit.words),
+                contents: &words_bytes(&lit_words),
                 usage: BufferUsages::STORAGE,
-            });
-
-            (lit.places, words)
+            })
         };
 
         // A material's three `vec4<f32>`s: its base color and metalness, its
@@ -365,58 +354,38 @@ impl BoxView {
                 })
         };
 
-        // Each tile's word of `size | first << 4`: the bits of a cell's
-        // entry among the tile's materials, and the tile's first material
-        // in `materials`. The tile's materials follow one another there, so
-        // a cell's entry leads to its material's values in one read. Tiles
-        // that hold the same materials in the same order share them.
+        // Each tile's first material in `materials`. The tile's materials
+        // follow one another there, so a cell's place among them leads to
+        // its material's values in one read. Tiles that hold the same
+        // materials in the same order share them.
         let mut materials: Vec<f32> = Vec::new();
         let mut firsts: HashMap<Vec<u32>, u32> = HashMap::new();
-        let mut headers: HashMap<u32, u32> = HashMap::new();
+        let mut tile_firsts: HashMap<u32, u32> = HashMap::new();
 
-        let mut header = |tile: u32| {
-            *headers.entry(tile).or_insert_with(|| {
-                let held = words[(tile + TileMasks::MATERIALS) as usize];
-                let size = held & 15;
+        let mut first_material = |tile: u32| {
+            *tile_firsts.entry(tile).or_insert_with(|| {
+                let palette = words[(tile + TileMasks::PALETTE) as usize];
+                let ids = (tile + (palette & 0xffff)) as usize;
+                let ids = words[ids..ids + (palette >> 16) as usize].to_vec();
 
-                let ids = if size == 0 {
-                    vec![held >> 4]
-                } else {
-                    // The ids end where the tile's occlusion words start.
-                    let ids = tile + TileMasks::MATERIALS + 1 + 128 * size;
-                    let end = tile + (words[(tile + TileMasks::SURFACE + 1) as usize] >> 12);
-
-                    words[ids as usize..end as usize].to_vec()
-                };
-
-                let first = *firsts.entry(ids).or_insert_with_key(|ids| {
+                *firsts.entry(ids).or_insert_with_key(|ids| {
                     let first = materials.len() / 12;
 
                     materials.extend(ids.iter().flat_map(|&id| material_values(id)));
 
-                    u32::try_from(first)
-                        .ok()
-                        .filter(|&first| first < 1 << 28)
-                        .expect("a scene's tiles' materials number under 2^28")
-                });
-
-                size | first << 4
+                    u32::try_from(first).expect("a scene's tiles' materials number under 2^32")
+                })
             })
         };
 
-        // What a box's fragments read of its tile with no load: its
-        // materials' word and the first of its lit words.
+        // What a box's fragments read of its tile with no load: its first
+        // material and the first of its lit words.
         let mut shading = |placed: &PlacedBox, tile: u32| {
             let first = lit_places[placed.placement as usize];
 
             [
-                header(tile),
-                first
-                    + if shadowed {
-                        words[(tile + TileMasks::FIRST) as usize]
-                    } else {
-                        0
-                    },
+                first_material(tile),
+                first + words[(tile + TileMasks::FIRST) as usize],
             ]
         };
 
@@ -504,17 +473,17 @@ impl BoxView {
             frame.extend((1.0 / side as f32).to_le_bytes());
         }
 
-        // A hit the depth test drops can read the words past its tile's
-        // last surface cell.
-        words.extend([0; 2]);
+        if words.is_empty() {
+            words.push(0);
+        }
 
         if box_words.is_empty() {
             box_words.resize(12, 0);
         }
 
-        if materials.is_empty() {
-            materials.resize(12, 0.0);
-        }
+        // A hit in a row with no record cell can read another tile's word
+        // in `lit`, whose material lies up to 255 past the hit tile's first.
+        materials.resize(materials.len() + 255 * 12, 0.0);
 
         if crosser_words.is_empty() {
             crosser_words.resize(8, 0);
@@ -580,15 +549,14 @@ impl BoxView {
         }
 
         // SAFETY: a fragment reads only within a tile's words because each
-        // step keeps its cell inside the tile's box. Its loop ends within
-        // the box's extent. A cell's entry among its tile's materials is
-        // under their count, so it indexes `materials` past the tile's
-        // first. A cell's place among its tile's surface cells is at most
-        // their count. Its occlusion words then end within two words of the
-        // tile's, and its word in `lit` within one of the placement's. Both
-        // buffers end with that many spare words. A box's entries in
-        // `crossers` index `boxes`. The stages index `places` by an eye and
-        // a box's placement.
+        // step keeps its cell inside the tile's box. Its loop ends within the
+        // box's extent. A cell's place among its tile's record cells ends
+        // within the tile's spare records. Its record then lies in the tile's
+        // words, and its word in `lit` lies within the spare words that
+        // buffer ends with. That word's material is under 256 and indexes
+        // `materials` within the spare values that buffer ends with. A box's
+        // entries in `crossers` index `boxes`. The stages index `places` by
+        // an eye and a box's placement.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
