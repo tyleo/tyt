@@ -11,14 +11,24 @@
 // 3. `MIRROR_CUT`, the share of a face's reflectance a mirror ray runs down
 //    to
 // 4. `MIRROR_REACH`, the least cells a mirror ray reaches
+// 5. `BLOOM`, whether a fragment adds the halo
+// 6. `BLOOM_THRESHOLD`, the level of an emission's brightest channel that
+//    blooms
+// 7. `BLOOM_SOURCE`. A module with a `BLOOM_SOURCE` draws the bloom's source
+//    in place of the view: a hit's emission over the threshold, scaled by
+//    `BLOOM_SOURCE`
 //
-// `BoxView` adds `mirrored`.
+// `BoxView` adds `mirrored` and `hidden`.
 
 // Every eye is a perspective view.
 const RAY_W: f32 = 1.0;
 
 // The part of a cell a mirror ray starts off its face.
 const MIRROR_START: f32 = 1.0 / 64.0;
+
+// The part of a cell that the ray from the eye to a glowing hit ends
+// short of the hit, which keeps the hit's face out of the ray's way.
+const SOURCE_SHORT: f32 = 0.25;
 
 // What a clip position's w scales by to give the nearest depth that stays
 // inside the view.
@@ -85,6 +95,13 @@ struct Source {
     pixel: vec2<f32>,
 }
 
+// A corner of the triangle that covers an eye.
+struct Sky {
+    @builtin(position) clip: vec4<f32>,
+
+    @location(0) @interpolate(flat) eye: u32,
+}
+
 struct Box {
     @builtin(position) clip: vec4<f32>,
 
@@ -143,7 +160,7 @@ struct Box {
 // Each placement's `LitCorners` words. A word's high 8 bits hold its
 // cell's place among its tile's materials.
 @group(0) @binding(6) var<storage, read> lit: array<u32>;
-// The bloom each eye's fragments add, a layer an eye.
+// The halo each eye's fragments add, a layer an eye: `BoxBloom`'s.
 @group(0) @binding(8) var bloom: texture_2d_array<f32>;
 @group(0) @binding(9) var bloom_sampler: sampler;
 
@@ -254,6 +271,24 @@ fn place_front(
     let front = front_of(vertex, ray, low.xyz, high.xyz);
 
     return vertex_of(eye, front.grid, front.face, low, high, more);
+}
+
+// A corner of a triangle over the eye, at the depth a pass clears to.
+@vertex
+fn place_sky(@builtin(vertex_index) vertex: u32, @builtin(view_index) eye: u32) -> Sky {
+    let across = vec2<f32>(f32(vertex & 1u), f32(vertex >> 1u)) * 4.0 - 1.0;
+
+    return Sky(vec4<f32>(across, 0.0, 1.0), eye);
+}
+
+// What the halo adds to the sky a pass cleared the target to: the sky under
+// the halo, less the sky alone. The target's blend adds it where no box
+// drew.
+@fragment
+fn sky_halo(sky: Sky) -> @location(0) vec4<f32> {
+    let halo = textureSampleLevel(bloom, bloom_sampler, sky.clip.xy * frame.texel, sky.eye, 0.0).rgb;
+
+    return vec4<f32>(tonemap(frame.sky.rgb + halo) - tonemap(frame.sky.rgb), 0.0);
 }
 
 // The contract's tonemap, Khronos PBR Neutral.
@@ -374,6 +409,26 @@ fn surface(
     let glow = materials[material * 3u + 1u];
     let gloss = materials[material * 3u + 2u];
 
+    if BLOOM_SOURCE > 0.0 {
+        // The emission's part over the threshold, where no opaque quad
+        // hides the hit from its eye.
+        let peak = max(glow.r, max(glow.g, glow.b));
+
+        if peak <= BLOOM_THRESHOLD {
+            return vec4<f32>(0.0);
+        }
+
+        let meters = length(source.toward) * dot(at - source.ray, direction) / dot(direction, direction);
+        let short = places[source.place].axes[face >> 1u].w * SOURCE_SHORT;
+        let origin = frame.eyes[u32(source.place >= frame.placements)].xyz;
+
+        if hidden(origin, normalize(source.toward), max(meters - short, 0.0)) {
+            return vec4<f32>(0.0);
+        }
+
+        return vec4<f32>(glow.rgb * ((peak - BLOOM_THRESHOLD) / peak * BLOOM_SOURCE), 1.0);
+    }
+
     // Where the hit lies across the face, on the axis after the face's and
     // on the one after that.
     let within = at - vec3<f32>(cell);
@@ -470,8 +525,10 @@ fn surface(
 
     color += reflected * reflectance;
 
-    // The bloom at the pixel.
-    color += textureSampleLevel(bloom, bloom_sampler, source.pixel * frame.texel, eye, 0.0).rgb;
+    // The halo at the pixel.
+    if BLOOM {
+        color += textureSampleLevel(bloom, bloom_sampler, source.pixel * frame.texel, eye, 0.0).rgb;
+    }
 
     return vec4<f32>(tonemap(color), 1.0);
 }

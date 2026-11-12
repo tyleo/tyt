@@ -2336,3 +2336,81 @@ back at 45,638 pixels off the reference, from 41,982.
    then draws in its old time or less on Quest, and a model of smooth
    faces in two thirds of it
 4. The chart joins the trial models in the headset's gallery
+
+## Bloom in the box view, 2026-11-12
+
+The box view adds the contract's bloom under the settings vxl's review
+renders take: strength 1, radius 0.03, threshold 1. B4 was to time the
+research's fused path: a pre-pass for the bloom's source, a pyramid, and
+the add and the tonemap in the primary pass.
+
+**The source on Quest.** The candelabra's five flames glow. Its view takes
+1.03 ms with no bloom. Two sources ran, the first in parts.
+
+| Bloom | App GPU, ms |
+| --- | ---: |
+| None | 1.03 |
+| One pass over a quarter-size target | 1.09 |
+| The levels alone, nine passes | 1.30 |
+| The eyes' fragments leave their emission in their alpha, and a pass reads the eyes back, one texel in 16 | 1.27 |
+| The same loop over 16 texels of a small texture | 1.45 |
+| The same pass over all 16 texels of the eyes | 3.19 |
+| That pass and the levels | 3.39 |
+| A pass that adds the halo over the sky, on the whole eye | 1.50 |
+| The glowing boxes drawn at half size, the levels, and the sky's halo within the halo's reach | 1.51 |
+
+Reading both eyes back costs 2 ms, whatever reads them. The view draws
+the source in its place: the boxes whose tiles hold an emission over the
+threshold, through a module that writes that emission where a ray query
+finds nothing between the eye and the hit. The source comes before the
+frame's passes, so the halo is the frame's own.
+
+**The halo against the reference.** The mean difference from the
+reference's image over the whole image, in steps of 255, at 512 and at 1024
+pixels square.
+
+| Source | Candelabra | Ramen stand |
+| --- | ---: | ---: |
+| The eyes read back, 16 texels a pixel | 0.131, 0.115 | 0.458, 0.360 |
+| The boxes drawn at a quarter of the eyes' size | 0.136, 0.116 | 0.785, 0.492 |
+| The boxes drawn at half size and halved once | 0.131, 0.114 | 0.469, 0.368 |
+
+A tube a pixel wide falls between a quarter-size target's samples. A level
+blurs by about 3 pixels of the eyes times two to its place, and an octave
+of the contract falls to the level nearest its blur: a first level at 2 or
+at 2.5 pixels scores 0.565 and 0.491 on the ramen stand, and one at 3 to
+4.5 scores the same as 3.
+
+**The gallery on Quest.** App GPU p50 in ms, with the reach of two cells.
+
+| Model | No bloom | Bloom |
+| --- | ---: | ---: |
+| candelabra | 1.03 | 1.51 |
+| lantern | | 1.66 |
+| fish tank | | 1.74 |
+| spaceship bridge | | 1.75 |
+| city | | 2.15 |
+| ramen stand | | 2.67 |
+
+Each holds 90 Hz. A model that glows loads 0.6 to 0.7 s later: the
+source's module compiles too.
+
+A scene with no emission over the threshold builds no bloom, and its
+fragments leave the halo's sample out. The bench scenes' views gain by
+it: S1 takes 1.87 ms, S5 3.30, S2 6.5, and S4 2.96.
+
+**The box view against the reference.** Both bloom now. The 35 trial
+models' pixels off go from 45,638 to 51,760. The ramen stand holds 3524 of
+them, from 818, and the spaceship's bridge 6074, from 3668. They lie
+beside thin emitters, where the two narrowest octaves share one level.
+
+**Outcomes.**
+
+1. The box view blooms as the contract does: the emission over the
+   threshold, in a halo the fragments add before the tonemap and a last
+   pass adds over the sky
+2. A model that glows takes about 0.5 ms more on Quest, against B4's line
+   of 0.6. A scene that does not glow takes 0.1 to 0.2 ms less than it did
+3. No pass reads the eyes back. That costs 2 ms on Quest
+4. Left: a level for each of the two narrowest octaves, an emission behind
+   glass, and B4's depth and motion vectors

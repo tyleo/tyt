@@ -1,18 +1,20 @@
 use crate::{
-    BoxBindings, BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitFill, MaterialGrid,
-    PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
+    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitFill,
+    MaterialGrid, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxcore::material;
-use voxrender::{RenderLight, RenderScene, grid_point, tonemap};
+use voxrender::{RenderBloom, RenderLight, RenderScene, grid_point, tonemap};
 use voxsurface::{SurfaceMethod, mesh_grid};
 use wgpu::{
-    AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, Device,
-    Extent3d, Features, FilterMode, Queue, RenderPass, SamplerDescriptor, ShaderModuleDescriptor,
-    ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages, TextureViewDescriptor,
+    AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
+    Device, Extent3d, Features, FilterMode, LoadOp, Operations, Queue, RenderPass,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
+    SamplerDescriptor, ShaderModuleDescriptor, ShaderRuntimeChecks, ShaderSource, ShaderStages,
+    StoreOp, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -26,6 +28,10 @@ const EYE_BYTES: usize = 80;
 /// The bytes of `box_view.wgsl`'s `Frame`, and where its eyes start.
 const FRAME_BYTES: usize = 112;
 const EYES_AT: u64 = 80;
+
+/// The standard deviations of the bloom's widest blur that the halo reaches
+/// past what glows.
+const REACH_SIGMAS: f64 = 3.0;
 
 /// The meters past the eyes within which a box counts as holding an eye,
 /// in a headset's meters. The reach covers the near plane.
@@ -45,11 +51,20 @@ const SLACK: f64 = 0.25;
 /// sun and its hemispheres, with corner occlusion and the sun's corner
 /// shadows. On a device with ray queries a face's mirror ray traces the
 /// scene's opaque quads. The quad it meets shades flat with no shadow.
-/// Elsewhere a face reflects the sky alone. Each fragment
-/// adds the bloom at its pixel before the tonemap, from a texture a quarter
-/// of the target's size that stays black until a pass fills it.
+/// Elsewhere a face reflects the sky alone.
+///
+/// Where the scene blooms, a fragment adds the halo at its pixel before the
+/// tonemap. [`glow`](Self::glow) makes the halo before a frame's passes, and
+/// a last pass adds it over the sky.
 pub struct BoxView {
     boxes: BoxDraw,
+
+    /// What makes the halo, where an emission passes the bloom's
+    /// threshold.
+    glow: Option<Glow>,
+
+    /// The target's width and height.
+    size: [u32; 2],
 
     /// `box_view.wgsl`'s `Frame`. A frame rewrites its eyes.
     frame: Buffer,
@@ -82,6 +97,22 @@ pub struct BoxView {
     sky: Color,
 }
 
+/// What a scene that blooms draws before a frame's passes.
+struct Glow {
+    bloom: BoxBloom,
+
+    /// The boxes whose fragments can meet an emission over the threshold,
+    /// in the view's runs, drawn through the module that draws the bloom's
+    /// source.
+    boxes: BoxDraw,
+
+    /// The depth the boxes draw with, at the source's size.
+    depth: TextureView,
+
+    /// The pixels of the target the halo reaches past what glows.
+    reach: f64,
+}
+
 /// Boxes as a sort reads them.
 #[derive(Default)]
 struct ViewBoxes {
@@ -93,10 +124,13 @@ struct ViewBoxes {
 
     /// Whether each box's fragments can cast a mirror ray.
     mirror: Vec<bool>,
+
+    /// Whether each box's fragments can meet an emission that blooms.
+    glow: Vec<bool>,
 }
 
 impl ViewBoxes {
-    fn push(&mut self, placed: &PlacedBox, words: [u32; 12], mirror: bool) {
+    fn push(&mut self, placed: &PlacedBox, words: [u32; 12], mirror: bool, glow: bool) {
         let (low, high) = placed.world();
         let [low_x, low_y, low_z] = low.as_vec3().to_array();
         let [high_x, high_y, high_z] = high.as_vec3().to_array();
@@ -110,6 +144,15 @@ impl ViewBoxes {
             .push([low_x, low_y, low_z, high_x, high_y, high_z]);
         self.words.push(bytes);
         self.mirror.push(mirror);
+        self.glow.push(glow);
+    }
+
+    /// The keys of `keys` whose boxes glow.
+    fn glowing<'a>(
+        &'a self,
+        keys: impl IntoIterator<Item = u64> + 'a,
+    ) -> impl Iterator<Item = u64> + 'a {
+        keys.into_iter().filter(|&key| self.glow[index_of(key)])
     }
 
     /// The keys of `keys` whose boxes have `mirror`.
@@ -186,17 +229,30 @@ impl BoxView {
     /// The format of the depth a pass that draws the view clears to zero.
     pub const DEPTH: TextureFormat = HitTargets::DEPTH;
 
-    /// Builds the view of `scene` for a two-layer target of `format` and
-    /// of `size`, its width and height, and submits the fill of the sun's
-    /// corner shadows. Errors if a tile holds over 256 materials, or if the
-    /// scene has a sun and no view.
+    /// Builds the view of `scene` under `bloom` and submits the fill of the
+    /// sun's corner shadows. The view draws to a two-layer target of
+    /// `format` whose width and height are `size`. Errors if a tile holds
+    /// over 256 materials, or if the scene has a sun and no view.
     pub fn new(
         device: &Device,
         queue: &Queue,
         scene: &RenderScene,
+        bloom: RenderBloom,
         format: TextureFormat,
         size: [u32; 2],
     ) -> Result<Self> {
+        // The scene blooms where an emission's brightest channel passes
+        // the threshold.
+        let glows = bloom.strength > 0.0
+            && scene.iter_materials().any(|(_, material)| {
+                let emission = material.emissive_color * material.emissive_strength;
+
+                emission.red.max(emission.green).max(emission.blue) > bloom.threshold
+            });
+
+        let radius = bloom.radius;
+        let bloom = glows.then(|| (BoxBloom::new(device, size, bloom), bloom.threshold as f32));
+
         let mut words = Vec::new();
         let mut offsets = HashMap::new();
         let mut object_boxes = HashMap::new();
@@ -436,6 +492,26 @@ impl BoxView {
             })
         };
 
+        // A tile glows where one of its materials' emission blooms.
+        let mut tile_glows: HashMap<u32, bool> = HashMap::new();
+
+        let mut glow_tile = |tile: u32| {
+            *tile_glows.entry(tile).or_insert_with(|| {
+                let palette = words[(tile + TileMasks::PALETTE) as usize];
+                let ids = (tile + (palette & 0xffff)) as usize;
+
+                bloom.as_ref().is_some_and(|&(_, threshold)| {
+                    words[ids..ids + (palette >> 16) as usize]
+                        .iter()
+                        .any(|&id| {
+                            let values = material_values(id);
+
+                            values[4].max(values[5]).max(values[6]) > threshold
+                        })
+                })
+            })
+        };
+
         // What a box's fragments read of its tile with no load: its first
         // material and the first of its lit words.
         let mut shading = |placed: &PlacedBox, tile: u32| {
@@ -523,15 +599,36 @@ impl BoxView {
             .chain(&march_mirrors)
             .any(|&mirror| mirror);
 
+        let solid_glows: Vec<_> = solid
+            .iter()
+            .map(|placed| glow_tile(tile(placed, true)))
+            .collect();
+
+        let march_glows: Vec<_> = marched
+            .iter()
+            .zip(&crossers)
+            .map(|(placed, entries)| {
+                glow_tile(tile(placed, false))
+                    || entries.iter().any(|entry| {
+                        let other = (entry.entry & !BoxCrosser::SOLID) as usize;
+
+                        match other.checked_sub(marched.len()) {
+                            Some(other) => solid_glows[other],
+                            None => glow_tile(tile(&marched[other], false)),
+                        }
+                    })
+            })
+            .collect();
+
         let mut solid_boxes = ViewBoxes::default();
         let mut marched_boxes = ViewBoxes::default();
 
-        for ((placed, &words), &mirror) in solid.iter().zip(&solid_words).zip(&solid_mirrors) {
-            solid_boxes.push(placed, words, mirror);
+        for (index, (placed, &words)) in solid.iter().zip(&solid_words).enumerate() {
+            solid_boxes.push(placed, words, solid_mirrors[index], solid_glows[index]);
         }
 
-        for ((placed, &words), &mirror) in marched.iter().zip(&march_words).zip(&march_mirrors) {
-            marched_boxes.push(placed, words, mirror);
+        for (index, (placed, &words)) in marched.iter().zip(&march_words).enumerate() {
+            marched_boxes.push(placed, words, march_mirrors[index], march_glows[index]);
         }
 
         let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
@@ -577,7 +674,8 @@ impl BoxView {
         // face under its material's place in `materials`.
         let mut quad_words: Vec<u32> = Vec::new();
 
-        let tlas = mirrors.then(|| {
+        // The bloom's source casts a ray to each glowing hit too.
+        let tlas = (mirrors || traced && bloom.is_some()).then(|| {
             let quads = QuadTlas::new(
                 device,
                 queue,
@@ -731,7 +829,9 @@ impl BoxView {
         // `materials` within the spare values that buffer ends with. A box's
         // entries in `crossers` index `boxes`. The stages index `places` by
         // an eye and a box's placement.
-        let module = |traced| unsafe {
+        let threshold = bloom.as_ref().map(|&(_, threshold)| threshold);
+
+        let module = |traced, source| unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some(if traced {
@@ -739,7 +839,7 @@ impl BoxView {
                     } else {
                         "box view"
                     }),
-                    source: ShaderSource::Wgsl(box_view_shader(traced).into()),
+                    source: ShaderSource::Wgsl(box_view_shader(traced, threshold, source).into()),
                 },
                 ShaderRuntimeChecks::unchecked(),
             )
@@ -747,8 +847,8 @@ impl BoxView {
 
         // A mirror ray's query costs each fragment of its module, so only
         // the boxes that can cast one draw through it.
-        let plain = module(false);
-        let mirror = mirrors.then(|| module(true));
+        let plain = module(false, None);
+        let mirror = mirrors.then(|| module(true, None));
         let modules: Vec<_> = [Some(&plain), mirror.as_ref()]
             .into_iter()
             .flatten()
@@ -758,23 +858,39 @@ impl BoxView {
         let storage = BufferBindingType::Storage { read_only: true };
         let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
 
-        // The bloom each eye's fragments add. wgpu clears it to black.
-        let bloom = device
-            .create_texture(&TextureDescriptor {
-                label: Some("view bloom"),
-                size: Extent3d {
-                    width: size[0].div_ceil(4),
-                    height: size[1].div_ceil(4),
-                    depth_or_array_layers: 2,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Rgba16Float,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
-            .create_view(&TextureViewDescriptor::default());
+        let texture = |label, size: [u32; 2], format, usage| {
+            device
+                .create_texture(&TextureDescriptor {
+                    label: Some(label),
+                    size: Extent3d {
+                        width: size[0],
+                        height: size[1],
+                        depth_or_array_layers: 2,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: TextureDimension::D2,
+                    format,
+                    usage,
+                    view_formats: &[],
+                })
+                .create_view(&TextureViewDescriptor::default())
+        };
+
+        // A texel no fragment reads, bound where a draw has no halo to
+        // add: by a scene with no bloom, and by the draw that makes the
+        // halo.
+        let no_halo = texture(
+            "no halo",
+            [1, 1],
+            BoxBloom::FORMAT,
+            TextureUsages::TEXTURE_BINDING,
+        );
+
+        let halo = bloom
+            .as_ref()
+            .map_or(&no_halo, |(bloom, _)| bloom.halo())
+            .clone();
 
         let bloom_sampler = device.create_sampler(&SamplerDescriptor {
             label: Some("view bloom"),
@@ -796,6 +912,27 @@ impl BoxView {
             .map(|(words, _)| *words)
             .collect();
 
+        // The same runs of the boxes that glow.
+        let glowing = |words: &[[u32; 12]], glows: &[bool]| -> Vec<_> {
+            words
+                .iter()
+                .zip(glows)
+                .filter(|&(_, &glows)| glows)
+                .map(|(words, _)| *words)
+                .collect()
+        };
+
+        let glow_solids = glowing(&solid_words, &solid_glows);
+        let glow_marched = glowing(&march_words, &march_glows);
+
+        let glow_held: Vec<_> = march_words
+            .iter()
+            .zip(&crossers)
+            .zip(&march_glows)
+            .filter(|&((_, entries), &glows)| glows && !entries.is_empty())
+            .map(|((words, _), _)| *words)
+            .collect();
+
         let part = |fragment, faces, module, boxes| BoxPart {
             fragment,
             faces,
@@ -803,7 +940,18 @@ impl BoxView {
             boxes,
         };
 
-        let boxes = BoxDraw::new(
+        let buffers = [
+            (both, BufferBindingType::Uniform, &frame),
+            (both, storage, &places),
+            (ShaderStages::FRAGMENT, storage, &bits),
+            (ShaderStages::FRAGMENT, storage, &materials),
+            (ShaderStages::FRAGMENT, storage, &box_list),
+            (ShaderStages::FRAGMENT, storage, &crosser_list),
+            (ShaderStages::FRAGMENT, storage, &lit_corners),
+            (ShaderStages::FRAGMENT, storage, &quad_list),
+        ];
+
+        let mut boxes = BoxDraw::new(
             device,
             &modules,
             format,
@@ -818,21 +966,56 @@ impl BoxView {
                 part("crossed", BoxFaces::Front, near, Vec::new()),
             ],
             &BoxBindings {
-                buffers: &[
-                    (both, BufferBindingType::Uniform, &frame),
-                    (both, storage, &places),
-                    (ShaderStages::FRAGMENT, storage, &bits),
-                    (ShaderStages::FRAGMENT, storage, &materials),
-                    (ShaderStages::FRAGMENT, storage, &box_list),
-                    (ShaderStages::FRAGMENT, storage, &crosser_list),
-                    (ShaderStages::FRAGMENT, storage, &lit_corners),
-                    (ShaderStages::FRAGMENT, storage, &quad_list),
-                ],
-                sampled: Some((&bloom, &bloom_sampler)),
+                buffers: &buffers,
+                sampled: Some((&halo, &bloom_sampler)),
                 tlas: tlas.as_ref(),
             },
             NonZeroU32::new(0b11),
         );
+
+        let glow = bloom.map(|(bloom, _)| {
+            boxes.cover(
+                device,
+                &plain,
+                "place_sky",
+                "sky_halo",
+                format,
+                NonZeroU32::new(0b11),
+            );
+
+            // The source's ray needs the ray queries the TLAS came with.
+            let source = module(tlas.is_some(), Some(bloom.scale() as f32));
+            let half = size.map(|side| side.div_ceil(2));
+
+            Glow {
+                boxes: BoxDraw::new(
+                    device,
+                    &[&source],
+                    BoxBloom::FORMAT,
+                    &[
+                        part("held", BoxFaces::Held, 0, glow_held),
+                        part("inside", BoxFaces::NearBack, 0, Vec::new()),
+                        part("solid", BoxFaces::Front, 0, glow_solids),
+                        part("front", BoxFaces::Front, 0, glow_marched),
+                        part("crossed", BoxFaces::Front, 0, Vec::new()),
+                    ],
+                    &BoxBindings {
+                        buffers: &buffers,
+                        sampled: Some((&no_halo, &bloom_sampler)),
+                        tlas: tlas.as_ref(),
+                    },
+                    NonZeroU32::new(0b11),
+                ),
+                depth: texture(
+                    "glow depth",
+                    half,
+                    Self::DEPTH,
+                    TextureUsages::RENDER_ATTACHMENT,
+                ),
+                reach: REACH_SIGMAS * radius * f64::from(size[0].min(size[1])),
+                bloom,
+            }
+        });
 
         let above = tonemap(TyLinSrgbF32::new(
             sky.red as f32,
@@ -842,6 +1025,8 @@ impl BoxView {
 
         Ok(BoxView {
             boxes,
+            glow,
+            size,
             frame,
             places,
             place_bytes,
@@ -922,6 +1107,12 @@ impl BoxView {
         if !holds {
             self.sort(queue, head, reach + slack);
         }
+
+        if let Some(reach) = self.glow.as_ref().map(|glow| glow.reach) {
+            let pixels = self.halo_pixels(eyes, reach);
+
+            self.boxes.cover_within(pixels);
+        }
     }
 
     /// Sorts the boxes nearest to `head` first into their runs. A marched
@@ -969,6 +1160,30 @@ impl BoxView {
 
         self.boxes.rewrite(queue, &self.sorted, &counts);
         self.sorted_for = Some((head, covered));
+
+        // The glowing boxes take the same runs for the halo's draw.
+        if let Some(glow) = &mut self.glow {
+            self.sorted.clear();
+
+            let counts = [
+                marched.extend(
+                    marched.glowing(crossing_keys(near, crossing, true)),
+                    &mut self.sorted,
+                ),
+                marched.extend(
+                    marched.glowing(crossing_keys(near, crossing, false)),
+                    &mut self.sorted,
+                ),
+                solid.extend(
+                    solid.glowing(self.solid_keys.iter().copied()),
+                    &mut self.sorted,
+                ),
+                marched.extend(marched.glowing(plain()), &mut self.sorted),
+                marched.extend(marched.glowing(crossed()), &mut self.sorted),
+            ];
+
+            glow.boxes.rewrite(queue, &self.sorted, &counts);
+        }
     }
 
     /// How many passes draw the boxes [`prepare`](Self::prepare) sorted, at
@@ -982,5 +1197,115 @@ impl BoxView {
     /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
     pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
         self.boxes.draw(pass, at);
+    }
+
+    /// Encodes the passes that make a frame's halo, which come before the
+    /// first of its [`passes`](Self::passes): the glowing boxes drawn into
+    /// the bloom's source, then the bloom's. Encodes nothing for a scene
+    /// with no bloom.
+    pub fn glow(&self, encoder: &mut CommandEncoder) {
+        let Some(glow) = &self.glow else {
+            return;
+        };
+
+        let passes = glow.boxes.passes();
+
+        for at in 0..passes {
+            let first = at == 0;
+
+            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("glow"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: glow.bloom.source(),
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: if first {
+                            LoadOp::Clear(Color::BLACK)
+                        } else {
+                            LoadOp::Load
+                        },
+                        store: StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
+                    view: &glow.depth,
+                    depth_ops: Some(Operations {
+                        load: if first {
+                            LoadOp::Clear(0.0)
+                        } else {
+                            LoadOp::Load
+                        },
+                        store: if at + 1 == passes {
+                            StoreOp::Discard
+                        } else {
+                            StoreOp::Store
+                        },
+                    }),
+                    stencil_ops: None,
+                }),
+                multiview_mask: NonZeroU32::new(0b11),
+                ..RenderPassDescriptor::default()
+            });
+
+            glow.boxes.draw(&mut pass, at);
+        }
+
+        glow.bloom.run(encoder);
+    }
+
+    /// The pixels of the target the halo can reach for `eyes`, as a
+    /// rectangle's left, top, width, and height: what glows in either eye,
+    /// grown by `reach` pixels. The rectangle covers the whole target where a
+    /// glowing box reaches behind an eye.
+    fn halo_pixels(&self, eyes: &[ViewEye; 2], reach: f64) -> [u32; 4] {
+        let [width, height] = self.size.map(f64::from);
+        let mut low = [f64::INFINITY; 2];
+        let mut high = [f64::NEG_INFINITY; 2];
+
+        let glowing = [&self.solid, &self.marched].into_iter().flat_map(|boxes| {
+            boxes
+                .bounds
+                .iter()
+                .zip(&boxes.glow)
+                .filter(|&(_, &glows)| glows)
+                .map(|(bounds, _)| bounds)
+        });
+
+        let clips = eyes.map(|eye| eye.world_to_clip.to_cols_array());
+
+        for bounds in glowing {
+            for clip in &clips {
+                for corner in 0..8 {
+                    let [x, y, z] =
+                        [0, 1, 2].map(|axis| f64::from(bounds[axis + 3 * (corner >> axis & 1)]));
+                    let along = |row: usize| {
+                        clip[row] * x + clip[4 + row] * y + clip[8 + row] * z + clip[12 + row]
+                    };
+                    let w = along(3);
+
+                    if w <= 0.0 {
+                        return [0, 0, self.size[0], self.size[1]];
+                    }
+
+                    let pixel = [
+                        (along(0) / w * 0.5 + 0.5) * width,
+                        (0.5 - along(1) / w * 0.5) * height,
+                    ];
+
+                    for axis in 0..2 {
+                        low[axis] = low[axis].min(pixel[axis] - reach);
+                        high[axis] = high[axis].max(pixel[axis] + reach);
+                    }
+                }
+            }
+        }
+
+        let left = low[0].clamp(0.0, width).floor();
+        let top = low[1].clamp(0.0, height).floor();
+        let right = high[0].clamp(left, width).ceil();
+        let bottom = high[1].clamp(top, height).ceil();
+
+        [left, top, right - left, bottom - top].map(|pixels| pixels as u32)
     }
 }

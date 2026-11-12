@@ -13,6 +13,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+use voxrender::RenderBloom;
 use voxrender_bench::{
     Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, KernelProfile, ModelGallery,
     PassTimer, TimedBench, bench_scene,
@@ -162,6 +163,7 @@ impl XrApp {
                         &gpu.device,
                         &gpu.queue,
                         &render_scene,
+                        RenderBloom::default(),
                         HeadsetStand::at_view(view),
                         swapchain.format,
                         [width, height],
@@ -401,6 +403,13 @@ impl XrApp {
 
             _ => 1,
         };
+
+        // A scene that blooms makes its halo before its passes.
+        match &self.work {
+            FrameWork::View { view, .. } => view.glow(&mut encoder),
+            FrameWork::Models { gallery, .. } => gallery.glow(&mut encoder),
+            _ => {}
+        }
 
         for at in 0..passes {
             let first = at == 0;

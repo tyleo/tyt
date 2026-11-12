@@ -1,6 +1,6 @@
 use crate::{BoxView, Error, Gpu, Result, ViewEye, map_readback, world_to_clip};
 use std::num::NonZeroU32;
-use voxrender::RenderScene;
+use voxrender::{RenderBloom, RenderScene};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT,
     CommandEncoderDescriptor, Extent3d, LoadOp, Operations, Origin3d, RenderPassColorAttachment,
@@ -12,14 +12,27 @@ use wgpu::{
 /// The format of the image's texels.
 const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
-/// A [`BoxView`] of `scene` through its first view, as the sRGB texels of a
-/// `width` by `height` image, four bytes each, row by row. Both eyes draw
-/// the view, and the image holds the first. Errors unless the scene has
-/// a view and the device has multiview.
-pub fn view_image(gpu: &Gpu, scene: &RenderScene, width: u32, height: u32) -> Result<Vec<u8>> {
+/// A [`BoxView`] of `scene` under `bloom` through its first view, as the
+/// sRGB texels of a `width` by `height` image, four bytes each, row by row.
+/// Both eyes draw the view, and the image holds the first. Errors unless
+/// the scene has a view and the device has multiview.
+pub fn view_image(
+    gpu: &Gpu,
+    scene: &RenderScene,
+    bloom: RenderBloom,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>> {
     let (_, view) = scene.iter_views().next().ok_or(Error::NoView)?;
 
-    let mut boxes = BoxView::new(&gpu.device, &gpu.queue, scene, FORMAT, [width, height])?;
+    let mut boxes = BoxView::new(
+        &gpu.device,
+        &gpu.queue,
+        scene,
+        bloom,
+        FORMAT,
+        [width, height],
+    )?;
 
     let eye = ViewEye {
         world_to_clip: world_to_clip(scene, view, width, height),
@@ -74,6 +87,8 @@ pub fn view_image(gpu: &Gpu, scene: &RenderScene, width: u32, height: u32) -> Re
     let color = eyes.create_view(&TextureViewDescriptor::default());
     let depth = depth.create_view(&TextureViewDescriptor::default());
     let passes = boxes.passes();
+
+    boxes.glow(&mut encoder);
 
     for at in 0..passes {
         let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {

@@ -28,7 +28,8 @@ CPU through the reference's walk. It prints how many corners differ. All three
 take the start of a scene's name in B1's report.
 
 Each of the three also takes the path of a Voxel Json model in place of a
-scene's name. A model draws from vxl's hero view under its studio rig:
+scene's name. A model draws from vxl's hero view under vxl's studio rig and
+the bloom vxl's review renders take:
 
 ```sh
 cargo run --release -p voxrender-bench-desktop -- view chair.voxjz chair.png

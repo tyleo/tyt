@@ -115,9 +115,10 @@ the CPU every 600 frames on a `view` line beside B0's GPU frame times.
 
 The view shades as the contract's opaque surface under the scene's first sun
 and its hemispheres. The GPU fills the sun's shadows at start. A face's
-mirror ray traces the scene's opaque faces through a ray query, and the
-face it meets shades flat with no shadow. The rougher the face, the nearer
-that face has to lie to show.
+mirror ray traces the scene's opaque faces through a ray query. The face it
+meets shades flat with no shadow. The rougher the face, the nearer what it
+mirrors has to lie to show. A model's emission blooms as vxl's review
+renders bloom it.
 
 ## Models
 

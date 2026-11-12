@@ -3159,6 +3159,7 @@ dependencies = [
  "ash",
  "log",
  "openxr",
+ "voxrender",
  "voxrender-bench",
  "wgpu",
 ]

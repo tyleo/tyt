@@ -585,3 +585,24 @@ they land.
   hemisphere under its whole occlusion, which stands in for what a ray
   would meet
 
+## Emission
+
+- `BoxBloom` holds the halo's levels and the passes between them. The
+  view draws the first because it holds the boxes
+- The bloom's source is a third module of `box_view.wgsl`. `surface`
+  returns a hit's emission over the threshold there, where a ray query
+  from the eye meets nothing before the hit. The march, the runs, and the
+  sort serve the source as they serve the view. A tile joins the source's
+  boxes where one of its materials blooms
+- The source draws at half the eyes' size and the first pass halves it.
+  The halo the fragments sample is a quarter of the eyes' size
+- A level's blur takes 3 pixels of the eyes times two to its place, as the
+  fit against the reference gave it. An octave falls to the level nearest it,
+  and a level counts the octaves it stands in for
+- The halo over the sky is one triangle at the depth a pass clears to,
+  under a depth test for that depth. Its blend adds the sky under the
+  halo less the sky alone. It draws within the pixels the glowing boxes
+  cover in either eye, grown by three of the widest blur
+- A model's scene comes with the bloom vxl's review renders take, and a
+  bench scene with none. `view-check` blooms the reference alike
+

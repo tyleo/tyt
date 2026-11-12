@@ -1,5 +1,5 @@
-// What a face's mirror ray meets, through a hardware ray query over the
-// scene's opaque quads. `box_view.wgsl` binds what it reads.
+// What a ray meets, through a hardware ray query over the scene's opaque
+// quads. `box_view.wgsl` binds what it reads.
 
 // Per quad of each object: its face, the axis doubled plus one where the
 // face looks up the axis, under its material's place in `materials` from
@@ -45,4 +45,20 @@ fn mirrored(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> vec4<f32> {
         glow.rgb + base.rgb * ((1.0 - base.a) * (ambient + sun)) + gloss.rgb * ambient,
         hit.t,
     );
+}
+
+// Whether the ray from `origin` along the unit `direction` meets a quad
+// within `reach` meters.
+fn hidden(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> bool {
+    var query: ray_query;
+
+    rayQueryInitialize(
+        &query,
+        tlas,
+        RayDesc(RAY_FLAG_TERMINATE_ON_FIRST_HIT, 0xffu, 0.0, reach, origin, direction),
+    );
+
+    while rayQueryProceed(&query) {}
+
+    return rayQueryGetCommittedIntersection(&query).kind != RAY_QUERY_INTERSECTION_NONE;
 }

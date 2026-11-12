@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyVector3F64};
-use wgpu::{Color, Device, Queue, RenderPass, TextureFormat};
+use wgpu::{Color, CommandEncoder, Device, Queue, RenderPass, TextureFormat};
 
 /// The meters a second a full stick moves the wearer, in the headset's
 /// meters.
@@ -236,6 +236,14 @@ impl ModelGallery {
         }
     }
 
+    /// Encodes the passes that come before the first of a frame's
+    /// [`passes`](Self::passes), as [`HeadsetView::glow`] does.
+    pub fn glow(&self, encoder: &mut CommandEncoder) {
+        if let Some(shown) = &self.shown {
+            shown.view.glow(encoder);
+        }
+    }
+
     /// The path of model `index` under the gallery's directory.
     fn name(&self, index: usize) -> String {
         let path = &self.paths[index];
@@ -258,7 +266,7 @@ impl ModelGallery {
         thread::spawn(move || {
             let start = Instant::now();
 
-            let loaded = model_scene(&path).and_then(|scene| {
+            let loaded = model_scene(&path).and_then(|(scene, bloom)| {
                 let placement_ids: Vec<_> = scene.iter_placements().map(|(id, _)| id).collect();
 
                 let bounds = scene
@@ -270,6 +278,7 @@ impl ModelGallery {
                     &device,
                     &queue,
                     &scene,
+                    bloom,
                     HeadsetStand::table(&bounds),
                     format,
                     size,
