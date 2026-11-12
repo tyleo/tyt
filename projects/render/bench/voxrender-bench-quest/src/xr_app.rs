@@ -36,6 +36,9 @@ const VIEW_FRAMES: u32 = 600;
 /// The directory of the gallery's models within the app's files.
 const MODELS: &str = "models";
 
+/// The directory of the gallery's test models within the app's files.
+const TESTS: &str = "tests";
+
 /// The most seconds one frame moves a gallery's wearer by. A longer gap
 /// between two frames is a stall.
 const STEP: f64 = 0.1;
@@ -127,18 +130,24 @@ impl XrApp {
         let width = u32::try_from(swapchain.extent.width).expect("an eye's width is positive");
         let height = u32::try_from(swapchain.extent.height).expect("an eye's height is positive");
 
-        let work = if options.models {
+        let shelf = if options.tests {
+            Some(TESTS)
+        } else {
+            options.models.then_some(MODELS)
+        };
+
+        let work = if let Some(shelf) = shelf {
             let gallery = ModelGallery::new(
                 &gpu.device,
                 &gpu.queue,
-                &files.join(MODELS),
+                &files.join(shelf),
                 options.model.as_deref(),
                 swapchain.format,
                 [width, height],
             )
             .map_err(Error::Bench)?;
 
-            log::info!("models {} under {MODELS}", gallery.count());
+            log::info!("models {} under {shelf}", gallery.count());
 
             FrameWork::Models {
                 gallery: Box::new(gallery),

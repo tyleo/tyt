@@ -137,9 +137,9 @@ adb shell setprop debug.voxrenderbench.models true
 adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
 ```
 
-A model lands on a table before the wearer, a meter across, under vxl's
-studio rig as its hero view places the rig. A glass voxel draws opaque. The
-Touch controllers steer:
+A model lands on a table before the wearer and spans a meter. The model
+sits under vxl's studio rig as vxl's hero view places the rig. The Touch
+controllers steer:
 
 | Control | Effect |
 | --- | --- |
@@ -166,6 +166,28 @@ Two more properties steer a run:
 
 `setprop debug.voxrenderbench.models false` returns the app to its
 benchmarks.
+
+### Test models
+
+Models that test the renderer stay out of the gallery's `models`. They go
+under `tests` in the app's files. `debug.voxrenderbench.tests true` shows
+that folder's models in the gallery's place. The bench's `test-models` folder
+holds their sources:
+
+| Source | Tests |
+| --- | --- |
+| `pbr-chart.ts` | Five steps of roughness across metal slabs and gold, steel, and plastic spheres |
+
+vxl builds a source into the document to push:
+
+```sh
+vxl sdf-doc build pbr-chart.ts
+vxl sdf-doc voxelize pbr-chart.sdfj --voxel-size 0.006 --format zip
+adb shell mkdir -p /sdcard/Android/data/com.tyleo.voxrenderbench/files/tests
+adb push pbr-chart.voxjz /data/local/tmp/
+adb shell mv /data/local/tmp/pbr-chart.voxjz /sdcard/Android/data/com.tyleo.voxrenderbench/files/tests/
+adb shell setprop debug.voxrenderbench.tests true
+```
 
 ## Profile
 
