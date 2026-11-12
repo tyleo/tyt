@@ -81,7 +81,7 @@ impl BoxRaster {
         self.targets.draw(
             encoder,
             Some((query_set, first)),
-            self.boxes.runs(),
+            self.boxes.passes(),
             |pass, _, run| self.boxes.draw(pass, run),
         );
     }
@@ -91,7 +91,7 @@ impl BoxRaster {
     pub fn trace(&self, device: &Device, queue: &Queue) -> Result<Vec<Option<PixelHit>>> {
         let words = self
             .targets
-            .read(device, queue, self.boxes.runs(), |pass, _, run| {
+            .read(device, queue, self.boxes.passes(), |pass, _, run| {
                 self.boxes.draw(pass, run)
             })?;
 

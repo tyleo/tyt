@@ -575,7 +575,7 @@ impl BoxView {
     /// its target to [`sky`](Self::sky) and its depth to zero, and each
     /// later one loads what the pass before it stored.
     pub fn passes(&self) -> u32 {
-        self.boxes.runs().max(1)
+        self.boxes.passes()
     }
 
     /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
