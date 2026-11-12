@@ -12,7 +12,10 @@ use std::{
     num::NonZeroU32,
     time::{Duration, Instant},
 };
-use voxrender_bench::{HeadsetEye, HeadsetView, KernelProfile, PassTimer, TimedBench};
+use voxrender_bench::{
+    Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, KernelProfile, PassTimer,
+    TimedBench, bench_scene,
+};
 use wgpu::{
     Color, CommandEncoderDescriptor, Extent3d, LoadOp, Operations, RenderPassColorAttachment,
     RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
@@ -130,12 +133,21 @@ impl XrApp {
                 view_formats: &[],
             });
 
+            let render_scene = bench_scene(scene)
+                .ok_or_else(|| Error::Bench(BenchError::NoScene(scene.clone())))?;
+
+            let (_, view) = render_scene
+                .iter_views()
+                .next()
+                .ok_or(Error::Bench(BenchError::NoView))?;
+
             FrameWork::View {
                 view: Box::new(
                     HeadsetView::new(
                         &gpu.device,
                         &gpu.queue,
-                        scene,
+                        &render_scene,
+                        HeadsetStand::at_view(view),
                         swapchain.format,
                         [width, height],
                     )
