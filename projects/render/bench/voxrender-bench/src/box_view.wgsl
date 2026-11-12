@@ -34,11 +34,9 @@ struct Place {
     // The eye in the grid, with w = 1.
     ray: vec4<f32>,
 
-    // The world direction of each of the grid's axes, then the meters a cell
-    // spans along it.
-    x: vec4<f32>,
-    y: vec4<f32>,
-    z: vec4<f32>,
+    // The world direction of each of the grid's axes, then the meters a
+    // cell spans along it.
+    axes: array<vec4<f32>, 3>,
 }
 
 // Whose cell a hit holds.
@@ -55,6 +53,10 @@ struct Source {
 
     // The first of the tile's words in `lit`.
     lit: u32,
+
+    // The world direction from the eye to the fragment's point, at any
+    // length.
+    toward: vec3<f32>,
 }
 
 struct Box {
@@ -88,6 +90,11 @@ struct Box {
     // read from the tile's words would hold up the reads that follow from
     // it.
     @location(8) @interpolate(flat) shading: vec2<u32>,
+
+    // The world direction from the eye to the point, at any length. A
+    // fragment that takes it here reads one of its placement's axes, where
+    // one that turns its ray to the world reads all three.
+    @location(9) toward: vec3<f32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -128,6 +135,13 @@ fn vertex_of(
     let clip = places[index].clip * vec4<f32>(vec3<f32>(grid), 1.0);
     let ray = places[index].ray.xyz - vec3<f32>(tile);
 
+    // The eye's ray to the corner, in cells and then in the world.
+    let cells = vec3<f32>(grid) - places[index].ray.xyz;
+    let axes = places[index].axes;
+    let toward = axes[0].xyz * (cells.x * axes[0].w)
+        + axes[1].xyz * (cells.y * axes[1].w)
+        + axes[2].xyz * (cells.z * axes[2].w);
+
     // A corner whose position or ray is not finite goes to the origin,
     // where its box draws nothing.
     return Box(
@@ -141,6 +155,7 @@ fn vertex_of(
         vec2<u32>(high.w, index),
         vec3<u32>(more.xy, eye * frame.placements),
         more.zw,
+        toward,
     );
 }
 
@@ -207,7 +222,7 @@ fn tonemap(color: vec3<f32>) -> vec3<f32> {
 }
 
 fn source_of(box: Box) -> Source {
-    return Source(box.words.x, box.words.y, box.shading.x, box.shading.y);
+    return Source(box.words.x, box.words.y, box.shading.x, box.shading.y, box.toward);
 }
 
 // The box at `index` of `boxes`, as the eye's ray along `direction` through
@@ -222,17 +237,17 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
     let its = places[place];
 
     // The direction in meters, then in the other grid's cells.
-    let world = own.x.xyz * (direction.x * own.x.w)
-        + own.y.xyz * (direction.y * own.y.w)
-        + own.z.xyz * (direction.z * own.z.w);
+    let world = own.axes[0].xyz * (direction.x * own.axes[0].w)
+        + own.axes[1].xyz * (direction.y * own.axes[1].w)
+        + own.axes[2].xyz * (direction.z * own.axes[2].w);
 
     return Other(
         high.w,
         vec3<f32>(low.xyz - tile),
         vec3<f32>(high.xyz - tile),
         its.ray.xyz - vec3<f32>(tile),
-        vec3<f32>(dot(its.x.xyz, world) / its.x.w, dot(its.y.xyz, world) / its.y.w, dot(its.z.xyz, world) / its.z.w),
-        Source(high.w, place, more.z, more.w),
+        vec3<f32>(dot(its.axes[0].xyz, world) / its.axes[0].w, dot(its.axes[1].xyz, world) / its.axes[1].w, dot(its.axes[2].xyz, world) / its.axes[2].w),
+        Source(high.w, place, more.z, more.w, box.toward),
     );
 }
 
@@ -288,11 +303,7 @@ fn surface(
     let base = materials[material * 3u];
     let glow = materials[material * 3u + 1u];
     let gloss = materials[material * 3u + 2u];
-    let place = places[source.place];
-
     let up = !any(across & ahead);
-    let axis = select(select(place.x, place.y, across.y), place.z, across.z);
-    let normal = select(-axis.xyz, axis.xyz, up);
 
     // Where the hit lies across the face, on the axis after the face's and
     // on the one after that.
@@ -310,16 +321,17 @@ fn surface(
     let rank = (before & 0xfffu) + countOneBits(held & ((1u << (index & 31u)) - 1u));
     let face = dot(vec3<u32>(across), vec3<u32>(0u, 2u, 4u)) + u32(up);
 
+    // The face's normal points one way along its axis.
+    let axis = places[source.place].axes[face >> 1u].xyz;
+    let normal = select(-axis, axis, up);
+
     let open = bits[tile + (before >> 12u) + rank * 2u + (face >> 2u)] >> ((face & 3u) * 8u);
     let occlusion = across_face(corners_of(open, 2u), along);
     let lights = (lit[source.lit + rank] >> (face * 4u)) & 15u;
 
     // The world direction to the eye.
-    let view = -normalize(
-        place.x.xyz * (direction.x * place.x.w)
-            + place.y.xyz * (direction.y * place.y.w)
-            + place.z.xyz * (direction.z * place.z.w),
-    );
+    // The world direction to the eye.
+    let view = -normalize(source.toward);
 
     let metallic = base.a;
     let roughness = glow.a;
