@@ -2096,3 +2096,52 @@ B1 passes, and the image check moves by under 6 pixels a scene.
    to 79% of their time
 4. Quad views pay where pixels set the time, S1 and S4, and cost S5
    until B6's LOD holds its boxes down
+
+## S9.7 the final run, 2026-11-12
+
+B2 with S9's code, and the headset view R leaves standing.
+
+- Device and method: as in B2 re-baseline. One window of 120 passes a
+  kernel over both eyes at 1680 by 1760, at 640 MHz for 70% of its time,
+  599 for 5%, and 545 for 25%. Times are p10s in ms, and a rate is the
+  eyes' 5.91 M rays over the time
+- B1 passes on Quest ahead of the window
+
+| Trace | S1 ms | S1 Grays/s | S5 ms | S5 Grays/s | S2 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Tree walk | 61.785 | 0.096 | 16.434 | 0.360 | |
+| Tree walk, checked | 53.371 | 0.111 | 14.828 | 0.399 | |
+| Ray query, float march, 16^3 bricks | 37.723 | 0.157 | 19.401 | 0.305 | |
+| Ray query, triangles | 7.138 | 0.828 | 14.825 | 0.399 | |
+| Raster, two passes | 0.872 | 6.78 | 7.956 | 0.743 | 136.985 |
+| Raster, multiview, 4x MSAA | 1.267 | 4.67 | 12.661 | 0.467 | 177.837 |
+| Box raster, mask march, face depth | 2.491 | 2.37 | 2.302 | 2.57 | 4.061 |
+| Box raster, solid boxes and mask march, face depth | 1.469 | 4.03 | 1.884 | 3.14 | 5.360 |
+
+The launches read as in S9.4 rungs 6 and 9. A pass a run costs the plain
+ids on S1 0.2 ms, with 1.47 against 1.26 in one pass, and gains S2's 0.7.
+
+**The headset view.** The box raster with solid boxes under B3's shading
+load: one sun with corner shadows, the hemispheres under corner
+occlusion, Lambert and GGX, emission, the bloom add, and the tonemap. App
+GPU frame time at p50 in ms at 545 MHz, 90 Hz on each:
+
+| View | Start of S9.4's box raster open ends | Now |
+| --- | ---: | ---: |
+| S1 | 2.24 | 2.03 |
+| S5 | 3.89 | 3.40 |
+| S2, with its shadows | 7.31 | 6.72 |
+| S4 | 3.28 | 3.15 |
+| Inside a bush | 8.4 at 640 MHz | 5.84 |
+| The gallery's 35 models | 0.34 to 1.81 | 0.31 to 1.13 |
+
+**Outcomes.**
+
+1. R is the box raster's rate. It shades S1's both eyes in 2.03 ms and
+   S5's in 3.40, under B3's 3.5 ms line. The tree walk B2 began with
+   traces S1's ids in 61.8 ms
+2. S2 runs with LOD off as a stress test and takes 6.72 ms
+3. B3's arms beside the box raster: the greedy-mesh raster traces S1's
+   ids faster and S5's four times slower, and its 4x MSAA costs S5 4.7 ms
+   more. The ray query over triangles stays for second rays. No arm
+   marches in compute
