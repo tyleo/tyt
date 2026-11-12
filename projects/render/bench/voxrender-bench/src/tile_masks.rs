@@ -35,10 +35,10 @@ type CellBox = (TyVector3U32, TyVector3U32);
 /// A tile's words hold a bit per cell, 32 cells a word: a cell is live
 /// where bit `index % 32` of word `index / 32` is set.
 ///
-/// A shaded view's tile holds other words. Its record cells are the live
-/// cells of each row that holds a surface cell. A row is the 16 cells along
-/// z that share an x and a y. A surface cell is a live cell beside a cell
-/// that is not opaque. The words:
+/// A shaded view's tile holds other words. Its live cells are its opaque
+/// cells alone. Its record cells are the live cells of each row that holds
+/// a surface cell. A row is the 16 cells along z that share an x and a y. A
+/// surface cell is a live cell beside a cell that is not opaque. The words:
 ///
 /// 1. A word for each row, 256 in the cells' index order. Its low 16 bits
 ///    hold the row's cells, and the bits above them the tile's record cells
@@ -187,7 +187,20 @@ impl TileMasks {
                 })
                 .collect();
 
-            let live: Vec<bool> = values.iter().map(|&value| value != 0).collect();
+            // A shaded view's tile holds its opaque cells alone.
+            let live: Vec<bool> = values
+                .iter()
+                .map(|&value| {
+                    value
+                        .checked_sub(1)
+                        .is_some_and(|id| opaque.is_none_or(|opaque| opaque(id)))
+                })
+                .collect();
+
+            if !live.contains(&true) {
+                continue;
+            }
+
             let offset =
                 u32::try_from(masks.words.len()).expect("an object's mask words number under 2^32");
 
@@ -631,6 +644,31 @@ mod tests {
         assert!(u32::from(entry) < palette >> 16);
 
         words[(tile + (palette & 0xffff) + u32::from(entry)) as usize]
+    }
+
+    #[test]
+    fn a_shaded_tile_holds_its_opaque_cells_alone() {
+        // A wall cell beside a glass cell, and a tile of glass alone.
+        let object = painted_object(
+            "pane",
+            TyVector3U32::new(18, 1, 1),
+            |position| match position.x {
+                0 => Some(U32Id::from_u32(0)),
+                1 | 17 => Some(U32Id::from_u32(1)),
+                _ => None,
+            },
+        );
+
+        let masks = TileMasks::new(&object, false, Some(&|id| id == 0)).unwrap();
+
+        // A row runs along z, so the wall's cell and the glass cell each
+        // start a row.
+        assert_eq!(masks.corners, [TyVector3U32::ZERO]);
+        assert!(is_set(&masks.words, 0, 0, true));
+        assert!(!is_set(&masks.words, 0, 16, true));
+
+        // With no word on what is opaque, every cell is live.
+        assert_eq!(TileMasks::new(&object, false, None).unwrap().boxes.len(), 2);
     }
 
     /// Whether `cell` of `object` is live.

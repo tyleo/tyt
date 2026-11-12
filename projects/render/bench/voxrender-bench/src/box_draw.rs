@@ -39,8 +39,8 @@ const TRIANGLES: [u16; 36] = [
 ];
 
 /// What picks a run's pipeline: its module, its vertex and fragment entries,
-/// and whether it draws its boxes' back faces.
-type PipelineKey<'a> = (usize, &'a str, &'a str, bool);
+/// whether it draws its boxes' back faces, and whether it draws glass.
+type PipelineKey<'a> = (usize, &'a str, &'a str, bool, bool);
 
 /// A view's boxes and the pipelines that draw their faces, with depth in
 /// [`HitTargets::DEPTH`].
@@ -214,7 +214,15 @@ impl BoxDraw {
             immediate_size: 0,
         });
 
-        let pipeline = |module: usize, vertex: &str, fragment: &str, backs: bool| {
+        // Glass keeps the target's color by the second color its fragment
+        // writes, and adds the first.
+        let tinted = |dst_factor| BlendComponent {
+            src_factor: BlendFactor::One,
+            dst_factor,
+            operation: BlendOperation::Add,
+        };
+
+        let pipeline = |module: usize, vertex: &str, fragment: &str, backs: bool, glass: bool| {
             let module = modules[module];
 
             device.create_render_pipeline(&RenderPipelineDescriptor {
@@ -264,7 +272,7 @@ impl BoxDraw {
                 },
                 depth_stencil: Some(DepthStencilState {
                     format: HitTargets::DEPTH,
-                    depth_write_enabled: Some(true),
+                    depth_write_enabled: Some(!glass),
                     depth_compare: Some(CompareFunction::Greater),
                     stencil: StencilState::default(),
                     bias: DepthBiasState::default(),
@@ -276,7 +284,10 @@ impl BoxDraw {
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
                         format,
-                        blend: None,
+                        blend: glass.then(|| BlendState {
+                            color: tinted(BlendFactor::Src1),
+                            alpha: tinted(BlendFactor::Src1Alpha),
+                        }),
                         write_mask: ColorWrites::ALL,
                     })],
                 }),
@@ -292,8 +303,8 @@ impl BoxDraw {
         // a later run to share.
         let mut built: Vec<(PipelineKey<'_>, RenderPipeline)> = Vec::new();
 
-        let mut shared = |module, vertex: &'static str, fragment, backs| {
-            let key = (module, vertex, fragment, backs);
+        let mut shared = |module, vertex: &'static str, fragment, backs, glass| {
+            let key = (module, vertex, fragment, backs, glass);
 
             let found = built
                 .iter()
@@ -301,7 +312,7 @@ impl BoxDraw {
                 .map(|(_, pipeline)| pipeline.clone());
 
             found.unwrap_or_else(|| {
-                let pipeline = pipeline(module, vertex, fragment, backs);
+                let pipeline = pipeline(module, vertex, fragment, backs, glass);
 
                 built.push((key, pipeline.clone()));
 
@@ -321,7 +332,7 @@ impl BoxDraw {
             };
 
             runs.push(Run {
-                pipeline: shared(part.module, vertex, part.fragment, backs),
+                pipeline: shared(part.module, vertex, part.fragment, backs, part.glass),
                 fronts: part.faces == BoxFaces::Front,
                 boxes: first..end,
             });

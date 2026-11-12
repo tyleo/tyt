@@ -61,11 +61,14 @@ impl LitFill {
     /// 1. `tiles`: each object's non-empty tiles in the order of their mask
     ///    words, as a tile's low corner and the indices of its record
     ///    cells
+    /// 2. `opaque`: whether a material id passes no light. A cell of any
+    ///    other material shadows nothing
     pub fn new(
         device: &Device,
         scene: &RenderScene,
         toward: TyVector3F64,
         tiles: &HashMap<U32Id<BVoxObject>, Vec<(TyVector3U32, Vec<u16>)>>,
+        opaque: &dyn Fn(u32) -> bool,
     ) -> Result<Self> {
         // The walk's placements carry a view's rays, which the fill leaves
         // unread.
@@ -84,7 +87,15 @@ impl LitFill {
                 u32::try_from(dense.len()).expect("a scene's cells number under 2^32"),
             );
 
-            dense.extend(dense_cells(object));
+            // A cell holds its material's id plus one, and the walk passes
+            // a zero.
+            dense.extend(dense_cells(object).into_iter().map(|value| {
+                if value.checked_sub(1).is_some_and(opaque) {
+                    value
+                } else {
+                    0
+                }
+            }));
         }
 
         let cell_offsets: Vec<_> = scene

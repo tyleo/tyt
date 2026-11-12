@@ -606,3 +606,33 @@ they land.
 - A model's scene comes with the bloom vxl's review renders take, and a
   bench scene with none. `view-check` blooms the reference alike
 
+## Glass
+
+- A shaded `TileMasks` tile holds its opaque cells alone, and `LitFill`
+  walks the opaque cells alone, as `LitCorners` did. What sits inside
+  glass then draws and takes the sun
+- `GlassTiles` keeps a tile's busy cells: the cells with a face where a
+  ray enters or leaves a material that passes light, and the opaque cells,
+  which end a walk. A body of water keeps its skin. A tile with no surface
+  draws nothing. The walk loads a word a cell and a second for a
+  busy one. On Quest the fish tank drew in 8.57 ms with every cell that
+  passes light kept and the opaque cells read from their own tile, and in
+  4.42 ms with the busy cells
+- A cell's word holds a bit a face with a surface. The bit serves the ray
+  that leaves the cell there and the ray that enters it because both mean a
+  neighbor that is neither opaque nor of the cell's material. A surface's
+  normal faces back along the ray either way, as the contract turns an
+  exit's
+- Glass draws in the view's `BoxDraw` as two more runs through a module
+  that adds `box_glass.wgsl`: every box's front faces, then the back faces
+  of the boxes an eye can stand in, as `held` draws them. A front face's
+  fragment drops out for an eye its box holds. The runs blend with a
+  second color a fragment and write no depth
+- The target holds tonemapped light. The blend tints that by the walk's
+  pass. The walk's light gives back the 0.04 the tonemap took off what lies
+  behind. The contract tonemaps the sum
+- The boxes sort farthest first with the view's sort, which runs when the
+  head has moved 25 cm. A tint multiplies in any order. A stale order gets
+  wrong the light a surface adds
+- A device without dual-source blending draws no glass
+

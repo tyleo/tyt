@@ -161,6 +161,7 @@ pub fn tree_boxes(
             faces: BoxFaces::Back,
             module: 0,
             boxes,
+            glass: false,
         }],
         &BoxBindings {
             buffers: &[

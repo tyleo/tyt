@@ -33,14 +33,27 @@ fn hidden(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> bool {
 /// 3. `source`: with it, the module draws the bloom's source in place of the
 ///    view: a hit's emission over the `bloom` level times `source`, or
 ///    nothing where a quad hides the hit from the eye. It takes `traced`
-pub fn box_view_shader(traced: bool, bloom: Option<f32>, source: Option<f32>) -> String {
+/// 4. `glass`: whether the module adds `glass` and `glass_held`, which draw
+///    a box's cells that pass light. A device needs dual-source blending for
+///    them
+pub fn box_view_shader(
+    traced: bool,
+    bloom: Option<f32>,
+    source: Option<f32>,
+    glass: bool,
+) -> String {
     format!(
-        "{}const RECORDS: u32 = {}u;\nconst MIRRORS: bool = {traced};\n\
+        "{}{}const RECORDS: u32 = {}u;\nconst MIRRORS: bool = {traced};\n\
          const MIRROR_CUT: f32 = {:?};\nconst MIRROR_REACH: f32 = {:?};\n\
          const BLOOM: bool = {};\n\
-         const BLOOM_THRESHOLD: f32 = {:?};\nconst BLOOM_SOURCE: f32 = {:?};\n{}\n{}\n{}",
+         const BLOOM_THRESHOLD: f32 = {:?};\nconst BLOOM_SOURCE: f32 = {:?};\n{}\n{}\n{}\n{}",
         if traced {
             "enable wgpu_ray_query;\n"
+        } else {
+            ""
+        },
+        if glass {
+            "enable dual_source_blending;\n"
         } else {
             ""
         },
@@ -56,6 +69,11 @@ pub fn box_view_shader(traced: bool, bloom: Option<f32>, source: Option<f32>) ->
         } else {
             UNTRACED
         },
-        include_str!("mask_march.wgsl")
+        include_str!("mask_march.wgsl"),
+        if glass {
+            include_str!("box_glass.wgsl")
+        } else {
+            ""
+        }
     )
 }

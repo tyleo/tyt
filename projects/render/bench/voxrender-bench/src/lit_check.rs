@@ -35,7 +35,7 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         );
     }
 
-    let fill = LitFill::new(&gpu.device, scene, toward, &tiles)?;
+    let fill = LitFill::new(&gpu.device, scene, toward, &tiles, &every)?;
 
     fill.fill(&gpu.device, &gpu.queue);
 

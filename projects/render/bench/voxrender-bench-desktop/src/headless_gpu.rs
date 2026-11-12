@@ -23,7 +23,8 @@ pub fn headless_gpu() -> Result<Gpu> {
             | Features::SUBGROUP
             | Features::MULTIVIEW
             | Features::MULTISAMPLE_ARRAY
-            | Features::SHADER_EARLY_DEPTH_TEST);
+            | Features::SHADER_EARLY_DEPTH_TEST
+            | Features::DUAL_SOURCE_BLENDING);
 
     let mut limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
         Limits::default().using_acceleration_structure_values(adapter.limits())

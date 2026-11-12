@@ -373,9 +373,19 @@ in this order:
             line of 0.6
       - [ ] B4's depth and motion vectors, and a level for each of the
             two narrowest octaves
-3. Glass. The box view draws the contract's transmission, which B7 was to
-   time: what lies behind a pane shows through it, tinted, and a mirror ray
-   passes through it
+3. Glass
+      - [x] The box view draws the contract's transmission, which B7 was
+            to time. The cells that pass light leave the opaque tiles. A
+            pass after the opaque ones walks each box of surfaces between
+            such materials, farthest first. A dual-source blend tints what
+            lies behind. The trial models' pixels off the reference
+            fall from 51,760 to 38,468, and the fish tank takes 4.4 ms on
+            Quest
+      - [ ] The light that reaches a face through glass: a pane throws no
+            shadow and no tint, and its own surfaces take the sun whole
+      - [ ] The walk's cost, a mirror ray through glass and from it, an
+            eye inside a material, and the order of the boxes between
+            sorts
 4. A pass over the bench's code and tests that drops what the box raster
    left without a use
 5. The stereo view in the reference: two off-axis frusta and a head pose

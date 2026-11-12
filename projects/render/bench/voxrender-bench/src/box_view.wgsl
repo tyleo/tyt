@@ -380,6 +380,29 @@ fn sky_light(direction: vec3<f32>, width: f32) -> vec3<f32> {
     return mix(frame.ground.rgb, frame.sky.rgb, clamp(0.5 + direction.y / (2.0 * width), 0.0, 1.0));
 }
 
+// The sun's light off a face of unit `normal` toward the unit `view`, with
+// no shadow: the contract's direct term, Lambert over `diffuse` and GGX
+// with Smith visibility and Schlick's Fresnel from `reflectance`, under the
+// GGX alpha whose square is `alpha2`.
+fn sun_light(normal: vec3<f32>, view: vec3<f32>, diffuse: vec3<f32>, reflectance: vec3<f32>, alpha2: f32) -> vec3<f32> {
+    let toward = frame.sun.xyz;
+    let n_dot_l = dot(normal, toward);
+    let n_dot_v = max(dot(normal, view), 1.0e-4);
+    let half = normalize(toward + view);
+    let n_dot_h = max(dot(normal, half), 0.0);
+    let v_dot_h = max(dot(view, half), 0.0);
+    let fresnel = reflectance + (1.0 - reflectance) * pow(1.0 - v_dot_h, 5.0);
+    let spread = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
+    let distribution = alpha2 / (3.14159265 * spread * spread);
+    let visibility = 0.5
+        / (n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0 - alpha2) + alpha2)
+            + n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0 - alpha2) + alpha2));
+
+    return ((1.0 - fresnel) * diffuse / 3.14159265 + fresnel * (distribution * visibility))
+        * max(n_dot_l, 0.0)
+        * frame.sunlight.rgb;
+}
+
 // The shaded color of `cell` in `source`'s tile, across the face on the one
 // axis of `across`. `cells` holds the cell's bit. The face's normal points
 // up its axis where the ray moves down the axis. The hit lies at `at` in
@@ -459,27 +482,8 @@ fn surface(
 
     // The sun, scaled by the light that reaches the face's corners.
     if lights != 0u {
-        let light = across_face(corners_of(lights, 1u), along);
-
-        // The contract's direct term: Lambert, and GGX with Smith
-        // visibility and Schlick's Fresnel.
-        let toward = frame.sun.xyz;
-        let n_dot_l = dot(normal, toward);
-        let n_dot_v = max(cosine, 1.0e-4);
-        let half = normalize(toward + view);
-        let n_dot_h = max(dot(normal, half), 0.0);
-        let v_dot_h = max(dot(view, half), 0.0);
-        let fresnel = reflectance + (1.0 - reflectance) * pow(1.0 - v_dot_h, 5.0);
-        let spread = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
-        let distribution = alpha2 / (3.14159265 * spread * spread);
-        let visibility = 0.5
-            / (n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0 - alpha2) + alpha2)
-                + n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0 - alpha2) + alpha2));
-        let diffuse = (1.0 - fresnel) * base.rgb * ((1.0 - metallic) / 3.14159265);
-
-        color += (diffuse + fresnel * (distribution * visibility))
-            * (max(n_dot_l, 0.0) * light)
-            * frame.sunlight.rgb;
+        color += sun_light(normal, view, base.rgb * (1.0 - metallic), reflectance, alpha2)
+            * across_face(corners_of(lights, 1u), along);
     }
 
     // The hemispheres on the face.
