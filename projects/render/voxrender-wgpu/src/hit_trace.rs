@@ -1,4 +1,7 @@
-use crate::{Error, GRID_WALK_WGSL, PixelHit, Result, dense_cells, placement_bytes, push_i32s};
+use crate::{
+    Error, GRID_WALK_WGSL, INTEGER_WALK_WGSL, PixelHit, Result, dense_cells, placement_bytes,
+    push_i32s,
+};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
 use voxrender::{
@@ -57,7 +60,7 @@ impl HitTrace {
                 view_id,
                 width,
                 height,
-                include_str!("integer_walk.wgsl"),
+                INTEGER_WALK_WGSL,
                 dense_cells,
                 ShaderRuntimeChecks::unchecked(),
             )
@@ -67,9 +70,8 @@ impl HitTrace {
     /// As [`HitTrace::new`], tracing with `walk` in place of the integer
     /// walk. `walk` is WGSL defining
     /// `fn walk(placement: Placement, ray: Ray) -> Hit` over
-    /// [`GRID_WALK_WGSL`] and `first_hit.wgsl`'s helpers. It reads the words
-    /// `cells` gives each object. The module keeps the runtime checks in
-    /// `checks`.
+    /// [`GRID_WALK_WGSL`]. It reads the words `cells` gives each object. The
+    /// module keeps the runtime checks in `checks`.
     ///
     /// # Safety
     ///
