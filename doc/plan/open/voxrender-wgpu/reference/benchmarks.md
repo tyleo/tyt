@@ -1197,3 +1197,99 @@ The headset view after these steps, as in the section above:
    its top cells, which waits for B6's LOD
 8. S1 runs in 1.26 ms against 1.37. Its crates' crossing fragments cost
    0.18 ms more than their depth writes did
+
+## Shading load, 2026-11-11
+
+B3's shading load in the box raster's fragments, on the headset view.
+
+- Device and method: as in Headset view. GPU times are the app's frame
+  time at p50 in ms, at 545 MHz unless a row gives another clock
+- The load so far: one sun with per-corner shadows read from a prefilled
+  memo, the hemispheres under corner occlusion, Lambert and GGX, emission,
+  and the tonemap. The bloom add is not in it. A smooth face reflects the
+  sky alone, where the reference traces its mirror ray
+- Image check: `voxrender-bench-desktop view-check`, on this Mac at 256 by
+  256. It draws the view and the reference's image of it and counts the
+  pixels that hit something opaque and have a channel off by over 8 of
+  255
+
+**Memo.** The contract casts a corner's shadow ray from a point 2^-10 of a
+cell inside the face's edges. The research planned a memo keyed by face
+with a bit a corner. The rays allow less: every face that shares a
+lattice point casts a ray through the same cells from it, apart from the
+cell beside the face that a ray crosses when it leaves past the corner on
+both of the face's axes. `LitRows` holds one bit a lattice point. The
+shader reads that cell from the tile's opaque cells. An axis the rays
+stay still along takes a bit for either edge of a cell because such a ray
+keeps to its face's side of the lattice plane.
+
+| Scene | Corner samples | Differ from the reference |
+| --- | ---: | ---: |
+| S1 | 5784 | 0 |
+| S5 | 10,004 | 0 |
+| two placements | 2024 | 0 |
+| S4 | 5196 | 10 |
+
+S4's sun moves two cells up for each cell along z. Its rays cross two
+lattice planes at once, and a ray's inset decides which it crosses first.
+One bit cannot hold both orders. A tile's rows take 289 words a
+light, against 1536 for a bit a corner of each lit face.
+
+The fill casts each ray through the reference's walk on the CPU, which
+crosses every placement for each ray. S1 and S5 fill in 1 to 3 s on this
+Mac. A scene of over 64 placements draws without shadows, S2 among them.
+
+**Image.**
+
+| Scene | Opaque pixels | Off by over 8 | Mean difference of 255 |
+| --- | ---: | ---: | ---: |
+| cube | 13,794 | 0 | 0.005 |
+| S1 | 53,296 | 7 | 0.022 |
+| S5 | 31,818 | 100 | 0.324 |
+| S4 | 31,125 | 176 | 0.161 |
+
+**Times.**
+
+| View | S1 | S5 | S2 |
+| --- | ---: | ---: | ---: |
+| Base color, sun, and hemispheres | 1.87 | 2.61 | 5.71 |
+| The load, first cut | 3.79 | 5.37 | 10.3 at 640 MHz |
+| The box hands over its tile's shading words | 3.29 | 5.18 | 9.5 at 640 MHz |
+
+1. With the sun's term off the first cut ran S1 in 3.01 ms and S5 in
+   4.27, and with the occlusion off in 3.53 and 4.94
+2. A shaded fragment read the first word of its tile's materials and the
+   tile's place among the tiles before the reads that depend on them. The
+   box now carries both to the fragment
+
+**Variants that lost.**
+
+1. A shading pass. The boxes wrote each pixel's hit to an Rg32Uint
+   target, and one pass over both eyes shaded the hits. S1 ran in 5.19 ms
+   against 3.79 and S5 in 6.12 against 5.37. S2 ran in 9.2 against 10.3.
+   With the shading off, the hits and the last pass alone took S1 2.48 ms
+   and S5 3.5, against 1.87 and 2.61 for the plain view. The pass's
+   shading took 2.6 to 2.7 ms on both scenes
+2. Occlusion and shadow bits read a row at a time: three rows for a face
+   across x or y in place of eight cells, and two rows in place of four
+   corners. S1 ran in 3.21 ms against 3.29, and S5 in 5.6 against 5.18
+3. A read of each field of a placement in place of the whole record ran
+   S1 in 3.96 ms against 3.79
+
+**Outcomes.**
+
+1. The shaded view matches the reference's image to 0.01% of S1's pixels
+   and 0.3% of S5's
+2. One bit a lattice point gives the reference's corner shadows where the
+   sun's direction holds no small whole ratio between two components. A
+   sun that does needs a plane for each order its rays cross lattice
+   planes in, or a nudge of its direction in the contract
+3. S1 meets B3's 3.5 ms line at 3.29 ms, before the bloom add. S5 takes
+   5.18 ms. All three views hold 90 Hz but S2 at 640 MHz, which holds 89
+4. A shaded pixel costs S5 about three times what it costs S1. S5's
+   pixels each land on another voxel, and its tiles hold 12 MB of words.
+   The same shading in a pass of its own cost S5 as much, so the cost
+   follows the reads and not the march around them
+5. The fill needs the GPU before S2 can cast shadows or a caster can
+   move. That is B5
+

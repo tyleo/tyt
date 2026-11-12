@@ -528,3 +528,19 @@ they land.
   corner that is not finite to the origin
 - `mask_boxes` builds its module for one view and prepends the view's
   projection as `RAY_W`
+- `BoxView` shades in its boxes' fragments. `surface` takes the hit's point
+  and the ray's direction in the tile's cells for the blend across the
+  face and the view vector
+- A shaded tile's words hold 324 rows of opaque cells after its bits: the
+  tile's cells and a layer around it, a word for each x and y. The corner
+  occlusion and the shadow's side cell read them, and no fragment reads a
+  neighbor tile
+- `LitRows` keys a lattice point by a tile's 17 points along an axis the
+  sun's rays move along, and by twice a cell plus its far edge along an
+  axis they stay still along. A placement's `Place` holds the direction
+  to the sun in its grid as the reference quantizes it, which the shader
+  reads for the still axes and for the side-cell rule
+- A box's third `vec4<u32>` ends with the first word of its tile's
+  materials and the first of its rows in `LitRows`. The fragment then
+  starts both chains of reads with no read
+
