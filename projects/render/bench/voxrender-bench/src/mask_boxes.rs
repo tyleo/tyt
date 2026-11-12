@@ -331,6 +331,7 @@ pub fn mask_boxes(
             (ShaderStages::FRAGMENT, storage, &boxes),
             (ShaderStages::FRAGMENT, storage, &crossers),
         ],
+        None,
         multiview_mask,
     ))
 }

@@ -44,8 +44,9 @@ const PIPELINES: [(&str, &str, bool); 5] = [
     ("place", "exact", true),
 ];
 
-/// The buffers `box_view_shader` binds in group 0.
-const BINDINGS: u32 = 7;
+/// The buffers `box_view_shader` binds in group 0. Its texture and its
+/// sampler follow them.
+const BUFFERS: u32 = 7;
 
 /// Logs the driver's statistics for each pipeline of the headset view's
 /// shader: on Adreno, a stage's instructions, its registers, and the share
@@ -89,7 +90,7 @@ pub fn probe_pipelines(gpu: &XrGpu) -> Result<()> {
             _ => (1, 6),
         },
         flags: WriterFlags::FORCE_POINT_SIZE,
-        binding_map: (0..BINDINGS)
+        binding_map: (0..BUFFERS + 2)
             .map(|binding| {
                 (
                     ResourceBinding { group: 0, binding },
@@ -134,14 +135,15 @@ pub fn probe_pipelines(gpu: &XrGpu) -> Result<()> {
         .map_err(Error::Vulkan)
     };
 
-    let bindings: Vec<_> = (0..BINDINGS)
+    let bindings: Vec<_> = (0..BUFFERS + 2)
         .map(|binding| {
             DescriptorSetLayoutBinding::default()
                 .binding(binding)
-                .descriptor_type(if binding == 0 {
-                    DescriptorType::UNIFORM_BUFFER
-                } else {
-                    DescriptorType::STORAGE_BUFFER
+                .descriptor_type(match binding {
+                    0 => DescriptorType::UNIFORM_BUFFER,
+                    BUFFERS => DescriptorType::SAMPLED_IMAGE,
+                    binding if binding > BUFFERS => DescriptorType::SAMPLER,
+                    _ => DescriptorType::STORAGE_BUFFER,
                 })
                 .descriptor_count(1)
                 .stage_flags(ShaderStageFlags::VERTEX | ShaderStageFlags::FRAGMENT)

@@ -25,6 +25,9 @@ struct Frame {
     // The scene's placements. Each eye has a `Place` for each, the first
     // eye's first.
     placements: u32,
+
+    // What a pixel spans of the target's width and height.
+    texel: vec2<f32>,
 }
 
 struct Place {
@@ -57,6 +60,9 @@ struct Source {
     // The world direction from the eye to the fragment's point, at any
     // length.
     toward: vec3<f32>,
+
+    // The fragment's pixel in the target.
+    pixel: vec2<f32>,
 }
 
 struct Box {
@@ -116,6 +122,9 @@ struct Box {
 @group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
 // Each placement's `LitCorners` words.
 @group(0) @binding(6) var<storage, read> lit: array<u32>;
+// The bloom each eye's fragments add, a layer an eye.
+@group(0) @binding(7) var bloom: texture_2d_array<f32>;
+@group(0) @binding(8) var bloom_sampler: sampler;
 
 // The box's vertex at the grid's `grid` for `eye`, on the face of code
 // `face`. `low` holds the box's low cell and its placement's index. `high`
@@ -222,7 +231,7 @@ fn tonemap(color: vec3<f32>) -> vec3<f32> {
 }
 
 fn source_of(box: Box) -> Source {
-    return Source(box.words.x, box.words.y, box.shading.x, box.shading.y, box.toward);
+    return Source(box.words.x, box.words.y, box.shading.x, box.shading.y, box.toward, box.clip.xy);
 }
 
 // The box at `index` of `boxes`, as the eye's ray along `direction` through
@@ -247,7 +256,7 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
         vec3<f32>(high.xyz - tile),
         its.ray.xyz - vec3<f32>(tile),
         vec3<f32>(dot(its.axes[0].xyz, world) / its.axes[0].w, dot(its.axes[1].xyz, world) / its.axes[1].w, dot(its.axes[2].xyz, world) / its.axes[2].w),
-        Source(high.w, place, more.z, more.w, box.toward),
+        Source(high.w, place, more.z, more.w, box.toward, box.clip.xy),
     );
 }
 
@@ -373,6 +382,11 @@ fn surface(
 
     color += sky_light(normal, 1.0) * base.rgb * ((1.0 - metallic) * unblocked);
     color += sky_light(mirror, alpha) * reflectance * unblocked;
+
+    // The bloom at the pixel. The second eye's places follow the first's.
+    let eye = u32(source.place >= frame.placements);
+
+    color += textureSampleLevel(bloom, bloom_sampler, source.pixel * frame.texel, eye, 0.0).rgb;
 
     return vec4<f32>(tonemap(color), 1.0);
 }

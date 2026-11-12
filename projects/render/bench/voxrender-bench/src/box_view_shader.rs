@@ -7,8 +7,8 @@ use crate::TileMasks;
 /// `vec4<u32>`s at locations 1 to 3: `place` and `place_near` for a box's
 /// back faces, and `place_front` for its faces toward the view. Its
 /// fragment entries are `front`, `crossed`, `inside`, `exact`, and `solid`.
-/// Group 0 binds a uniform buffer at 0 and read-only storage buffers at 1
-/// to 6.
+/// Group 0 binds a uniform buffer at 0, read-only storage buffers at 1 to
+/// 6, a two-layer texture of filterable floats at 7, and its sampler at 8.
 pub fn box_view_shader() -> String {
     format!(
         "const SURFACE: u32 = {}u;\nconst MATERIALS: u32 = {}u;\n{}\n{}",

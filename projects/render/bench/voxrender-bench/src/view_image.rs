@@ -26,7 +26,7 @@ pub fn view_image(
 ) -> Result<Vec<u8>> {
     let (_, view) = scene.iter_views().next().ok_or(Error::NoView)?;
 
-    let mut boxes = BoxView::new(&gpu.device, scene, FORMAT, shadows)?;
+    let mut boxes = BoxView::new(&gpu.device, scene, FORMAT, [width, height], shadows)?;
 
     let eye = ViewEye {
         world_to_clip: world_to_clip(scene, view, width, height),

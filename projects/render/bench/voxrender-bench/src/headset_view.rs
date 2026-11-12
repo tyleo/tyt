@@ -24,9 +24,14 @@ impl HeadsetView {
     pub const DEPTH: TextureFormat = BoxView::DEPTH;
 
     /// Builds the view of the bench scene whose name starts with `scene`,
-    /// for a two-layer target of `format`. Errors unless a scene has the
-    /// name and a view.
-    pub fn new(device: &Device, scene: &str, format: TextureFormat) -> Result<Self> {
+    /// for a two-layer target of `format` and of `size`, its width and
+    /// height. Errors unless a scene has the name and a view.
+    pub fn new(
+        device: &Device,
+        scene: &str,
+        format: TextureFormat,
+        size: [u32; 2],
+    ) -> Result<Self> {
         let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
         let (_, view) = render_scene.iter_views().next().ok_or(Error::NoView)?;
         let forward = view.pose.rotation * -TyVector3F64::Z;
@@ -36,6 +41,7 @@ impl HeadsetView {
                 device,
                 &render_scene,
                 format,
+                size,
                 render_scene.placement_count() <= SHADOWED,
             )?,
             origin: view.pose.position,

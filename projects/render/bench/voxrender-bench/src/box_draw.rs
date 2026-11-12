@@ -5,12 +5,13 @@ use std::{
 };
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferUsages, ColorTargetState,
-    ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState,
-    FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayoutDescriptor,
-    PrimitiveState, Queue, RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderModule,
-    ShaderStages, StencilState, TextureFormat, VertexAttribute, VertexBufferLayout, VertexFormat,
-    VertexState, VertexStepMode,
+    BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages,
+    ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device,
+    Face, FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions,
+    PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPass, RenderPipeline,
+    RenderPipelineDescriptor, Sampler, SamplerBindingType, ShaderModule, ShaderStages,
+    StencilState, TextureFormat, TextureSampleType, TextureView, TextureViewDimension,
+    VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -91,13 +92,16 @@ impl BoxDraw {
     /// 2. `parts`: the runs of boxes in draw order
     /// 3. `bindings`: each binding's stages, type, and buffer, in binding
     ///    order
-    /// 4. `multiview_mask`: the mask of the passes the boxes draw in
+    /// 4. `sampled`: a two-layer texture of filterable floats and its
+    ///    sampler, which the fragments bind after the buffers
+    /// 5. `multiview_mask`: the mask of the passes the boxes draw in
     pub fn new(
         device: &Device,
         module: &ShaderModule,
         format: TextureFormat,
         parts: &[BoxPart<'_>],
         bindings: &[(ShaderStages, BufferBindingType, &Buffer)],
+        sampled: Option<(&TextureView, &Sampler)>,
         multiview_mask: Option<NonZeroU32>,
     ) -> Self {
         let mut box_bytes: Vec<u8> = parts
@@ -139,7 +143,9 @@ impl BoxDraw {
             BufferUsages::VERTEX | BufferUsages::COPY_DST,
         );
 
-        let entries: Vec<_> = (0u32..)
+        let buffers = u32::try_from(bindings.len()).expect("a draw's bindings number under 2^32");
+
+        let mut entries: Vec<_> = (0u32..)
             .zip(bindings)
             .map(|(binding, &(visibility, ty, _))| BindGroupLayoutEntry {
                 binding,
@@ -152,6 +158,27 @@ impl BoxDraw {
                 count: None,
             })
             .collect();
+
+        if sampled.is_some() {
+            entries.extend([
+                BindGroupLayoutEntry {
+                    binding: buffers,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Float { filterable: true },
+                        view_dimension: TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: buffers + 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ]);
+        }
 
         // The pipelines share the layout, so one bind group serves them all.
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -280,16 +307,31 @@ impl BoxDraw {
             first = end;
         }
 
+        let mut resources: Vec<_> = (0u32..)
+            .zip(bindings)
+            .map(|(binding, (_, _, buffer))| BindGroupEntry {
+                binding,
+                resource: buffer.as_entire_binding(),
+            })
+            .collect();
+
+        if let Some((texture, sampler)) = sampled {
+            resources.extend([
+                BindGroupEntry {
+                    binding: buffers,
+                    resource: BindingResource::TextureView(texture),
+                },
+                BindGroupEntry {
+                    binding: buffers + 1,
+                    resource: BindingResource::Sampler(sampler),
+                },
+            ]);
+        }
+
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("box raster"),
             layout: &bind_group_layout,
-            entries: &(0u32..)
-                .zip(bindings)
-                .map(|(binding, (_, _, buffer))| BindGroupEntry {
-                    binding,
-                    resource: buffer.as_entire_binding(),
-                })
-                .collect::<Vec<_>>(),
+            entries: &resources,
         });
 
         BoxDraw {
