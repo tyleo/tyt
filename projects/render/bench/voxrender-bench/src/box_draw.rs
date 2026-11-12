@@ -38,6 +38,10 @@ const TRIANGLES: [u16; 36] = [
     6, 5, 6, 4,
 ];
 
+/// The steps of depth a glass face draws nearer by. A glass box can share
+/// a face's plane with the opaque box of its tile and draws before it.
+const GLASS_BIAS: i32 = 1024;
+
 /// What picks a run's pipeline: its module, its vertex and fragment entries,
 /// whether it draws its boxes' back faces, and whether it draws glass.
 type PipelineKey<'a> = (usize, &'a str, &'a str, bool, bool);
@@ -275,7 +279,10 @@ impl BoxDraw {
                     depth_write_enabled: Some(!glass),
                     depth_compare: Some(CompareFunction::Greater),
                     stencil: StencilState::default(),
-                    bias: DepthBiasState::default(),
+                    bias: DepthBiasState {
+                        constant: if glass { GLASS_BIAS } else { 0 },
+                        ..DepthBiasState::default()
+                    },
                 }),
                 multisample: MultisampleState::default(),
                 fragment: Some(FragmentState {

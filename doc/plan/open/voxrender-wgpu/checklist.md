@@ -379,7 +379,7 @@ in this order:
             pass after the opaque ones walks each box of surfaces between
             such materials, farthest first. A dual-source blend tints what
             lies behind. The trial models' pixels off the reference
-            fall from 51,760 to 38,468, and the fish tank takes 4.4 ms on
+            fall from 51,760 to 37,006, and the fish tank takes 5.6 ms on
             Quest
       - [ ] The light that reaches a face through glass: a pane throws no
             shadow and no tint, and its own surfaces take the sun whole

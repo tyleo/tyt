@@ -2448,12 +2448,28 @@ The second keeps the busy cells, and its boxes hold the surfaces alone.
 Each holds 90 Hz. The surfaces' shade takes a third of what glass costs
 the fish tank. The fragments and their steps take the rest.
 
+**Glass behind its tile's opaque box.** A glass box held its tile's
+surfaces alone. The opaque view's depth holds each box's face, so the depth
+test dropped a glass fragment wherever the opaque box of its tile lay
+before it, though the box's cells hid nothing there. The gravel under a
+tank's pane showed through holes in the tint. A glass box now spans its
+tile's opaque cells too. A fragment drops out where its ray misses the box
+around the surfaces. Pixels off, then Quest's app GPU p50 in ms:
+
+| Model | Surfaces' box | Busy cells' box | Surfaces' box, ms | Busy cells' box, ms |
+| --- | ---: | ---: | ---: | ---: |
+| fish tank | 7776 | 6805 | 4.49 | 5.61 |
+| potion | 6933 | 6927 | 2.50 | 2.63 |
+| spaceship bridge | 4590 | 4299 | 1.79 | 1.91 |
+| lantern | 1366 | 1399 | 2.69 | 2.94 |
+| all 35 | 38,468 | 37,006 | | |
+
 **Outcomes.**
 
 1. Glass, water, and what sits inside them draw as the contract draws
    them, but for the light that crosses glass
-2. The fish tank takes 4.4 ms on Quest, 2.7 more than with its water
-   opaque. B7's line was 1.0 ms
+2. The fish tank takes 5.6 ms on Quest with its holes closed, 3.9 more
+   than with its water opaque. B7's line was 1.0 ms
 3. Left: the walk's cost, shadows and tints under glass, a mirror ray
    through glass, and an eye inside a material
 
