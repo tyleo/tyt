@@ -1819,3 +1819,33 @@ differs from the reference on no pixel, before and after.
 2. An eye within 2 cm of a box and outside it starts its ray where it
    enters the box and takes the nearest depth all the same. A hit in
    another box within those 2 cm would lose the pixel
+
+## The crossing test as placements move, 2026-11-12
+
+What the test for boxes that share space would cost a frame if placements
+moved.
+
+- Device: this Mac's CPU, one thread
+- Test: `PlacedBox::crossers` over a scene's boxes, timed by a probe that
+  is not checked in. The test sorts the boxes along x and compares those
+  whose spans meet
+
+| Scene | Marched boxes | Solid boxes | That cross | Crossers | ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| S1 | 45 | 381 | 13 | 22 | 0.03 |
+| S4 | 1247 | 1098 | 54 | 92 | 0.25 |
+| S5 | 4096 | 19,200 | 0 | 0 | 1.26 |
+| S2 | 21,604 | 4721 | 6155 | 14,255 | 13.70 |
+
+S2's median placement holds 30 marched boxes, and 2 boxes of other
+placements cross it. S4's holds 28, and 8 cross it.
+
+**Outcomes.**
+
+1. A placement that moves changes the crossers of its boxes and of the
+   boxes that crossed it before the move or cross it after
+2. A scene of S1's size tests whole in 0.03 ms, so S6's view can test
+   every box each frame. A scene of S2's size needs the test for the
+   movers' boxes alone, about a thousandth of its 13.7 ms a mover
+3. The view holds no moving placement yet. S6 brings the test into a
+   frame, with the lit words of the shadow fill section above
