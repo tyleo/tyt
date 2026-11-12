@@ -2,9 +2,9 @@
 // steps its ray a cell at a time, from the point the rasterizer gives it on
 // its box.
 //
-// `front`, `crossed`, and `inside` discard a miss and keep their face's
-// depth, which lets the depth test run before the march. `exact` writes the
-// hit's depth. `solid` marches nothing.
+// `front`, `crossed`, `inside`, and `held` discard a miss and keep the depth
+// their vertices give, which lets the depth test run before the march.
+// `exact` writes the hit's depth. `solid` marches nothing.
 //
 // Under face depth the nearest face wins a pixel. That face must then hold
 // the pixel's first hit, so a front face's fragment finds the first hit of
@@ -17,6 +17,12 @@
 // such a box lies before the box's back face. The front face of the box
 // behind can share that face's plane. A vertex entry for `inside` scales its
 // depth by `NEARER`, which keeps the hit ahead of that box's.
+//
+// `held` shades the back faces of a box that holds the view's eye and
+// shares space with other placements' boxes. Its ray starts at the eye, so
+// the first hit it finds in its tile and in those boxes is the pixel's. A
+// vertex entry for `held` gives it the nearest depth. Its box also draws its
+// front faces through `crossed` for an eye outside it.
 //
 // The WGSL that includes this file defines:
 //
@@ -312,9 +318,10 @@ fn hit_from_back(box: Box) -> Hit {
     return hit;
 }
 
-// The first hit of a perspective view's ray in `other`, nearer than `reach`
-// directions past the fragment's point. A miss holds `reach`.
-fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
+// The first hit of a perspective view's ray in `other`, from `base`
+// directions past the eye and nearer than `reach` directions past that. A
+// hit lies `along` directions past it. A miss holds `reach`.
+fn other_hit(other: Other, solid: bool, base: f32, reach: f32) -> Hit {
     // Where the ray crosses each axis's two faces of the box, in directions
     // from the eye.
     let turned = select(other.direction, vec3<f32>(1.0e-12), abs(other.direction) < vec3<f32>(1.0e-12));
@@ -325,13 +332,14 @@ fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
     let near = max(nears.x, max(nears.y, nears.z));
     let far = min(fars.x, min(fars.y, fars.z));
 
-    // The ray's stretch in both boxes starts at the fragment's point or
-    // where the ray enters the other box, whichever comes later.
-    let first = max(near, 1.0);
+    // The ray's stretch in both boxes starts `base` past the eye or where
+    // the ray enters the other box, whichever comes later.
+    let first = max(near, base);
 
     // A ray that starts the stretch inside a solid box met its face before
-    // the fragment's point, where another box finds it.
-    if first >= min(far, 1.0 + reach) || (solid && near < 1.0) {
+    // the stretch, where another box finds it, or starts at an eye inside
+    // the box, which sees none of it.
+    if first >= min(far, base + reach) || (solid && near < base) {
         return Hit(false, 0, vec3<bool>(false), reach, Cells());
     }
 
@@ -343,10 +351,14 @@ fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
     if solid {
         hit.cells = cells_at(other.tile, bit);
     } else {
-        hit = first_hit(other.tile, other.low, other.high, start, other.direction, true, entry);
+        // A ray from an eye inside the box takes no hit in the live cells
+        // it starts in.
+        let enters = base > 0.0 || near >= 0.0;
+
+        hit = first_hit(other.tile, other.low, other.high, start, other.direction, enters, entry);
     }
 
-    hit.along += first - 1.0;
+    hit.along += first - base;
 
     if !hit.found || hit.along >= reach {
         return Hit(false, 0, vec3<bool>(false), reach, Cells());
@@ -448,12 +460,72 @@ fn crossed(box: Box) -> @location(0) vec4<f32> {
 
         let crosser = bitcast<u32>(low.w);
         let other = other_of(box, direction, crosser & ~SOLID);
-        let nearer = other_hit(other, (crosser & SOLID) != 0u, hit.along);
+        let nearer = other_hit(other, (crosser & SOLID) != 0u, 1.0, hit.along);
 
         if nearer.found {
             hit = nearer;
             source = other.source;
             start = other.eye + other.direction;
+            along = other.direction;
+        }
+    }
+
+    if !hit.found {
+        discard;
+    }
+
+    return shade(source, hit, start, along);
+}
+
+// A back face's fragment of a box that holds a perspective view's eye and
+// shares space with other placements' boxes.
+@fragment
+fn held(box: Box) -> @location(0) vec4<f32> {
+    let direction = direction_of(box);
+    let turned = select(direction, vec3<f32>(1.0e-12), abs(direction) < vec3<f32>(1.0e-12));
+    let ahead = direction >= vec3<f32>(0.0);
+    let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
+
+    // How far back along the ray each axis's entry face lies. The ray
+    // starts where it enters the box, or at the eye inside the box, one
+    // direction back.
+    let faces = abs(box.point - select(box.high, box.low, ahead)) * rate;
+    let entry = min(faces.x, min(faces.y, faces.z));
+    let before = min(entry, 1.0);
+    let begin = box.point - direction * before;
+
+    var hit = first_hit(box.words.x, box.low, box.high, begin, direction, entry <= 1.0, least(faces));
+    var source = source_of(box);
+
+    // The ray's start and its direction in the hit's tile.
+    var start = begin;
+    var along = direction;
+
+    for (var n = 0u; n < box.crossers.y; n++) {
+        let low = crossers[(box.crossers.x + n) * 2u];
+        let high = crossers[(box.crossers.x + n) * 2u + 1u];
+
+        // Where the ray crosses the space the two boxes share, in
+        // directions past its start.
+        let lows = (low.xyz - begin) / turned;
+        let highs = (high.xyz - begin) / turned;
+        let nears = min(lows, highs);
+        let fars = max(lows, highs);
+        let near = max(nears.x, max(nears.y, nears.z));
+        let far = min(fars.x, min(fars.y, fars.z));
+
+        if max(near, 0.0) >= min(far, hit.along) {
+            continue;
+        }
+
+        let crosser = bitcast<u32>(low.w);
+        let other = other_of(box, direction, crosser & ~SOLID);
+        let nearer = other_hit(other, (crosser & SOLID) != 0u, 1.0 - before, hit.along);
+
+        if nearer.found {
+            hit = nearer;
+            source = other.source;
+            start = other.eye + other.direction * (1.0 - before);
             along = other.direction;
         }
     }

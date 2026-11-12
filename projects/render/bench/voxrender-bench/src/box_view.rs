@@ -598,12 +598,26 @@ impl BoxView {
         });
 
         // The runs start with every marched box in the run that draws its
-        // front faces. Each sort then deals the boxes out again.
+        // front faces. Each sort then deals the boxes out again. A box that
+        // crosses another draws in two runs when it lies near the head, so
+        // the first run starts with room for each.
+        let held_words: Vec<_> = march_words
+            .iter()
+            .zip(&crossers)
+            .filter(|(_, entries)| !entries.is_empty())
+            .map(|(words, _)| *words)
+            .collect();
+
         let boxes = BoxDraw::new(
             device,
             &module,
             format,
             &[
+                BoxPart {
+                    fragment: "held",
+                    faces: BoxFaces::Held,
+                    boxes: held_words,
+                },
                 BoxPart {
                     fragment: "inside",
                     faces: BoxFaces::NearBack,
@@ -622,11 +636,6 @@ impl BoxView {
                 BoxPart {
                     fragment: "crossed",
                     faces: BoxFaces::Front,
-                    boxes: Vec::new(),
-                },
-                BoxPart {
-                    fragment: "exact",
-                    faces: BoxFaces::Back,
                     boxes: Vec::new(),
                 },
             ],
@@ -690,7 +699,11 @@ impl BoxView {
             self.place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each)
         {
             let clip = (eye.world_to_clip * *grid_to_world).to_cols_array();
-            let ray = grid_point(transform, eye.position).extend(1.0).to_array();
+
+            // A box holds an eye within `REACH` of it, in the grid's cells
+            // along its finest axis.
+            let cells = REACH * scale / transform.scale.abs().min_element();
+            let ray = grid_point(transform, eye.position).extend(cells).to_array();
 
             for (bytes, value) in place[..EYE_BYTES]
                 .chunks_exact_mut(4)
@@ -722,11 +735,11 @@ impl BoxView {
 
     /// Sorts the boxes nearest to `head` first into their runs. A marched
     /// box within `covered` of `head` draws its back faces because an eye
-    /// can come to stand inside it before the next sort. Such a box writes
-    /// its hits' depth when it crosses another placement's box because only
-    /// a front face's fragment steps through the boxes it crosses. Every solid
-    /// box draws its front faces because a ray that starts inside one sees
-    /// none of it.
+    /// can come to stand inside it before the next sort. Such a box that
+    /// crosses another placement's box draws its back faces at the nearest
+    /// depth for an eye it holds, and its front faces for one it does not.
+    /// Every solid box draws its front faces because a ray that starts
+    /// inside one sees none of it.
     fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32) {
         self.solid
             .nearest_first(head, covered, &mut self.solid_keys);
@@ -741,15 +754,17 @@ impl BoxView {
 
         let counts = [
             self.marched
+                .extend(crossing_keys(near, crossing, true), &mut self.sorted),
+            self.marched
                 .extend(crossing_keys(near, crossing, false), &mut self.sorted),
             self.solid
                 .extend(self.solid_keys.iter().copied(), &mut self.sorted),
             self.marched
                 .extend(crossing_keys(far, crossing, false), &mut self.sorted),
-            self.marched
-                .extend(crossing_keys(far, crossing, true), &mut self.sorted),
-            self.marched
-                .extend(crossing_keys(near, crossing, true), &mut self.sorted),
+            self.marched.extend(
+                crossing_keys(&self.marched_keys, crossing, true),
+                &mut self.sorted,
+            ),
         ];
 
         self.boxes.rewrite(queue, &self.sorted, &counts);

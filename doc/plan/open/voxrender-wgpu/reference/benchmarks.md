@@ -1770,3 +1770,52 @@ with the most.
 3. B5's line for the shadow memo is 1.0 ms a frame. A fill of whole
    tiles does not fit it for one mover. B5 needs a finer rule for what a
    move changes, or another shadow for movers
+
+## A crossing box that holds the eye, 2026-11-12
+
+The last fragments that wrote their hits' depth, on a view from inside a
+bush.
+
+- Device, method, and image check: as in Records by row
+- View: B1's inside a bush, S4's garden from an empty cell inside a bush.
+  Its sort deals 16 marched boxes near the head that cross no box, 7 that
+  cross one, 1177 and 47 farther ones, and 1098 solid boxes
+
+**Before.** A marched box within 25 cm of the head drew its back faces,
+because an eye can come to stand inside it before the next sort. One that
+crossed another placement's box wrote its hits' depth through `exact`: a
+farther box that crosses it draws a front face nearer than its back
+face, and only a hit's depth put its hit ahead of that face. A fragment
+that writes its depth runs before its depth test, so each of the 7 boxes
+marched every pixel its back faces covered.
+
+**After.** Such a box draws in two runs:
+
+1. Its front faces draw through `crossed` with the farther boxes'. An eye
+   outside the box sees them
+2. Its back faces draw first, through `held`, at the nearest depth. The
+   vertex stage draws them only for an eye within 2 cm of the box. The
+   fragment's ray starts at the eye, or where it enters the box, and
+   steps through the box's tile and through each box that shares space
+   with it. Its first hit is the pixel's, so the nearest depth is its
+   to take. Every later fragment of the pixel fails its depth test before
+   it runs
+
+`held` shades 739,200 of the view's 2,956,800 pixels on this Mac.
+
+| Build | Inside a bush, ms | GPU clock | S1 | S5 | S2 | S4 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Before | 8.36 to 8.44 | 640 MHz | 2.16 | 3.54 | 6.74 | 3.14 |
+| The 7 boxes through `inside`, which no crossing box may use | 5.72 to 5.87 | 545 MHz | | | | |
+| After | 5.59 to 6.38 | 545 MHz | 2.17 | 3.58 | 6.74 | 3.15 |
+
+The image check passes on every bench scene as before. The inside view
+differs from the reference on no pixel, before and after.
+
+**Outcomes.**
+
+1. The view takes 5.6 to 6.4 ms at 545 MHz where it took 8.4 at 640. No
+   fragment of the view writes its depth
+2. An eye within 2 cm of a box and outside it starts its ray where it
+   enters the box and takes the nearest depth all the same. A hit in
+   another box within those 2 cm would lose the pixel

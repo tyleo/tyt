@@ -10,4 +10,9 @@ pub enum BoxFaces {
     /// The faces away from the view, drawn nearer than they lie by
     /// `mask_march.wgsl`'s `NEARER`.
     NearBack,
+
+    /// The faces away from the view at the nearest depth, where the view's
+    /// eye lies within reach of the box. The module's `place_held` places
+    /// them.
+    Held,
 }

@@ -82,9 +82,10 @@ impl BoxDraw {
     pub const BOX_BYTES: usize = 48;
 
     /// Builds the pipelines over `module`, whose vertex entries take a
-    /// vertex's bits and a box's three `vec4<u32>`s. `place` and
-    /// `place_near` take a corner of the box, and `place_front` takes a
-    /// vertex of one of its three faces toward the view.
+    /// vertex's bits and a box's three `vec4<u32>`s: `place`, `place_near`,
+    /// and `place_held` a corner of the box, and `place_front` a vertex of
+    /// one of its three faces toward the view. A module needs the entries
+    /// its parts' faces draw through.
     ///
     /// # Arguments
     ///
@@ -296,6 +297,7 @@ impl BoxDraw {
                 ),
                 BoxFaces::Back => (shared("place", part.fragment, true), None),
                 BoxFaces::NearBack => (shared("place_near", part.fragment, true), None),
+                BoxFaces::Held => (shared("place_held", part.fragment, true), None),
             };
 
             runs.push(Run {
