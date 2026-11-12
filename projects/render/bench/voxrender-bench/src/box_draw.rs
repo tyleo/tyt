@@ -28,6 +28,11 @@ const TRIANGLES: [u16; 36] = [
 
 /// A view's boxes and the pipelines that draw their faces, with depth in
 /// [`HitTargets::DEPTH`].
+///
+/// Each run draws in a pass of its own, which loads what the pass before it
+/// stored. On Quest a pass of one draw runs in a faster mode. A second draw
+/// in a pass, even of one box, cost S5 0.65 ms over its 4096 boxes and S2
+/// 2.8 ms over its 25,301. The passes between cost under 0.02 ms each.
 pub struct BoxDraw {
     /// Each run's pipeline and boxes, in draw order.
     parts: Vec<(RenderPipeline, Range<u32>)>,
@@ -274,22 +279,28 @@ impl BoxDraw {
         }
     }
 
-    /// Draws every box into `pass`.
-    pub fn draw(&self, pass: &mut RenderPass<'_>) {
-        if self.parts.iter().all(|(_, boxes)| boxes.is_empty()) {
+    /// How many of the runs hold boxes.
+    pub fn runs(&self) -> u32 {
+        u32::try_from(self.drawn().count()).expect("a draw's runs number under 2^32")
+    }
+
+    /// Draws the `run`th of the runs that hold boxes into `pass`, a pass of
+    /// its own. Draws nothing past the last such run.
+    pub fn draw(&self, pass: &mut RenderPass<'_>, run: u32) {
+        let Some((pipeline, boxes)) = self.drawn().nth(run as usize) else {
             return;
-        }
+        };
 
         pass.set_bind_group(0, &self.bind_group, &[]);
         pass.set_vertex_buffer(0, self.corners.slice(..));
         pass.set_vertex_buffer(1, self.boxes.slice(..));
         pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
+        pass.set_pipeline(pipeline);
+        pass.draw_indexed(0..36, 0, boxes.clone());
+    }
 
-        for (pipeline, boxes) in &self.parts {
-            if !boxes.is_empty() {
-                pass.set_pipeline(pipeline);
-                pass.draw_indexed(0..36, 0, boxes.clone());
-            }
-        }
+    /// The runs that hold boxes, in draw order.
+    fn drawn(&self) -> impl Iterator<Item = &(RenderPipeline, Range<u32>)> {
+        self.parts.iter().filter(|(_, boxes)| !boxes.is_empty())
     }
 }

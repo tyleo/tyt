@@ -284,36 +284,9 @@ impl XrApp {
                 label: Some("frame"),
             });
 
-        let depth = match &self.work {
-            FrameWork::View { depth, .. } => Some(depth),
-            _ => None,
-        };
-
-        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("eyes"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: &self.swapchain.views[image],
-                depth_slice: None,
-                resolve_target: None,
-                ops: Operations {
-                    load: LoadOp::Clear(match &self.work {
-                        FrameWork::View { view, .. } => view.sky(),
-                        _ => CLEAR,
-                    }),
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: depth.map(|depth| RenderPassDepthStencilAttachment {
-                view: depth,
-                depth_ops: Some(Operations {
-                    load: LoadOp::Clear(0.0),
-                    store: StoreOp::Discard,
-                }),
-                stencil_ops: None,
-            }),
-            multiview_mask: NonZeroU32::new(0b11),
-            ..RenderPassDescriptor::default()
-        });
+        // A view draws in passes of one draw each. Any other work clears
+        // the eyes in one pass.
+        let mut passes = 1;
 
         if let FrameWork::View {
             view,
@@ -359,10 +332,56 @@ impl XrApp {
                 *frames = 0;
             }
 
-            view.draw(&mut pass);
+            passes = view.passes();
         }
 
-        drop(pass);
+        for at in 0..passes {
+            let first = at == 0;
+
+            let (sky, depth) = match &self.work {
+                FrameWork::View { view, depth, .. } => (view.sky(), Some(depth)),
+                _ => (CLEAR, None),
+            };
+
+            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("eyes"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.swapchain.views[image],
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: if first {
+                            LoadOp::Clear(sky)
+                        } else {
+                            LoadOp::Load
+                        },
+                        store: StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: depth.map(|depth| RenderPassDepthStencilAttachment {
+                    view: depth,
+                    depth_ops: Some(Operations {
+                        load: if first {
+                            LoadOp::Clear(0.0)
+                        } else {
+                            LoadOp::Load
+                        },
+                        store: if at + 1 == passes {
+                            StoreOp::Discard
+                        } else {
+                            StoreOp::Store
+                        },
+                    }),
+                    stencil_ops: None,
+                }),
+                multiview_mask: NonZeroU32::new(0b11),
+                ..RenderPassDescriptor::default()
+            });
+
+            if let FrameWork::View { view, .. } = &self.work {
+                view.draw(&mut pass, at);
+            }
+        }
 
         match &mut self.work {
             FrameWork::View { .. } => {

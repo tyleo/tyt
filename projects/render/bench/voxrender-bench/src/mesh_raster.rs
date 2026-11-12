@@ -210,7 +210,7 @@ impl MeshRaster {
     /// timestamps at `first` and `first + 1` of `query_set`.
     pub fn record(&self, encoder: &mut CommandEncoder, query_set: &QuerySet, first: u32) {
         self.targets
-            .draw(encoder, Some((query_set, first)), |pass, eye| {
+            .draw(encoder, Some((query_set, first)), 1, |pass, eye, _| {
                 self.draw(pass, eye)
             });
     }
@@ -221,7 +221,7 @@ impl MeshRaster {
     pub fn trace(&self, device: &Device, queue: &Queue) -> Result<Vec<Option<PixelHit>>> {
         let words = self
             .targets
-            .read(device, queue, |pass, eye| self.draw(pass, eye))?;
+            .read(device, queue, 1, |pass, eye, _| self.draw(pass, eye))?;
 
         Ok(words
             .into_iter()

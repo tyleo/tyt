@@ -25,7 +25,7 @@ const SLACK: f32 = 0.25;
 
 /// A shaded view of a scene's boxes for both eyes of a headset: the box
 /// raster with solid boxes, a mask march, and face depth. Each frame takes
-/// its eyes and draws in one multiview pass over a two-layer target with
+/// its eyes and draws in multiview passes over a two-layer target with
 /// depth in [`BoxView::DEPTH`]. The boxes draw nearest first. They sort
 /// again once the head has moved [`SLACK`] from where they last sorted.
 ///
@@ -570,9 +570,16 @@ impl BoxView {
         self.sorted_for = Some((head, covered));
     }
 
-    /// Draws the boxes [`prepare`](Self::prepare) sorted into `pass`, a
-    /// multiview pass over both eyes.
-    pub fn draw(&self, pass: &mut RenderPass<'_>) {
-        self.boxes.draw(pass);
+    /// How many passes draw the boxes [`prepare`](Self::prepare) sorted, at
+    /// least one. Each is a multiview pass over both eyes. The first clears
+    /// its target to [`sky`](Self::sky) and its depth to zero, and each
+    /// later one loads what the pass before it stored.
+    pub fn passes(&self) -> u32 {
+        self.boxes.runs().max(1)
+    }
+
+    /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
+    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
+        self.boxes.draw(pass, at);
     }
 }
