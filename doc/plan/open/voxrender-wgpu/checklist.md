@@ -250,8 +250,12 @@ code-level choices in
                                     1.43. A depth pass of the solid boxes
                                     ahead of the march would leave the
                                     marched boxes' share
-                              - [ ] A shadow fill on the GPU, which S2 and
-                                    moving casters wait for
+                              - [x] A shadow fill on the GPU. A compute
+                                    pass casts each corner's ray through
+                                    the placements that can shadow its
+                                    tile. S2 draws its shadows in 7.1 ms
+                              - [ ] The fill as casters move: which tiles
+                                    to fill again, and the time a frame
                         - [ ] A crossing box that holds the eye. It still
                               writes its hits' depth
                         - [ ] The crossing test as placements move

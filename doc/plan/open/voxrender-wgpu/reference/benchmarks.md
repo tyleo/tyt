@@ -1439,3 +1439,58 @@ last two cuts. The view takes 4.03 ms and 2.19 with the cell alone.
    hit the cell they enter by
 5. S2 shades 1.43 times a pixel. Its solid boxes draw before its marched
    ones and shade under them
+
+## Shadow fill on the GPU, 2026-11-11
+
+The view's corner shadows, filled by a compute pass in place of the
+reference's walk on the CPU.
+
+- Device, method, and image check: as in Shading load
+- Fill check: `voxrender-bench-desktop lit-check`, on this Mac. It fills
+  a scene's lit corners on the GPU and again on the CPU, and counts the
+  corners that differ. Every live cell counts as opaque
+- The fill: `LitFill`. An invocation takes one surface cell. For each of
+  the cell's faces toward the sun with no live cell before it, it casts
+  the contract's ray from each corner through voxrender-wgpu's integer
+  walk. A ray walks the placements whose box, seen along the light,
+  covers some of its tile's and reaches as far toward the light
+
+**Fill.**
+
+| Scene | Surface cells | Lit corners | Differ from the CPU's |
+| --- | ---: | ---: | ---: |
+| cube | 8 | 48 | 0 |
+| l-shape | 54 | 184 | 0 |
+| two placements | 48 | 240 | 0 |
+| precision shadows, sparse | 1406 | 3602 | 0 |
+| precision shadows, stairs | 720 | 2496 | 0 |
+| S1 | 182,466 | 107,743 | 15 |
+| S5 | 2,110,883 | 3,771,285 | 0 |
+| S4 | 721,598 | 1,199,271 | 2348 |
+
+S1's and S4's rays cross other placements' grids. The GPU carries a
+ray's start to another grid in f32, as B1's walks do, and the CPU's fill
+in f64.
+
+**Image.**
+
+| Scene | Opaque pixels | Off by over 8 | Mean difference of 255 |
+| --- | ---: | ---: | ---: |
+| cube | 13,794 | 0 | 0.005 |
+| S1 | 53,296 | 7 | 0.022 |
+| S5 | 31,818 | 100 | 0.327 |
+| S4 | 31,125 | 67 | 0.089 |
+| S2 | 62,236 | 17 | 0.046 |
+
+**Quest.** The view's GPU frame time at p50 in ms at 545 MHz: S1 2.24, S5
+3.97, S2 7.08. S2 took 7.31 without its shadows. The view's first frame
+comes about 2 s after the app starts, on each scene.
+
+**Outcomes.**
+
+1. The GPU's fill gives the CPU's corners on S5 and the small scenes. S2's
+   view matches the reference's image on all but 17 pixels
+2. S2 casts its shadows on Quest in 7.08 ms, 0.2 ms under its time
+   without them. A face with no lit corner skips the sun's term
+3. The fill runs once, as the view is built. A caster that moves needs
+   its tiles and the tiles it shadows filled again, which B5 times
