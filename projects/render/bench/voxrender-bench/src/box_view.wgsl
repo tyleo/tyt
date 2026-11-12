@@ -287,7 +287,7 @@ fn surface(
 ) -> vec4<f32> {
     let tile = source.tile;
     let size = source.header & 15u;
-    let index = u32((cell.x * 16 + cell.y) * 16 + cell.z);
+    let index = u32((cell.y * 16 + cell.x) * 16 + cell.z);
 
     // The cell's material: the tile's first, plus the cell's entry among
     // the tile's.

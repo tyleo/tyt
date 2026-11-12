@@ -165,7 +165,7 @@ fn least(v: vec3<f32>) -> vec3<bool> {
 
 // The cell's bit in its tile.
 fn bit_of(cell: vec3<f32>) -> i32 {
-    return i32(dot(cell, vec3<f32>(256.0, 16.0, 1.0)));
+    return i32(dot(cell, vec3<f32>(16.0, 256.0, 1.0)));
 }
 
 // A ray's place among a tile's cells.
@@ -234,7 +234,7 @@ fn first_hit(
     let cell = clamp(floor(start), low, high - 1.0);
 
     // What a step along each axis adds to a cell's bit.
-    let strides = select(vec3<i32>(-256, -16, -1), vec3<i32>(256, 16, 1), ahead);
+    let strides = select(vec3<i32>(-16, -256, -1), vec3<i32>(16, 256, 1), ahead);
 
     // How far along the ray each axis's next cell face lies.
     let within = start - cell;
@@ -347,7 +347,7 @@ fn other_hit(other: Other, solid: bool, reach: f32) -> Hit {
 // What a fragment writes for `hit` in `source`. The hit lies `hit.along`
 // directions past `start` in the source's tile.
 fn shade(source: Source, hit: Hit, start: vec3<f32>, direction: vec3<f32>) -> vec4<f32> {
-    let cell = vec3<i32>(hit.bit >> 8u, (hit.bit >> 4u) & 15, hit.bit & 15);
+    let cell = vec3<i32>((hit.bit >> 4u) & 15, hit.bit >> 8u, hit.bit & 15);
 
     return surface(
         source,
@@ -376,7 +376,7 @@ fn front(box: Box) -> @location(0) vec4<f32> {
     let ahead = direction >= vec3<f32>(0.0);
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
     let cell = clamp(floor(box.point), box.low, box.high - 1.0);
-    let strides = select(vec3<i32>(-256, -16, -1), vec3<i32>(256, 16, 1), ahead);
+    let strides = select(vec3<i32>(-16, -256, -1), vec3<i32>(16, 256, 1), ahead);
     let within = box.point - cell;
     let next = abs(select(within, 1.0 - within, ahead)) * rate;
     let ends = abs(select(box.low, box.high, ahead) - box.point) * rate;
