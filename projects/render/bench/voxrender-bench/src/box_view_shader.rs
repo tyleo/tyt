@@ -24,7 +24,7 @@ fn mirrored(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> vec4<f32> {
 pub fn box_view_shader(traced: bool) -> String {
     format!(
         "{}const RECORDS: u32 = {}u;\nconst MIRRORS: bool = {traced};\n\
-         const MIRROR_CUT: f32 = {:?};\n{}\n{}\n{}",
+         const MIRROR_CUT: f32 = {:?};\nconst MIRROR_REACH: f32 = {:?};\n{}\n{}\n{}",
         if traced {
             "enable wgpu_ray_query;\n"
         } else {
@@ -32,6 +32,7 @@ pub fn box_view_shader(traced: bool) -> String {
         },
         TileMasks::RECORDS,
         BoxView::MIRROR_CUT,
+        BoxView::MIRROR_REACH,
         include_str!("box_view.wgsl"),
         if traced {
             include_str!("box_mirror.wgsl")

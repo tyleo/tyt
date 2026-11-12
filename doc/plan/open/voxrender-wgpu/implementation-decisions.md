@@ -578,6 +578,10 @@ they land.
 - The box view's `mirrored` returns the meters to its quad beside the
   quad's light, and negative meters where it meets none. The view's
   fragment works the share out because it holds the alpha
-- A tile draws through the module with the ray query where one of its
-  materials is less than fully rough and reflects over `MIRROR_CUT`
+- A face casts a mirror ray where the ray would reach past
+  `MIRROR_REACH`, two cells, before its share of the reflectance falls to
+  `MIRROR_CUT`. A tile draws through the module with the ray query where
+  one of its materials can. A face that casts none reflects the
+  hemisphere under its whole occlusion, which stands in for what a ray
+  would meet
 

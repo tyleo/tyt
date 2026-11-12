@@ -10,6 +10,7 @@
 // 2. `MIRRORS`, whether a face can cast a mirror ray
 // 3. `MIRROR_CUT`, the share of a face's reflectance a mirror ray runs down
 //    to
+// 4. `MIRROR_REACH`, the least cells a mirror ray reaches
 //
 // `BoxView` adds `mirrored`.
 
@@ -434,24 +435,28 @@ fn surface(
     // The second eye's places follow the first's.
     let eye = u32(source.place >= frame.placements);
 
-    // The hemispheres along the face's mirror ray, with the occlusion over
-    // the lobe's rough share.
+    // The hemispheres along the face's mirror ray. Where no ray is cast,
+    // the face's occlusion stands in for what one would meet.
     let mirror = normal * (2.0 * cosine) - view;
     let sky = sky_light(mirror, alpha);
-    var reflected = sky * (1.0 - alpha * (1.0 - unblocked));
+    var reflected = sky * unblocked;
 
     // The contract's reflection. What the mirror ray meets shows by the
     // share of the face's lobe that lands within two cells of it. The ray
-    // runs to where that share of the reflectance falls to `MIRROR_CUT`.
+    // runs to where that share of the reflectance falls to `MIRROR_CUT`. A
+    // face casts none that would end within `MIRROR_REACH` cells.
     let most = max(reflectance.r, max(reflectance.g, reflectance.b));
+    let far = sqrt(max(most / MIRROR_CUT - 1.0, 0.0)) / alpha;
 
-    if MIRRORS && alpha < 1.0 && most > MIRROR_CUT {
+    if MIRRORS && alpha < 1.0 && far > MIRROR_REACH {
         // The hit lies this many of the eye's rays to the fragment's point
         // from the eye.
         let reach = dot(at - source.ray, direction) / dot(direction, direction);
         let point = frame.eyes[eye].xyz + source.toward * reach;
-        let far = sqrt(most / MIRROR_CUT - 1.0) / alpha;
         let met = mirrored(point + normal * (side.w * MIRROR_START), mirror, far * side.w);
+
+        // The occlusion darkens the lobe's rough share.
+        reflected = sky * (1.0 - alpha * (1.0 - unblocked));
 
         if met.a >= 0.0 {
             // The cells to the quad. A quad within two cells lies in the
