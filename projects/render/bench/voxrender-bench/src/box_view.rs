@@ -1,6 +1,6 @@
 use crate::{
     BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, GlassTiles, HitTargets, LitFill,
-    MaterialGrid, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
+    MaterialGrid, PassTerms, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, num::NonZeroU32};
@@ -763,25 +763,77 @@ impl BoxView {
 
         // The surfaces between materials that pass light draw as glass
         // where the device blends a tint a channel. A glass material holds
-        // a fourth `vec4<f32>`: its coverage and its transmission.
+        // the seven `vec4<f32>`s `box_glass.wgsl`'s `past` lists.
         let blends = device.features().contains(Features::DUAL_SOURCE_BLENDING);
         let mut glass_places: HashMap<u32, u32> = HashMap::new();
         let mut object_glass = HashMap::new();
         let mut glass_tiles = HashMap::new();
+
+        // An id the scene lacks passes the light whole.
+        let mut absent = [0.0; 28];
+
+        absent[..3].fill(1.0);
+
+        let glass_values = |id: u32| {
+            scene
+                .material(U32Id::from_u32(id))
+                .map_or(absent, |material| {
+                    let terms = PassTerms::new(material);
+                    let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
+                    let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
+                    let alpha = (material.roughness * material.roughness).max(1.0e-3);
+                    let emission = material.emissive_color * material.emissive_strength;
+                    let transmitted = material.transmission * (1.0 - material.metallic);
+                    let diffuse = material.base_color.color
+                        * ((1.0 - material.metallic) * (1.0 - material.transmission));
+                    let rise = terms.rise * transmitted;
+
+                    // A reflectance with no hue fits one channel.
+                    let gloss = terms.reflectance;
+                    let plain = gloss.red == gloss.green && gloss.red == gloss.blue;
+
+                    let follows = if !plain || emission != black {
+                        2.0
+                    } else if diffuse != black {
+                        1.0
+                    } else {
+                        0.0
+                    };
+
+                    let colors = [
+                        (
+                            white * terms.uncovered + terms.most * (white - gloss),
+                            material.base_color.alpha,
+                        ),
+                        (terms.most * terms.rise, 0.5 / alpha),
+                        (
+                            TyLinSrgbF64::new(gloss.red, rise.red, alpha * alpha),
+                            follows,
+                        ),
+                        (diffuse, 0.0),
+                        (gloss, 0.0),
+                        (rise, 0.0),
+                        (emission, 0.0),
+                    ];
+
+                    let mut values = [0.0; 28];
+
+                    for (values, (color, last)) in values.chunks_exact_mut(4).zip(colors) {
+                        values.copy_from_slice(
+                            &[color.red, color.green, color.blue, last].map(|value| value as f32),
+                        );
+                    }
+
+                    values
+                })
+        };
 
         for (object_id, object) in scene.iter_objects() {
             let mut place = |id: u32| {
                 *glass_places.entry(id).or_insert_with(|| {
                     let place = materials.len() / 4;
 
-                    let cover = scene
-                        .material(U32Id::from_u32(id))
-                        .map_or([0.0; 2], |material| {
-                            [material.base_color.alpha, material.transmission]
-                        });
-
-                    materials.extend(material_values(id));
-                    materials.extend([cover[0] as f32, cover[1] as f32, 0.0, 0.0]);
+                    materials.extend(glass_values(id));
 
                     u32::try_from(place)
                         .ok()

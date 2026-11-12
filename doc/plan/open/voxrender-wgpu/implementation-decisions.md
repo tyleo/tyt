@@ -653,5 +653,13 @@ they land.
   test. A fragment drops out where its ray misses the box around the
   surfaces, and its walk ends where the ray leaves that box. A depth bias
   draws a glass face before an opaque box's face in its plane
+- A glass fragment's time follows the instructions it runs. Its surfaces'
+  shade ran most of them. `sides_of` gives a ray's cosines to
+  the faces on each axis once a fragment. A glass material holds 7 values
+  in the order `past` reads them, and one with no diffuse color, emission,
+  or hue in its reflectance reads 3. A walk keeps the shade of the
+  surface it last entered by for the exit on the same axis
+- `PassTerms` holds the parts of a material's pass that `LitFill` and the
+  glass materials both take
 - A device without dual-source blending draws no glass
 

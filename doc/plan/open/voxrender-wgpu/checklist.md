@@ -387,6 +387,8 @@ in this order:
             through each surface a ray crosses. A cell keeps the tint that
             reaches it. The trial models' pixels off fall to 31,329
             for 0.03 ms on Quest
+      - [x] A glass fragment shades its surfaces in fewer instructions.
+            The fish tank takes 4.9 ms on Quest, down from 5.7
       - [ ] The sun on a glass surface, which takes it whole
       - [ ] The walk's cost, a mirror ray through glass and from it, an
             eye inside a material, and the order of the boxes between

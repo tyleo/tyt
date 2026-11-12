@@ -1,8 +1,8 @@
-use crate::{Error, Result, TileMasks};
+use crate::{Error, PassTerms, Result, TileMasks};
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyVector3F64, TyVector3U32};
-use voxcore::{BVoxObject, material};
+use voxcore::BVoxObject;
 use voxrender::{RenderScene, RenderViewRays, grid_vector, quantize_direction};
 use voxrender_wgpu::{GRID_WALK_WGSL, dense_cells, placement_bytes};
 use wgpu::{
@@ -116,32 +116,25 @@ impl LitFill {
                             0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, blocks, 0.0, 0.0, 0.0, 0.0,
                         ],
                         |material| {
-                            let base = material.base_color;
-                            let most = base.color
-                                * (base.alpha * material.transmission * (1.0 - material.metallic));
-                            let reflectance = material::normal_reflectance(
-                                base.color,
-                                material.metallic,
-                                material.ior,
-                            );
-
-                            // The reflectance rises toward grazing as far as
-                            // the roughness lets it.
-                            let smooth = 1.0 - material.roughness;
-                            let rise = |at_normal: f64| smooth.max(at_normal) - at_normal;
+                            let PassTerms {
+                                most,
+                                uncovered,
+                                reflectance,
+                                rise,
+                            } = PassTerms::new(material);
 
                             [
                                 most.red,
                                 most.green,
                                 most.blue,
-                                1.0 - base.alpha,
+                                uncovered,
                                 reflectance.red,
                                 reflectance.green,
                                 reflectance.blue,
                                 blocks,
-                                rise(reflectance.red),
-                                rise(reflectance.green),
-                                rise(reflectance.blue),
+                                rise.red,
+                                rise.green,
+                                rise.blue,
                                 0.0,
                             ]
                         },
