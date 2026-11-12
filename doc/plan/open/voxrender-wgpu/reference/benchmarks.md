@@ -1333,6 +1333,7 @@ the marched ones: 1.11, 1.08, 1.25.
 | A cell's entry leads to its material in one read | 2.36 | 3.94 | 7.22 |
 | A vertex hands its fragments the eye's ray | 2.14 | 3.91 | 7.10 |
 | A tile's cells run by y first | 2.12 | 3.76 | 7.1 |
+| The bloom add | 2.24 | 3.89 | 7.31 |
 
 1. A record a surface cell. The fragment took its corners' occlusion from
    eight opaque cells and its corners' light from four lattice bits and a
@@ -1351,6 +1352,10 @@ the marched ones: 1.11, 1.08, 1.25.
    axes it read. A vertex now turns it, and the fragment reads one axis
 5. Cell order. A cell's index took x first, which spread a floor's layer
    over every sixteenth word of its tile
+6. The bloom add ends B3's load. A fragment samples a texture a quarter
+   of the target's size at its pixel and adds it before the tonemap.
+   Nothing fills the texture yet. The statistics and the parts below
+   predate it. With it `front` holds 604 instructions in 10 registers
 
 **Driver statistics.** A stage's static counts at the last step. A
 register holds one vec4.
@@ -1422,13 +1427,15 @@ last two cuts. The view takes 4.03 ms and 2.19 with the cell alone.
 1. A shaded fragment on Quest computes more than it waits. The cuts that
    won removed instructions and reads that depend on other reads. The
    register count moved times less than the instruction count did
-2. S1 takes 2.12 ms against B3's 3.5 ms line and S5 3.76, before the
-   bloom add. S2 takes 7.1 ms at 545 MHz, where it took 9.5 at 640
+2. Under B3's whole load S1 takes 2.24 ms against the 3.5 ms line and
+   S5 3.89. S2 takes 7.31 ms at 545 MHz, where it took 9.5 at 640 without
+   the bloom add
 3. Past 8 m, S5's floor holds about a fifth of the view's pixels and
    takes 41% of its shading time. Each pixel there lands in another cell
    and reads lines no other pixel shares. A record a face in place of a
    cell would shrink those reads, and B6's LOD would remove them
-4. With the cell alone S5's view takes 2.13 ms of its 3.76. Its top
-   layer is 85% full, so most of its rays hit the cell they enter by
+4. With the cell alone S5's view takes 2.13 ms of the 3.76 it took
+   before the bloom add. Its top layer is 85% full, so most of its rays
+   hit the cell they enter by
 5. S2 shades 1.43 times a pixel. Its solid boxes draw before its marched
    ones and shade under them
