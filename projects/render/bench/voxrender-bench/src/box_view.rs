@@ -22,13 +22,13 @@ const PLACE_BYTES: usize = 128;
 /// its ray.
 const EYE_BYTES: usize = 80;
 
-/// The meters past the eyes within which a box counts as holding an eye.
-/// The reach covers the near plane.
-const REACH: f32 = 0.02;
+/// The meters past the eyes within which a box counts as holding an eye,
+/// in a headset's meters. The reach covers the near plane.
+const REACH: f64 = 0.02;
 
 /// The meters a head moves from where the boxes last sorted before they
-/// sort again.
-const SLACK: f32 = 0.25;
+/// sort again, in a headset's meters.
+const SLACK: f64 = 0.25;
 
 /// A shaded view of a scene's boxes for both eyes of a headset: the box
 /// raster with solid boxes, a mask march, and face depth. Each frame takes
@@ -708,9 +708,10 @@ impl BoxView {
         self.sky
     }
 
-    /// Readies the next draw for `eyes`: writes each eye's matrices, and
-    /// sorts the boxes when the head has left the last sort's reach.
-    pub fn prepare(&mut self, queue: &Queue, eyes: &[ViewEye; 2]) {
+    /// Readies the next draw for `eyes`. The boxes sort again when the head
+    /// has left the last sort's reach. A meter of the headset's spans `scale`
+    /// of the scene's meters.
+    pub fn prepare(&mut self, queue: &Queue, eyes: &[ViewEye; 2], scale: f64) {
         let each = eyes.iter().flat_map(|eye| {
             self.placements
                 .iter()
@@ -736,7 +737,8 @@ impl BoxView {
         let head = ((eyes[0].position + eyes[1].position) / 2.0)
             .as_vec3()
             .to_array();
-        let reach = (eyes[0].position - eyes[1].position).length() as f32 / 2.0 + REACH;
+        let reach = ((eyes[0].position - eyes[1].position).length() / 2.0 + REACH * scale) as f32;
+        let slack = (SLACK * scale) as f32;
 
         // A sort holds while each box an eye can enter draws its back faces.
         let holds = self.sorted_for.is_some_and(|(from, covered)| {
@@ -746,7 +748,7 @@ impl BoxView {
         });
 
         if !holds {
-            self.sort(queue, head, reach + SLACK);
+            self.sort(queue, head, reach + slack);
         }
     }
 

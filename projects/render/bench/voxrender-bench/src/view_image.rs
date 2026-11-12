@@ -26,7 +26,7 @@ pub fn view_image(gpu: &Gpu, scene: &RenderScene, width: u32, height: u32) -> Re
         position: view.pose.position,
     };
 
-    boxes.prepare(&gpu.queue, &[eye, eye]);
+    boxes.prepare(&gpu.queue, &[eye, eye], 1.0);
 
     let texture = |label, format, usage| {
         gpu.device.create_texture(&TextureDescriptor {
