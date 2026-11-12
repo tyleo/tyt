@@ -221,13 +221,35 @@ code-level choices in
                                     reference's image
                               - [x] The sun's corner shadows take a bit a
                                     lattice point
-                              - [ ] S5 takes 5.18 ms against the 3.5 ms
-                                    line. S1 takes 3.29
+                              - [x] Quest's counters put S5's fragment at
+                                    650 instructions and S1's at 413.
+                                    Under 1% of the time stalls on memory
+                              - [x] A face reads its corners' occlusion
+                                    and light from a record of its cell.
+                                    S1 takes 2.41 ms and S5 4.10
+                              - [x] A sun whose direction holds a small
+                                    whole ratio, as S4's does. Each corner
+                                    casts its ray there
+                              - [x] The Quest app logs the driver's
+                                    statistics for the view's pipelines:
+                                    instructions, reads, and registers
+                              - [x] A cell's entry leads to its material
+                                    in one read, a vertex hands its
+                                    fragments the eye's ray, and a tile's
+                                    cells run by y first. S1 takes 2.12
+                                    ms, S5 3.76, and S2 7.1
+                              - [ ] S5 takes 3.76 ms against the 3.5 ms
+                                    line. Past 8 m its floor holds a fifth
+                                    of the pixels and 41% of the shading.
+                                    The levers left are a record a face
+                                    and B6's LOD
+                              - [ ] S1 shades 1.18 times a pixel and S2
+                                    1.43. A depth pass of the solid boxes
+                                    ahead of the march would leave the
+                                    marched boxes' share
                               - [ ] The bloom add
                               - [ ] A shadow fill on the GPU, which S2 and
                                     moving casters wait for
-                              - [ ] A sun whose direction holds a small
-                                    whole ratio, as S4's does
                         - [ ] A crossing box that holds the eye. It still
                               writes its hits' depth
                         - [ ] The crossing test as placements move

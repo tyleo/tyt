@@ -1293,3 +1293,142 @@ Mac. A scene of over 64 placements draws without shadows, S2 among them.
 5. The fill needs the GPU before S2 can cast shadows or a caster can
    move. That is B5
 
+
+## Shading load, instructions and reads, 2026-11-11
+
+What a shaded fragment costs on Quest, and the cuts that followed.
+
+- Device, method, and image check: as in Shading load. Times are the
+  view's GPU frame time at p50 in ms at 545 MHz. The headset rests off
+  the face. Its pose moves a time by a few percent between sittings, so a
+  row's times come from one sitting
+- Counters: `ovrgpuprofiler` over 10 s of a view, less its counts over
+  the cube scene's view, which holds the compositor's share
+- Driver statistics: the Quest app's pipeline probe,
+  `debug.voxrenderbench.statistics`
+
+**Counters before the cuts.**
+
+| Counter | S1 | S5 |
+| --- | ---: | ---: |
+| Fragments a frame | 3.95 M | 2.89 M |
+| Instructions a fragment | 413 | 650 |
+| Buffer loads a fragment | 9.4 | 14.5 |
+| Shaders stalled | 2.2% | 8.3% |
+| ALU capacity in use | 69% | 48% |
+| Stalled on system memory | 0.02% | 0.53% |
+| Buffer bytes read from memory a second | 6.7 MB | 1.03 GB |
+| GPU ms | 3.27 | 5.27 |
+
+A count of shades a covered pixel on this Mac, through the first view at
+1680 by 1760: S1 1.18, S5 1.00, S2 1.43. With the solid boxes drawn after
+the marched ones: 1.11, 1.08, 1.25.
+
+**Cuts.**
+
+| Step | S1 | S5 | S2 |
+| --- | ---: | ---: | ---: |
+| Start | 3.27 | 5.20 | 9.5 at 640 MHz |
+| A record a surface cell | 2.41 | 4.10 | 7.41 |
+| A cell's entry leads to its material in one read | 2.36 | 3.94 | 7.22 |
+| A vertex hands its fragments the eye's ray | 2.14 | 3.91 | 7.10 |
+| A tile's cells run by y first | 2.12 | 3.76 | 7.1 |
+
+1. A record a surface cell. The fragment took its corners' occlusion from
+   eight opaque cells and its corners' light from four lattice bits and a
+   side cell. A tile's words now hold two occlusion words for each
+   surface cell, and `LitCorners` a word of lit corners for each surface
+   cell of each placement. The fragment finds its cell's record by a
+   count of bits. S5's fragment fell to 433 instructions and 7.3 loads
+2. The fill now casts each corner's ray where the sun's direction lets a
+   ray cross two lattice planes at once inside the grid. S4's view fell
+   from 176 pixels off to 74, with a mean difference of 0.095. Every
+   other image stayed as it was
+3. Materials. A cell read its entry among its tile's materials, then the
+   material's id, then the material. A tile's materials now follow one
+   another in the view's materials, so the entry leads there in one read
+4. The eye's ray. A fragment turned its ray to the world through three
+   axes it read. A vertex now turns it, and the fragment reads one axis
+5. Cell order. A cell's index took x first, which spread a floor's layer
+   over every sixteenth word of its tile
+
+**Driver statistics.** A stage's static counts at the last step. A
+register holds one vec4.
+
+| Fragment stage | Instructions | Reads | Registers | Fiber occupancy |
+| --- | ---: | ---: | ---: | ---: |
+| `front` | 582 | 4 | 9 | 62% |
+| `solid` | 467 | 4 | 7 | 75% |
+| `crossed` | 1035 | 12 | 17 | 62% |
+| `inside` | 679 | 2 | 10 | 50% |
+| `exact` | 686 | 5 | 10 | 50% |
+
+With shading that writes the cell alone, `front` holds 155 instructions
+in 5 registers at 100% and `solid` 48 in 3. Across the variants below,
+occupancy read 100% at 5 registers and under, 75% at 7 and 8, 62% at 9,
+and 50% at 10. `crossed` read 75% at 16 registers.
+
+**S5's fragment, a part at a time.** Each row removes one part of the
+shading at the last step. The view takes 3.78 ms.
+
+| Shading | ms |
+| --- | ---: |
+| The cell alone | 2.13 |
+| No material reads | 3.40 |
+| No sun | 3.19 |
+| No hemispheres | 3.31 |
+| No tonemap | 3.60 |
+
+Before the last three cuts the view took 4.01 ms. With constant
+occlusion and light in place of the surface records it took 3.38, and
+with constant axes in place of the placement's 3.97.
+
+**S5's shading by distance.** The cell alone past a distance, before the
+last two cuts. The view takes 4.03 ms and 2.19 with the cell alone.
+
+| The cell alone past | ms |
+| --- | ---: |
+| 2 m | 2.27 |
+| 4 m | 2.95 |
+| 8 m | 3.28 |
+| 16 m | 3.64 |
+
+**Variants that lost or tied.**
+
+1. Shading after the march's loop in place of inside it: S5 5.20 ms
+   against 5.20
+2. The lighting's dot products as picks along the grid's axes, with the
+   sun's direction in the placement's record: S1 2.33 ms against 2.39, S5
+   4.45 against 4.2, S2 7.6 against 7.4. `front` rose from 9 registers to
+   10
+3. The geometry's scalars before the material reads: `front` fell to 8
+   registers and rose from 606 instructions to 667. S5 ran in 4.20 ms
+   against 4.09 and S1 in 2.47 against 2.39
+4. The march's setup only where the ray's first cell is empty: S5 4.05 ms
+   against 4.04
+5. A march that carries its last face and distance out of the loop in
+   place of through it, three forms: `front` at 8 registers, S5 within 1%
+6. Two material reads in place of three, with the reflectance worked out
+   in the fragment: `front` rose from 595 instructions to 614
+7. Color in 16-bit floats, read through the probe alone: `front` fell
+   from 9 registers to 8 and rose by 52 instructions. wgpu reports no
+   16-bit floats on Quest
+8. A cell's material entry in its surface record, with made-up values:
+   S5 3.84 ms against 4.05. The materials' step above took the simpler
+   layout
+
+**Outcomes.**
+
+1. A shaded fragment on Quest computes more than it waits. The cuts that
+   won removed instructions and reads that depend on other reads. The
+   register count moved times less than the instruction count did
+2. S1 takes 2.12 ms against B3's 3.5 ms line and S5 3.76, before the
+   bloom add. S2 takes 7.1 ms at 545 MHz, where it took 9.5 at 640
+3. Past 8 m, S5's floor holds about a fifth of the view's pixels and
+   takes 41% of its shading time. Each pixel there lands in another cell
+   and reads lines no other pixel shares. A record a face in place of a
+   cell would shrink those reads, and B6's LOD would remove them
+4. With the cell alone S5's view takes 2.13 ms of its 3.76. Its top
+   layer is 85% full, so most of its rays hit the cell they enter by
+5. S2 shades 1.43 times a pixel. Its solid boxes draw before its marched
+   ones and shade under them

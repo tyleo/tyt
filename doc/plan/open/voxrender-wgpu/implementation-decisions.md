@@ -529,18 +529,32 @@ they land.
 - `mask_boxes` builds its module for one view and prepends the view's
   projection as `RAY_W`
 - `BoxView` shades in its boxes' fragments. `surface` takes the hit's point
-  and the ray's direction in the tile's cells for the blend across the
-  face and the view vector
-- A shaded tile's words hold 324 rows of opaque cells after its bits: the
-  tile's cells and a layer around it, a word for each x and y. The corner
-  occlusion and the shadow's side cell read them, and no fragment reads a
-  neighbor tile
-- `LitRows` keys a lattice point by a tile's 17 points along an axis the
-  sun's rays move along, and by twice a cell plus its far edge along an
-  axis they stay still along. A placement's `Place` holds the direction
-  to the sun in its grid as the reference quantizes it, which the shader
-  reads for the still axes and for the side-cell rule
-- A box's third `vec4<u32>` ends with the first word of its tile's
-  materials and the first of its rows in `LitRows`. The fragment then
-  starts both chains of reads with no read
+  in the tile's cells for the blend across the face. The view vector
+  comes from the box's vertices, which turn the eye's ray to the world
+- A shaded tile's words hold a record for each surface cell, a live cell
+  beside a cell that is not opaque. Two words hold how open each corner
+  of each of the cell's six faces is. `LitCorners` holds a word for each
+  surface cell of each placement, with a bit for each corner the sun
+  reaches. A fragment finds its cell's place among the tile's surface
+  cells from a bit a cell and a count for each word of bits. No fragment
+  reads a neighbor cell
+- `LitCorners` fills on the CPU through the reference's walk. A ray from
+  a lattice point serves every face that shares the point, and an opaque
+  cell beside the face shadows a corner whose ray leaves past it on both
+  axes. Where a sun's direction lets a ray cross two lattice planes at
+  once inside a grid, each corner casts its ray, because the corner's
+  inset then decides which cell the ray crosses first
+- A box's third `vec4<u32>` ends with its tile's materials' word and the
+  first of the tile's words in `LitCorners`. The materials' word holds the
+  bits of a cell's entry and the tile's first material in the view's
+  materials. A tile's materials follow one another there, and tiles that
+  hold the same materials in the same order share them. The fragment
+  then starts both chains of reads with no read
+- A cell's index in its tile takes y first: `(y * 16 + x) * 16 + z`. A
+  layer across y then fills 8 words in a row, which a floor's far tiles
+  read a few pixels each
+- The Quest app's pipeline probe builds the view's pipelines through
+  Vulkan beside wgpu's, with the flag that captures the driver's
+  statistics, which wgpu does not set. It compiles each stage with naga
+  as wgpu's Vulkan backend does for a module with no runtime checks
 
