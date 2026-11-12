@@ -3,11 +3,21 @@
 // contract's opaque surface under one sun and the hemispheres: corner
 // occlusion from the tile's words, the sun's corner shadows from
 // `LitCorners`, Lambert and GGX, and emission, under the contract's
-// tonemap. A smooth face reflects the sky alone. `BoxView` prepends
-// `RECORDS`, the offset in a tile's words of its cells' records.
+// tonemap. A smooth face reflects what `mirrored` sees along its mirror
+// ray. `BoxView` prepends:
+//
+// 1. `RECORDS`, the offset in a tile's words of its cells' records
+// 2. `MIRRORS`, whether a face can cast a mirror ray
+// 3. `MIRROR_CUT`, the least smooth share of a face's reflectance that
+//    casts one
+//
+// `BoxView` adds `mirrored`.
 
 // Every eye is a perspective view.
 const RAY_W: f32 = 1.0;
+
+// The part of a cell a mirror ray starts off its face.
+const MIRROR_START: f32 = 1.0 / 64.0;
 
 // What a clip position's w scales by to give the nearest depth that stays
 // inside the view.
@@ -31,6 +41,9 @@ struct Frame {
 
     // What a pixel spans of the target's width and height.
     texel: vec2<f32>,
+
+    // Each eye in the world.
+    eyes: array<vec4<f32>, 2>,
 }
 
 struct Place {
@@ -59,6 +72,9 @@ struct Source {
 
     // The first of the tile's words in `lit`.
     lit: u32,
+
+    // The eye in the tile's cells.
+    ray: vec3<f32>,
 
     // The world direction from the eye to the fragment's point, at any
     // length.
@@ -127,8 +143,8 @@ struct Box {
 // cell's place among its tile's materials.
 @group(0) @binding(6) var<storage, read> lit: array<u32>;
 // The bloom each eye's fragments add, a layer an eye.
-@group(0) @binding(7) var bloom: texture_2d_array<f32>;
-@group(0) @binding(8) var bloom_sampler: sampler;
+@group(0) @binding(8) var bloom: texture_2d_array<f32>;
+@group(0) @binding(9) var bloom_sampler: sampler;
 
 // The box's vertex at the grid's `grid` for `eye`, on the face of code
 // `face`. `low` holds the box's low cell and its placement's index. `high`
@@ -269,7 +285,15 @@ fn live_in(cells: Cells, bit: i32) -> bool {
 }
 
 fn source_of(box: Box) -> Source {
-    return Source(box.words.x, box.words.y, box.shading.x, box.shading.y, box.toward, box.clip.xy);
+    return Source(
+        box.words.x,
+        box.words.y,
+        box.shading.x,
+        box.shading.y,
+        box.ray,
+        box.toward,
+        box.clip.xy,
+    );
 }
 
 // The box at `index` of `boxes`, as the eye's ray along `direction` through
@@ -294,7 +318,7 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
         vec3<f32>(high.xyz - tile),
         its.ray.xyz - vec3<f32>(tile),
         vec3<f32>(dot(its.axes[0].xyz, world) / its.axes[0].w, dot(its.axes[1].xyz, world) / its.axes[1].w, dot(its.axes[2].xyz, world) / its.axes[2].w),
-        Source(high.w, place, more.z, more.w, box.toward, box.clip.xy),
+        Source(high.w, place, more.z, more.w, its.ray.xyz - vec3<f32>(tile), box.toward, box.clip.xy),
     );
 }
 
@@ -359,8 +383,8 @@ fn surface(
     );
 
     // The face's normal points one way along its axis.
-    let axis = places[source.place].axes[face >> 1u].xyz;
-    let normal = select(-axis, axis, up);
+    let side = places[source.place].axes[face >> 1u];
+    let normal = select(-side.xyz, side.xyz, up);
 
     let occlusion = across_face(corners_of(open, 2u), along);
     let lights = (light >> (face * 4u)) & 15u;
@@ -402,16 +426,40 @@ fn surface(
             * frame.sunlight.rgb;
     }
 
-    // The hemispheres, on the face and off it toward the eye.
+    // The hemispheres on the face.
     let unblocked = 1.0 - gloss.a * (1.0 - occlusion);
-    let mirror = normal * (2.0 * cosine) - view;
 
     color += sky_light(normal, 1.0) * base.rgb * ((1.0 - metallic) * unblocked);
-    color += sky_light(mirror, alpha) * reflectance * unblocked;
 
-    // The bloom at the pixel. The second eye's places follow the first's.
+    // The second eye's places follow the first's.
     let eye = u32(source.place >= frame.placements);
 
+    // The hemispheres along the face's mirror ray.
+    let mirror = normal * (2.0 * cosine) - view;
+    let sky = sky_light(mirror, alpha);
+
+    if MIRRORS {
+        // The contract's reflection. The face's smooth share shows what
+        // its mirror ray sees, and the rest shows the hemispheres. Where
+        // no ray is cast, the face's occlusion stands in for what one
+        // would meet.
+        var seen = sky * unblocked;
+
+        if (1.0 - alpha) * max(reflectance.r, max(reflectance.g, reflectance.b)) > MIRROR_CUT {
+            // The hit lies this many of the eye's rays to the fragment's
+            // point from the eye.
+            let reach = dot(at - source.ray, direction) / dot(direction, direction);
+            let point = frame.eyes[eye].xyz + source.toward * reach;
+
+            seen = mirrored(point + normal * (side.w * MIRROR_START), mirror, sky);
+        }
+
+        color += (seen * (1.0 - alpha) + sky * (alpha * unblocked)) * reflectance;
+    } else {
+        color += sky * reflectance * unblocked;
+    }
+
+    // The bloom at the pixel.
     color += textureSampleLevel(bloom, bloom_sampler, source.pixel * frame.texel, eye, 0.0).rgb;
 
     return vec4<f32>(tonemap(color), 1.0);

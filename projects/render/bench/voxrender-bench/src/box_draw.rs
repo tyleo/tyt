@@ -1,17 +1,17 @@
-use crate::{BoxFaces, BoxPart, HitTargets};
+use crate::{BoxBindings, BoxFaces, BoxPart, HitTargets};
 use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
 };
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages,
-    ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device,
-    Face, FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions,
-    PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPass, RenderPipeline,
-    RenderPipelineDescriptor, Sampler, SamplerBindingType, ShaderModule, ShaderStages,
-    StencilState, TextureFormat, TextureSampleType, TextureView, TextureViewDimension,
-    VertexAttribute, VertexBufferLayout, VertexFormat, VertexState, VertexStepMode,
+    BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferUsages, ColorTargetState,
+    ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState,
+    FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayoutDescriptor,
+    PrimitiveState, Queue, RenderPass, RenderPipeline, RenderPipelineDescriptor,
+    SamplerBindingType, ShaderModule, ShaderStages, StencilState, TextureFormat, TextureSampleType,
+    TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
+    VertexStepMode,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -36,6 +36,10 @@ const TRIANGLES: [u16; 36] = [
     0, 4, 6, 0, 6, 2, 7, 5, 1, 7, 1, 3, 1, 5, 4, 1, 4, 0, 6, 7, 3, 6, 3, 2, 2, 3, 1, 2, 1, 0, 5, 7,
     6, 5, 6, 4,
 ];
+
+/// What picks a run's pipeline: its module, its vertex and fragment entries,
+/// and whether it draws its boxes' back faces.
+type PipelineKey<'a> = (usize, &'a str, &'a str, bool);
 
 /// A view's boxes and the pipelines that draw their faces, with depth in
 /// [`HitTargets::DEPTH`].
@@ -78,7 +82,7 @@ impl BoxDraw {
     /// The bytes of a box's three `vec4<u32>`s.
     pub const BOX_BYTES: usize = 48;
 
-    /// Builds the pipelines over `module`, whose vertex entries take a
+    /// Builds the pipelines over `modules`, whose vertex entries take a
     /// vertex's bits and a box's three `vec4<u32>`s: `place`, `place_near`,
     /// and `place_held` a corner of the box, and `place_front` a vertex of
     /// one of its three faces toward the view. A module needs the entries
@@ -88,20 +92,22 @@ impl BoxDraw {
     ///
     /// 1. `format`: the format of the target the fragments write
     /// 2. `parts`: the runs of boxes in draw order
-    /// 3. `bindings`: each binding's stages, type, and buffer, in binding
-    ///    order
-    /// 4. `sampled`: a two-layer texture of filterable floats and its
-    ///    sampler, which the fragments bind after the buffers
-    /// 5. `multiview_mask`: the mask of the passes the boxes draw in
+    /// 3. `bindings`: what the shaders bind in group 0
+    /// 4. `multiview_mask`: the mask of the passes the boxes draw in
     pub fn new(
         device: &Device,
-        module: &ShaderModule,
+        modules: &[&ShaderModule],
         format: TextureFormat,
         parts: &[BoxPart<'_>],
-        bindings: &[(ShaderStages, BufferBindingType, &Buffer)],
-        sampled: Option<(&TextureView, &Sampler)>,
+        bindings: &BoxBindings<'_>,
         multiview_mask: Option<NonZeroU32>,
     ) -> Self {
+        let BoxBindings {
+            buffers: bindings,
+            sampled,
+            tlas,
+        } = *bindings;
+
         let mut box_bytes: Vec<u8> = parts
             .iter()
             .flat_map(|part| part.boxes.iter().flatten())
@@ -178,6 +184,17 @@ impl BoxDraw {
             ]);
         }
 
+        if tlas.is_some() {
+            entries.push(BindGroupLayoutEntry {
+                binding: buffers + 2,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::AccelerationStructure {
+                    vertex_return: false,
+                },
+                count: None,
+            });
+        }
+
         // The pipelines share the layout, so one bind group serves them all.
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("box raster"),
@@ -190,7 +207,9 @@ impl BoxDraw {
             immediate_size: 0,
         });
 
-        let pipeline = |vertex: &str, fragment: &str, backs: bool| {
+        let pipeline = |module: usize, vertex: &str, fragment: &str, backs: bool| {
+            let module = modules[module];
+
             device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: Some(fragment),
                 layout: Some(&layout),
@@ -262,12 +281,12 @@ impl BoxDraw {
         let mut first = 0;
         let mut runs = Vec::new();
 
-        // Each pipeline built so far with its entries and faces, for a later
-        // run to share.
-        let mut built: Vec<((&str, &str, bool), RenderPipeline)> = Vec::new();
+        // Each pipeline built so far with its module, entries, and faces, for
+        // a later run to share.
+        let mut built: Vec<(PipelineKey<'_>, RenderPipeline)> = Vec::new();
 
-        let mut shared = |vertex: &'static str, fragment, backs| {
-            let key = (vertex, fragment, backs);
+        let mut shared = |module, vertex: &'static str, fragment, backs| {
+            let key = (module, vertex, fragment, backs);
 
             let found = built
                 .iter()
@@ -275,7 +294,7 @@ impl BoxDraw {
                 .map(|(_, pipeline)| pipeline.clone());
 
             found.unwrap_or_else(|| {
-                let pipeline = pipeline(vertex, fragment, backs);
+                let pipeline = pipeline(module, vertex, fragment, backs);
 
                 built.push((key, pipeline.clone()));
 
@@ -295,7 +314,7 @@ impl BoxDraw {
             };
 
             runs.push(Run {
-                pipeline: shared(vertex, part.fragment, backs),
+                pipeline: shared(part.module, vertex, part.fragment, backs),
                 fronts: part.faces == BoxFaces::Front,
                 boxes: first..end,
             });
@@ -322,6 +341,13 @@ impl BoxDraw {
                     resource: BindingResource::Sampler(sampler),
                 },
             ]);
+        }
+
+        if let Some(tlas) = tlas {
+            resources.push(BindGroupEntry {
+                binding: buffers + 2,
+                resource: BindingResource::AccelerationStructure(tlas),
+            });
         }
 
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
