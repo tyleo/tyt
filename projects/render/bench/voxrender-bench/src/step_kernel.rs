@@ -16,9 +16,16 @@ pub struct StepKernel {
     width: u32,
 
     height: u32,
+
+    /// The invocations across and down a workgroup.
+    group: [u32; 2],
 }
 
 impl StepKernel {
+    /// The invocations across and down a workgroup of [`new`](Self::new)'s
+    /// kernels.
+    pub const GROUP: [u32; 2] = [8, 8];
+
     /// Builds `step_loop` at `count` steps. At 0 steps, the loop times the
     /// launch alone.
     pub fn new(
@@ -28,6 +35,20 @@ impl StepKernel {
         width: u32,
         height: u32,
         count: u32,
+    ) -> Self {
+        Self::grouped(device, grid, step_loop, width, height, count, Self::GROUP)
+    }
+
+    /// [`new`](Self::new) with workgroups of `group` invocations across and
+    /// down.
+    pub fn grouped(
+        device: &Device,
+        grid: &StepGrid,
+        step_loop: StepLoop,
+        width: u32,
+        height: u32,
+        count: u32,
+        group: [u32; 2],
     ) -> Self {
         // The salt is zero, and no cell holds the miss.
         let steps = [width, height, 0, u32::MAX]
@@ -53,7 +74,14 @@ impl StepKernel {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some("steps"),
-                    source: ShaderSource::Wgsl(include_str!("steps.wgsl").into()),
+                    source: ShaderSource::Wgsl(
+                        include_str!("steps.wgsl")
+                            .replace(
+                                "@workgroup_size(8, 8)",
+                                &format!("@workgroup_size({}, {})", group[0], group[1]),
+                            )
+                            .into(),
+                    ),
                 },
                 ShaderRuntimeChecks::unchecked(),
             )
@@ -106,6 +134,7 @@ impl StepKernel {
             bind_group,
             width,
             height,
+            group,
         }
     }
 
@@ -113,6 +142,10 @@ impl StepKernel {
     pub fn dispatch(&self, pass: &mut ComputePass<'_>) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.dispatch_workgroups(self.width.div_ceil(8), self.height.div_ceil(8), 1);
+        pass.dispatch_workgroups(
+            self.width.div_ceil(self.group[0]),
+            self.height.div_ceil(self.group[1]),
+            1,
+        );
     }
 }

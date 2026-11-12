@@ -1916,3 +1916,54 @@ to build.
    own, and a run of front faces draws three faces a box
 4. B1's float flips on the box raster move by up to 5 pixels a scene
    under three faces, within its line
+
+## S9.4 rungs 6 and 9, 2026-11-12
+
+The ladder's decision on the compute walk, and the floor of a compute
+launch by its workgroups.
+
+- Device and method: as in B2 re-baseline. A launch kernel runs the
+  hoisted loop with no step over both eyes at 1680 by 1760. Times are
+  p10s in ms at 545 MHz, alike over two windows
+- Kernels: `b2-times` with `launch` for its kernels' text
+
+**The launch by its workgroups.**
+
+| Launch | Workgroups | Quest ms | ns a workgroup | Mac ms |
+| --- | ---: | ---: | ---: | ---: |
+| Compute, 4x4 groups | 369,600 | 11.390 | 31 | 0.399 |
+| Compute, 8x8 groups | 92,400 | 2.547 | 28 | 0.105 |
+| Compute, 16x8 groups | 46,200 | 1.275 | 28 | 0.054 |
+| Compute, 16x16 groups | 23,100 | 0.639 | 28 | 0.029 |
+| Fragment | | 0.249 | | 0.034 |
+
+At 8x8 groups the launch takes 2.547 ms with no step and 2.553 with 4.
+
+**Rung 6.** The ladder reads the compute walk's rate on S1 against 0.15,
+0.25, and 0.5 Grays/s. The rates so far, on Quest:
+
+| Arm | S1 | S5 |
+| --- | ---: | ---: |
+| Tree walk, after rung 3 | 0.096 | 0.382 |
+| Ray query, float march over 16^3 bricks | 0.157 | 0.306 |
+| Box raster, ids | 4.31 | 1.86 |
+| Box raster, the shaded view | 2.90 | 1.66 |
+
+The shaded view's rate is its 5.9 M pixels over its frame time, 2.04 ms on
+S1 and 3.57 on S5.
+
+**Outcomes.**
+
+1. A compute launch on Quest costs 28 ns a workgroup, whatever the
+   group holds. Groups of 16x16 take a pass over both eyes from 2.55 ms
+   to 0.64. A fragment pass takes 0.25
+2. Rung 6 takes its second case for the compute walk: its tuning stops.
+   Rungs 4 and 5 expect 1.2x to 1.5x and a few percent a trim, and the
+   walk would need 45x to meet the box raster. The profile of the walk
+   after rung 3 and the tiles of pixels that walk together do not run
+   because no frame holds a compute walk
+3. The box raster's march passes rung 6's third case, 0.5 Grays/s on S1
+   and 1.0 on S5. It is the front end S9 hands on
+4. A compute walk still fills the corner shadows as a view is built.
+   B7's study of glass can weigh a compute walk at 16x16 groups, 0.64 ms
+   before its first step, against a fragment pass
