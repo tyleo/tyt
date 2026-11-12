@@ -2,7 +2,7 @@ use crate::{
     Error, Result, RunOptions, XrApp, XrGpu, XrSystem, log_b1, probe_gpu, probe_indirect,
     probe_pipelines, probe_system,
 };
-use android_activity::{AndroidApp, MainEvent, PollEvent};
+use android_activity::{AndroidApp, InputStatus, MainEvent, PollEvent};
 use android_logger::Config;
 use log::LevelFilter;
 use std::{panic, time::Duration};
@@ -72,6 +72,8 @@ fn run(app: &AndroidApp) -> Result<()> {
             }
         });
 
+        take_input(app);
+
         if !xr_app.poll()? {
             break;
         }
@@ -82,4 +84,16 @@ fn run(app: &AndroidApp) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Answers every input event Android holds for the activity. Android stops
+/// an activity that leaves a key unanswered for five seconds. OpenXR carries
+/// the controllers. A button Android gets back unhandled can fall back to
+/// the key that finishes the activity.
+fn take_input(app: &AndroidApp) {
+    let mut events = app
+        .input_events_iter()
+        .expect("the loop holds no other iterator of the events");
+
+    while events.next(|_| InputStatus::Handled) {}
 }
