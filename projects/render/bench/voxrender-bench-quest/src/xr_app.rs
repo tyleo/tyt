@@ -121,7 +121,7 @@ impl XrApp {
         }
 
         let frame_times = FrameTimes::new(&xr, &session)?;
-        let swapchain = EyeSwapchain::new(&xr, &gpu, &session)?;
+        let swapchain = EyeSwapchain::new(&xr, &gpu, &session, options.scale)?;
 
         let width = u32::try_from(swapchain.extent.width).expect("an eye's width is positive");
         let height = u32::try_from(swapchain.extent.height).expect("an eye's height is positive");

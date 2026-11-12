@@ -31,9 +31,15 @@ pub struct EyeSwapchain {
 }
 
 impl EyeSwapchain {
-    /// Creates the swapchain at the eyes' recommended size in the runtime's
-    /// first format that wgpu takes, and wraps its images as wgpu textures.
-    pub fn new(xr: &XrSystem, gpu: &XrGpu, session: &Session<XrVulkan>) -> Result<Self> {
+    /// Creates the swapchain at `scale` of the eyes' recommended size along
+    /// each side, in the runtime's first format that wgpu takes, and wraps
+    /// its images as wgpu textures.
+    pub fn new(
+        xr: &XrSystem,
+        gpu: &XrGpu,
+        session: &Session<XrVulkan>,
+        scale: f64,
+    ) -> Result<Self> {
         let eyes = xr
             .instance
             .enumerate_view_configuration_views(xr.system, ViewConfigurationType::PRIMARY_STEREO)
@@ -47,8 +53,10 @@ impl EyeSwapchain {
             return Err(Error::UnequalViews);
         }
 
-        let width = left.recommended_image_rect_width;
-        let height = left.recommended_image_rect_height;
+        // A side keeps at least a pixel.
+        let scaled = |side: u32| ((f64::from(side) * scale).round() as u32).max(1);
+        let width = scaled(left.recommended_image_rect_width);
+        let height = scaled(left.recommended_image_rect_height);
 
         let extent = Extent2Di {
             width: i32::try_from(width).map_err(|_| Error::ImageSize(width))?,

@@ -71,6 +71,13 @@ adb shell 'setprop debug.voxrenderbench.kernels "box raster"'
 `setprop debug.voxrenderbench.b1 true` and
 `'setprop debug.voxrenderbench.kernels ""'` return the app to the full run.
 
+### Scale
+
+`debug.voxrenderbench.scale` holds a part over 0 and at most 1. The app
+draws that part of the eyes' recommended size along each side. Unset, the app
+draws the recommended size of 1680 by 1760 an eye on Quest 3. At `0.8` it
+draws 1344 by 1408, and the runtime stretches the image to the display.
+
 ### Off the face
 
 Two commands let the session run with the headset on a desk. The first

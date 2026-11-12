@@ -29,6 +29,10 @@ const MODEL: &str = "debug.voxrenderbench.model";
 /// before it steps to the next.
 const TOUR: &str = "debug.voxrenderbench.tour";
 
+/// The system property that holds the part of the eyes' recommended size
+/// the swapchain takes along each side.
+const SCALE: &str = "debug.voxrenderbench.scale";
+
 /// What the app runs, from the system properties the README's steps set.
 pub struct RunOptions {
     /// Whether the profile runs in place of B1 and B2's timer.
@@ -58,11 +62,16 @@ pub struct RunOptions {
     /// The seconds the gallery shows a model before it steps to the next
     /// with no button pressed.
     pub tour: Option<f64>,
+
+    /// The part of the eyes' recommended size the swapchain takes along
+    /// each side, 1 when the property is unset.
+    pub scale: f64,
 }
 
 impl RunOptions {
     /// Reads the properties. Errors unless each flag is unset, `true`, or
-    /// `false`, and the tour is unset or a positive count of seconds.
+    /// `false`, the tour is unset or a positive count of seconds, and the
+    /// scale is unset or over 0 and at most 1.
     pub fn read() -> Result<Self> {
         let text = |name| getprop(name).map(|value| (!value.is_empty()).then_some(value));
 
@@ -76,6 +85,17 @@ impl RunOptions {
             })
             .transpose()?;
 
+        let scale = text(SCALE)?
+            .map(|value| {
+                value
+                    .parse()
+                    .ok()
+                    .filter(|&scale: &f64| scale > 0.0 && scale <= 1.0)
+                    .ok_or(Error::ScaleProperty { name: SCALE, value })
+            })
+            .transpose()?
+            .unwrap_or(1.0);
+
         Ok(RunOptions {
             profile: flag(PROFILE, false)?,
             b1: flag(B1, true)?,
@@ -85,6 +105,7 @@ impl RunOptions {
             models: flag(MODELS, false)?,
             model: text(MODEL)?,
             tour,
+            scale,
         })
     }
 }
