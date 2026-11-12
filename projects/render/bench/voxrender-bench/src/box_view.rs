@@ -791,6 +791,7 @@ impl BoxView {
             } else {
                 GlassTiles {
                     boxes: Vec::new(),
+                    surfaces: Vec::new(),
                     tiles: Vec::new(),
                     words: Vec::new(),
                 }
@@ -800,7 +801,7 @@ impl BoxView {
 
             words.extend(tiles.words);
             object_glass.insert(object_id, tiles.boxes);
-            glass_tiles.insert(object_id, (first, tiles.tiles));
+            glass_tiles.insert(object_id, (first, tiles.tiles, tiles.surfaces));
         }
 
         let glass = PlacedBox::list(scene, &object_glass);
@@ -809,8 +810,17 @@ impl BoxView {
         let glass_words: Vec<_> = glass
             .iter()
             .map(|placed| {
-                let (first, tiles) = &glass_tiles[&object_ids[placed.placement as usize]];
-                let words = placed.words(placed.placement, first + tiles[placed.brick], [0, 0]);
+                let (first, tiles, surfaces) = &glass_tiles[&object_ids[placed.placement as usize]];
+
+                // The box around the tile's surfaces, 4 bits a side: its
+                // low cell in the tile, then its high cell.
+                let (low, high) = surfaces[placed.brick];
+                let [x, y, z] = (low % 16).to_array();
+                let [far_x, far_y, far_z] = ((high - 1) % 16).to_array();
+                let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
+
+                let words =
+                    placed.words(placed.placement, first + tiles[placed.brick], [surfaces, 0]);
 
                 glass_boxes.push(placed, words, false, false);
 

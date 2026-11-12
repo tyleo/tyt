@@ -634,5 +634,12 @@ they land.
 - The boxes sort farthest first with the view's sort, which runs when the
   head has moved 25 cm. A tint multiplies in any order. A stale order gets
   wrong the light a surface adds
+- A glass box spans its tile's busy cells, the opaque ones too. The
+  opaque view's depth holds a box's face where a hit lies deeper, so the
+  opaque box of a glass box's tile can lie before a surface it does not
+  hide. A box around the surfaces alone lost those fragments to the depth
+  test. A fragment drops out where its ray misses the box around the
+  surfaces, and its walk ends where the ray leaves that box. A depth bias
+  draws a glass face before an opaque box's face in its plane
 - A device without dual-source blending draws no glass
 

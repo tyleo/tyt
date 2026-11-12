@@ -24,9 +24,15 @@ const TILE: u32 = 16;
 /// face with a surface, under the cell's material from bit 8. Face
 /// `2 * axis` looks down its axis and face `2 * axis + 1` up it.
 pub struct GlassTiles {
-    /// The box around each tile's cells with a surface, as its low cell and
-    /// the corner past its high cell.
+    /// The box each tile draws, as its low cell and the corner past its
+    /// high cell: the box around its busy cells. The tile's opaque cells
+    /// draw a box whose faces can lie before a surface they do not hide,
+    /// so a walk starts no later than that box does.
     pub boxes: Vec<(TyVector3U32, TyVector3U32)>,
+
+    /// The box around each tile's cells with a surface, where a walk can
+    /// end.
+    pub surfaces: Vec<(TyVector3U32, TyVector3U32)>,
 
     /// The offset in [`words`](Self::words) of each box's tile.
     pub tiles: Vec<u32>,
@@ -76,6 +82,7 @@ impl GlassTiles {
 
         let mut tiles = GlassTiles {
             boxes: Vec::new(),
+            surfaces: Vec::new(),
             tiles: Vec::new(),
             words: Vec::new(),
         };
@@ -94,8 +101,18 @@ impl GlassTiles {
 
             let mut rows = vec![0; Self::ROWS as usize];
             let mut busy = Vec::new();
-            let mut least = [i64::MAX; 3];
-            let mut most = [i64::MIN; 3];
+
+            // The low and high corners around the cells with a surface,
+            // then around every busy cell.
+            let mut surfaces = ([i64::MAX; 3], [i64::MIN; 3]);
+            let mut drawn = surfaces;
+
+            let grow = |(least, most): &mut ([i64; 3], [i64; 3]), cell: [i64; 3]| {
+                for axis in 0..3 {
+                    least[axis] = least[axis].min(cell[axis]);
+                    most[axis] = most[axis].max(cell[axis] + 1);
+                }
+            };
 
             for index in 0..TILE * TILE * TILE {
                 let cell = cell_of(index);
@@ -122,10 +139,7 @@ impl GlassTiles {
                         continue;
                     }
 
-                    for axis in 0..3 {
-                        least[axis] = least[axis].min(cell[axis]);
-                        most[axis] = most[axis].max(cell[axis] + 1);
-                    }
+                    grow(&mut surfaces, cell);
 
                     place(own - 1) << 8 | faces
                 } else if own != 0 {
@@ -134,22 +148,28 @@ impl GlassTiles {
                     continue;
                 };
 
+                grow(&mut drawn, cell);
                 rows[(index / TILE) as usize] |= 1 << (index % TILE);
                 busy.push(word);
             }
 
             // A tile with no surface draws nothing.
-            if least[0] == i64::MAX {
+            if surfaces.0[0] == i64::MAX {
                 continue;
             }
 
-            let corner_of = |cell: [i64; 3]| {
-                let [x, y, z] = cell.map(|side| side as u32);
+            let corners = |(least, most): ([i64; 3], [i64; 3])| {
+                let corner_of = |cell: [i64; 3]| {
+                    let [x, y, z] = cell.map(|side| side as u32);
 
-                TyVector3U32::new(x, y, z)
+                    TyVector3U32::new(x, y, z)
+                };
+
+                (corner_of(least), corner_of(most))
             };
 
-            tiles.boxes.push((corner_of(least), corner_of(most)));
+            tiles.boxes.push(corners(drawn));
+            tiles.surfaces.push(corners(surfaces));
             tiles.tiles.push(
                 u32::try_from(tiles.words.len())
                     .expect("an object's glass words number under 2^32"),
@@ -178,8 +198,13 @@ mod tests {
 
         let tiles = GlassTiles::new(&object, &|id| id == 0, &mut |id| id + 10);
 
+        // The wall joins the box the tile draws.
         assert_eq!(
             tiles.boxes,
+            [(TyVector3U32::new(0, 0, 0), TyVector3U32::new(4, 1, 1))]
+        );
+        assert_eq!(
+            tiles.surfaces,
             [(TyVector3U32::new(1, 0, 0), TyVector3U32::new(4, 1, 1))]
         );
         assert_eq!(tiles.tiles, [0]);

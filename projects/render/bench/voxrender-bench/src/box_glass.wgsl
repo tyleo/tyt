@@ -5,9 +5,15 @@
 // `box_view.wgsl` and `mask_march.wgsl` come before this file.
 //
 // A box's `words.x` holds the offset of its tile's `GlassTiles` words in
-// `bits`. A busy cell's word holds where its material's four values start
-// in `materials`: the three an opaque material has, then its coverage and
-// its transmission.
+// `bits`, and its `crossers.x` the box around the tile's surfaces, 4 bits a
+// side: its low cell in the tile, then its high cell. A busy cell's word
+// holds where its material's four values start in `materials`: the three
+// an opaque material has, then its coverage and its transmission.
+//
+// A box spans its tile's opaque cells too. The opaque view's depth holds
+// the faces of the box around those, which can lie before a surface they
+// do not hide. A walk that starts on its box then starts no later. An opaque
+// cell ends the walk.
 //
 // A surface takes the sun whole, with no shadow, and reflects the
 // hemispheres alone. A ray that starts inside a material pays nothing for
@@ -90,19 +96,33 @@ fn past(walked: Walked, box: Box, cell: u32, across: vec3<bool>, ahead: vec3<boo
 }
 
 // What the ray from `start` along `direction` meets of the box's surfaces,
-// to where it leaves the box or meets an opaque cell. A ray that `enters`
-// starts on the face of the box across the one axis of `entry`. Any other
-// ray starts at an eye inside the box.
+// to where it leaves the box around them or meets an opaque cell. A ray
+// that `enters` starts on the face of the box across the one axis of
+// `entry`. Any other ray starts at an eye inside the box.
 fn glass_walk(box: Box, start: vec3<f32>, direction: vec3<f32>, entry: vec3<bool>, enters: bool) -> Glass {
     let tile = box.words.x;
     let ahead = direction >= vec3<f32>(0.0);
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
+
+    // How far along the ray it enters and leaves the box around the
+    // surfaces. A ray that misses that box meets none.
+    let sides = vec3<u32>(box.crossers.x);
+    let low = vec3<f32>((sides >> vec3<u32>(0u, 4u, 8u)) & vec3<u32>(15u));
+    let high = vec3<f32>((sides >> vec3<u32>(12u, 16u, 20u)) & vec3<u32>(15u)) + 1.0;
+    let turn = select(-rate, rate, ahead);
+    let nears = (select(high, low, ahead) - start) * turn;
+    let fars = (select(low, high, ahead) - start) * turn;
+    let far = min(fars.x, min(fars.y, fars.z));
+
+    if far <= max(max(nears.x, max(nears.y, nears.z)), 0.0) {
+        discard;
+    }
+
     let cell = clamp(floor(start), box.low, box.high - 1.0);
     let strides = select(vec3<i32>(-16, -256, -1), vec3<i32>(16, 256, 1), ahead);
     let within = start - cell;
     let next = abs(select(within, 1.0 - within, ahead)) * rate;
-    let ends = abs(select(box.low, box.high, ahead) - start) * rate;
-    let end = min(ends.x, min(ends.y, ends.z)) * 0.99999;
+    let end = far * 0.99999;
 
     var march = March(bit_of(cell), next, entry, 0.0);
     var walked = Walked(vec3<f32>(0.0), vec3<f32>(1.0));
@@ -127,7 +147,8 @@ fn glass_walk(box: Box, start: vec3<f32>, direction: vec3<f32>, entry: vec3<bool
         }
     }
 
-    // The ray leaves the box across the axis the last step found.
+    // The ray leaves the surfaces' box across the axis the last step
+    // found.
     if word != OPAQUE {
         walked = past(walked, box, word, march.across, ahead, true);
     }
