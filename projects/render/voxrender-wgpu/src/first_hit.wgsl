@@ -29,31 +29,6 @@ struct Frame {
 // surface. Bit 1 of c picks the face's far edge on u, bit 2 on v.
 @group(0) @binding(5) var<storage, read_write> shadows: array<u32>;
 
-// The material key at `position` in `dense_cells`'s layout.
-fn material_at(placement: Placement, position: vec3<i32>) -> u32 {
-    let bounds = vec3<u32>(placement.bounds.xyz);
-    let at = vec3<u32>(position);
-
-    return cells[placement.cells.x + at.x * bounds.y * bounds.z + at.y * bounds.z + at.z];
-}
-
-// The voxel id of `position`, linear in it, so a position outside the grid
-// has one too.
-fn linear_voxel(placement: Placement, position: vec3<i32>) -> i32 {
-    let bounds = placement.bounds;
-
-    return position.x * bounds.y * bounds.z + position.y * bounds.z + position.z;
-}
-
-// The change to the voxel id of a mirrored walk's cell when it steps up each
-// axis.
-fn voxel_strides(placement: Placement, flip: vec3<bool>) -> vec3<i32> {
-    let bounds = placement.bounds;
-    let strides = vec3<i32>(bounds.y * bounds.z, bounds.z, 1);
-
-    return select(strides, -strides, flip);
-}
-
 // The ray from `origin` toward `point`, as voxrender's
 // `RenderGridRay::toward` makes it. An offset past 2^31 wraps.
 fn toward(origin: vec3<i32>, point: vec3<i32>) -> Ray {
@@ -107,17 +82,6 @@ fn toward(origin: vec3<i32>, point: vec3<i32>) -> Ray {
     }
 
     return Ray(origin, direction, end, true);
-}
-
-// The fixed point `origin` in the grid of `source`, carried through world
-// space into the grid of `destination` in f32.
-fn carry(origin: vec3<i32>, source: Placement, destination: Placement) -> vec3<i32> {
-    let local = vec3<f32>(origin) / f32(ONE) * source.scale.xyz;
-    let world = source.position.xyz + rotate(source.rotation, local);
-    let inverse = vec4<f32>(-destination.rotation.xyz, destination.rotation.w);
-    let grid = rotate(inverse, world - destination.position.xyz) / destination.scale.xyz;
-
-    return vec3<i32>(round(grid * f32(ONE)));
 }
 
 // `ray` cut to end where it reaches `distance` in world units, one cell
