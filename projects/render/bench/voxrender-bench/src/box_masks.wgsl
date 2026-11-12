@@ -76,13 +76,11 @@ struct Box {
 // plus `SOLID` for a solid one, then the high corner.
 @group(0) @binding(4) var<storage, read> crossers: array<vec4<f32>>;
 
-// The box's corner `corner`. Bit `a` of `corner` picks the box's high face on
-// axis `a`. `low` holds the box's low cell and its placement's index. `high`
-// holds the corner past the box's high cell and the offset of its tile's bits.
-// `more` holds the first of the box's entries in `crossers` and their count.
-fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<u32>) -> Box {
-    let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
-    let grid = select(low.xyz, high.xyz, far);
+// The box's vertex at the grid's `grid`, on the face of code `face`. `low`
+// holds the box's low cell and its placement's index. `high` holds the
+// corner past the box's high cell and the offset of its tile's bits. `more`
+// holds the first of the box's entries in `crossers` and their count.
+fn vertex_of(grid: vec3<u32>, face: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<u32>) -> Box {
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
     let placed = places[low.w];
     let strides = placed.strides.xy;
@@ -99,12 +97,14 @@ fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<u32>) -> B
         vec3<f32>(high.xyz - tile),
         vec3<u32>(tile.x * strides.x + tile.y * strides.y + tile.z, strides),
         (placed.clip * vec4<f32>(placed.ray.xyz, 0.0)).z,
-        min(corner, 7u - corner) | (corner & 4u),
+        face,
         vec2<u32>(high.w, low.w << FACE_BITS),
         more.xy,
     );
 }
 
+// A corner of the box, for its back faces. Bit `a` of `corner` picks the
+// box's high face on axis `a`.
 @vertex
 fn place(
     @location(0) corner: u32,
@@ -112,7 +112,7 @@ fn place(
     @location(2) high: vec4<u32>,
     @location(3) more: vec4<u32>,
 ) -> Box {
-    return corner_of(corner, low, high, more);
+    return vertex_of(corner_of(corner, low, high), corner_face(corner), low, high, more);
 }
 
 // `place` for the back faces `inside` shades, under a perspective view.
@@ -123,11 +123,25 @@ fn place_near(
     @location(2) high: vec4<u32>,
     @location(3) more: vec4<u32>,
 ) -> Box {
-    var box = corner_of(corner, low, high, more);
+    var box = vertex_of(corner_of(corner, low, high), corner_face(corner), low, high, more);
 
     box.clip.z *= NEARER;
 
     return box;
+}
+
+// A vertex of one of the box's three faces toward the view. `vertex` holds
+// the face's axis above its two bits for the face's four vertices.
+@vertex
+fn place_front(
+    @location(0) vertex: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
+) -> Box {
+    let front = front_of(vertex, places[low.w].ray.xyz, low.xyz, high.xyz);
+
+    return vertex_of(front.grid, front.face, low, high, more);
 }
 
 fn source_of(box: Box) -> Source {

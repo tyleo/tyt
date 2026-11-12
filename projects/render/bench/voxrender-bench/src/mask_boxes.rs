@@ -1,6 +1,6 @@
 use crate::{
-    BoxCrosser, BoxDepth, BoxDraw, BoxPart, HitPacking, HitTargets, PlacedBox, Result, TileMasks,
-    world_to_clip,
+    BoxCrosser, BoxDepth, BoxDraw, BoxFaces, BoxPart, HitPacking, HitTargets, PlacedBox, Result,
+    TileMasks, world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyMatrix4x4F64, TyVector3F64};
@@ -216,9 +216,8 @@ pub fn mask_boxes(
     // Every solid box draws its front faces because a ray that starts
     // inside one sees none of it.
     let solids = BoxPart {
-        vertex: "place",
         fragment: "solid",
-        backs: false,
+        faces: BoxFaces::Front,
         boxes: nearest_first(solid.iter().map(|placed| (placed.seen(view).1, placed)))
             .into_iter()
             .map(solid_words)
@@ -226,9 +225,8 @@ pub fn mask_boxes(
     };
 
     let exact = |boxes: Vec<[u32; 12]>| BoxPart {
-        vertex: "place",
         fragment: "exact",
-        backs: true,
+        faces: BoxFaces::Back,
         boxes,
     };
 
@@ -274,9 +272,8 @@ pub fn mask_boxes(
             }
 
             let fronts = |fragment, boxes: Vec<(f64, (usize, [u32; 2]))>| BoxPart {
-                vertex: "place",
                 fragment,
-                backs: false,
+                faces: BoxFaces::Front,
                 boxes: nearest_first(boxes)
                     .into_iter()
                     .map(|(index, span)| march_words(index, span))
@@ -285,9 +282,8 @@ pub fn mask_boxes(
 
             vec![
                 BoxPart {
-                    vertex: "place_near",
                     fragment: "inside",
-                    backs: true,
+                    faces: BoxFaces::NearBack,
                     boxes: inside,
                 },
                 solids,

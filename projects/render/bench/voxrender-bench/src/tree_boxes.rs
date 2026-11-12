@@ -1,6 +1,6 @@
 use crate::{
-    BoxDraw, BoxPart, BrickMarch, Error, HitPacking, HitTargets, PlacedBox, Result, Tree64,
-    live_boxes, world_to_clip,
+    BoxDraw, BoxFaces, BoxPart, BrickMarch, Error, HitPacking, HitTargets, PlacedBox, Result,
+    Tree64, live_boxes, world_to_clip,
 };
 use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::TyMatrix4x4F64;
@@ -157,9 +157,8 @@ pub fn tree_boxes(
         &module,
         HitTargets::FORMAT,
         &[BoxPart {
-            vertex: "place",
             fragment: "back",
-            backs: true,
+            faces: BoxFaces::Back,
             boxes,
         }],
         &[

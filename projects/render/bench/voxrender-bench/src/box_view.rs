@@ -1,4 +1,6 @@
-use crate::{BoxCrosser, BoxDraw, BoxPart, HitTargets, PlacedBox, Result, TileMasks, ViewEye};
+use crate::{
+    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, PlacedBox, Result, TileMasks, ViewEye,
+};
 use std::{collections::HashMap, f64::consts::PI, num::NonZeroU32};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxrender::{RenderLight, RenderScene, grid_point, tonemap};
@@ -418,33 +420,28 @@ impl BoxView {
             format,
             &[
                 BoxPart {
-                    vertex: "place_near",
                     fragment: "inside",
-                    backs: true,
+                    faces: BoxFaces::NearBack,
                     boxes: Vec::new(),
                 },
                 BoxPart {
-                    vertex: "place",
                     fragment: "solid",
-                    backs: false,
+                    faces: BoxFaces::Front,
                     boxes: solid_words,
                 },
                 BoxPart {
-                    vertex: "place",
                     fragment: "front",
-                    backs: false,
+                    faces: BoxFaces::Front,
                     boxes: march_words,
                 },
                 BoxPart {
-                    vertex: "place",
                     fragment: "crossed",
-                    backs: false,
+                    faces: BoxFaces::Front,
                     boxes: Vec::new(),
                 },
                 BoxPart {
-                    vertex: "place",
                     fragment: "exact",
-                    backs: true,
+                    faces: BoxFaces::Back,
                     boxes: Vec::new(),
                 },
             ],
