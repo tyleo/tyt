@@ -1,18 +1,21 @@
-use crate::{Error, RayQueryArm, Result, Tree64};
+use crate::{Error, Occupancy, RayQueryArm, Result, Tree64};
 use branded_id::U32Id;
 use std::{collections::HashMap, sync::mpsc};
 use ty_math::{TyVector3F64, TyVector3U32};
+use voxcore::BVoxObject;
 use voxrender::{BRenderView, Error as RenderError, RenderObject, RenderScene, RenderViewRays};
 use voxrender_wgpu::{GRID_WALK_WGSL, PixelHit, dense_cells, placement_bytes};
+use voxsurface::{SurfaceMethod, mesh_grid};
 use wgpu::{
     AccelerationStructureFlags, AccelerationStructureGeometryFlags,
     AccelerationStructureUpdateMode, BindGroup, BindGroupDescriptor, BindGroupEntry,
-    BindingResource, BlasAABBGeometrySizeDescriptor, BlasAabbGeometry, BlasBuildEntry,
-    BlasGeometries, BlasGeometrySizeDescriptors, Buffer, BufferDescriptor, BufferUsages,
+    BindingResource, Blas, BlasAABBGeometrySizeDescriptor, BlasAabbGeometry, BlasBuildEntry,
+    BlasGeometries, BlasGeometrySizeDescriptors, BlasTriangleGeometry,
+    BlasTriangleGeometrySizeDescriptor, Buffer, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePass, ComputePassDescriptor, ComputePipeline,
     ComputePipelineDescriptor, CreateBlasDescriptor, CreateTlasDescriptor, Device, Features,
-    MapMode, PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor,
-    ShaderRuntimeChecks, ShaderSource, TlasInstance,
+    IndexFormat, MapMode, PipelineCompilationOptions, PollType, Queue, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource, Tlas, TlasInstance, VertexFormat,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -28,8 +31,7 @@ const AABB_BYTES: u64 = 24;
 
 /// One view's first hits through a hardware ray query over a TLAS of the
 /// scene's placements, uploaded once and dispatched as often as its caller
-/// records it. Each object's BLAS holds one AABB per non-empty brick. The
-/// scene's lights cast no shadow rays.
+/// records it. The scene's lights cast no shadow rays.
 pub struct RayQueryTrace {
     pipeline: ComputePipeline,
 
@@ -45,7 +47,9 @@ pub struct RayQueryTrace {
 impl RayQueryTrace {
     /// Uploads `scene`, its bricks, and the rays of `view_id` over a `width`
     /// by `height` image, and builds the acceleration structures and the
-    /// pipeline of `arm`. Errors unless the device has ray queries.
+    /// pipeline of `arm`. Each object's BLAS holds one AABB per non-empty
+    /// brick. A candidate marches its brick. Errors unless the device has ray
+    /// queries.
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -159,46 +163,7 @@ impl RayQueryTrace {
             })
             .collect();
 
-        let instanced: Vec<_> = (0..)
-            .zip(scene.iter_placements())
-            .filter(|(_, (_, placement))| blases.contains_key(&placement.object_id))
-            .collect();
-
-        let mut tlas = device.create_tlas(&CreateTlasDescriptor {
-            label: Some("placements"),
-            max_instances: u32::try_from(instanced.len().max(1))
-                .expect("placements number under 2^32"),
-            flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
-            update_mode: AccelerationStructureUpdateMode::Build,
-        });
-
-        for (slot, (index, (_, placement))) in instanced.iter().enumerate() {
-            let transform = &placement.transform;
-
-            // Grid cells to world: rotation times scale, then position.
-            let columns = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
-                .map(|axis| transform.rotation * axis);
-            let scale = transform.scale.to_array();
-            let position = transform.position.to_array();
-
-            let mut rows = [0.0; 12];
-
-            for row in 0..3 {
-                for column in 0..3 {
-                    rows[row * 4 + column] =
-                        (columns[column].to_array()[row] * scale[column]) as f32;
-                }
-
-                rows[row * 4 + 3] = position[row] as f32;
-            }
-
-            tlas[slot] = Some(TlasInstance::new(
-                &blases[&placement.object_id],
-                rows,
-                *index,
-                0xff,
-            ));
-        }
+        let tlas = tlas_of(device, scene, &blases);
 
         encoder.build_acceleration_structures(&entries, [&tlas]);
         queue.submit([encoder.finish()]);
@@ -218,21 +183,7 @@ impl RayQueryTrace {
             })
             .collect();
 
-        let mut frame = Vec::new();
-
-        for value in [width, height, 0, 0] {
-            frame.extend(value.to_le_bytes());
-        }
-
-        for vector in view_rays
-            .origin_steps()
-            .into_iter()
-            .chain(view_rays.direction_steps())
-        {
-            for value in vector.to_array().into_iter().chain([0.0]) {
-                frame.extend((value as f32).to_le_bytes());
-            }
-        }
+        let frame = frame_bytes(&view_rays, width, height);
 
         let init = |label, contents: &[u8], usage| {
             device.create_buffer_init(&BufferInitDescriptor {
@@ -344,6 +295,224 @@ impl RayQueryTrace {
         })
     }
 
+    /// Uploads `scene` and the rays of `view_id` over a `width` by `height`
+    /// image, with each object's greedy quads as the triangles of its BLAS.
+    /// The ray tracing unit then finds a ray's first hit, and no march
+    /// runs. Errors unless the device has ray queries.
+    pub fn triangles(
+        device: &Device,
+        queue: &Queue,
+        scene: &RenderScene,
+        view_id: U32Id<BRenderView>,
+        width: u32,
+        height: u32,
+    ) -> Result<Self> {
+        if !device.features().contains(Features::EXPERIMENTAL_RAY_QUERY) {
+            return Err(Error::NoRayQuery);
+        }
+
+        let view = scene
+            .view(view_id)
+            .ok_or(Error::Render(RenderError::UnknownView { view_id }))?;
+
+        let view_rays = RenderViewRays::new(view, width, height);
+
+        let init = |label, contents: &[u8], usage| {
+            device.create_buffer_init(&BufferInitDescriptor {
+                label: Some(label),
+                contents,
+                usage,
+            })
+        };
+
+        let bytes = |words: &[u32]| -> Vec<u8> {
+            words.iter().flat_map(|word| word.to_le_bytes()).collect()
+        };
+
+        let count = |value: usize| u32::try_from(value).expect("a scene's quads number under 2^30");
+
+        let mut faces: Vec<u32> = Vec::new();
+        let mut quad_offsets = HashMap::new();
+        let mut blases = HashMap::new();
+        let mut meshes = Vec::new();
+
+        for (object_id, object) in scene.iter_objects() {
+            let mesh = mesh_grid(&Occupancy(object), SurfaceMethod::Greedy);
+
+            if mesh.spans.is_empty() {
+                continue;
+            }
+
+            quad_offsets.insert(object_id, count(faces.len()));
+
+            faces.extend(
+                mesh.spans
+                    .iter()
+                    .map(|span| count(span.d) * 2 + u32::from(span.sign > 0)),
+            );
+
+            let size = BlasTriangleGeometrySizeDescriptor {
+                vertex_format: VertexFormat::Float32x3,
+                vertex_count: count(mesh.positions.len()),
+                index_format: Some(IndexFormat::Uint32),
+                index_count: Some(count(mesh.indices.len())),
+                flags: AccelerationStructureGeometryFlags::OPAQUE,
+            };
+
+            let blas = device.create_blas(
+                &CreateBlasDescriptor {
+                    label: Some("quads"),
+                    flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
+                    update_mode: AccelerationStructureUpdateMode::Build,
+                },
+                BlasGeometrySizeDescriptors::Triangles {
+                    descriptors: vec![size.clone()],
+                },
+            );
+
+            let vertices = init(
+                "quad vertices",
+                &mesh
+                    .positions
+                    .iter()
+                    .flat_map(|position| position.to_array())
+                    .flat_map(f32::to_le_bytes)
+                    .collect::<Vec<_>>(),
+                BufferUsages::BLAS_INPUT,
+            );
+            let indices = init(
+                "quad indices",
+                &bytes(&mesh.indices),
+                BufferUsages::BLAS_INPUT,
+            );
+
+            meshes.push((object_id, size, vertices, indices));
+            blases.insert(object_id, blas);
+        }
+
+        let entries: Vec<_> = meshes
+            .iter()
+            .map(|(object_id, size, vertices, indices)| BlasBuildEntry {
+                blas: &blases[object_id],
+                geometry: BlasGeometries::TriangleGeometries(vec![BlasTriangleGeometry {
+                    size,
+                    vertex_buffer: vertices,
+                    first_vertex: 0,
+                    vertex_stride: 12,
+                    index_buffer: Some(indices),
+                    first_index: Some(0),
+                    transform_buffer: None,
+                    transform_buffer_offset: None,
+                }]),
+            })
+            .collect();
+
+        let tlas = tlas_of(device, scene, &blases);
+
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("ray query structures"),
+        });
+
+        encoder.build_acceleration_structures(&entries, [&tlas]);
+        queue.submit([encoder.finish()]);
+
+        let mut bounds: Vec<u32> = Vec::new();
+        let mut first_quads: Vec<u32> = Vec::new();
+
+        for (_, placement) in scene.iter_placements() {
+            let object = scene
+                .object(placement.object_id)
+                .expect("a placement's object is one of the scene's");
+
+            bounds.extend(object.bounds().to_array().into_iter().chain([0]));
+            first_quads.push(quad_offsets.get(&placement.object_id).copied().unwrap_or(0));
+        }
+
+        // A binding cannot be empty.
+        for words in [&mut bounds, &mut faces, &mut first_quads] {
+            if words.is_empty() {
+                words.resize(4, 0);
+            }
+        }
+
+        let frame = init(
+            "frame",
+            &frame_bytes(&view_rays, width, height),
+            BufferUsages::UNIFORM,
+        );
+        let bounds = init("bounds", &bytes(&bounds), BufferUsages::STORAGE);
+        let faces = init("faces", &bytes(&faces), BufferUsages::STORAGE);
+        let first_quads = init("first quads", &bytes(&first_quads), BufferUsages::STORAGE);
+
+        let hits = device.create_buffer(&BufferDescriptor {
+            label: Some("hits"),
+            size: u64::from(width) * u64::from(height) * 16,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // SAFETY: a hit's placement indexes the per-placement buffers, and its
+        // primitive lies within its object's quads. The query proceeds before
+        // its hit is read, and its rays hold finite values.
+        let module = unsafe {
+            device.create_shader_module_trusted(
+                ShaderModuleDescriptor {
+                    label: Some("triangle_query"),
+                    source: ShaderSource::Wgsl(include_str!("triangle_query.wgsl").into()),
+                },
+                ShaderRuntimeChecks::unchecked(),
+            )
+        };
+
+        let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("triangle_query"),
+            layout: None,
+            module: &module,
+            entry_point: Some("main"),
+            compilation_options: PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("triangle_query"),
+            layout: &pipeline.get_bind_group_layout(0),
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: frame.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: bounds.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: faces.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: first_quads.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: BindingResource::AccelerationStructure(&tlas),
+                },
+                BindGroupEntry {
+                    binding: 5,
+                    resource: hits.as_entire_binding(),
+                },
+            ],
+        });
+
+        Ok(RayQueryTrace {
+            pipeline,
+            bind_group,
+            hits,
+            width,
+            height,
+        })
+    }
+
     /// Records the trace of every pixel into `pass`.
     pub fn dispatch(&self, pass: &mut ComputePass<'_>) {
         pass.set_pipeline(&self.pipeline);
@@ -407,6 +576,76 @@ impl RayQueryTrace {
             })
             .collect())
     }
+}
+
+/// A TLAS of `scene`'s placements whose objects have a BLAS in `blases`. An
+/// instance's custom data holds its placement's index.
+fn tlas_of(
+    device: &Device,
+    scene: &RenderScene,
+    blases: &HashMap<U32Id<BVoxObject>, Blas>,
+) -> Tlas {
+    let instanced: Vec<_> = (0..)
+        .zip(scene.iter_placements())
+        .filter(|(_, (_, placement))| blases.contains_key(&placement.object_id))
+        .collect();
+
+    let mut tlas = device.create_tlas(&CreateTlasDescriptor {
+        label: Some("placements"),
+        max_instances: u32::try_from(instanced.len().max(1)).expect("placements number under 2^32"),
+        flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
+        update_mode: AccelerationStructureUpdateMode::Build,
+    });
+
+    for (slot, (index, (_, placement))) in instanced.iter().enumerate() {
+        let transform = &placement.transform;
+
+        // Grid cells to world: rotation times scale, then position.
+        let columns = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
+            .map(|axis| transform.rotation * axis);
+        let scale = transform.scale.to_array();
+        let position = transform.position.to_array();
+        let mut rows = [0.0; 12];
+
+        for row in 0..3 {
+            for column in 0..3 {
+                rows[row * 4 + column] = (columns[column].to_array()[row] * scale[column]) as f32;
+            }
+
+            rows[row * 4 + 3] = position[row] as f32;
+        }
+
+        tlas[slot] = Some(TlasInstance::new(
+            &blases[&placement.object_id],
+            rows,
+            *index,
+            0xff,
+        ));
+    }
+
+    tlas
+}
+
+/// The bytes of a trace's `Frame`: the image's size, then pixel (0, 0)'s
+/// world ray and its steps along a row and down a column.
+fn frame_bytes(view_rays: &RenderViewRays, width: u32, height: u32) -> Vec<u8> {
+    let mut frame = Vec::new();
+
+    for value in [width, height, 0, 0] {
+        frame.extend(value.to_le_bytes());
+    }
+
+    for vector in view_rays
+        .origin_steps()
+        .into_iter()
+        .chain(view_rays.direction_steps())
+    {
+        for value in vector.to_array().into_iter().chain([0.0]) {
+            frame.extend((value as f32).to_le_bytes());
+        }
+    }
+
+    frame
 }
 
 /// The corners of `object`'s non-empty bricks of `brick` cells a side, in

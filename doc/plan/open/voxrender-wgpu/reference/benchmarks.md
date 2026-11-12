@@ -1967,3 +1967,42 @@ S1 and 3.57 on S5.
 4. A compute walk still fills the corner shadows as a view is built.
    B7's study of glass can weigh a compute walk at 16x16 groups, 0.64 ms
    before its first step, against a fragment pass
+
+## S9.4 rung 8, the ray query over triangles, 2026-11-12
+
+The ray tracing unit's rate with triangles in place of bricks that a
+shader marches.
+
+- Device and method: as in B2 re-baseline. Times are p10s in ms over both
+  eyes at 1680 by 1760. One Quest window ran at 640 MHz for 96% of its
+  time
+- The arm: `RayQueryTrace::triangles`. Each object's BLAS holds its
+  greedy quads as two triangles each, the quads the raster of S9.3 draws.
+  A ray's first hit comes from the unit, and the shader takes the cell
+  from the hit's point and its quad's face
+- Kernels: `b2-times` with `ray query` for its kernels' text
+
+| Arm | Quest S1 | Quest S5 | Mac S1 | Mac S5 |
+| --- | ---: | ---: | ---: | ---: |
+| Integer march, 4^3 bricks | 66.463 | 41.902 | 7.807 | 7.426 |
+| Integer march, 16^3 bricks | 60.271 | 26.869 | 7.305 | 3.756 |
+| Float march, 4^3 bricks | 41.508 | 28.148 | 5.952 | 5.950 |
+| Float march, 16^3 bricks | 37.681 | 19.456 | 5.328 | 3.095 |
+| Triangles | 7.138 | 14.874 | 1.699 | 1.548 |
+
+B1 passes on both devices. On Quest the triangles flip 131 of S1's 131,072
+pixels and 710 of S5's, where the float march over 16^3 bricks flips 130
+and 715.
+
+**Outcomes.**
+
+1. Triangles trace S1 at 0.83 Grays/s on Quest, 5.3 times the best march,
+   and S5 at 0.40, 1.3 times. The ladder's line for the arm is 0.3 on S5
+2. The box raster traces the primary rays at 4.31 and 1.86, so the ray
+   query stays off them. It is the arm at hand for a second ray: a
+   reflection, a mover's shadow, or a ray through glass
+3. Past the launch's floor a ray costs 0.84 ns on S1 and 2.15 on S5.
+   These rays are a view's, which run alike from pixel to pixel. A
+   second ray's cost is not measured
+4. The rung meant to find what fills the march's 2.7 KB of scratch. The
+   triangles run no march, and the scratch stays unread

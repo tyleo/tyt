@@ -26,6 +26,9 @@ enum Tracer {
 
     RayQuery(RayQueryArm),
 
+    /// A ray query over each object's greedy quads as triangles.
+    Triangles,
+
     Raster,
 
     Boxes(BoxMarch),
@@ -46,9 +49,9 @@ struct Tally {
 /// The integer and tree walks' primary ids and corner shadow bits, and the
 /// integer marches' primary ids under the ray queries and the box rasters,
 /// are judged against B1's line. The float walk's, the float and mask
-/// marches', and the greedy-mesh raster's flips are counted for the record.
-/// The report lists the first mismatching pixels of each scene
-/// and trace.
+/// marches', the triangle ray query's, and the greedy-mesh raster's flips
+/// are counted for the record. The report lists the first mismatching
+/// pixels of each scene and trace.
 pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
     let scenes = b1_scenes();
 
@@ -56,7 +59,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         .map(Tracer::Walk)
         .into_iter()
         .chain(RayQueryArm::ALL.map(Tracer::RayQuery))
-        .chain([Tracer::Raster])
+        .chain([Tracer::Triangles, Tracer::Raster])
         .chain(BoxMarch::ALL.map(Tracer::Boxes))
         .collect();
 
@@ -94,7 +97,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         format!(
             "| Scene | Views | Pixels | Shadow samples | Id mismatches | Shadow mismatches \
              | Float id flips | Float shadow flips | Tree id mismatches | Tree shadow mismatches \
-             | {} | Raster id flips | {} |",
+             | {} | Ray query triangles id flips | Raster id flips | {} |",
             RayQueryArm::ALL
                 .map(|arm| format!("Ray query {}^3 {}", arm.brick, march_column(arm.march)))
                 .join(" | "),
@@ -108,7 +111,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
         ),
         format!(
             "| --- | ---: | ---: | ---: | {}",
-            "---: | ".repeat(7 + RayQueryArm::ALL.len() + BoxMarch::ALL.len())
+            "---: | ".repeat(8 + RayQueryArm::ALL.len() + BoxMarch::ALL.len())
         )
         .trim_end()
         .to_owned(),
@@ -187,7 +190,7 @@ pub fn run_b1(gpu: &Gpu, size: u32) -> Result<String> {
             .zip(&tallies)
             .flat_map(|(tracer, tally)| match tracer {
                 Tracer::Walk(_) => vec![count(tally.ids, pixels), count(tally.shadows, samples)],
-                Tracer::RayQuery(_) => vec![count(tally.ids, pixels)],
+                Tracer::RayQuery(_) | Tracer::Triangles => vec![count(tally.ids, pixels)],
                 Tracer::Raster if mesh.is_none() => vec!["n/a".to_owned()],
                 Tracer::Raster => vec![count(tally.ids, pixels)],
                 Tracer::Boxes(_) if mesh.is_none() => vec!["n/a".to_owned()],
@@ -243,6 +246,11 @@ fn trace(
                 .trace(&gpu.device, &gpu.queue)?
         }
 
+        Tracer::Triangles => {
+            RayQueryTrace::triangles(&gpu.device, &gpu.queue, scene, view_id, size, size)?
+                .trace(&gpu.device, &gpu.queue)?
+        }
+
         Tracer::Raster => {
             let Some(mesh) = mesh else {
                 return Ok(None);
@@ -275,6 +283,7 @@ fn judged(tracer: Tracer) -> bool {
                 march: BrickMarch::Float,
                 ..
             })
+            | Tracer::Triangles
             | Tracer::Raster
             | Tracer::Boxes(BoxMarch::Tree(BrickMarch::Float) | BoxMarch::Masks { .. })
     )
@@ -293,6 +302,7 @@ fn label(tracer: Tracer) -> String {
     match tracer {
         Tracer::Walk(walk) => format!("{walk:?} walk"),
         Tracer::RayQuery(arm) => arm.label(),
+        Tracer::Triangles => "ray query, triangles".to_owned(),
         Tracer::Raster => RASTER.label(),
         Tracer::Boxes(march) => march.label(),
     }
