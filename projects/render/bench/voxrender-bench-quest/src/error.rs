@@ -98,6 +98,9 @@ pub enum Error {
     /// The GPU clock's file holds other than a clock in Hz.
     ClockParse(String),
 
+    /// The view's shader would not compile for the pipeline probe.
+    ProbeShader(String),
+
     /// A benchmark failed.
     Bench(BenchError),
 }
@@ -135,6 +138,13 @@ impl Display for Error {
             }
             Error::ClockRead(error) => write!(f, "the GPU clock would not read: {error}"),
             Error::ClockParse(text) => write!(f, "the GPU clock file holds {text:?}"),
+            Error::ProbeShader(error) => {
+                write!(
+                    f,
+                    "the view's shader would not compile for the probe: {error}"
+                )
+            }
+
             Error::Bench(error) => write!(f, "a benchmark failed: {error}"),
         }
     }

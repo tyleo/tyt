@@ -132,6 +132,23 @@ adb shell ovrgpuprofiler -r="4,17,18,19,20,23,55"
 The profile repeats until the app stops. `setprop
 debug.voxrenderbench.profile false` returns the app to B1 and B2.
 
+## Pipeline statistics
+
+`debug.voxrenderbench.statistics true` has the app log what the driver
+reports for each of the view's pipelines on `pipeline statistics` lines
+before its session opens:
+
+```sh
+adb shell setprop debug.voxrenderbench.statistics true
+adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
+adb logcat -s voxrender-bench | grep "pipeline statistics"
+```
+
+Each line gives one stage of one pipeline. On Quest the driver counts the
+stage's instructions and its reads, its registers, and the share of its
+fibers that run at once. The line of a fragment stage reads `Mesh Shader`.
+`setprop debug.voxrenderbench.statistics false` turns the lines off.
+
 ## Lint
 
 A desktop build sees an empty crate, so lint for Android:

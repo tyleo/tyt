@@ -1,9 +1,11 @@
 use crate::{Error, Result, XrSystem};
 use ash::{
     Device as VkDevice, Entry as VkEntry, Instance as VkInstance,
+    khr::pipeline_executable_properties,
     vk::{
         self, ApplicationInfo, DeviceCreateInfo, DeviceQueueCreateInfo, Handle, InstanceCreateInfo,
-        PFN_vkGetInstanceProcAddr, PhysicalDevice, QueueFlags, Result as VkResult,
+        PFN_vkGetInstanceProcAddr, PhysicalDevice,
+        PhysicalDevicePipelineExecutablePropertiesFeaturesKHR, QueueFlags, Result as VkResult,
     },
 };
 use openxr::{
@@ -34,6 +36,10 @@ pub struct XrGpu {
 
     /// The raw handles an OpenXR session binds to.
     pub session_info: SessionCreateInfo,
+
+    /// Whether the device reports the statistics of a pipeline's
+    /// executables.
+    pub statistics: bool,
 }
 
 impl XrGpu {
@@ -179,8 +185,27 @@ impl XrGpu {
             .adapter
             .physical_device_features(&device_extensions, features);
 
-        let device_extension_names: Vec<_> =
+        let mut device_extension_names: Vec<_> =
             device_extensions.iter().map(|name| name.as_ptr()).collect();
+
+        // The pipeline probe reads a pipeline's statistics where the device
+        // has them. wgpu neither asks for the extension nor uses it.
+        // SAFETY: `physical_device` belongs to `vk_instance`.
+        let statistics =
+            unsafe { vk_instance.enumerate_device_extension_properties(physical_device) }
+                .map_err(Error::Vulkan)?
+                .iter()
+                .any(|extension| {
+                    extension.extension_name_as_c_str() == Ok(pipeline_executable_properties::NAME)
+                });
+
+        if statistics {
+            device_extension_names.push(pipeline_executable_properties::NAME.as_ptr());
+        }
+
+        let mut executable_features =
+            PhysicalDevicePipelineExecutablePropertiesFeaturesKHR::default()
+                .pipeline_executable_info(true);
 
         let queue_priorities = [1.0];
 
@@ -188,9 +213,13 @@ impl XrGpu {
             .queue_family_index(queue_family_index)
             .queue_priorities(&queue_priorities)];
 
-        let device_info = physical_features
+        let mut device_info = physical_features
             .add_to_device_create(DeviceCreateInfo::default().queue_create_infos(&queue_infos))
             .enabled_extension_names(&device_extension_names);
+
+        if statistics {
+            device_info = device_info.push_next(&mut executable_features);
+        }
 
         // SAFETY: `device_info` and everything it points to are alive for the
         // call.
@@ -265,6 +294,7 @@ impl XrGpu {
                 queue_family_index,
                 queue_index: 0,
             },
+            statistics,
         })
     }
 }
