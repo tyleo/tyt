@@ -54,10 +54,16 @@ emissive term. The light kinds reach a hit differently:
 Each hit reflects along the view's mirror direction. The mirror ray shows the
 shade of what it meets, with the hits behind showing through, then the
 hemisphere where the mirror ray leaves the scene. There the sky meets the ground
-at the horizon over a band as wide as the GGX alpha. The alpha also sets the
-share that sees the blurred hemisphere in place of the mirror ray, so a fully
-rough material traces none. A hit the mirror ray meets reflects the hemisphere
-without tracing.
+at the horizon over a band as wide as the GGX alpha.
+
+One ray cannot blur what a rough face reflects. What the mirror ray meets
+shows by the share of the face's GGX lobe that lands within two cells of it:
+`1 / (1 + (alpha * cells)^2)` for a hit `cells` away. The blurred hemisphere
+fills the rest. The occlusion darkens the alpha's share of the hemisphere. A
+smooth face mirrors the scene, and a rough face mirrors only what touches it.
+A ray that leaves the scene shows what it saw on the way. The same occlusion
+darkens that ray. A fully rough material traces no mirror ray. A hit the
+mirror ray meets reflects the hemisphere without tracing.
 
 Under `RenderOcclusion::Corner`, the corner occlusion darkens the hemisphere
 light. It counts only the cells whose material passes no light, so glass

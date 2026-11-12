@@ -140,7 +140,7 @@ fn shade_ray(
     scene: &RenderScene,
     occlusion: RenderOcclusion,
     ray: &RenderRay,
-    walk: RenderRayWalk,
+    walk: impl Iterator<Item = RenderHit>,
     bounce: bool,
 ) -> Result<RayShade> {
     let mut light = BLACK;
@@ -334,8 +334,21 @@ fn shade_hit(
         let sky = sky_radiance(scene, mirror, alpha);
 
         let reflected = if bounce && alpha < 1.0 {
-            trace_reflection(scene, occlusion, hit, mirror, sky)? * (1.0 - alpha)
-                + sky * (alpha * open)
+            let (seen, reach) = trace_reflection(scene, occlusion, hit, mirror, sky)?;
+
+            // The occlusion darkens the lobe's rough share.
+            let rough = 1.0 - alpha * (1.0 - open);
+
+            match reach {
+                Some(meters) => {
+                    let cells = meters / transform.scale.to_array()[hit.face.d].abs();
+                    let share = lobe_share(alpha, cells);
+
+                    seen * share + sky * ((1.0 - share) * rough)
+                }
+
+                None => seen * rough,
+            }
         } else {
             sky * open
         };
@@ -440,8 +453,18 @@ fn sky_radiance(scene: &RenderScene, direction: TyVector3F64, width: f64) -> TyL
         })
 }
 
+/// The share of a GGX lobe of `alpha` that lands within two cells of what
+/// its mirror ray meets `cells` away. The lobe puts `t / (alpha^2 + t)` of
+/// its facets within the angle of tangent squared `t` of the normal. A
+/// facet at that angle moves the ray's landing by twice the tangent times
+/// the distance.
+fn lobe_share(alpha: f64, cells: f64) -> f64 {
+    1.0 / (1.0 + (alpha * cells).powi(2))
+}
+
 /// The light that reaches `hit` along the unit `mirror`, with `sky` where
-/// the ray leaves the scene. Errors if the ray's start lies out of a grid's
+/// the ray leaves the scene, then the meters to what the ray first meets.
+/// Errors if the ray's start lies out of a grid's
 /// [range](crate::GRID_RANGE_BITS).
 fn trace_reflection(
     scene: &RenderScene,
@@ -449,13 +472,15 @@ fn trace_reflection(
     hit: &RenderHit,
     mirror: TyVector3F64,
     sky: TyLinSrgbF64,
-) -> Result<TyLinSrgbF64> {
+) -> Result<(TyLinSrgbF64, Option<f64>)> {
     let across = pixel_across(hit);
     let (_, origin) = shadow_origin(scene, hit, across);
     let target = ShadowTarget::Direction(mirror);
 
     let walk = RenderRayWalk::new(scene, shadow_rays(scene, hit, across, &target)?);
     let entry = entry_pass(scene, &walk);
+    let mut walk = walk.peekable();
+    let reach = walk.peek().map(|met| met.distance);
 
     let ray = RenderRay {
         origin,
@@ -463,7 +488,7 @@ fn trace_reflection(
     };
     let seen = shade_ray(scene, occlusion, &ray, walk, false)?;
 
-    Ok(entry * (seen.light + seen.transmittance * sky))
+    Ok((entry * (seen.light + seen.transmittance * sky), reach))
 }
 
 /// How much of a point light reaches `distance` meters out: the inverse
@@ -613,8 +638,9 @@ mod tests {
     use crate::{
         DependenciesImpl, RenderHit, RenderRayWalk, cast_ray, material_pass, render,
         render::{
-            BLACK, RayShade, WHITE, bilinear, check_bloom, cone_attenuation, direct_radiance,
-            point_attenuation, shade_hit, shade_ray, shadow_factor, sky_radiance,
+            BLACK, MIN_ALPHA, RayShade, WHITE, bilinear, check_bloom, cone_attenuation,
+            direct_radiance, lobe_share, point_attenuation, shade_hit, shade_ray, shadow_factor,
+            sky_radiance,
         },
         test_utilities::{bar_scene, check_goldens},
         transmitted_reflectance,
@@ -914,12 +940,11 @@ mod tests {
         // The white sky lights a face by its diffuse color plus the 0.04
         // reflectance. Each wall of the pane reflects the 0.04 alone and
         // passes 0.96. The far wall's mirror ray sees the sky through the
-        // near wall, and its roughness share of 0.04 sees the sky open.
+        // near wall.
         let (pane, ray) = bar_scene(&[glass(white)]);
         let alone = ray_shade(&pane, &ray);
-        let far = 0.96 * 0.96 + 0.04;
         assert!(
-            close(alone.light, WHITE * (0.04 + 0.96 * 0.04 * far)),
+            close(alone.light, WHITE * (0.04 + 0.96 * 0.04 * 0.96)),
             "{:?}",
             alone.light
         );
@@ -1043,7 +1068,7 @@ mod tests {
         // The ray enters by the -X face and leaves by the +Z face, each at a
         // cosine of 0.707. The white sky reflects alike in every direction,
         // and the far wall's mirror ray sees it through the near wall head
-        // on for all but the roughness share of 0.04.
+        // on.
         let oblique = RenderRay {
             origin: TyVector3F64::new(-0.5, 0.5, 0.0),
             direction: TyVector3F64::new(1.0, 0.0, 1.0).normalize(),
@@ -1054,7 +1079,7 @@ mod tests {
 
         let shade = ray_shade(&pane, &oblique);
         assert!(close(shade.transmittance, pass * pass));
-        let far = material_pass(&clear, 1.0) * 0.96 + WHITE * 0.04;
+        let far = material_pass(&clear, 1.0);
         assert!(close(shade.light, fresnel + pass * fresnel * far));
         assert!(shade.transmittance.red < ray_shade(&pane, &head_on).transmittance.red);
     }
@@ -1096,15 +1121,14 @@ mod tests {
         // Each wall passes 0.98: the uncovered half whole and the covered
         // half 0.96. The near wall adds half the emission plus half the
         // 0.04 reflectance, and the far wall adds as much through 0.98. The
-        // far wall's mirror ray sees the sky through the near wall for all
-        // but the roughness share of 0.04.
+        // far wall's mirror ray sees the sky through the near wall.
         let walls = 1.0 + 0.98;
 
         assert!(close(
             shade.emission,
             TyLinSrgbF64::new(1.0, 0.5, 0.0) * walls
         ));
-        let far = TyLinSrgbF64::new(1.0, 0.5, 0.0) + WHITE * (0.02 * (0.98 * 0.96 + 0.04));
+        let far = TyLinSrgbF64::new(1.0, 0.5, 0.0) + WHITE * (0.02 * 0.98);
         assert!(close(
             shade.light,
             TyLinSrgbF64::new(1.02, 0.52, 0.02) + far * 0.98
@@ -1373,6 +1397,35 @@ mod tests {
         let up = 0.5 + 0.5f64.sqrt() / 2.0;
         assert!(close(mirror_shade(1.0, true), WHITE * up));
         assert_eq!(mirror_shade(1.0, true), mirror_shade(1.0, false));
+    }
+
+    #[test]
+    fn a_rougher_metal_shows_less_of_what_its_mirror_ray_meets() {
+        assert_eq!(lobe_share(0.25, 0.0), 1.0);
+        assert_eq!(lobe_share(0.25, 4.0), 0.5);
+        assert!(lobe_share(0.5, 4.0) < 0.5);
+
+        // The mirror ray runs half a cell along each of two axes to the
+        // wall voxel. What it meets shows by the lobe's share, and the
+        // blurred sky of the open floor fills the rest.
+        let cells = 0.5f64.sqrt();
+        let met = |roughness: f64| {
+            let share = lobe_share((roughness * roughness).max(MIN_ALPHA), cells);
+
+            (mirror_shade(roughness, true) - mirror_shade(roughness, false) * (1.0 - share))
+                * (1.0 / share)
+        };
+
+        let (smooth, rough) = (met(0.0), met(0.8));
+        assert!(
+            (smooth.red - rough.red).abs() < 1e-4,
+            "{smooth:?} {rough:?}"
+        );
+        assert!(
+            (smooth.green - rough.green).abs() < 1e-4,
+            "{smooth:?} {rough:?}"
+        );
+        assert!(mirror_shade(0.8, true).red < mirror_shade(0.0, true).red);
     }
 
     #[test]
