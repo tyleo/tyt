@@ -22,6 +22,9 @@ const LAUNCH_STEPS: [u32; 5] = [0, 1, 2, 4, 8];
 /// launch's cost follows its groups or its invocations.
 const LAUNCH_GROUPS: [[u32; 2]; 3] = [[4, 4], [16, 8], [16, 16]];
 
+/// The label of the ray query over each object's greedy quads as triangles.
+const TRIANGLES: &str = "ray query, triangles";
+
 /// The fragment launch's label.
 const FRAGMENT_LAUNCH: &str = "fragment launch";
 
@@ -144,6 +147,15 @@ pub fn b2_kernels(
             for &arm in arms {
                 let label = format!("{}, {name}", arm.label());
                 let trace = RayQueryTrace::new(device, queue, &scene, view_id, width, height, arm)?;
+
+                traces.push((label.clone(), None));
+                kernels.push((label, KernelWork::RayQuery(trace)));
+            }
+
+            if ray_queries {
+                let label = format!("{TRIANGLES}, {name}");
+                let trace =
+                    RayQueryTrace::triangles(device, queue, &scene, view_id, width, height)?;
 
                 traces.push((label.clone(), None));
                 kernels.push((label, KernelWork::RayQuery(trace)));

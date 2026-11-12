@@ -151,7 +151,7 @@ code-level choices in
             - [x] Each finding becomes an experiment in S9.4
       - [x] **S9.3. A raster to beat.** A bare greedy-mesh raster of S1 and
             S5 on Quest gives the march a rate to beat
-      - [ ] **S9.4. Experiments.** The experiments follow the research's
+      - [x] **S9.4. Experiments.** The experiments follow the research's
             [ladder](reference/speedup-research.md#5-experiment-ladder),
             with a round of new approaches after rung 3. They rework the
             tree walk, the 64-tree, and the ray query march, one change at
@@ -304,8 +304,11 @@ code-level choices in
                   Grays/s after rung 3, under the ladder's 0.15, and the
                   box raster shades it at 2.90. The walk's tuning stops.
                   The box raster is the front end S9 hands on
-            - [ ] Rung 8, the ray-query arm. The rung first finds what fills
-                  the march's 2.7 KB of scratch per invocation
+            - [x] Rung 8, the ray-query arm. Each object's greedy quads
+                  as triangles trace S1 at 0.83 Grays/s on Quest, 5.3
+                  times the best march, and S5 at 0.40. The box raster
+                  keeps the primary rays. The arm is at hand for second
+                  rays. The march's scratch stays unread
             - [x] Rung 9, the output path. The box raster's march runs in
                   fragment passes. A compute launch costs Quest 28 ns a
                   workgroup: a pass over both eyes takes 2.55 ms at 8x8
