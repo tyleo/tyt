@@ -249,10 +249,13 @@ code-level choices in
                                     3.5 ms line, S1 2.16, and S2 6.70.
                                     B6's LOD remains for S5's floor past
                                     8 m
-                              - [ ] S1 shades 1.18 times a pixel and S2
-                                    1.43. A depth pass of the solid boxes
-                                    ahead of the march would leave the
-                                    marched boxes' share
+                              - [x] S1 shades 1.21 times a pixel and S2
+                                    1.47. A depth pass of the solid boxes
+                                    ahead of the march leaves 1.03 and
+                                    1.18. It costs S5 0.48 ms and gains
+                                    S2 0.21, so it drops. Bands of
+                                    distance and one run nearest first
+                                    lose too
                               - [x] A shadow fill on the GPU. A compute
                                     pass casts each corner's ray through
                                     the placements that can shadow its

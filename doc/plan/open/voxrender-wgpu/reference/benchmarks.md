@@ -1665,3 +1665,61 @@ reference's on 99 pixels of 31,818, from 100.
    copy the occlusion to each placement, at 12 bytes a placed record
    cell. S2 holds 18.9 million of them
 4. B6's LOD remains for the floor past 8 m
+
+## Overdraw, 2026-11-12
+
+Four ways to keep a solid box's fragments from shading under a marched
+box's hit. None stays.
+
+- Device, method, and image check: as in Records by row. Times are the
+  view's GPU frame time at p50 in ms at 545 MHz, in sittings that
+  alternate a build with the kept one
+- Shades a covered pixel: on this Mac, through the first view at 1680 by
+  1760. A build whose fragments each add 1 of 255 to a black target gives
+  the count
+
+**Shades a covered pixel.**
+
+| Order | S1 | S5 | S2 | S4 |
+| --- | ---: | ---: | ---: | ---: |
+| Kept: the solid boxes, then the marched ones | 1.21 | 1.03 | 1.47 | 1.40 |
+| A depth pass of the solid boxes | 1.03 | 1.03 | 1.18 | 1.03 |
+| Four bands of distance | 1.15 | 1.03 | 1.46 | 1.34 |
+| One run, nearest first | 1.13 | 1.10 | 1.30 | 1.03 |
+
+**Quest.**
+
+| Order | S1 | S5 | S2 | S4 |
+| --- | ---: | ---: | ---: | ---: |
+| Kept | 2.16 | 3.54 | 6.74 | 3.14 |
+| A depth pass of the solid boxes | 2.16 | 4.02 | 6.53 | 3.04 |
+| The depth pass, with vertices that carry a position alone | 2.16 | 4.02 | 6.52 | 3.02 |
+| Four bands of distance | 2.13 | 3.68 | 6.80 | 3.18 |
+| One run, nearest first | 2.36 | 3.88 | 6.57 | 2.89 |
+| One run, with a way out for a solid box | 2.27 | 4.42 | 6.61 | 2.95 |
+
+1. A depth pass. The solid boxes draw their depth and no color, then the
+   marched boxes draw, then the solid boxes shade where their depth still
+   holds. S5's 19,200 solid boxes cost 0.48 ms to draw a second time with
+   their varyings or without. S5 had no shade to save
+2. Four bands. The marched boxes that cross no box split into four bands
+   by distance. A solid box draws in the band whose marched boxes start no
+   farther than it lies, ahead of them. S2's marched boxes hide solid
+   boxes of their band, and each band adds two passes
+3. One run. The solid boxes and those marched boxes draw in one run,
+   nearest first, through the march's fragment, which hits a solid box's
+   first cell. A solid box's fragment then runs the march's 556
+   instructions at 50% occupancy, where `solid` holds 457 at 75%. A stray
+   cell's box also sorts behind the wider box of the layer under it
+4. A way out. `front` shades a solid box before the march's setup. The
+   stage then holds the shading twice
+
+**Outcomes.**
+
+1. The order stays. S1 shades 1.21 times a covered pixel, S2 1.47, and S4
+   1.40
+2. A second draw of a box costs Quest about 25 ns. A depth pass pays for a
+   scene whose solid boxes hide under marched hits, S2 and S4 here, and
+   costs one whose boxes are many and whose solid pixels show
+3. No sort by a box's distance orders two boxes of unlike size that
+   overlap on screen
