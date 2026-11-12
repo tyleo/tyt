@@ -204,15 +204,23 @@ code-level choices in
                               march. Five trims take 21% off S1, 20% off
                               S5, and 16% off S2. Stray cells as boxes
                               lose. The occupancy stays at 62% to 66%
+                        - [x] Boxes that cross another placement's box.
+                              A front face's fragment steps through the
+                              boxes its box crosses. Every box keeps its
+                              face's depth. S2 runs in 4.7 ms
+                        - [x] A pass a run. A pass of one draw runs in a
+                              faster mode on Quest, so a draw of 1024
+                              boxes or more gives each run its own pass
+                        - [x] Stray cells over a dense layer come off as
+                              boxes. A large draw draws three faces a box.
+                              S5 runs in 2.1 ms
                         - [ ] B3's shading load in the box raster's
                               fragments, on S1 and S5
-                        - [ ] Boxes that cross another placement's box.
-                              They cost S2 about 10 of its 14.5 ms.
-                              Three candidates: a raster of the tile's
-                              cell faces layer by layer, a second pass
-                              that reads the first's depth, and one march
-                              through both placements' cells
+                        - [ ] A crossing box that holds the eye. It still
+                              writes its hits' depth
                         - [ ] The crossing test as placements move
+                        - [ ] Why S1 shades a tenth more fragments over
+                              three faces a box than over corners
                   - [ ] Tiles of pixels walk together. An 8x8 tile walks
                         the empty space its rays share. Each ray then walks
                         on alone. The prototype runs only if the box raster
