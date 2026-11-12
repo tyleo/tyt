@@ -325,4 +325,14 @@ The steps after S9 get their detail when S9 lands. They run in this order:
 4. The reference rules B4 to B7 need, each before its benchmark: bloom at
    quarter resolution, the shadow memo's tier rules, `msaa4`, brick LOD, and
    transparency termination
-5. B4 to B12
+5. B4 to B7. A step starts with a study where its line in the frame budget
+   is in doubt. B7 is one. The research plans its walk as a compute pass
+   against a line of 1.0 ms. No compute pass over both eyes runs under 2.32
+   ms on Quest
+6. Traced reflections. The reference traces a mirror ray from each smooth
+   face. The research gives the ray no step and no line in the frame
+   budget. The box view reflects the sky alone. A study comes first: what
+   a second ray from a hit costs in the box raster, which cheaper forms
+   hold up, and the line they fit. The realtime tier's reflections can be
+   coarser than the reference's
+7. B8 to B12
