@@ -36,17 +36,22 @@ fn hidden(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> bool {
 /// 4. `glass`: whether the module adds `glass` and `glass_held`, which draw
 ///    a box's cells that pass light. A device needs dual-source blending for
 ///    them
+/// 5. `tints`: how far past a cell's word in `lit` its tint lies, as
+///    [`LitFill::tints`](crate::LitFill::tints) gives it, or zero where the
+///    sun reaches a face whole
 pub fn box_view_shader(
     traced: bool,
     bloom: Option<f32>,
     source: Option<f32>,
     glass: bool,
+    tints: u32,
 ) -> String {
     format!(
         "{}{}const RECORDS: u32 = {}u;\nconst MIRRORS: bool = {traced};\n\
          const MIRROR_CUT: f32 = {:?};\nconst MIRROR_REACH: f32 = {:?};\n\
          const BLOOM: bool = {};\n\
-         const BLOOM_THRESHOLD: f32 = {:?};\nconst BLOOM_SOURCE: f32 = {:?};\n{}\n{}\n{}\n{}",
+         const BLOOM_THRESHOLD: f32 = {:?};\nconst BLOOM_SOURCE: f32 = {:?};\n\
+         const TINTS: u32 = {tints}u;\n{}\n{}\n{}\n{}",
         if traced {
             "enable wgpu_ray_query;\n"
         } else {

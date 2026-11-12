@@ -61,8 +61,9 @@ const SLACK: f64 = 0.25;
 /// blends two colors a fragment: a fragment walks its box through the
 /// surfaces between such materials, and the blend tints what the target
 /// holds by what they pass and adds their light. The boxes draw farthest
-/// first as of the last sort. Elsewhere those cells do not draw. Their
-/// surfaces take the sun with no shadow and cast none.
+/// first as of the last sort. Elsewhere those cells do not draw. They tint
+/// the sun's light on the opaque faces behind them, and their own surfaces
+/// take the sun with no shadow.
 pub struct BoxView {
     boxes: BoxDraw,
 
@@ -405,7 +406,8 @@ impl BoxView {
         // The sun's corner shadows, which the GPU fills into the words' low
         // bits before the view's first draw. A scene with no sun leaves them
         // zero, and its faces skip the sun's term.
-        let lit_corners = if suns > 0 {
+        // Where a material passes light, the fill adds each cell's tint.
+        let (lit_corners, tints) = if suns > 0 {
             let fill = LitFill::new(device, scene, sun.0, &object_recorded, &opaque)?;
 
             assert_eq!(
@@ -416,13 +418,15 @@ impl BoxView {
             queue.write_buffer(&fill.lit, 0, &words_bytes(&lit_words));
             fill.fill(device, queue);
 
-            fill.lit
+            (fill.lit, fill.tints.unwrap_or(0))
         } else {
-            device.create_buffer_init(&BufferInitDescriptor {
+            let lit = device.create_buffer_init(&BufferInitDescriptor {
                 label: Some("view lit corners"),
                 contents: &words_bytes(&lit_words),
                 usage: BufferUsages::STORAGE,
-            })
+            });
+
+            (lit, 0)
         };
 
         // A material's three `vec4<f32>`s: its base color and metalness, its
@@ -924,7 +928,7 @@ impl BoxView {
                         "box view"
                     }),
                     source: ShaderSource::Wgsl(
-                        box_view_shader(traced, threshold, source, glass).into(),
+                        box_view_shader(traced, threshold, source, glass, tints).into(),
                     ),
                 },
                 ShaderRuntimeChecks::unchecked(),
