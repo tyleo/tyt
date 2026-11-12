@@ -132,8 +132,14 @@ impl XrApp {
 
             FrameWork::View {
                 view: Box::new(
-                    HeadsetView::new(&gpu.device, scene, swapchain.format, [width, height])
-                        .map_err(Error::Bench)?,
+                    HeadsetView::new(
+                        &gpu.device,
+                        &gpu.queue,
+                        scene,
+                        swapchain.format,
+                        [width, height],
+                    )
+                    .map_err(Error::Bench)?,
                 ),
                 depth: depth.create_view(&TextureViewDescriptor::default()),
                 prepared: Duration::ZERO,

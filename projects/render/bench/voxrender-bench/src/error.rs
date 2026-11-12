@@ -22,6 +22,9 @@ pub enum Error {
     /// The scene has no view to draw.
     NoView,
 
+    /// The scene has no directional light.
+    NoSun,
+
     /// The device lacks timestamp queries, which a timed benchmark needs.
     NoTimestampQuery,
 
@@ -67,6 +70,7 @@ impl Display for Error {
             Error::Trace(error) => write!(f, "the GPU trace failed: {error}"),
             Error::NoScene(name) => write!(f, "no bench scene's name starts with {name:?}"),
             Error::NoView => write!(f, "the scene has no view"),
+            Error::NoSun => write!(f, "the scene has no directional light"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),
             Error::NoKernel(text) => write!(f, "no kernel's label holds {text:?}"),
             Error::NoRayQuery => write!(f, "the device lacks ray queries"),

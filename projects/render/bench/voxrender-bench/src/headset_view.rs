@@ -2,10 +2,6 @@ use crate::{BoxView, Error, HeadsetEye, Result, ViewEye, bench_scene};
 use ty_math::{TyQuaternionF64, TyVector3F64};
 use wgpu::{Color, Device, Queue, RenderPass, TextureFormat};
 
-/// The most placements a scene holds for its sun to cast shadows. The
-/// shadows' fill on the CPU takes too long past that.
-const SHADOWED: usize = 64;
-
 /// A [`BoxView`] of a bench scene around a headset's wearer. The origin of
 /// the headset's tracking space stands at the scene's first view and faces
 /// the way that view does, kept level.
@@ -28,6 +24,7 @@ impl HeadsetView {
     /// height. Errors unless a scene has the name and a view.
     pub fn new(
         device: &Device,
+        queue: &Queue,
         scene: &str,
         format: TextureFormat,
         size: [u32; 2],
@@ -37,13 +34,7 @@ impl HeadsetView {
         let forward = view.pose.rotation * -TyVector3F64::Z;
 
         Ok(HeadsetView {
-            boxes: BoxView::new(
-                device,
-                &render_scene,
-                format,
-                size,
-                render_scene.placement_count() <= SHADOWED,
-            )?,
+            boxes: BoxView::new(device, queue, &render_scene, format, size)?,
             origin: view.pose.position,
             turn: TyQuaternionF64::from_rotation_y((-forward.x).atan2(-forward.z)),
         })

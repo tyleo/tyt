@@ -107,9 +107,7 @@ the CPU every 600 frames on a `view` line beside B0's GPU frame times.
 `'setprop debug.voxrenderbench.view ""'` returns the app to its benchmarks.
 
 The view shades as the contract's opaque surface under the scene's first sun
-and its hemispheres. The sun's shadows fill on the CPU at start, which takes
-S1 and S5 some seconds. A scene of over 64 placements, such as S2, draws
-without them.
+and its hemispheres. The GPU fills the sun's shadows at start.
 
 ## Profile
 
