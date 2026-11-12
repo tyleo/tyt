@@ -339,9 +339,10 @@ code-level choices in
             - [ ] Quad views, four views of 840 by 880. By the split they
                   gain S1 and S4 a quarter and cost S5. The app draws
                   them once B6's LOD holds a scene's boxes down
-      - [ ] **S9.7. The final run.** A final Quest run re-times B2 with the
+      - [x] **S9.7. The final run.** A final Quest run re-times B2 with the
             improved code. The report lands in benchmarks.md. R picks the B3
-            arms
+            arms: the box raster shades S1's both eyes in 2.03 ms and S5's
+            in 3.40, under B3's 3.5 ms line
 
 ## Later
 
