@@ -2414,3 +2414,46 @@ beside thin emitters, where the two narrowest octaves share one level.
 3. No pass reads the eyes back. That costs 2 ms on Quest
 4. Left: a level for each of the two narrowest octaves, an emission behind
    glass, and B4's depth and motion vectors
+
+## Glass in the box view, 2026-11-12
+
+The box view drew every live cell as opaque: a tank hid its fish. It now
+draws the contract's transmission in a pass after the opaque ones.
+
+**The 35 trial models against the reference.** Pixels off of 543,559, with
+bloom in both.
+
+| Model | Glass drawn opaque | Glass walked |
+| --- | ---: | ---: |
+| fish tank | 14,354 | 7776 |
+| potion | 8072 | 6933 |
+| spaceship bridge | 6074 | 4590 |
+| lantern | 3334 | 1366 |
+| bridge | 2757 | 899 |
+| all 35 | 51,760 | 38,468 |
+
+The light under glass stays off. The reference tints the sun and its
+shadow by each pane they cross, and the box view lights the fish whole.
+
+**Quest.** App GPU p50 in ms. The first walk kept every cell that passes
+light and read the opaque cells from their own tile: three loads a cell.
+The second keeps the busy cells, and its boxes hold the surfaces alone.
+
+| Model | Glass drawn opaque | Every cell walked | Busy cells walked | The same with no sun on glass | The same with the tint alone |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| fish tank | 1.74 | 8.57 | 4.42 | 3.98 | 3.50 |
+| potion | 0.87 | 4.11 | 2.45 | 2.16 | 1.75 |
+| lantern | 1.66 | 3.30 | 2.61 | | |
+
+Each holds 90 Hz. The surfaces' shade takes a third of what glass costs
+the fish tank. The fragments and their steps take the rest.
+
+**Outcomes.**
+
+1. Glass, water, and what sits inside them draw as the contract draws
+   them, but for the light that crosses glass
+2. The fish tank takes 4.4 ms on Quest, 2.7 more than with its water
+   opaque. B7's line was 1.0 ms
+3. Left: the walk's cost, shadows and tints under glass, a mirror ray
+   through glass, and an eye inside a material
+

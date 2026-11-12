@@ -1,5 +1,5 @@
 use crate::{
-    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitFill,
+    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, GlassTiles, HitTargets, LitFill,
     MaterialGrid, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
@@ -56,6 +56,13 @@ const SLACK: f64 = 0.25;
 /// Where the scene blooms, a fragment adds the halo at its pixel before the
 /// tonemap. [`glow`](Self::glow) makes the halo before a frame's passes, and
 /// a last pass adds it over the sky.
+///
+/// The cells that pass light draw after the opaque ones, where the device
+/// blends two colors a fragment: a fragment walks its box through the
+/// surfaces between such materials, and the blend tints what the target
+/// holds by what they pass and adds their light. The boxes draw farthest
+/// first as of the last sort. Elsewhere those cells do not draw. Their
+/// surfaces take the sun with no shadow and cast none.
 pub struct BoxView {
     boxes: BoxDraw,
 
@@ -82,6 +89,11 @@ pub struct BoxView {
     solid: ViewBoxes,
     marched: ViewBoxes,
 
+    /// The boxes around each tile's surfaces between materials that pass
+    /// light. They draw after the rest, farthest first, where the device
+    /// blends a tint a channel.
+    glass: ViewBoxes,
+
     /// Whether each marched box shares space with another placement's box.
     crossing: Vec<bool>,
 
@@ -93,6 +105,7 @@ pub struct BoxView {
     sorted: Vec<u8>,
     solid_keys: Vec<u64>,
     marched_keys: Vec<u64>,
+    glass_keys: Vec<u64>,
 
     sky: Color,
 }
@@ -393,7 +406,7 @@ impl BoxView {
         // bits before the view's first draw. A scene with no sun leaves them
         // zero, and its faces skip the sun's term.
         let lit_corners = if suns > 0 {
-            let fill = LitFill::new(device, scene, sun.0, &object_recorded)?;
+            let fill = LitFill::new(device, scene, sun.0, &object_recorded, &opaque)?;
 
             assert_eq!(
                 fill.places, lit_places,
@@ -744,6 +757,67 @@ impl BoxView {
             quad_words.push(0);
         }
 
+        // The surfaces between materials that pass light draw as glass
+        // where the device blends a tint a channel. A glass material holds
+        // a fourth `vec4<f32>`: its coverage and its transmission.
+        let blends = device.features().contains(Features::DUAL_SOURCE_BLENDING);
+        let mut glass_places: HashMap<u32, u32> = HashMap::new();
+        let mut object_glass = HashMap::new();
+        let mut glass_tiles = HashMap::new();
+
+        for (object_id, object) in scene.iter_objects() {
+            let mut place = |id: u32| {
+                *glass_places.entry(id).or_insert_with(|| {
+                    let place = materials.len() / 4;
+
+                    let cover = scene
+                        .material(U32Id::from_u32(id))
+                        .map_or([0.0; 2], |material| {
+                            [material.base_color.alpha, material.transmission]
+                        });
+
+                    materials.extend(material_values(id));
+                    materials.extend([cover[0] as f32, cover[1] as f32, 0.0, 0.0]);
+
+                    u32::try_from(place)
+                        .ok()
+                        .filter(|&place| place < 1 << 24)
+                        .expect("a scene's material values number under 2^24")
+                })
+            };
+
+            let tiles = if blends {
+                GlassTiles::new(object, &opaque, &mut place)
+            } else {
+                GlassTiles {
+                    boxes: Vec::new(),
+                    tiles: Vec::new(),
+                    words: Vec::new(),
+                }
+            };
+
+            let first = u32::try_from(words.len()).expect("a scene's mask words number under 2^32");
+
+            words.extend(tiles.words);
+            object_glass.insert(object_id, tiles.boxes);
+            glass_tiles.insert(object_id, (first, tiles.tiles));
+        }
+
+        let glass = PlacedBox::list(scene, &object_glass);
+        let mut glass_boxes = ViewBoxes::default();
+
+        let glass_words: Vec<_> = glass
+            .iter()
+            .map(|placed| {
+                let (first, tiles) = &glass_tiles[&object_ids[placed.placement as usize]];
+                let words = placed.words(placed.placement, first + tiles[placed.brick], [0, 0]);
+
+                glass_boxes.push(placed, words, false, false);
+
+                words
+            })
+            .collect();
+
         // A hit in a row with no record cell can read another tile's word
         // in `lit`, whose material lies up to 255 past the hit tile's first.
         materials.resize(materials.len() + 255 * 12, 0.0);
@@ -831,7 +905,7 @@ impl BoxView {
         // an eye and a box's placement.
         let threshold = bloom.as_ref().map(|&(_, threshold)| threshold);
 
-        let module = |traced, source| unsafe {
+        let module = |traced, source, glass| unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some(if traced {
@@ -839,21 +913,26 @@ impl BoxView {
                     } else {
                         "box view"
                     }),
-                    source: ShaderSource::Wgsl(box_view_shader(traced, threshold, source).into()),
+                    source: ShaderSource::Wgsl(
+                        box_view_shader(traced, threshold, source, glass).into(),
+                    ),
                 },
                 ShaderRuntimeChecks::unchecked(),
             )
         };
 
         // A mirror ray's query costs each fragment of its module, so only
-        // the boxes that can cast one draw through it.
-        let plain = module(false, None);
-        let mirror = mirrors.then(|| module(true, None));
-        let modules: Vec<_> = [Some(&plain), mirror.as_ref()]
+        // the boxes that can cast one draw through it. Glass draws through
+        // a module of its own, which a device needs dual-source blending
+        // to take.
+        let plain = module(false, None, false);
+        let mirror = mirrors.then(|| module(true, None, false));
+        let glassy = (!glass_words.is_empty()).then(|| module(false, None, true));
+        let near = usize::from(mirror.is_some());
+        let modules: Vec<_> = [Some(&plain), mirror.as_ref(), glassy.as_ref()]
             .into_iter()
             .flatten()
             .collect();
-        let near = modules.len() - 1;
 
         let storage = BufferBindingType::Storage { read_only: true };
         let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
@@ -938,7 +1017,35 @@ impl BoxView {
             faces,
             module,
             boxes,
+            glass: false,
         };
+
+        let mut parts = vec![
+            part("held", BoxFaces::Held, near, held_words),
+            part("inside", BoxFaces::NearBack, near, Vec::new()),
+            part("solid", BoxFaces::Front, 0, solid_words),
+            part("solid", BoxFaces::Front, near, Vec::new()),
+            part("front", BoxFaces::Front, 0, march_words),
+            part("front", BoxFaces::Front, near, Vec::new()),
+            part("crossed", BoxFaces::Front, 0, Vec::new()),
+            part("crossed", BoxFaces::Front, near, Vec::new()),
+        ];
+
+        // Glass draws last. A box near the head draws in both runs, and
+        // each eye takes the one that fits it.
+        if glassy.is_some() {
+            parts.extend(
+                [("glass", BoxFaces::Front), ("glass_held", BoxFaces::Held)].map(
+                    |(fragment, faces)| BoxPart {
+                        fragment,
+                        faces,
+                        module: modules.len() - 1,
+                        boxes: glass_words.clone(),
+                        glass: true,
+                    },
+                ),
+            );
+        }
 
         let buffers = [
             (both, BufferBindingType::Uniform, &frame),
@@ -955,16 +1062,7 @@ impl BoxView {
             device,
             &modules,
             format,
-            &[
-                part("held", BoxFaces::Held, near, held_words),
-                part("inside", BoxFaces::NearBack, near, Vec::new()),
-                part("solid", BoxFaces::Front, 0, solid_words),
-                part("solid", BoxFaces::Front, near, Vec::new()),
-                part("front", BoxFaces::Front, 0, march_words),
-                part("front", BoxFaces::Front, near, Vec::new()),
-                part("crossed", BoxFaces::Front, 0, Vec::new()),
-                part("crossed", BoxFaces::Front, near, Vec::new()),
-            ],
+            &parts,
             &BoxBindings {
                 buffers: &buffers,
                 sampled: Some((&halo, &bloom_sampler)),
@@ -984,7 +1082,7 @@ impl BoxView {
             );
 
             // The source's ray needs the ray queries the TLAS came with.
-            let source = module(tlas.is_some(), Some(bloom.scale() as f32));
+            let source = module(tlas.is_some(), Some(bloom.scale() as f32), false);
             let half = size.map(|side| side.div_ceil(2));
 
             Glow {
@@ -1033,11 +1131,13 @@ impl BoxView {
             placements,
             solid: solid_boxes,
             marched: marched_boxes,
+            glass: glass_boxes,
             crossing,
             sorted_for: None,
             sorted: Vec::new(),
             solid_keys: Vec::new(),
             marched_keys: Vec::new(),
+            glass_keys: Vec::new(),
             sky: Color {
                 r: f64::from(above.red),
                 g: f64::from(above.green),
@@ -1141,7 +1241,7 @@ impl BoxView {
 
         // Each run of front faces draws twice: the boxes with no mirror,
         // then those with one.
-        let counts = [
+        let mut counts = vec![
             marched.extend(crossing_keys(near, crossing, true), &mut self.sorted),
             marched.extend(crossing_keys(near, crossing, false), &mut self.sorted),
             solid.extend(
@@ -1157,6 +1257,17 @@ impl BoxView {
             marched.extend(marched.of(crossed(), false), &mut self.sorted),
             marched.extend(marched.of(crossed(), true), &mut self.sorted),
         ];
+
+        // Glass draws farthest first: every box through its front faces,
+        // then the boxes an eye can stand in through their back faces.
+        if !self.glass.words.is_empty() {
+            let glass = &self.glass;
+            let within = glass.nearest_first(head, covered, &mut self.glass_keys);
+            let farthest_first = |keys: &[u64]| keys.iter().rev().copied().collect::<Vec<_>>();
+
+            counts.push(glass.extend(farthest_first(&self.glass_keys), &mut self.sorted));
+            counts.push(glass.extend(farthest_first(&self.glass_keys[..within]), &mut self.sorted));
+        }
 
         self.boxes.rewrite(queue, &self.sorted, &counts);
         self.sorted_for = Some((head, covered));

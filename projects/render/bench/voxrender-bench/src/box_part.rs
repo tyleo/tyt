@@ -12,4 +12,9 @@ pub struct BoxPart<'a> {
 
     /// Each box's three `vec4<u32>`s, in draw order.
     pub boxes: Vec<[u32; 12]>,
+
+    /// Whether the run draws glass. Its fragments write no depth. They
+    /// write a light and the share of the target's color to keep under it
+    /// as dual-source blending's two sources.
+    pub glass: bool,
 }

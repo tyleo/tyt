@@ -223,6 +223,7 @@ pub fn mask_boxes(
             .into_iter()
             .map(solid_words)
             .collect(),
+        glass: false,
     };
 
     let exact = |boxes: Vec<[u32; 12]>| BoxPart {
@@ -230,6 +231,7 @@ pub fn mask_boxes(
         faces: BoxFaces::Back,
         module: 0,
         boxes,
+        glass: false,
     };
 
     let parts = match depth {
@@ -281,6 +283,7 @@ pub fn mask_boxes(
                     .into_iter()
                     .map(|(index, span)| march_words(index, span))
                     .collect(),
+                glass: false,
             };
 
             vec![
@@ -289,6 +292,7 @@ pub fn mask_boxes(
                     faces: BoxFaces::NearBack,
                     module: 0,
                     boxes: inside,
+                    glass: false,
                 },
                 solids,
                 fronts("front", front),

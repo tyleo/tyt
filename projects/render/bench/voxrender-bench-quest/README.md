@@ -118,7 +118,7 @@ and its hemispheres. The GPU fills the sun's shadows at start. A face's
 mirror ray traces the scene's opaque faces through a ray query. The face it
 meets shades flat with no shadow. The rougher the face, the nearer what it
 mirrors has to lie to show. A model's emission blooms as vxl's review
-renders bloom it.
+renders bloom it. Glass and water tint what lies behind them.
 
 ## Models
 
