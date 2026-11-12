@@ -448,11 +448,12 @@ they land.
   box covers both sides of its tile because a slot serves every ray
 - Child boxes grown in the walk from a node's mask cut S1's iterations but
   lost 10% to 16% on the Mac, so the walk keeps tile boxes alone
-- The box raster draws each box as one instance of 8 corners and 36
-  indices, with two `vec4<u32>`s an instance. A view's boxes share one
-  buffer in draw order, and each run of them has its pipeline. A
-  full-screen draw costs about 25 us on Quest, so a view draws at most four
-  runs
+- The box raster draws each box as one instance with three `vec4<u32>`s. A
+  view's boxes share one buffer in draw order, and each run of them has its
+  pipeline. A draw of 1024 boxes or more counts its cost by the box: each
+  run takes a pass of its own, and a run of front faces draws the three
+  faces toward the view. A smaller draw counts by the pixel: one pass, and
+  each box's 8 corners and 36 indices
 - The tree-march arms rebuild the pixel's quantized ray from the fragment's
   position and call the ray query's `march`. Their boxes sit 1/64 cell past
   their cells because the rasterizer covers the exact projection while the
@@ -467,12 +468,25 @@ they land.
   miss. Depth runs reversed, so zero fails the test, and the fragment needs
   no discard
 - Under face depth two boxes that share no space order their hits as they
-  order their faces, because a ray crosses one before the other. The
-  crossing test compares the world boxes around two placements' boxes, 0.1
-  mm short so boxes that touch stay apart. It can count a turned box that
-  only comes near, which costs time and no hit. A tile's solid boxes and
-  its marched box can share space because the march reads every live cell
-  of the tile
+  order their faces, because a ray crosses one before the other. Two boxes
+  cross where no axis parts them. The test stops 0.1 mm short so boxes that
+  touch stay apart. A tile's solid boxes and its marched box can share
+  space because the march reads every live cell of the tile
+- A marched box that crosses others draws through `crossed`, which finds
+  the first hit of any placement inside the box. It reads `boxes`, every
+  box's two words in a storage buffer, and `crossers`, each crossing
+  pair's shared space and the other box's index. It carries the ray into
+  the other grid through each placement's axes and scale. A solid box
+  needs no such fragment because nothing inside it lies before its face
+- Three cases keep hit depth: every marched box under the hit-depth arm, a
+  crossing box that holds the eye, and a crossing or eye-holding box under
+  an orthographic view
+- `front` holds its march in a loop of its own in place of a call to
+  `first_hit`. The boxes that cross no other draw in their own run. Both
+  keep the fragment that most pixels run small
+- A tile gives up stray cells as boxes of live cells before its slabs: a
+  face layer of at most 16 cells that fill an eighth of it or less, before
+  a layer at least half full
 - A tile gives a solid box only as a slab across a face of the box around
   its cells that are left, so a wall, a floor, and a table top each come off
   whole. The slab must hold 32 cells. A tile gives up to four

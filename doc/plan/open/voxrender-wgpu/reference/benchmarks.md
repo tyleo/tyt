@@ -1076,16 +1076,105 @@ two. The kernel's share of a frame's instructions:
 | solid boxes and mask march, S1 | 0.74 G | 0.59 G | 86% |
 | solid boxes and mask march, S5 | 1.30 G | 1.05 G | 66% |
 
+**Passes.** A render pass that holds one draw runs in a faster mode on
+Quest. The mask arm on S5 draws its 4096 boxes through one pipeline, so
+the same boxes in one draw or several show the mode alone:
+
+| S5's 4096 boxes | ms |
+| --- | ---: |
+| One draw | 2.545 |
+| Two draws of 2048 | 3.211 |
+| Sixteen draws | 3.224 |
+| Two draws, the second of one box | 3.166 |
+| Two draws, the pipeline set once | 3.164 |
+| Two draws, each from instance 0 | 3.217 |
+| Two passes of one draw, the second loading the first's color and depth | 2.578 |
+
+A second draw of any size slows the whole pass, and more draws cost no
+more. `ovrgpuprofiler` shows 14 vertices shaded a box in such a pass
+against 8. S2's 25,301 boxes ran in 8.0 ms as two draws in a pass and in
+4.9 as a pass a draw, so the slower mode costs 110 to 160 ns a box. A
+pass that loads the last pass's color and depth costs under 0.02 ms.
+S1's 426 boxes go the other way: 1.26 ms in one pass against 1.39 at p50
+as a pass a run. The driver has no setting for the mode. Its name is a
+guess: a pass that renders straight to memory with no binning would
+cost less a box and more a pixel.
+
+The earlier section's 25 us a draw came from this switch. Its sixteen
+bands lost on S5 because they left the faster mode.
+
+**Crossing boxes.** A box that crossed another placement's box wrote its
+hits' depth, and such a fragment runs before its depth test. Under face
+depth the nearest face wins a pixel. That face holds the pixel's first
+hit as long as each front face's fragment finds the first hit of any
+placement inside its box, because a nearer hit in another box lies in
+that box's span of the ray and so past the winning face. A fragment of a
+box that shares space with others steps through its tile and then
+through each of those boxes. No box then needs its hits' depth.
+
+| Scene | Marched boxes | That cross | Crossers | Most a box |
+| --- | ---: | ---: | ---: | ---: |
+| S1 | 45 | 13 | 22 | 8 |
+| S2 | 21,604 | 6157 | 14,070 | 22 |
+| S4 | 1247 | 54 | 92 | 4 |
+
+The table follows a tighter crossing test. Two boxes cross only where
+no axis parts them as they lie. The first test compared the world boxes
+around them. S2 had 6957 crossing boxes under that test.
+
+Each step's p10 on the solid and mask arm, in ms at 545 MHz:
+
+| State | S1 | S5 | S2 |
+| --- | ---: | ---: | ---: |
+| After the trims | 1.080 | 2.523 | 11.984 |
+| The tighter crossing test | | | 11.780 |
+| Crossing boxes step through their crossers, in one pass | 1.261 | 2.552 | 7.921 |
+| A pass a run from 1024 boxes | 1.260 | 2.603 | 4.890 |
+| Stray cells come off as boxes | 1.260 | 2.299 | 4.938 |
+| Three faces a box from 1024 boxes | 1.260 | 2.068 | 4.733 |
+
+1. A crosser carries a box around the space the two boxes share, in the
+   first box's cells. A ray that misses that space skips the crosser.
+   Without the test S2's crossing fragments ran in 10.9 ms where they
+   now run in 8.0, both in one pass
+2. A shader's size costs every fragment that runs it. With every marched
+   box through the crossing fragment, S5 ran in 3.45 ms against 2.55,
+   though it has no crosser. A front fragment that called the shared
+   march ran S5 in 2.83 ms against 2.61 with a loop of its own. The
+   boxes that cross no other keep a small fragment and their own run
+3. S1's 13 crossing boxes are its crates. Their fragments cost more than
+   their depth writes did, 1.26 ms against 1.08
+4. Stray cells lost under two draws in a pass. With a pass a run they
+   win on S5, where each tile's pebbles leave its box a layer lower.
+   Taken wherever a layer was an eighth full, they also took 92,512
+   cells off S2's tree crowns, and S2 ran in 10.8 ms. The cells come off
+   only before a layer that is at least half full
+5. A box drew 12 triangles and the pipeline culled half. The three faces
+   toward the view make 6. S5's 23,296 boxes gained 0.33 ms and S2's
+   25,301 gained 0.2, about 1 ns a triangle an eye. S1 shaded a tenth
+   more fragments over the faces, 16.6 M a frame against 15.1, and ran
+   in 1.51 ms against 1.26. The cause is not known. S1 keeps its
+   corners
+
+The headset view after these steps, as in the section above:
+
+| Scene | Frame rate | GPU p50 | CPU | GPU busy | GPU clock |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| S1 | 90 Hz | 1.87 | 0.08 | 24% | 545 MHz |
+| S5 | 90 Hz | 2.61 to 2.64 | 0.08 | 33% | 545 MHz |
+| S2 | 90 Hz | 5.71 to 5.73 | 0.27 | 62% | 545 MHz |
+
 **Variants that lost.**
 
 1. Loops that end on a compare of the distance's bits, which a NaN also
    ends, ran S5 in 2.620 ms against 2.603 for trim 3 and 2.736 before it,
    and the mask arm on S1 in 2.188 against 2.109
-2. Stray cells as boxes. A face of a tile's box gave up its layer's cells
-   as boxes of live cells when they filled an eighth of the layer or less,
-   up to 16 cells a tile. S5's pebbles came off every tile, and its
-   marched boxes shrank by a layer. S5 ran in 3.160 ms against 2.523, and
-   S2 in 16.855 against 11.984. S5 gained 19,200 boxes and S2 92,512
+2. Distance bands that drew each band's boxes that cross no other and
+   then its boxes that do, in one pass, ran S2 in 8.0 to 8.2 ms at 1, 2,
+   4, 8, and 16 bands
+3. One sorted run with every marched box through the crossing fragment
+   ran S2's mask arm in 4.95 ms and S5 in 3.45. The pass a run reaches
+   4.9 on S2 and keeps S5's fragment small
 
 **Outcomes.**
 
@@ -1097,10 +1186,14 @@ two. The kernel's share of a frame's instructions:
    and no bench view showed it. B1's new scene covers it
 4. The trims take 21% off S1, 20% off S5, and 16% off S2. The march's
    occupancy stays at 62% to 66%
-5. A box costs 33 to 53 ns a frame on Quest beyond its fragments, from
-   the stray cells' boxes. S2's 25,301 boxes then cost about 1 ms. A box
-   earns its place only where it saves a few hundred steps a frame
-6. S5's far rays skim its top layer, where pebbles fill 2% of the cells.
-   Those steps wait for B6's LOD because a cell there stands under a pixel
-   tall from about 5 m out
-
+5. S2 runs in 4.7 ms against 14.2 at the round's start, and its view
+   holds 90 Hz at 5.7 ms. Every box now keeps its face's depth under a
+   perspective view, but for a crossing box within 25 cm of the head
+6. On Quest a pass of one draw costs less a box and more a pixel. A draw
+   of 1024 boxes or more takes a pass a run. Each earlier loss that put
+   a second draw in a pass needs this in mind: the sixteen bands, S5's
+   slabs, and the first trial of stray cells
+7. S5 runs in 2.07 ms against 3.17. Its far rays still skim a layer of
+   its top cells, which waits for B6's LOD
+8. S1 runs in 1.26 ms against 1.37. Its crates' crossing fragments cost
+   0.18 ms more than their depth writes did
