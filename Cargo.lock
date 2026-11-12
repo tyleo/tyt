@@ -3129,6 +3129,7 @@ version = "0.1.0"
 dependencies = [
  "branded-id",
  "ty-math",
+ "voxconv",
  "voxcore",
  "voxrender",
  "voxrender-cpu",
@@ -3144,6 +3145,7 @@ dependencies = [
  "clap",
  "png",
  "pollster",
+ "voxrender",
  "voxrender-bench",
  "wgpu",
 ]

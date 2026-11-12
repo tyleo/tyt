@@ -26,3 +26,10 @@ prints how many of the pixels that hit something opaque differ. `lit-check`
 fills a scene's corner shadows on the GPU as the view does and again on the
 CPU through the reference's walk. It prints how many corners differ. All three
 take the start of a scene's name in B1's report.
+
+Each of the three also takes the path of a Voxel Json model in place of a
+scene's name. A model draws from vxl's hero view under its studio rig:
+
+```sh
+cargo run --release -p voxrender-bench-desktop -- view chair.voxjz chair.png
+```
