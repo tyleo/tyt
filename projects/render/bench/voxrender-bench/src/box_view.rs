@@ -179,6 +179,10 @@ impl BoxView {
     /// of its face's light. A face that reflects less casts none.
     pub const MIRROR_CUT: f32 = 1.0 / 64.0;
 
+    /// The least cells a mirror ray reaches. A face whose ray would end
+    /// sooner casts none: what touches it shows too faintly to earn a ray.
+    pub const MIRROR_REACH: f32 = 2.0;
+
     /// The format of the depth a pass that draws the view clears to zero.
     pub const DEPTH: TextureFormat = HitTargets::DEPTH;
 
@@ -407,8 +411,8 @@ impl BoxView {
         };
 
         // A mirror ray needs a device with ray queries. A tile's fragments
-        // can cast one where one of its materials is less than fully rough
-        // and reflects over `MIRROR_CUT`.
+        // can cast one where one of its materials' rays would reach past
+        // `MIRROR_REACH`.
         let traced = device.features().contains(Features::EXPERIMENTAL_RAY_QUERY);
         let mut tile_mirrors: HashMap<u32, bool> = HashMap::new();
 
@@ -422,9 +426,12 @@ impl BoxView {
                         .iter()
                         .any(|&id| {
                             let values = material_values(id);
+                            let alpha = (values[7] * values[7]).max(1.0e-3);
                             let reflectance = values[8].max(values[9]).max(values[10]);
+                            let far =
+                                (reflectance / Self::MIRROR_CUT - 1.0).max(0.0).sqrt() / alpha;
 
-                            values[7] < 1.0 && reflectance > Self::MIRROR_CUT
+                            values[7] < 1.0 && far > Self::MIRROR_REACH
                         })
             })
         };

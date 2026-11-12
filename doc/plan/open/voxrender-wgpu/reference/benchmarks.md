@@ -2289,6 +2289,7 @@ face's reflectance falls to 1 in 64.
 | The same with no ray under a reach of 4 cells | 58,558 |
 | The same with no ray under a reach of 8 cells | 64,462 |
 | The lobe's share, and a quad within two cells takes its face's occlusion | 41,982 |
+| The same with no ray under a reach of 2 cells, and the face's occlusion where none is cast | 45,638 |
 
 A rough dielectric now mirrors what touches it at a twentieth of its
 light. The reference shades that with its shadow and occlusion. The box
@@ -2296,6 +2297,30 @@ view shades it flat, which shows in a crease. The dollhouse's roof moved
 from 447 pixels off to 2678. A quad near the face lies in the same crease.
 The face's occlusion stands in for the quad's. The bench scenes
 hold: S1 6 pixels off, S5 99, S2 17, and S4 72.
+
+**Quest.** A tour of the gallery, 15 seconds a model. App GPU p50 in ms.
+The first rule cast a ray from a face whose reflectance times one minus
+alpha passed 1 in 64. Under the lobe's share every face short of fully
+rough casts one because what touches it shows whole. The last column casts
+none from a face whose ray would end within two cells, which a dielectric's
+does from a roughness of 0.8. The face's occlusion then stands in for what
+the ray would meet, as it did under the first rule.
+
+| Model | One minus alpha | The lobe's share | No ray under a reach of 2 cells |
+| --- | ---: | ---: | ---: |
+| chess set | 2.79 | 1.97 | 1.99 |
+| dragon | 2.93 | 2.07 | 2.04 |
+| chest | 2.31 | 1.87 | 1.77 |
+| pocket watch | 1.50 | 1.30 | 1.31 |
+| valley | 2.25 | 3.37 | 1.79 |
+| oak tree | 0.82 | 1.66 | 0.73 |
+| well | 1.06 | 1.29 | 0.94 |
+| dungeon wall | 0.43 | 0.60 | 0.40 |
+
+The lobe's share ends a smooth face's ray early, and the chess set draws
+in 71% of its time. It also casts a ray from each rough face of the valley,
+which took half again its time. The reach of two cells takes those rays
+back at 45,638 pixels off the reference, from 41,982.
 
 **Outcomes.**
 
@@ -2307,6 +2332,7 @@ hold: S1 6 pixels off, S5 99, S2 17, and S4 72.
    seventeenth what lies 16
 2. The reflectance stays the one at normal incidence. No rise toward
    grazing scored better against the truth
-3. A short ray earns its cost: the box view strays further from the
-   reference with each cell of reach it gives up
+3. A face casts no ray that would end within two cells. Every trial model
+   then draws in its old time or less on Quest, and a model of smooth
+   faces in two thirds of it
 4. The chart joins the trial models in the headset's gallery

@@ -357,6 +357,8 @@ in this order:
             the share of the face's lobe that lands within two cells of it,
             in the reference and in the box view. The box view's ray ends
             where that share runs out
+      - [x] A face casts no ray that would end within two cells. Every
+            trial model then draws in its old time or less on Quest
       - [ ] Shadows and occlusion at what a mirror ray meets. The box view
             shades it flat, and a quad within two cells takes its face's
             occlusion
