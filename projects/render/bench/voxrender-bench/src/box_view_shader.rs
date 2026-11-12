@@ -3,14 +3,14 @@ use crate::{BoxView, TileMasks};
 /// What stands in for `box_mirror.wgsl` in the module with no ray query,
 /// where no face casts a mirror ray.
 const UNTRACED: &str = "
-fn mirrored(origin: vec3<f32>, direction: vec3<f32>, sky: vec3<f32>) -> vec3<f32> {
-    return sky;
+fn mirrored(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> vec4<f32> {
+    return vec4<f32>(-1.0);
 }
 ";
 
 /// The WGSL of [`BoxView`](crate::BoxView)'s shader module, for a tool that
-/// compiles it apart from the view. With `traced`, a smooth face's mirror
-/// ray runs a ray query, which needs a device with ray queries. Without
+/// compiles it apart from the view. With `traced`, a face's mirror ray
+/// runs a ray query, which needs a device with ray queries. Without
 /// `traced`, no face casts one.
 ///
 /// Its vertex entries take a vertex's bits at location 0 and a box's three

@@ -1,5 +1,5 @@
-// What a smooth face's mirror ray sees, through a hardware ray query over
-// the scene's opaque quads. `box_view.wgsl` binds what it reads.
+// What a face's mirror ray meets, through a hardware ray query over the
+// scene's opaque quads. `box_view.wgsl` binds what it reads.
 
 // Per quad of each object: its face, the axis doubled plus one where the
 // face looks up the axis, under its material's place in `materials` from
@@ -7,14 +7,15 @@
 @group(0) @binding(7) var<storage, read> quads: array<u32>;
 @group(0) @binding(10) var tlas: acceleration_structure;
 
-// The light that reaches `origin` along the unit `direction`, with `sky`
-// where the ray leaves the scene. The quad it meets shades flat: its
-// material's emission, and its color under the sun and the hemispheres
+// The light that reaches `origin` from the quad the ray along the unit
+// `direction` meets within `reach` meters, then the meters to the quad.
+// The meters are negative where the ray meets none. The quad shades flat:
+// its material's emission, and its color under the sun and the hemispheres
 // with no shadow and no occlusion.
-fn mirrored(origin: vec3<f32>, direction: vec3<f32>, sky: vec3<f32>) -> vec3<f32> {
+fn mirrored(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> vec4<f32> {
     var query: ray_query;
 
-    rayQueryInitialize(&query, tlas, RayDesc(RAY_FLAG_NONE, 0xffu, 0.0, 3.0e38, origin, direction));
+    rayQueryInitialize(&query, tlas, RayDesc(RAY_FLAG_NONE, 0xffu, 0.0, reach, origin, direction));
 
     // An opaque triangle commits its hit as the query proceeds.
     while rayQueryProceed(&query) {}
@@ -22,7 +23,7 @@ fn mirrored(origin: vec3<f32>, direction: vec3<f32>, sky: vec3<f32>) -> vec3<f32
     let hit = rayQueryGetCommittedIntersection(&query);
 
     if hit.kind == RAY_QUERY_INTERSECTION_NONE {
-        return sky;
+        return vec4<f32>(-1.0);
     }
 
     let quad = quads[hit.instance_custom_data + hit.primitive_index / 2u];
@@ -40,5 +41,8 @@ fn mirrored(origin: vec3<f32>, direction: vec3<f32>, sky: vec3<f32>) -> vec3<f32
     let ambient = sky_light(normal, 1.0);
     let sun = frame.sunlight.rgb * (max(dot(normal, frame.sun.xyz), 0.0) / 3.14159265);
 
-    return glow.rgb + base.rgb * ((1.0 - base.a) * (ambient + sun)) + gloss.rgb * ambient;
+    return vec4<f32>(
+        glow.rgb + base.rgb * ((1.0 - base.a) * (ambient + sun)) + gloss.rgb * ambient,
+        hit.t,
+    );
 }

@@ -346,29 +346,37 @@ code-level choices in
 
 ## Later
 
-The steps after S9 get their detail when S9 lands. They run in this order:
+The steps after S9 get their detail as they come up. On 2026-11-12 the
+project lead put the trial models' look in the headset first. The steps run
+in this order:
 
-1. The stereo view in the reference: two off-axis frusta and a head pose
-2. S6, the moving scene, joins the bench scenes. Its motion is a scripted
+1. Reflections that follow the contract's materials
+      - [x] A rough face mirrors less. The reference showed a face's mirror
+            ray by one minus its GGX alpha, which left a brass at roughness
+            0.5 three quarters of a mirror. What the ray meets now shows by
+            the share of the face's lobe that lands within two cells of it,
+            in the reference and in the box view. The box view's ray ends
+            where that share runs out
+      - [ ] Shadows and occlusion at what a mirror ray meets. The box view
+            shades it flat, and a quad within two cells takes its face's
+            occlusion
+      - [ ] Placements that move, a model's load time, and a line in the
+            frame budget
+2. Emission. The box view adds the contract's bloom, which B4 was to time:
+   the halo over the emission, added before the tonemap
+3. Glass. The box view draws the contract's transmission, which B7 was to
+   time: what lies behind a pane shows through it, tinted, and a mirror ray
+   passes through it
+4. A pass over the bench's code and tests that drops what the box raster
+   left without a use
+5. The stereo view in the reference: two off-axis frusta and a head pose
+6. S6, the moving scene, joins the bench scenes. Its motion is a scripted
    function of time. The box view then moves a placement each frame: its
    matrices, the crossers of its boxes, and its lit words
-3. B3, one step per arm the B2 rate allows, then the shootout
-4. The reference rules B4 to B7 need, each before its benchmark: bloom at
-   quarter resolution, the shadow memo's tier rules, `msaa4`, brick LOD, and
-   transparency termination
-5. B4 to B7. A step starts with a study where its line in the frame budget
-   is in doubt. B7 is one. The research plans its walk as a compute pass
-   against a line of 1.0 ms. A compute pass over both eyes takes
-   0.64 ms on Quest before its first step, at 16x16 groups. B5 is another.
-   A fill of the tiles one mover changes takes 1.8 to 3.6 ms on Quest
-   against a line of 1.0 ms
-6. Traced reflections. The reference traces a mirror ray from each smooth
-   face. The research gives the ray no step and no line in the frame
-   budget. A first cut runs in the box view: a ray query over the opaque
-   faces, with the face it meets shaded flat. The trial models' pixels off
-   the reference fall by a third, and a model on its table takes 0.5 to
-   1.8 ms more on Quest. A study settles the rest: shadows and occlusion
-   at what the ray meets, glass along the ray, placements that move, and
-   the line they fit. The realtime tier's reflections can be coarser than
-   the reference's
-7. B8 to B12
+7. B3, one step per arm the B2 rate allows, then the shootout
+8. The reference rules B5 and B6 need, each before its benchmark: the
+   shadow memo's tier rules, `msaa4`, and brick LOD
+9. B5 and B6. A step starts with a study where its line in the frame
+   budget is in doubt. B5 is one. A fill of the tiles one mover changes
+   takes 1.8 to 3.6 ms on Quest against a line of 1.0 ms
+10. B8 to B12
