@@ -216,6 +216,18 @@ code-level choices in
                               S5 runs in 2.1 ms
                         - [ ] B3's shading load in the box raster's
                               fragments, on S1 and S5
+                              - [x] The view shades as the contract's
+                                    opaque surface and matches the
+                                    reference's image
+                              - [x] The sun's corner shadows take a bit a
+                                    lattice point
+                              - [ ] S5 takes 5.18 ms against the 3.5 ms
+                                    line. S1 takes 3.29
+                              - [ ] The bloom add
+                              - [ ] A shadow fill on the GPU, which S2 and
+                                    moving casters wait for
+                              - [ ] A sun whose direction holds a small
+                                    whole ratio, as S4's does
                         - [ ] A crossing box that holds the eye. It still
                               writes its hits' depth
                         - [ ] The crossing test as placements move
