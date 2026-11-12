@@ -3,9 +3,8 @@
 // contract's opaque surface under one sun and the hemispheres: corner
 // occlusion, the sun's corner shadows from `LitRows`, Lambert and GGX, and
 // emission, under the contract's tonemap. A smooth face reflects the sky
-// alone. `BoxView` prepends `ROWS`, `ORDINAL`, and `MATERIALS`, the offsets
-// in a tile's words of its opaque rows, its place among the tiles, and its
-// materials.
+// alone. `BoxView` prepends `ROWS` and `MATERIALS`, the offsets in a tile's
+// words of its opaque rows and its materials.
 
 // Every eye is a perspective view.
 const RAY_W: f32 = 1.0;
@@ -57,6 +56,12 @@ struct Source {
 
     // The index of the eye's `Place`.
     place: u32,
+
+    // The first word of the tile's materials.
+    header: u32,
+
+    // The first of the tile's rows in `lit`.
+    rows: u32,
 }
 
 struct Box {
@@ -84,6 +89,11 @@ struct Box {
     // The first of the box's entries in `crossers`, their count, and the
     // index of the eye's first `Place`.
     @location(7) @interpolate(flat) crossers: vec3<u32>,
+
+    // The first word of the tile's materials, then the first of its rows in
+    // `lit`. A fragment reads both here, where a read from the tile's words
+    // would hold up the reads that follow from it.
+    @location(8) @interpolate(flat) shading: vec2<u32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -93,8 +103,10 @@ struct Box {
 // Three words per material: its base color and metalness, its emission and
 // roughness, and its reflectance at normal incidence and occlusion strength.
 @group(0) @binding(3) var<storage, read> materials: array<vec4<f32>>;
-// Two words per box: its low cell and its placement's index, then the corner
-// past its high cell and the offset of its tile's words.
+// Three words per box: its low cell and its placement's index, the corner
+// past its high cell and the offset of its tile's words, and in the last
+// two parts the first word of the tile's materials and the first of its
+// rows in `lit`.
 @group(0) @binding(4) var<storage, read> boxes: array<vec4<u32>>;
 // Two words per box that shares space with a box: the low corner of a box
 // around the shared space and the other box's index in `boxes` as bits,
@@ -106,8 +118,9 @@ struct Box {
 // The box's vertex at the grid's `grid` for `eye`, on the face of code
 // `face`. `low` holds the box's low cell and its placement's index. `high`
 // holds the corner past the box's high cell and the offset of its tile's
-// words. `more` holds the first of the box's entries in `crossers` and
-// their count.
+// words. `more` holds the first of the box's entries in `crossers`, their
+// count, the first word of the tile's materials, and the first of its rows
+// in `lit`.
 fn vertex_of(
     eye: u32,
     grid: vec3<u32>,
@@ -133,6 +146,7 @@ fn vertex_of(
         face,
         vec2<u32>(high.w, index),
         vec3<u32>(more.xy, eye * frame.placements),
+        more.zw,
     );
 }
 
@@ -199,14 +213,15 @@ fn tonemap(color: vec3<f32>) -> vec3<f32> {
 }
 
 fn source_of(box: Box) -> Source {
-    return Source(box.words.x, box.words.y);
+    return Source(box.words.x, box.words.y, box.shading.x, box.shading.y);
 }
 
 // The box at `index` of `boxes`, as the eye's ray along `direction` through
 // `box` meets it.
 fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
-    let low = boxes[index * 2u];
-    let high = boxes[index * 2u + 1u];
+    let low = boxes[index * 3u];
+    let high = boxes[index * 3u + 1u];
+    let more = boxes[index * 3u + 2u];
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
     let place = box.crossers.z + low.w;
     let own = places[box.words.y];
@@ -223,7 +238,7 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
         vec3<f32>(high.xyz - tile),
         its.ray.xyz - vec3<f32>(tile),
         vec3<f32>(dot(its.x.xyz, world) / its.x.w, dot(its.y.xyz, world) / its.y.w, dot(its.z.xyz, world) / its.z.w),
-        Source(high.w, place),
+        Source(high.w, place, more.z, more.w),
     );
 }
 
@@ -261,10 +276,9 @@ fn surface(
     direction: vec3<f32>,
 ) -> vec4<f32> {
     let tile = source.tile;
-    let header = bits[tile + MATERIALS];
-    let size = header & 15u;
+    let size = source.header & 15u;
 
-    var material = header >> 4u;
+    var material = source.header >> 4u;
 
     if size != 0u {
         let entry_at = u32((cell.x * 16 + cell.y) * 16 + cell.z) * size;
@@ -338,7 +352,6 @@ fn surface(
         let sun_u = dot(place.sun.xyz, vec3<f32>(u));
         let sun_v = dot(place.sun.xyz, vec3<f32>(v));
         let still = ((vec3<u32>(place.lit.w) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
-        let rows = place.lit.x + bits[tile + ORDINAL] * place.lit.y;
 
         // A ray that leaves the face's cell past a corner on both axes
         // crosses the cell beside the face on the axis it moves faster
@@ -352,7 +365,7 @@ fn surface(
             let far_v = (corner & 2u) == 2u;
             let far = i32(up) * d + i32(far_u) * u + i32(far_v) * v;
             let key = vec3<u32>(select(cell + far, 2 * cell + far, still));
-            let reaches = ((lit[rows + key.x * place.lit.z + key.y] >> key.z) & 1u) == 1u;
+            let reaches = ((lit[source.rows + key.x * place.lit.z + key.y] >> key.z) & 1u) == 1u;
 
             let out_u = select((sun_u < 0.0), (sun_u > 0.0), far_u);
             let out_v = select((sun_v < 0.0), (sun_v > 0.0), far_v);

@@ -231,52 +231,6 @@ impl BoxView {
             offsets[&object_id] + if solid { solid_tiles } else { tiles }[placed.brick]
         };
 
-        // Each marched box's entries in `crosser_words`, as their first and
-        // their count.
-        let crossers = PlacedBox::crossers(&marched, &solid);
-        let mut crosser_words: Vec<u32> = Vec::new();
-
-        let march_words: Vec<_> = marched
-            .iter()
-            .zip(&crossers)
-            .map(|(placed, entries)| {
-                let count = |entries: usize| {
-                    u32::try_from(entries).expect("a scene's crossing boxes number under 2^32")
-                };
-
-                let span = [count(crosser_words.len() / 8), count(entries.len())];
-
-                crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
-
-                placed.words(placed.placement, tile(placed, false), span)
-            })
-            .collect();
-
-        let solid_words: Vec<_> = solid
-            .iter()
-            .map(|placed| placed.words(placed.placement, tile(placed, true), [0, 0]))
-            .collect();
-
-        // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
-        let mut box_words: Vec<u32> = march_words
-            .iter()
-            .chain(&solid_words)
-            .flat_map(|words| words.iter().copied().take(8))
-            .collect();
-
-        let mut solid_boxes = ViewBoxes::default();
-        let mut marched_boxes = ViewBoxes::default();
-
-        for (placed, &words) in solid.iter().zip(&solid_words) {
-            solid_boxes.push(placed, words);
-        }
-
-        for (placed, &words) in marched.iter().zip(&march_words) {
-            marched_boxes.push(placed, words);
-        }
-
-        let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
-
         let mut sun = (TyVector3F64::Y, TyLinSrgbF64::new(0.0, 0.0, 0.0));
         let mut sky = TyLinSrgbF64::new(0.0, 0.0, 0.0);
         let mut ground = sky;
@@ -309,6 +263,92 @@ impl BoxView {
                 _ => {}
             }
         }
+
+        // The sun's corner shadows. Without them every placement reads one
+        // tile's worth of rows the light reaches.
+        let lit = if shadows && suns > 0 {
+            LitRows::new(scene, sun.0, &object_corners, &opaque)?
+        } else {
+            LitRows {
+                places: vec![[0, 0, 32, 0]; placements.len()],
+                directions: placements
+                    .iter()
+                    .map(|(transform, _)| quantize_direction(grid_vector(transform, sun.0)))
+                    .collect(),
+                words: vec![u32::MAX; 32 * 32],
+            }
+        };
+
+        // What a box's fragments read of its tile with no load: the first
+        // word of the tile's materials, and the first of its lit rows.
+        let shading = |placed: &PlacedBox, tile: u32| {
+            let [first, tile_rows, ..] = lit.places[placed.placement as usize];
+            let ordinal = words[(tile + TileMasks::ORDINAL) as usize];
+
+            [
+                words[(tile + TileMasks::MATERIALS) as usize],
+                first + ordinal * tile_rows,
+            ]
+        };
+
+        // Each marched box's entries in `crosser_words`, as their first and
+        // their count.
+        let crossers = PlacedBox::crossers(&marched, &solid);
+        let mut crosser_words: Vec<u32> = Vec::new();
+
+        let march_words: Vec<_> = marched
+            .iter()
+            .zip(&crossers)
+            .map(|(placed, entries)| {
+                let count = |entries: usize| {
+                    u32::try_from(entries).expect("a scene's crossing boxes number under 2^32")
+                };
+
+                let span = [count(crosser_words.len() / 8), count(entries.len())];
+
+                crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
+
+                let tile = tile(placed, false);
+                let mut words = placed.words(placed.placement, tile, span);
+
+                words[10..].copy_from_slice(&shading(placed, tile));
+
+                words
+            })
+            .collect();
+
+        let solid_words: Vec<_> = solid
+            .iter()
+            .map(|placed| {
+                let tile = tile(placed, true);
+                let mut words = placed.words(placed.placement, tile, [0, 0]);
+
+                words[10..].copy_from_slice(&shading(placed, tile));
+
+                words
+            })
+            .collect();
+
+        // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
+        let mut box_words: Vec<u32> = march_words
+            .iter()
+            .chain(&solid_words)
+            .flatten()
+            .copied()
+            .collect();
+
+        let mut solid_boxes = ViewBoxes::default();
+        let mut marched_boxes = ViewBoxes::default();
+
+        for (placed, &words) in solid.iter().zip(&solid_words) {
+            solid_boxes.push(placed, words);
+        }
+
+        for (placed, &words) in marched.iter().zip(&march_words) {
+            marched_boxes.push(placed, words);
+        }
+
+        let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
 
         let mut frame = Vec::new();
 
@@ -368,28 +408,13 @@ impl BoxView {
             }
         }
 
-        // The sun's corner shadows. Without them every placement reads one
-        // tile's worth of rows the light reaches.
-        let lit = if shadows && suns > 0 {
-            LitRows::new(scene, sun.0, &object_corners, &opaque)?
-        } else {
-            LitRows {
-                places: vec![[0, 0, 32, 0]; placements.len()],
-                directions: placements
-                    .iter()
-                    .map(|(transform, _)| quantize_direction(grid_vector(transform, sun.0)))
-                    .collect(),
-                words: vec![u32::MAX; 32 * 32],
-            }
-        };
-
         // A binding cannot be empty.
         if words.is_empty() {
             words.push(0);
         }
 
         if box_words.is_empty() {
-            box_words.resize(8, 0);
+            box_words.resize(12, 0);
         }
 
         if crosser_words.is_empty() {
@@ -487,10 +512,8 @@ impl BoxView {
                     label: Some("box view"),
                     source: ShaderSource::Wgsl(
                         format!(
-                            "const ROWS: u32 = {}u;\nconst ORDINAL: u32 = {}u;\n\
-                             const MATERIALS: u32 = {}u;\n{}\n{}",
+                            "const ROWS: u32 = {}u;\nconst MATERIALS: u32 = {}u;\n{}\n{}",
                             TileMasks::ROWS,
-                            TileMasks::ORDINAL,
                             TileMasks::MATERIALS,
                             include_str!("box_view.wgsl"),
                             include_str!("mask_march.wgsl")
