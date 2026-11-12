@@ -28,8 +28,11 @@ type CellBox = (TyVector3U32, TyVector3U32);
 /// An object's non-empty tiles as a mask march reads them.
 ///
 /// A tile's words start with a bit per cell. Cell `(x, y, z)` has index
-/// `(x * 16 + y) * 16 + z` and is live where bit `index % 32` of word
-/// `index / 32` is set. For a shaded view, the tile's words go on:
+/// `(y * 16 + x) * 16 + z` and is live where bit `index % 32` of word
+/// `index / 32` is set. A layer of cells across y then fills 8 words in a
+/// row, which a floor's far tiles read a few pixels each: S5's view ran 5%
+/// faster on Quest than with x first. For a shaded view, the tile's words
+/// go on:
 ///
 /// 1. From [`SURFACE`](Self::SURFACE), two words for each word of bits.
 ///    The first holds a bit per cell, set for a surface cell: a live cell
@@ -365,7 +368,7 @@ fn toward(face: usize, u: i64, v: i64) -> [i64; 3] {
 }
 
 /// One tile's cells while its solid boxes come off. A cell's index is
-/// `(x * 16 + y) * 16 + z`.
+/// `(y * 16 + x) * 16 + z`.
 struct Tile {
     /// Whether each cell is live.
     live: Vec<bool>,
@@ -504,9 +507,9 @@ impl Tile {
                     continue;
                 }
 
-                // Index order runs along z, or along y in a layer across z,
+                // Index order runs along z, or along x in a layer across z,
                 // so a row's cells follow one another.
-                let row = if axis == 2 { 1 } else { 2 };
+                let row = if axis == 2 { 0 } else { 2 };
                 let mut cells = 0;
                 let mut runs: Vec<CellBox> = Vec::new();
 
@@ -551,7 +554,7 @@ impl Tile {
     fn all_live(&self, low: TyVector3U32, high: TyVector3U32) -> bool {
         (low.x..high.x).all(|x| {
             (low.y..high.y)
-                .all(|y| (low.z..high.z).all(|z| self.live[((x * TILE + y) * TILE + z) as usize]))
+                .all(|y| (low.z..high.z).all(|z| self.live[((y * TILE + x) * TILE + z) as usize]))
         })
     }
 
@@ -560,7 +563,7 @@ impl Tile {
         for x in low.x..high.x {
             for y in low.y..high.y {
                 for z in low.z..high.z {
-                    self.left[((x * TILE + y) * TILE + z) as usize] = false;
+                    self.left[((y * TILE + x) * TILE + z) as usize] = false;
                 }
             }
         }
@@ -571,7 +574,7 @@ impl Tile {
 fn position(index: usize) -> TyVector3U32 {
     let index = index as u32;
 
-    TyVector3U32::new(index / (TILE * TILE), index / TILE % TILE, index % TILE)
+    TyVector3U32::new(index / TILE % TILE, index / (TILE * TILE), index % TILE)
 }
 
 #[cfg(test)]
@@ -640,7 +643,7 @@ mod tests {
                         let corner = low / 16 * 16;
 
                         for bit in 0..4096 {
-                            let at = TyVector3U32::new(bit / 256, bit / 16 % 16, bit % 16);
+                            let at = TyVector3U32::new(bit / 16 % 16, bit / 256, bit % 16);
                             let word = masks.words[(tile + bit / 32) as usize];
                             let set = word >> (bit % 32) & 1 == 1;
                             let cell = corner + at;
@@ -705,7 +708,7 @@ mod tests {
                                 // Every live cell is opaque here, so a
                                 // surface cell is a live one beside a cell
                                 // that is not.
-                                let at = TyVector3U32::new(bit / 256, bit / 16 % 16, bit % 16);
+                                let at = TyVector3U32::new(bit / 16 % 16, bit / 256, bit % 16);
                                 let cell = corner + at;
 
                                 let open = (0..3).any(|axis| {
@@ -731,7 +734,7 @@ mod tests {
                                     for z in low.z..high.z {
                                         let cell = TyVector3U32::new(x, y, z);
                                         let at = cell - corner;
-                                        let bit = (at.x * 16 + at.y) * 16 + at.z;
+                                        let bit = (at.y * 16 + at.x) * 16 + at.z;
 
                                         if !is_live(object, cell) {
                                             continue;
@@ -776,7 +779,7 @@ mod tests {
         let masks = TileMasks::new(&object, false, Some(&every)).unwrap();
 
         // The floor's cell at x = 1 and z = 1, beside the wall.
-        let bit = 16 * 16 + 1;
+        let bit = 16 + 1;
         let pair = (TileMasks::SURFACE + bit / 32 * 2) as usize;
         let held = masks.words[pair];
         let second = masks.words[pair + 1];

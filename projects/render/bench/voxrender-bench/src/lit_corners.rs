@@ -132,7 +132,7 @@ impl LitCorners {
 
                 for &index in surface {
                     let index = u32::from(index);
-                    let local = [index / (TILE * TILE), index / TILE % TILE, index % TILE]
+                    let local = [index / TILE % TILE, index / (TILE * TILE), index % TILE]
                         .map(|coordinate| coordinate as i32);
                     let cell = [0, 1, 2].map(|axis| corner[axis] + local[axis]);
                     let mut word = 0;
@@ -323,7 +323,7 @@ mod tests {
                     // of its object's tiles.
                     let tiles = &tiles[&placement.object_id];
                     let at = cell % 16;
-                    let index = ((at.x * 16 + at.y) * 16 + at.z) as u16;
+                    let index = ((at.y * 16 + at.x) * 16 + at.z) as u16;
 
                     let ordinal = tiles
                         .iter()
