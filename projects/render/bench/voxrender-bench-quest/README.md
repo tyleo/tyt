@@ -109,6 +109,53 @@ the CPU every 600 frames on a `view` line beside B0's GPU frame times.
 The view shades as the contract's opaque surface under the scene's first sun
 and its hemispheres. The GPU fills the sun's shadows at start.
 
+## Models
+
+`debug.voxrenderbench.models true` has the app skip its benchmarks and show
+a gallery of Voxel Json models one at a time. The gallery draws each model as
+the view draws a scene. The gallery holds every `.voxj` and `.voxjz` document
+under `models` in the app's files. The models show in the order of their
+paths. `adb push` cannot create folders there, so the models go through a
+temporary folder:
+
+```sh
+adb push <models-dir> /data/local/tmp/models
+adb shell cp -r /data/local/tmp/models /sdcard/Android/data/com.tyleo.voxrenderbench/files/
+adb shell rm -r /data/local/tmp/models
+adb shell setprop debug.voxrenderbench.models true
+adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
+```
+
+A model lands on a table before the wearer, a meter across, under vxl's
+studio rig as its hero view places the rig. A glass voxel draws opaque. The
+Touch controllers steer:
+
+| Control | Effect |
+| --- | --- |
+| A or X | Shows the next model |
+| B or Y | Shows the model before |
+| Left stick | Walks the way the head faces |
+| Right stick to a side | Turns the wearer 30 degrees |
+| Right stick ahead or back | Rises or sinks |
+| Right trigger | Grows the model around the point a meter ahead |
+| Left trigger | Shrinks the model |
+| A press of either stick | Switches between the table and life size |
+
+At life size the wearer stands on the model's floor 1.5 m before its
+front. While a model loads on a thread of its own, the model before it
+stays in view under a dimmed sky. The app logs each model on a `models`
+line with the time its load took.
+
+Two more properties steer a run:
+
+1. `debug.voxrenderbench.model` starts the gallery at the first model whose
+   path holds the property's text
+2. `debug.voxrenderbench.tour` steps the gallery to the next model once each
+   has shown for the property's count of seconds
+
+`setprop debug.voxrenderbench.models false` returns the app to its
+benchmarks.
+
 ## Profile
 
 The profile runs six of B2's kernels in turn, each alone for 10 seconds.

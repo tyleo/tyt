@@ -1,6 +1,6 @@
 use crate::{
-    Result, RunOptions, XrApp, XrGpu, XrSystem, log_b1, probe_gpu, probe_indirect, probe_pipelines,
-    probe_system,
+    Error, Result, RunOptions, XrApp, XrGpu, XrSystem, log_b1, probe_gpu, probe_indirect,
+    probe_pipelines, probe_system,
 };
 use android_activity::{AndroidApp, MainEvent, PollEvent};
 use android_logger::Config;
@@ -48,12 +48,14 @@ fn run(app: &AndroidApp) -> Result<()> {
         probe_pipelines(&gpu)?;
     }
 
-    // The profile and the view skip B1 to reach the session sooner.
-    if options.b1 && !options.profile && options.view.is_none() {
+    // The profile, the view, and the gallery skip B1 to reach the session
+    // sooner.
+    if options.b1 && !options.profile && options.view.is_none() && !options.models {
         log_b1(&gpu)?;
     }
 
-    let mut xr_app = XrApp::new(xr, gpu, &options)?;
+    let files = app.external_data_path().ok_or(Error::NoFiles)?;
+    let mut xr_app = XrApp::new(xr, gpu, &options, &files)?;
 
     let mut destroyed = false;
 

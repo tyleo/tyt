@@ -18,6 +18,17 @@ const VIEW: &str = "debug.voxrenderbench.view";
 /// statistics.
 const STATISTICS: &str = "debug.voxrenderbench.statistics";
 
+/// The system property that turns on the gallery of models.
+const MODELS: &str = "debug.voxrenderbench.models";
+
+/// The system property that holds text from the path of the gallery's first
+/// model.
+const MODEL: &str = "debug.voxrenderbench.model";
+
+/// The system property that holds the seconds the gallery shows a model
+/// before it steps to the next.
+const TOUR: &str = "debug.voxrenderbench.tour";
+
 /// What the app runs, from the system properties the README's steps set.
 pub struct RunOptions {
     /// Whether the profile runs in place of B1 and B2's timer.
@@ -36,13 +47,34 @@ pub struct RunOptions {
     /// Whether the app logs the driver's statistics for the view's
     /// pipelines.
     pub statistics: bool,
+
+    /// Whether the app shows the gallery of the models in its files in
+    /// place of its benchmarks.
+    pub models: bool,
+
+    /// Text the path of the gallery's first model holds.
+    pub model: Option<String>,
+
+    /// The seconds the gallery shows a model before it steps to the next
+    /// with no button pressed.
+    pub tour: Option<f64>,
 }
 
 impl RunOptions {
     /// Reads the properties. Errors unless each flag is unset, `true`, or
-    /// `false`.
+    /// `false`, and the tour is unset or a positive count of seconds.
     pub fn read() -> Result<Self> {
         let text = |name| getprop(name).map(|value| (!value.is_empty()).then_some(value));
+
+        let tour = text(TOUR)?
+            .map(|value| {
+                value
+                    .parse()
+                    .ok()
+                    .filter(|&seconds: &f64| seconds.is_finite() && seconds > 0.0)
+                    .ok_or(Error::SecondsProperty { name: TOUR, value })
+            })
+            .transpose()?;
 
         Ok(RunOptions {
             profile: flag(PROFILE, false)?,
@@ -50,6 +82,9 @@ impl RunOptions {
             kernels: text(KERNELS)?,
             view: text(VIEW)?,
             statistics: flag(STATISTICS, false)?,
+            models: flag(MODELS, false)?,
+            model: text(MODEL)?,
+            tour,
         })
     }
 }

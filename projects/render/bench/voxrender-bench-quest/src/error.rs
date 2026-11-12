@@ -92,6 +92,12 @@ pub enum Error {
     /// A flag's system property holds a value other than `true` or `false`.
     FlagProperty { name: &'static str, value: String },
 
+    /// A system property holds a value other than a positive count of seconds.
+    SecondsProperty { name: &'static str, value: String },
+
+    /// Android gave the app no external files directory.
+    NoFiles,
+
     /// The GPU clock's file would not read.
     ClockRead(IOError),
 
@@ -136,6 +142,11 @@ impl Display for Error {
             Error::FlagProperty { name, value } => {
                 write!(f, "the property {name} holds {value:?}, not true or false")
             }
+            Error::SecondsProperty { name, value } => write!(
+                f,
+                "the property {name} holds {value:?}, not a positive count of seconds"
+            ),
+            Error::NoFiles => write!(f, "the app has no external files directory"),
             Error::ClockRead(error) => write!(f, "the GPU clock would not read: {error}"),
             Error::ClockParse(text) => write!(f, "the GPU clock file holds {text:?}"),
             Error::ProbeShader(error) => {
