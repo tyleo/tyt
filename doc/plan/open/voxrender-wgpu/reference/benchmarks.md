@@ -2226,3 +2226,87 @@ A model with mirror tiles loads in about twice its time: the chess set in
 4. Left for the plan's study: shadows and occlusion at what the ray
    meets, glass along the ray, a TLAS that follows a placement that
    moves, a model's load time, and a line in the frame budget
+
+## A rough face's reflection, 2026-11-12
+
+The project lead found every reflecting trial model too shiny in the
+headset. The reference showed what a face's mirror ray meets by one minus
+the face's GGX alpha. A brass at roughness 0.5 then mirrored the scene at
+three quarters of a mirror's strength, where its lobe would blur the scene
+past reading. This run looks for a rule one ray can follow.
+
+**Setup.** A chart model at 6 mm a voxel steps the roughness over five
+columns: 0.05, 0.2, 0.35, 0.5, and 0.8. Each column holds a gold sphere, a
+steel sphere, a red plastic sphere, and a flat steel slab under a striped
+post and a block, before a wall of four colors. The truth is the reference
+with its mirror ray replaced by 128 or 256 GGX samples of the face's lobe,
+each a traced ray under Fresnel and Smith visibility. Four views render at
+768 pixels square: the slabs, the spheres, one at 6 degrees over the
+floor, and one at 60. A rule scores by its mean difference from the truth
+in steps of 255, over the image and over its detail. The detail is the
+image less its blur over 4 pixels. The truth, the trial rules, and the
+scores ran as a patch that is not checked in.
+
+**The rule.** A GGX lobe puts `t / (alpha^2 + t)` of its facets within the
+angle of tangent squared `t` of the normal. A facet at that angle moves
+the mirror ray's landing by twice the tangent times the distance. The
+share of the lobe that lands within `s` cells of what the ray meets `d`
+cells away is then `1 / (1 + (2 * alpha * d / s)^2)`. What the ray meets
+shows by that share, and the blurred hemisphere fills the rest.
+
+**Trials.** Whole image, then detail, on each view.
+
+| Rule | Slabs | Spheres | At 6 degrees | At 60 degrees |
+| --- | ---: | ---: | ---: | ---: |
+| One minus alpha, as it was | 3.56, 2.54 | 5.58, 4.03 | 3.07, 2.13 | 3.27, 2.39 |
+| No ray | 6.21, 4.02 | 7.84, 4.57 | 4.19, 2.72 | 5.84, 4.41 |
+| The lobe within 1 cell | 3.82, 2.02 | 5.55, 3.25 | 2.75, 1.52 | 3.75, 2.45 |
+| The lobe within 2 cells | 3.60, 2.05 | 5.31, 3.32 | 2.67, 1.55 | 3.53, 2.33 |
+| The lobe within 4 cells | 3.46, 2.20 | 5.17, 3.58 | 2.69, 1.69 | 3.30, 2.29 |
+| The lobe within 2 cells, with the occlusion over the alpha's share of the hemisphere | 3.42, 1.95 | 5.17, 3.20 | 2.58, 1.49 | 3.47, 2.27 |
+
+Three more trials ran with the lobe within 1 cell:
+
+1. One GGX sample a point in place of the mirror ray, fixed to the face,
+   scores 6.9 on the slabs. The image is noise
+2. A reflectance that rises toward grazing scores no better than the
+   reflectance at normal incidence. Karis's fit of the split sum scores
+   3.69, 5.71, 3.13, and 4.03 over the four views, a Schlick rise capped
+   by the roughness 3.92, 5.50, 3.02, and 3.40, and the reflectance at
+   normal incidence 3.82, 5.55, 2.75, and 3.75
+3. An occlusion that counts a second bounce off the face's like moves a
+   rough gold sphere's mean color by 2 steps of 255
+
+**The box view against the reference.** The 35 trial models' pixels off the
+reference, of 543,559. The box view's ray ends where its share of the
+face's reflectance falls to 1 in 64.
+
+| Box view | Pixels off |
+| --- | ---: |
+| One minus alpha in both, as it was | 43,224 |
+| The lobe's share in both | 45,915 |
+| The same with no ray under a reach of 2 cells | 51,294 |
+| The same with no ray under a reach of 4 cells | 58,558 |
+| The same with no ray under a reach of 8 cells | 64,462 |
+| The lobe's share, and a quad within two cells takes its face's occlusion | 41,982 |
+
+A rough dielectric now mirrors what touches it at a twentieth of its
+light. The reference shades that with its shadow and occlusion. The box
+view shades it flat, which shows in a crease. The dollhouse's roof moved
+from 447 pixels off to 2678. A quad near the face lies in the same crease.
+The face's occlusion stands in for the quad's. The bench scenes
+hold: S1 6 pixels off, S5 99, S2 17, and S4 72.
+
+**Outcomes.**
+
+1. What a mirror ray meets shows by the share of the face's lobe that
+   lands within two cells of it, `1 / (1 + (alpha * cells)^2)`, in the
+   reference and in the box view. The rule beats the old one on detail in
+   every view and on the whole image in three of four. A brass at
+   roughness 0.5 mirrors at a half what lies 4 cells away, and at a
+   seventeenth what lies 16
+2. The reflectance stays the one at normal incidence. No rise toward
+   grazing scored better against the truth
+3. A short ray earns its cost: the box view strays further from the
+   reference with each cell of reach it gives up
+4. The chart joins the trial models in the headset's gallery

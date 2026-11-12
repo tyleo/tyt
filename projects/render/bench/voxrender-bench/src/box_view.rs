@@ -43,9 +43,9 @@ const SLACK: f64 = 0.25;
 ///
 /// A hit shades as the contract's opaque surface under the scene's first
 /// sun and its hemispheres, with corner occlusion and the sun's corner
-/// shadows. On a device with ray queries a smooth face's mirror ray traces
-/// the scene's opaque quads, and the quad it meets shades flat with no
-/// shadow. Elsewhere a smooth face reflects the sky alone. Each fragment
+/// shadows. On a device with ray queries a face's mirror ray traces the
+/// scene's opaque quads. The quad it meets shades flat with no shadow.
+/// Elsewhere a face reflects the sky alone. Each fragment
 /// adds the bloom at its pixel before the tonemap, from a texture a quarter
 /// of the target's size that stays black until a pass fills it.
 pub struct BoxView {
@@ -175,8 +175,8 @@ fn crossing_keys<'a>(
 }
 
 impl BoxView {
-    /// A face casts no mirror ray where its smooth share of its reflectance
-    /// is under this. The ray could then move its color by a part in 64.
+    /// A mirror ray runs to where what it meets would show by this share
+    /// of its face's light. A face that reflects less casts none.
     pub const MIRROR_CUT: f32 = 1.0 / 64.0;
 
     /// The format of the depth a pass that draws the view clears to zero.
@@ -407,8 +407,8 @@ impl BoxView {
         };
 
         // A mirror ray needs a device with ray queries. A tile's fragments
-        // can cast one where the smooth share of one of its materials'
-        // reflectance passes `MIRROR_CUT`.
+        // can cast one where one of its materials is less than fully rough
+        // and reflects over `MIRROR_CUT`.
         let traced = device.features().contains(Features::EXPERIMENTAL_RAY_QUERY);
         let mut tile_mirrors: HashMap<u32, bool> = HashMap::new();
 
@@ -422,10 +422,9 @@ impl BoxView {
                         .iter()
                         .any(|&id| {
                             let values = material_values(id);
-                            let alpha = (values[7] * values[7]).max(1.0e-3);
                             let reflectance = values[8].max(values[9]).max(values[10]);
 
-                            (1.0 - alpha) * reflectance > Self::MIRROR_CUT
+                            values[7] < 1.0 && reflectance > Self::MIRROR_CUT
                         })
             })
         };

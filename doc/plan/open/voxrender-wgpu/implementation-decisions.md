@@ -565,3 +565,19 @@ they land.
   statistics, which wgpu does not set. It compiles each stage with naga
   as wgpu's Vulkan backend does for a module with no runtime checks
 
+## Reflections that follow the contract's materials
+
+- A mirror ray's share comes from the cells to what it meets, in the
+  cells of the face's axis. One length then serves a scene of any scale
+- The reference keeps one ray a face. Its `shade_ray` takes any hits, and
+  `trace_reflection` peeks at the walk's first for the distance
+- A ray that leaves the scene has no distance. It shows what it saw on
+  the way under the occlusion's part of the alpha's share. That keeps a
+  pane's tint on the sky behind it. A hit far off tends to the same
+  light, so the box view's ray can end early with no seam
+- The box view's `mirrored` returns the meters to its quad beside the
+  quad's light, and negative meters where it meets none. The view's
+  fragment works the share out because it holds the alpha
+- A tile draws through the module with the ray query where one of its
+  materials is less than fully rough and reflects over `MIRROR_CUT`
+

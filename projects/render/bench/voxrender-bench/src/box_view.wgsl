@@ -3,13 +3,13 @@
 // contract's opaque surface under one sun and the hemispheres: corner
 // occlusion from the tile's words, the sun's corner shadows from
 // `LitCorners`, Lambert and GGX, and emission, under the contract's
-// tonemap. A smooth face reflects what `mirrored` sees along its mirror
-// ray. `BoxView` prepends:
+// tonemap. A face reflects what `mirrored` meets along its mirror ray.
+// `BoxView` prepends:
 //
 // 1. `RECORDS`, the offset in a tile's words of its cells' records
 // 2. `MIRRORS`, whether a face can cast a mirror ray
-// 3. `MIRROR_CUT`, the least smooth share of a face's reflectance that
-//    casts one
+// 3. `MIRROR_CUT`, the share of a face's reflectance a mirror ray runs down
+//    to
 //
 // `BoxView` adds `mirrored`.
 
@@ -434,30 +434,36 @@ fn surface(
     // The second eye's places follow the first's.
     let eye = u32(source.place >= frame.placements);
 
-    // The hemispheres along the face's mirror ray.
+    // The hemispheres along the face's mirror ray, with the occlusion over
+    // the lobe's rough share.
     let mirror = normal * (2.0 * cosine) - view;
     let sky = sky_light(mirror, alpha);
+    var reflected = sky * (1.0 - alpha * (1.0 - unblocked));
 
-    if MIRRORS {
-        // The contract's reflection. The face's smooth share shows what
-        // its mirror ray sees, and the rest shows the hemispheres. Where
-        // no ray is cast, the face's occlusion stands in for what one
-        // would meet.
-        var seen = sky * unblocked;
+    // The contract's reflection. What the mirror ray meets shows by the
+    // share of the face's lobe that lands within two cells of it. The ray
+    // runs to where that share of the reflectance falls to `MIRROR_CUT`.
+    let most = max(reflectance.r, max(reflectance.g, reflectance.b));
 
-        if (1.0 - alpha) * max(reflectance.r, max(reflectance.g, reflectance.b)) > MIRROR_CUT {
-            // The hit lies this many of the eye's rays to the fragment's
-            // point from the eye.
-            let reach = dot(at - source.ray, direction) / dot(direction, direction);
-            let point = frame.eyes[eye].xyz + source.toward * reach;
+    if MIRRORS && alpha < 1.0 && most > MIRROR_CUT {
+        // The hit lies this many of the eye's rays to the fragment's point
+        // from the eye.
+        let reach = dot(at - source.ray, direction) / dot(direction, direction);
+        let point = frame.eyes[eye].xyz + source.toward * reach;
+        let far = sqrt(most / MIRROR_CUT - 1.0) / alpha;
+        let met = mirrored(point + normal * (side.w * MIRROR_START), mirror, far * side.w);
 
-            seen = mirrored(point + normal * (side.w * MIRROR_START), mirror, sky);
+        if met.a >= 0.0 {
+            // The cells to the quad. A quad within two cells lies in the
+            // face's crease. The face's occlusion stands in for the quad's.
+            let away = met.a / side.w;
+            let seen = met.rgb * mix(unblocked, 1.0, min(away / 2.0, 1.0));
+
+            reflected = mix(reflected, seen, 1.0 / (1.0 + alpha * alpha * away * away));
         }
-
-        color += (seen * (1.0 - alpha) + sky * (alpha * unblocked)) * reflectance;
-    } else {
-        color += sky * reflectance * unblocked;
     }
+
+    color += reflected * reflectance;
 
     // The bloom at the pixel.
     color += textureSampleLevel(bloom, bloom_sampler, source.pixel * frame.texel, eye, 0.0).rgb;
