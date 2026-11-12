@@ -1849,3 +1849,70 @@ placements cross it. S4's holds 28, and 8 cross it.
    movers' boxes alone, about a thousandth of its 13.7 ms a mover
 3. The view holds no moving placement yet. S6 brings the test into a
    frame, with the lit words of the shadow fill section above
+
+## A pass a run for every draw, 2026-11-12
+
+Why S1 shaded a tenth more fragments over three faces a box than over
+its corners, and what the answer changed.
+
+- Device, method, and image check: as in Records by row. A model's times
+  come from the gallery, as in Trial models, with the model held for 24 s
+- Counters: `ovrgpuprofiler` over 10 s of S1's view
+
+A draw of under 1024 boxes drew every run in one pass, over its boxes'
+corners. From 1024 boxes up each run took a pass of its own, and a run of
+front faces drew three faces a box. The plain ids set that line: S1's 426
+boxes ran 10% faster in one pass, and 19% slower over three faces.
+
+**S1 under the shaded view.**
+
+| Passes | Faces | ms | Fragments shaded a second |
+| --- | --- | ---: | ---: |
+| One | Corners | 2.17 | 1.078 G |
+| One | Three faces | 2.08 | 1.074 G |
+| A pass a run | Corners | 2.03 | 1.075 G |
+| A pass a run | Three faces | 2.04 | 1.075 G |
+
+The counts hold the compositor's fragments too.
+
+**Models.**
+
+| Model | Boxes | One pass, corners | One pass, three faces | A pass a run, corners | A pass a run, three faces |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| dungeon kit floor | 4 | 0.33 | 0.33 | 0.33 | 0.33 |
+| knight | 4 | 0.53 | | | 0.51 |
+| sword | 37 | 0.34 | | | 0.30 |
+| valley | 876 | 1.64 | 1.64 | 1.11 | 1.11 |
+| dollhouse | 904 | 1.25 | 1.25 | 0.93 | 0.92 |
+| chess set | 1579 | | | | 0.87 |
+
+**The gallery.** A tour of 20 s a model, as in Trial models, against that
+section's times. The times also hold the cut of Records by row.
+
+| Model | Trial models | Now |
+| --- | ---: | ---: |
+| valley | 1.81 | 1.13 |
+| pirate ship gun deck | 1.37 | 1.01 |
+| dollhouse | 1.36 | 0.95 |
+| log cabin | 1.21 | 0.82 |
+| living room | 1.20 | 0.91 |
+| chess set | 0.91 | 0.87 |
+| knight | 0.56 | 0.52 |
+| dungeon kit floor | 0.34 | 0.34 |
+
+The 35 models take 0.31 to 1.13 ms, from 0.34 to 1.81. Each loads and
+holds 90 Hz. The smallest load in 0.4 s, from 0.5, with fewer pipelines
+to build.
+
+**Outcomes.**
+
+1. Under the shaded view S1 shades as many fragments over three faces as
+   over corners. The tenth does not show
+2. A pass a run suits every draw. Valley draws in 1.11 ms where it took
+   1.64, the dollhouse in 0.93 from 1.25, and S1 in 2.04 from 2.17. The
+   draws of 4 boxes hold their time. The faces change nothing a model
+   shows
+3. `BoxDraw` drops its line at 1024 boxes. Every run takes a pass of its
+   own, and a run of front faces draws three faces a box
+4. B1's float flips on the box raster move by up to 5 pixels a scene
+   under three faces, within its line

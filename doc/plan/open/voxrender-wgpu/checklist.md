@@ -193,7 +193,7 @@ code-level choices in
                   - [x] A headset view. The Quest app draws a scene around
                         the wearer each frame, from each eye's pose, with
                         plain shading. S1 and S5 hold 90 Hz
-                  - [ ] The box raster's open ends, in order:
+                  - [x] The box raster's open ends, in order:
                         - [x] The frame's CPU time. A view sorts its boxes
                               when the head has moved 25 cm. A frame
                               between sorts takes S2 0.24 ms
@@ -275,8 +275,12 @@ code-level choices in
                               takes this Mac 0.03 ms over S1's boxes and
                               13.7 ms over S2's. A mover holds 30 of the
                               26,325. S6's view runs it each frame
-                        - [ ] Why S1 shades a tenth more fragments over
-                              three faces a box than over corners
+                        - [x] Why S1 shades a tenth more fragments over
+                              three faces a box than over corners. Under
+                              the shaded view it does not. A pass a run
+                              now suits every draw: a model of 900 boxes
+                              ran a third slower in one pass, and S1
+                              takes 2.04 ms from 2.17
                   - [x] A gallery of models. The Quest app shows the
                         prompt trials' 35 Voxel Json models one at a time
                         under the view's shading. The controllers step
