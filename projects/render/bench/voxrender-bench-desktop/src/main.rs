@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process,
 };
-use voxrender_bench::{TimedBench, bench_scene, run_b1, view_check, view_image};
+use voxrender_bench::{TimedBench, bench_scene, lit_check, run_b1, view_check, view_image};
 
 // Internal API
 
@@ -120,6 +120,15 @@ enum Command {
         )]
         size: u32,
     },
+
+    /// Compares the GPU's fill of a bench scene's corner shadows with the
+    /// fill through the reference's walk and prints how far they differ.
+    #[command(name = "lit-check")]
+    LitCheck {
+        /// The start of the scene's name in B1's report, such as `S1`.
+        #[arg(value_name = "scene")]
+        scene: String,
+    },
 }
 
 #[derive(Clone, Debug, Args)]
@@ -177,6 +186,8 @@ fn main() {
         } => view(&scene, &output, width, height).map(|()| String::new()),
 
         Command::ViewCheck { scene, size } => check(&scene, size),
+
+        Command::LitCheck { scene } => check_lit(&scene),
     };
 
     match result {
@@ -203,18 +214,22 @@ fn time(bench: TimedBench, times: &Times) -> Result<String> {
     })
 }
 
-/// The most placements a scene holds for its sun to cast shadows. The
-/// shadows' fill on the CPU takes too long past that.
-const SHADOWED: usize = 64;
-
 /// Compares the shaded view of the bench scene whose name starts with
 /// `scene` with the reference's image, over a `size` square image.
 fn check(scene: &str, size: u32) -> Result<String> {
     let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
     let gpu = headless_gpu()?;
-    let shadows = render_scene.placement_count() <= SHADOWED;
 
-    view_check(&gpu, &render_scene, size, shadows).map_err(Error::Bench)
+    view_check(&gpu, &render_scene, size).map_err(Error::Bench)
+}
+
+/// Compares the GPU's fill of the lit corners of the bench scene whose name
+/// starts with `scene` with the fill through the reference's walk.
+fn check_lit(scene: &str) -> Result<String> {
+    let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
+    let gpu = headless_gpu()?;
+
+    lit_check(&gpu, &render_scene).map_err(Error::Bench)
 }
 
 /// Writes the shaded view of the bench scene whose name starts with `scene`
@@ -222,8 +237,7 @@ fn check(scene: &str, size: u32) -> Result<String> {
 fn view(scene: &str, output: &Path, width: u32, height: u32) -> Result<()> {
     let render_scene = bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))?;
     let gpu = headless_gpu()?;
-    let shadows = render_scene.placement_count() <= SHADOWED;
-    let texels = view_image(&gpu, &render_scene, width, height, shadows).map_err(Error::Bench)?;
+    let texels = view_image(&gpu, &render_scene, width, height).map_err(Error::Bench)?;
 
     let file = File::create(output).map_err(Error::Write)?;
     let mut encoder = Encoder::new(BufWriter::new(file), width, height);

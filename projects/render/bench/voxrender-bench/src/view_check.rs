@@ -23,10 +23,9 @@ impl MapRows for SerialRows {
 /// with the reference's image of it, over a `size` square image, and
 /// returns a line of the result. The line counts the pixels the reference
 /// hits something opaque in, how many of them have a channel off by over
-/// 8 of 255 steps, and the mean difference of a channel. The sun casts its
-/// corner shadows when `shadows`. Errors unless the scene has a view and
-/// the device has multiview.
-pub fn view_check(gpu: &Gpu, scene: &RenderScene, size: u32, shadows: bool) -> Result<String> {
+/// 8 of 255 steps, and the mean difference of a channel. Errors unless
+/// the scene has a view and the device has multiview.
+pub fn view_check(gpu: &Gpu, scene: &RenderScene, size: u32) -> Result<String> {
     let (view_id, _) = scene.iter_views().next().ok_or(Error::NoView)?;
 
     let image = render(
@@ -41,7 +40,7 @@ pub fn view_check(gpu: &Gpu, scene: &RenderScene, size: u32, shadows: bool) -> R
     .map_err(Error::Render)?;
 
     let reference = RenderOutput::from_image(&image, Some(TySrgbU8::new(0, 0, 0)));
-    let texels = view_image(gpu, scene, size, size, shadows)?;
+    let texels = view_image(gpu, scene, size, size)?;
     let black = TyLinSrgbF32::new(0.0, 0.0, 0.0);
 
     let (mut pixels, mut off, mut sum) = (0u64, 0u64, 0u64);

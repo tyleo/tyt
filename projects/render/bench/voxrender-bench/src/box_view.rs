@@ -1,6 +1,6 @@
 use crate::{
-    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitCorners, PlacedBox, Result, TileMasks,
-    ViewEye, box_view_shader,
+    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitCorners, LitFill, PlacedBox, Result,
+    TileMasks, ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, num::NonZeroU32};
@@ -187,18 +187,15 @@ impl BoxView {
     pub const DEPTH: TextureFormat = HitTargets::DEPTH;
 
     /// Builds the view of `scene` for a two-layer target of `format` and
-    /// of `size`, its width and height. Errors if a tile holds over 256
-    /// materials, or if a shadow's ray lies out of a grid's range.
-    ///
-    /// When `shadows`, the sun casts its corner shadows. Their fill runs the
-    /// reference's walk, which crosses every placement for each ray, so a
-    /// scene of many placements takes long.
+    /// of `size`, its width and height, and submits the fill of the sun's
+    /// corner shadows. Errors if a tile holds over 256 materials, or if the
+    /// scene has a sun and no view.
     pub fn new(
         device: &Device,
+        queue: &Queue,
         scene: &RenderScene,
         format: TextureFormat,
         size: [u32; 2],
-        shadows: bool,
     ) -> Result<Self> {
         let mut words = Vec::new();
         let mut offsets = HashMap::new();
@@ -308,13 +305,34 @@ impl BoxView {
             }
         }
 
-        // The sun's corner shadows.
-        let shadowed = shadows && suns > 0;
+        let words_bytes = |words: &[u32]| -> Vec<u8> {
+            words.iter().flat_map(|word| word.to_le_bytes()).collect()
+        };
 
-        let lit = if shadowed {
-            LitCorners::new(scene, sun.0, &object_surfaces, &opaque)?
+        // The sun's corner shadows, which the GPU fills before the view's
+        // first draw. A scene with no sun reads words nothing fills.
+        let shadowed = suns > 0;
+
+        let (lit_places, lit_corners) = if shadowed {
+            let fill = LitFill::new(device, scene, sun.0, &object_surfaces)?;
+
+            fill.fill(device, queue);
+
+            (fill.places, fill.lit)
         } else {
-            unblocked(&placements, sun.0)
+            let mut lit = unblocked(&placements, sun.0);
+
+            // A hit the depth test drops can read the word past its tile's
+            // last surface cell.
+            lit.words.push(0);
+
+            let words = device.create_buffer_init(&BufferInitDescriptor {
+                label: Some("view lit corners"),
+                contents: &words_bytes(&lit.words),
+                usage: BufferUsages::STORAGE,
+            });
+
+            (lit.places, words)
         };
 
         // A material's three `vec4<f32>`s: its base color and metalness, its
@@ -389,7 +407,7 @@ impl BoxView {
         // What a box's fragments read of its tile with no load: its
         // materials' word and the first of its lit words.
         let mut shading = |placed: &PlacedBox, tile: u32| {
-            let first = lit.places[placed.placement as usize];
+            let first = lit_places[placed.placement as usize];
 
             [
                 header(tile),
@@ -490,10 +508,6 @@ impl BoxView {
         // last surface cell.
         words.extend([0; 2]);
 
-        let mut lit_words = lit.words;
-
-        lit_words.push(0);
-
         if box_words.is_empty() {
             box_words.resize(12, 0);
         }
@@ -514,10 +528,6 @@ impl BoxView {
             })
         };
 
-        let words_bytes = |words: &[u32]| -> Vec<u8> {
-            words.iter().flat_map(|word| word.to_le_bytes()).collect()
-        };
-
         let material_bytes: Vec<u8> = materials
             .iter()
             .flat_map(|value| value.to_le_bytes())
@@ -526,11 +536,6 @@ impl BoxView {
         let frame = init("view frame", &frame, BufferUsages::UNIFORM);
         let bits = init("view bits", &words_bytes(&words), BufferUsages::STORAGE);
         let materials = init("view materials", &material_bytes, BufferUsages::STORAGE);
-        let lit_corners = init(
-            "view lit corners",
-            &words_bytes(&lit_words),
-            BufferUsages::STORAGE,
-        );
         let box_list = init(
             "view boxes",
             &words_bytes(&box_words),
