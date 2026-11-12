@@ -425,12 +425,13 @@ impl Tile {
 
                     cells += 1;
 
-                    let mut before = cell;
+                    // Where a run that ends just before the cell ends.
+                    let mut end = cell + 1;
 
-                    before[row] = before[row].wrapping_sub(1);
+                    end[row] = cell[row];
 
                     match runs.last_mut() {
-                        Some((_, run_high)) if *run_high == before + 1 => run_high[row] += 1,
+                        Some((_, run_high)) if *run_high == end => run_high[row] += 1,
                         _ => runs.push((cell, cell + 1)),
                     }
                 }
