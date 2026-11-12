@@ -15,13 +15,15 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
 };
 
-/// The vertices a box's shaders take: the 8 corners for its back faces,
-/// and 4 vertices for each of its three faces toward the view.
-const VERTICES: u32 = 12;
+/// The vertices a box's shaders take: its 8 corners, each a number whose
+/// bit `a` picks a side of the box on an axis.
+const VERTICES: u32 = 8;
 
-/// A box's three faces toward the view, two triangles each over the 4
-/// vertices of a face. A vertex holds its face's axis above two bits.
-const FRONTS: [u16; 18] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11];
+/// A box's three faces toward the view, two triangles each over the 7
+/// corners the faces hold. Bit `b` of a corner picks the far side on the
+/// axis the bit stands for. A face's triangles start at its corner that no
+/// other face holds.
+const FRONTS: [u16; 18] = [6, 0, 4, 6, 2, 0, 5, 0, 1, 5, 4, 0, 3, 0, 2, 3, 1, 0];
 
 /// A box's 12 triangles over its 8 corners, wound counterclockwise from
 /// outside. Bit `a` of a corner picks the box's high face on axis `a`.
@@ -46,7 +48,7 @@ const TRIANGLES: [u16; 36] = [
 /// each.
 ///
 /// A run of front faces draws each box's three faces toward the view: 6
-/// triangles where its corners make 12.
+/// triangles over 7 corners, where the box makes 12 over 8.
 pub struct BoxDraw {
     /// The runs in draw order.
     parts: Vec<Run>,

@@ -328,6 +328,17 @@ code-level choices in
             scene. It also writes three images per scene: the full trace,
             the cut, and a map of the changed pixels. A cut stays when the
             project lead accepts its tradeoff from the images
+            - [x] The cut that fits the box raster is fewer pixels. The
+                  Quest app draws at a scale of the eyes' size. At 0.8 the
+                  scenes take 71% to 79% of their time
+            - [x] A frame's time splits into 0.3 ms, about 55 ns a box,
+                  and 0.29 to 0.84 ns a pixel. Three faces over 7 corners
+                  take S5 to 3.40 ms, under B3's line
+            - [ ] The project lead tries the scale in the headset and
+                  keeps it or drops it
+            - [ ] Quad views, four views of 840 by 880. By the split they
+                  gain S1 and S4 a quarter and cost S5. The app draws
+                  them once B6's LOD holds a scene's boxes down
       - [ ] **S9.7. The final run.** A final Quest run re-times B2 with the
             improved code. The report lands in benchmarks.md. R picks the B3
             arms
