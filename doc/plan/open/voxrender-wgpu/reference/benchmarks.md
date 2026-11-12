@@ -1723,3 +1723,50 @@ box's hit. None stays.
    costs one whose boxes are many and whose solid pixels show
 3. No sort by a box's distance orders two boxes of unlike size that
    overlap on screen
+
+## Shadow fill as casters move, 2026-11-12
+
+What the view's fill of corner shadows would cost a frame if a placement
+moved.
+
+- Device: Quest 3, as in Headset view
+- Fill time: the wall time of `LitFill::fill` and the wait for its
+  dispatches, as the view is built and before the session draws. A probe
+  logged it and is not checked in
+- Reach: for each placement, the placed tiles of other placements whose
+  list of casters holds it, and the tiles it holds, counted on this Mac
+  by a probe that is not checked in
+
+**The whole fill on Quest.**
+
+| Scene | Record cells | ms | ns a cell |
+| --- | ---: | ---: | ---: |
+| S1 | 199,006 | 12.2 | 61 |
+| S4 | 739,110 | 50.5 | 68 |
+| S2 | 18,921,736 | 769 | 41 |
+| S5 | 2,917,037 | 40.2 | 14 |
+
+**A placement's reach.** The median placement of each scene, and the one
+with the most.
+
+| Scene | Placements | Shadows, tiles | Shadows, cells | Holds, tiles | Holds, cells |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| S1, median | 8 | 29 | 20,160 | 8 | 8,952 |
+| S1, most | | 140 | 81,830 | 248 | 117,160 |
+| S4, median | 24 | 92 | 28,645 | 47 | 23,939 |
+| S4, most | | 1237 | 478,274 | 1024 | 250,000 |
+| S2, median | 1025 | 35 | 24,845 | 31 | 20,485 |
+| S2, most | | 24,650 | 18,744,144 | 625 | 160,000 |
+
+**Outcomes.**
+
+1. A placement that moves changes the light on the tiles it holds, on the
+   tiles whose casters held it before the move, and on those whose
+   casters hold it after
+2. The median placement's own tiles and the tiles it shadows hold 29,000
+   cells on S1, 45,000 on S2, and 53,000 on S4. At each scene's rate
+   their fill takes 1.8 ms, 1.9 ms, and 3.6 ms on Quest, for one
+   placement that moves and before the tiles it comes to shadow
+3. B5's line for the shadow memo is 1.0 ms a frame. A fill of whole
+   tiles does not fit it for one mover. B5 needs a finer rule for what a
+   move changes, or another shadow for movers

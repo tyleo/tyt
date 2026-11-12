@@ -260,8 +260,12 @@ code-level choices in
                                     pass casts each corner's ray through
                                     the placements that can shadow its
                                     tile. S2 draws its shadows in 7.1 ms
-                              - [ ] The fill as casters move: which tiles
-                                    to fill again, and the time a frame
+                              - [x] The fill as casters move. A mover
+                                    changes its tiles and the tiles it
+                                    shadows before and after. On Quest a
+                                    cell fills in 14 to 68 ns, and one
+                                    median mover's tiles in 1.8 to 3.6 ms
+                                    against B5's 1.0 ms line
                         - [ ] A crossing box that holds the eye. It still
                               writes its hits' depth
                         - [ ] The crossing test as placements move
@@ -334,7 +338,8 @@ The steps after S9 get their detail when S9 lands. They run in this order:
 5. B4 to B7. A step starts with a study where its line in the frame budget
    is in doubt. B7 is one. The research plans its walk as a compute pass
    against a line of 1.0 ms. No compute pass over both eyes runs under 2.32
-   ms on Quest
+   ms on Quest. B5 is another. A fill of the tiles one mover changes
+   takes 1.8 to 3.6 ms on Quest against a line of 1.0 ms
 6. Traced reflections. The reference traces a mirror ray from each smooth
    face. The research gives the ray no step and no line in the frame
    budget. The box view reflects the sky alone. A study comes first: what
