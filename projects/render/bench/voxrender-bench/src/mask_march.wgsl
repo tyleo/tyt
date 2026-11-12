@@ -28,8 +28,7 @@
 //    cell. `words`, whose x holds the offset of the tile's words in `bits`.
 //    `fall`, the depth an orthographic ray loses over a unit of its
 //    direction. `face`, the axis of the fragment's face, plus 4 on the box's
-//    high face. `BoxDraw`'s triangles carry it from the corner each face
-//    starts at. `crossers`, the first of the box's entries in `crossers` and
+//    high face. `crossers`, the first of the box's entries in `crossers` and
 //    their count
 // 3. `bits`, whose words hold a tile's cells as `TileMasks` lays them out
 // 4. `crossers`, whose entries each hold a box of another placement that
@@ -43,7 +42,9 @@
 //    moves up
 //
 // Its vertex entries place a corner only when `sound` holds for the corner's
-// position and its `ray`.
+// position and its `ray`. They take a box's back faces from `BoxDraw`'s
+// corners through `corner_of` and `corner_face`, and its faces toward the
+// view from `BoxDraw`'s face vertices through `front_of`.
 
 // What a perspective view's reversed depth scales by to come a part in 1024
 // nearer.
@@ -97,6 +98,59 @@ fn sound(a: vec4<f32>, b: vec4<f32>) -> bool {
     let top = vec4<u32>(0x7f800000u);
 
     return all((bitcast<vec4<u32>>(a) & top) != top) && all((bitcast<vec4<u32>>(b) & top) != top);
+}
+
+// The grid point of a box's corner. Bit `a` of `corner` picks the box's high
+// face on axis `a`.
+fn corner_of(corner: u32, low: vec4<u32>, high: vec4<u32>) -> vec3<u32> {
+    let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
+
+    return select(low.xyz, high.xyz, far);
+}
+
+// The code of the face whose triangles start at `corner`: its axis, plus 4
+// for the box's high face. `BoxDraw` starts the low face on axis `a` at
+// corner `a` and the high face at corner `7 - a`.
+fn corner_face(corner: u32) -> u32 {
+    return min(corner, 7u - corner) | (corner & 4u);
+}
+
+// A vertex of a face toward the view.
+struct Front {
+    // The vertex's grid point.
+    grid: vec3<u32>,
+
+    // The face's code: its axis, plus 4 for the box's high face.
+    face: u32,
+}
+
+// The vertex `vertex` of the box from `low` to `high`, on the box's face
+// toward the view on the vertex's axis. `vertex` holds the axis above two
+// bits for the face's four vertices. `ray` is the placement's `Place::ray`.
+//
+// A perspective view's eye past the box's middle sees the high face, as
+// does an orthographic view whose reverse direction points up the axis. An
+// eye between the two faces sees neither, and the face then winds away from
+// it.
+fn front_of(vertex: u32, ray: vec3<f32>, low: vec3<u32>, high: vec3<u32>) -> Front {
+    let axis = vertex >> 2u;
+    let toward = ray * 2.0 > vec3<f32>(low + high) * RAY_W;
+    let on_high = toward[axis];
+
+    // The high face's vertices wind counterclockwise from outside along
+    // the next axis and then the one after. The low face's swap the two.
+    let first = (vertex & 3u) == 1u || (vertex & 3u) == 2u;
+    let second = (vertex & 3u) >= 2u;
+    let next = select(second, first, on_high);
+    let after = select(first, second, on_high);
+
+    let far = vec3<bool>(
+        select(select(after, next, axis == 2u), on_high, axis == 0u),
+        select(select(after, next, axis == 0u), on_high, axis == 1u),
+        select(select(after, next, axis == 1u), on_high, axis == 2u),
+    );
+
+    return Front(select(low, high, far), axis | (u32(on_high) << 2u));
 }
 
 // The one axis of the least component of `v`. A tie goes to the earlier

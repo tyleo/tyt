@@ -1,4 +1,4 @@
-use crate::{BoxPart, HitTargets};
+use crate::{BoxFaces, BoxPart, HitTargets};
 use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
@@ -13,6 +13,14 @@ use wgpu::{
     VertexState, VertexStepMode,
     util::{BufferInitDescriptor, DeviceExt},
 };
+
+/// The vertices a box's shaders take: the 8 corners for its back faces,
+/// and 4 vertices for each of its three faces toward the view.
+const VERTICES: u32 = 12;
+
+/// A box's three faces toward the view, two triangles each over the 4
+/// vertices of a face. A vertex holds its face's axis above two bits.
+const FRONTS: [u16; 18] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11];
 
 /// A box's 12 triangles over its 8 corners, wound counterclockwise from
 /// outside. Bit `a` of a corner picks the box's high face on axis `a`.
@@ -29,15 +37,22 @@ const TRIANGLES: [u16; 36] = [
 /// A view's boxes and the pipelines that draw their faces, with depth in
 /// [`HitTargets::DEPTH`].
 ///
-/// From [`APART`](Self::APART) boxes up, each run draws in a pass of its
-/// own, which loads what the pass before it stored. On Quest a pass of one
-/// draw runs in a mode that costs less a box and more a pixel. A second
-/// draw in a pass, even of one box, cost S5 0.65 ms over its 4096 boxes and
-/// S2 2.8 ms over its 25,301. The passes between cost under 0.02 ms each.
-/// S1's 426 boxes ran 10% faster in one pass.
+/// A draw of [`APART`](Self::APART) boxes or more counts its cost by the
+/// box, and one of fewer by the pixel:
+///
+/// 1. From `APART` boxes up, each run draws in a pass of its own, which
+///    loads what the pass before it stored. On Quest a pass of one draw
+///    runs in a mode that costs less a box and more a pixel. A second draw
+///    in a pass, even of one box, cost S5 0.65 ms over its 4096 boxes and
+///    S2 2.8 ms over its 25,301. The passes between cost under 0.02 ms
+///    each. S1's 426 boxes ran 10% faster in one pass
+/// 2. From `APART` boxes up, a run of front faces draws each box's three
+///    faces toward the view: 6 triangles where its corners make 12. S5's
+///    23,296 boxes ran 13% faster and S2's 4%. S1 shaded a tenth more
+///    fragments that way and ran 19% slower
 pub struct BoxDraw {
-    /// Each run's pipeline and boxes, in draw order.
-    parts: Vec<(RenderPipeline, Range<u32>)>,
+    /// The runs in draw order.
+    parts: Vec<Run>,
 
     bind_group: BindGroup,
 
@@ -49,12 +64,26 @@ pub struct BoxDraw {
     boxes: Buffer,
 }
 
+/// One run of a draw's boxes.
+struct Run {
+    /// Draws the run over its boxes' corners.
+    corners: RenderPipeline,
+
+    /// Draws a run of front faces over each box's three faces toward the
+    /// view.
+    fronts: Option<RenderPipeline>,
+
+    boxes: Range<u32>,
+}
+
 impl BoxDraw {
     /// The bytes of a box's three `vec4<u32>`s.
     pub const BOX_BYTES: usize = 48;
 
     /// Builds the pipelines over `module`, whose vertex entries take a
-    /// corner's bits and a box's three `vec4<u32>`s.
+    /// vertex's bits and a box's three `vec4<u32>`s. `place` and
+    /// `place_near` take a corner of the box, and `place_front` takes a
+    /// vertex of one of its three faces toward the view.
     ///
     /// # Arguments
     ///
@@ -92,13 +121,14 @@ impl BoxDraw {
 
         let corners = init(
             "box corners",
-            &(0u32..8).flat_map(u32::to_le_bytes).collect::<Vec<_>>(),
+            &(0..VERTICES).flat_map(u32::to_le_bytes).collect::<Vec<_>>(),
             BufferUsages::VERTEX,
         );
         let indices = init(
             "box indices",
             &TRIANGLES
                 .iter()
+                .chain(&FRONTS)
                 .flat_map(|index| index.to_le_bytes())
                 .collect::<Vec<_>>(),
             BufferUsages::INDEX,
@@ -135,13 +165,13 @@ impl BoxDraw {
             immediate_size: 0,
         });
 
-        let pipeline = |part: &BoxPart<'_>| {
+        let pipeline = |vertex: &str, fragment: &str, backs: bool| {
             device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some(part.fragment),
+                label: Some(fragment),
                 layout: Some(&layout),
                 vertex: VertexState {
                     module,
-                    entry_point: Some(part.vertex),
+                    entry_point: Some(vertex),
                     compilation_options: PipelineCompilationOptions::default(),
                     buffers: &[
                         Some(VertexBufferLayout {
@@ -178,7 +208,7 @@ impl BoxDraw {
                 },
                 primitive: PrimitiveState {
                     front_face: FrontFace::Ccw,
-                    cull_mode: Some(if part.backs { Face::Front } else { Face::Back }),
+                    cull_mode: Some(if backs { Face::Front } else { Face::Back }),
                     ..PrimitiveState::default()
                 },
                 depth_stencil: Some(DepthStencilState {
@@ -191,7 +221,7 @@ impl BoxDraw {
                 multisample: MultisampleState::default(),
                 fragment: Some(FragmentState {
                     module,
-                    entry_point: Some(part.fragment),
+                    entry_point: Some(fragment),
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
                         format,
@@ -205,32 +235,48 @@ impl BoxDraw {
         };
 
         let mut first = 0;
-        let mut runs: Vec<(RenderPipeline, Range<u32>)> = Vec::new();
+        let mut runs = Vec::new();
 
         // Each pipeline built so far with its entries and faces, for a later
         // run to share.
         let mut built: Vec<((&str, &str, bool), RenderPipeline)> = Vec::new();
 
-        for part in parts {
-            let end =
-                first + u32::try_from(part.boxes.len()).expect("a scene's boxes number under 2^32");
+        let mut shared = |vertex: &'static str, fragment, backs| {
+            let key = (vertex, fragment, backs);
 
-            let key = (part.vertex, part.fragment, part.backs);
-
-            let shared = built
+            let found = built
                 .iter()
                 .find(|(built, _)| *built == key)
                 .map(|(_, pipeline)| pipeline.clone());
 
-            let pipeline = shared.unwrap_or_else(|| {
-                let pipeline = pipeline(part);
+            found.unwrap_or_else(|| {
+                let pipeline = pipeline(vertex, fragment, backs);
 
                 built.push((key, pipeline.clone()));
 
                 pipeline
+            })
+        };
+
+        for part in parts {
+            let end =
+                first + u32::try_from(part.boxes.len()).expect("a scene's boxes number under 2^32");
+
+            let (corners, fronts) = match part.faces {
+                BoxFaces::Front => (
+                    shared("place", part.fragment, false),
+                    Some(shared("place_front", part.fragment, false)),
+                ),
+                BoxFaces::Back => (shared("place", part.fragment, true), None),
+                BoxFaces::NearBack => (shared("place_near", part.fragment, true), None),
+            };
+
+            runs.push(Run {
+                corners,
+                fronts,
+                boxes: first..end,
             });
 
-            runs.push((pipeline, first..end));
             first = end;
         }
 
@@ -275,13 +321,13 @@ impl BoxDraw {
 
         let mut first = 0;
 
-        for ((_, run), count) in self.parts.iter_mut().zip(counts) {
-            *run = first..first + count;
+        for (run, count) in self.parts.iter_mut().zip(counts) {
+            run.boxes = first..first + count;
             first += count;
         }
     }
 
-    /// The boxes from which each run draws in a pass of its own.
+    /// The boxes from which a draw counts its cost by the box.
     pub const APART: u32 = 1024;
 
     /// How many passes draw the boxes: one for each run that holds boxes
@@ -303,30 +349,41 @@ impl BoxDraw {
             (false, _) => (0, 0),
         };
 
-        for (run, (pipeline, boxes)) in self.drawn().skip(first).take(count).enumerate() {
-            if run == 0 {
+        // A box's corners make the first triangles of `indices`, and its
+        // three faces toward the view make the rest.
+        let corners = 0..TRIANGLES.len() as u32;
+        let fronts = corners.end..corners.end + FRONTS.len() as u32;
+        let apart = self.apart();
+
+        for (drawn, run) in self.drawn().skip(first).take(count).enumerate() {
+            if drawn == 0 {
                 pass.set_bind_group(0, &self.bind_group, &[]);
                 pass.set_vertex_buffer(0, self.corners.slice(..));
                 pass.set_vertex_buffer(1, self.boxes.slice(..));
                 pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
             }
 
+            let (pipeline, indices) = match &run.fronts {
+                Some(pipeline) if apart => (pipeline, fronts.clone()),
+                _ => (&run.corners, corners.clone()),
+            };
+
             pass.set_pipeline(pipeline);
-            pass.draw_indexed(0..36, 0, boxes.clone());
+            pass.draw_indexed(indices, 0, run.boxes.clone());
         }
     }
 
-    /// Whether each run draws in a pass of its own.
+    /// Whether the draw holds [`APART`](Self::APART) boxes or more.
     fn apart(&self) -> bool {
         self.parts
             .iter()
-            .map(|(_, boxes)| boxes.end - boxes.start)
+            .map(|run| run.boxes.end - run.boxes.start)
             .sum::<u32>()
             >= Self::APART
     }
 
     /// The runs that hold boxes, in draw order.
-    fn drawn(&self) -> impl Iterator<Item = &(RenderPipeline, Range<u32>)> {
-        self.parts.iter().filter(|(_, boxes)| !boxes.is_empty())
+    fn drawn(&self) -> impl Iterator<Item = &Run> {
+        self.parts.iter().filter(|run| !run.boxes.is_empty())
     }
 }

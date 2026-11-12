@@ -87,14 +87,19 @@ struct Box {
 // plus `SOLID` for a solid one, then the high corner.
 @group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
 
-// The box's corner `corner` for `eye`. Bit `a` of `corner` picks the box's
-// high face on axis `a`. `low` holds the box's low cell and its placement's
-// index. `high` holds the corner past the box's high cell and the offset of
-// its tile's words. `more` holds the first of the box's entries in
-// `crossers` and their count.
-fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<u32>) -> Box {
-    let far = ((vec3<u32>(corner) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
-    let grid = select(low.xyz, high.xyz, far);
+// The box's vertex at the grid's `grid` for `eye`, on the face of code
+// `face`. `low` holds the box's low cell and its placement's index. `high`
+// holds the corner past the box's high cell and the offset of its tile's
+// words. `more` holds the first of the box's entries in `crossers` and
+// their count.
+fn vertex_of(
+    eye: u32,
+    grid: vec3<u32>,
+    face: u32,
+    low: vec4<u32>,
+    high: vec4<u32>,
+    more: vec4<u32>,
+) -> Box {
     let tile = low.xyz & vec3<u32>(0xfffffff0u);
     let index = eye * frame.placements + low.w;
     let clip = places[index].clip * vec4<f32>(vec3<f32>(grid), 1.0);
@@ -109,12 +114,14 @@ fn corner_of(eye: u32, corner: u32, low: vec4<u32>, high: vec4<u32>, more: vec4<
         vec3<f32>(low.xyz - tile),
         vec3<f32>(high.xyz - tile),
         0.0,
-        min(corner, 7u - corner) | (corner & 4u),
+        face,
         vec2<u32>(high.w, index),
         vec3<u32>(more.xy, eye * frame.placements),
     );
 }
 
+// A corner of the box, for its back faces. Bit `a` of `corner` picks the
+// box's high face on axis `a`.
 @vertex
 fn place(
     @builtin(view_index) eye: u32,
@@ -123,7 +130,7 @@ fn place(
     @location(2) high: vec4<u32>,
     @location(3) more: vec4<u32>,
 ) -> Box {
-    return corner_of(eye, corner, low, high, more);
+    return vertex_of(eye, corner_of(corner, low, high), corner_face(corner), low, high, more);
 }
 
 // `place` for the back faces `inside` shades.
@@ -135,11 +142,27 @@ fn place_near(
     @location(2) high: vec4<u32>,
     @location(3) more: vec4<u32>,
 ) -> Box {
-    var box = corner_of(eye, corner, low, high, more);
+    var box = vertex_of(eye, corner_of(corner, low, high), corner_face(corner), low, high, more);
 
     box.clip.z *= NEARER;
 
     return box;
+}
+
+// A vertex of one of the box's three faces toward the eye. `vertex` holds
+// the face's axis above its two bits for the face's four vertices.
+@vertex
+fn place_front(
+    @builtin(view_index) eye: u32,
+    @location(0) vertex: u32,
+    @location(1) low: vec4<u32>,
+    @location(2) high: vec4<u32>,
+    @location(3) more: vec4<u32>,
+) -> Box {
+    let ray = places[eye * frame.placements + low.w].ray.xyz;
+    let front = front_of(vertex, ray, low.xyz, high.xyz);
+
+    return vertex_of(eye, front.grid, front.face, low, high, more);
 }
 
 // The contract's tonemap, Khronos PBR Neutral.
