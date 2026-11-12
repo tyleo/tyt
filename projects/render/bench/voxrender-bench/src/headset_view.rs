@@ -1,7 +1,7 @@
 use crate::{BoxView, HeadsetEye, HeadsetStand, Result, ViewEye};
 use ty_math::{TyQuaternionF64, TyVector3F64};
-use voxrender::RenderScene;
-use wgpu::{Color, Device, Queue, RenderPass, TextureFormat};
+use voxrender::{RenderBloom, RenderScene};
+use wgpu::{Color, CommandEncoder, Device, Queue, RenderPass, TextureFormat};
 
 /// A [`BoxView`] of a scene around a headset's wearer.
 pub struct HeadsetView {
@@ -15,19 +15,20 @@ impl HeadsetView {
     /// The format of the depth a pass that draws the view clears to zero.
     pub const DEPTH: TextureFormat = BoxView::DEPTH;
 
-    /// Builds the view of `scene` from `stand`, for a two-layer target of
-    /// `format` and of `size`, its width and height. Errors as
-    /// [`BoxView::new`] does.
+    /// Builds the view of `scene` under `bloom` from `stand` for a two-layer
+    /// target of `format` whose width and height are `size`.
+    /// Errors as [`BoxView::new`] does.
     pub fn new(
         device: &Device,
         queue: &Queue,
         scene: &RenderScene,
+        bloom: RenderBloom,
         stand: HeadsetStand,
         format: TextureFormat,
         size: [u32; 2],
     ) -> Result<Self> {
         Ok(HeadsetView {
-            boxes: BoxView::new(device, queue, scene, format, size)?,
+            boxes: BoxView::new(device, queue, scene, bloom, format, size)?,
             stand,
         })
     }
@@ -68,5 +69,11 @@ impl HeadsetView {
     /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
     pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
         self.boxes.draw(pass, at);
+    }
+
+    /// Encodes the passes that come before the first of a frame's
+    /// [`passes`](Self::passes), as [`BoxView::glow`] does.
+    pub fn glow(&self, encoder: &mut CommandEncoder) {
+        self.boxes.glow(encoder);
     }
 }

@@ -5,13 +5,14 @@ use std::{
 };
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferUsages, ColorTargetState,
-    ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState,
-    FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayoutDescriptor,
-    PrimitiveState, Queue, RenderPass, RenderPipeline, RenderPipelineDescriptor,
-    SamplerBindingType, ShaderModule, ShaderStages, StencilState, TextureFormat, TextureSampleType,
-    TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat, VertexState,
-    VertexStepMode,
+    BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor,
+    BlendOperation, BlendState, Buffer, BufferUsages, ColorTargetState, ColorWrites,
+    CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState, FrontFace,
+    IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayout,
+    PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPass, RenderPipeline,
+    RenderPipelineDescriptor, SamplerBindingType, ShaderModule, ShaderStages, StencilState,
+    TextureFormat, TextureSampleType, TextureViewDimension, VertexAttribute, VertexBufferLayout,
+    VertexFormat, VertexState, VertexStepMode,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -65,6 +66,12 @@ pub struct BoxDraw {
 
     /// Three `vec4<u32>`s per box.
     boxes: Buffer,
+
+    layout: PipelineLayout,
+
+    /// What [`cover`](Self::cover) draws after the runs, and the pixels
+    /// it draws within: a rectangle's left, top, width, and height.
+    cover: Option<(RenderPipeline, [u32; 4])>,
 }
 
 /// One run of a draw's boxes.
@@ -362,6 +369,76 @@ impl BoxDraw {
             corners,
             indices,
             boxes,
+            layout,
+            cover: None,
+        }
+    }
+
+    /// Adds a last pass that draws one triangle where no box drew: three
+    /// vertices through `module`'s `vertex` entry, which places them at
+    /// the depth a pass clears to, and its `fragment` entry, whose color
+    /// the target's blend adds. The entries bind what the boxes' do. The
+    /// pass draws nothing until [`cover_within`](Self::cover_within) gives
+    /// it pixels.
+    pub fn cover(
+        &mut self,
+        device: &Device,
+        module: &ShaderModule,
+        vertex: &str,
+        fragment: &str,
+        format: TextureFormat,
+        multiview_mask: Option<NonZeroU32>,
+    ) {
+        let added = BlendComponent {
+            src_factor: BlendFactor::One,
+            dst_factor: BlendFactor::One,
+            operation: BlendOperation::Add,
+        };
+
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some(fragment),
+            layout: Some(&self.layout),
+            vertex: VertexState {
+                module,
+                entry_point: Some(vertex),
+                compilation_options: PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: PrimitiveState::default(),
+            depth_stencil: Some(DepthStencilState {
+                format: HitTargets::DEPTH,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(CompareFunction::Equal),
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
+            multisample: MultisampleState::default(),
+            fragment: Some(FragmentState {
+                module,
+                entry_point: Some(fragment),
+                compilation_options: PipelineCompilationOptions::default(),
+                targets: &[Some(ColorTargetState {
+                    format,
+                    blend: Some(BlendState {
+                        color: added,
+                        alpha: added,
+                    }),
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask,
+            cache: None,
+        });
+
+        self.cover = Some((pipeline, [0; 4]));
+    }
+
+    /// Sets the pixels of the target the [`cover`](Self::cover) draws
+    /// within: a rectangle's left, top, width, and height, inside the
+    /// target.
+    pub fn cover_within(&mut self, pixels: [u32; 4]) {
+        if let Some((_, within)) = &mut self.cover {
+            *within = pixels;
         }
     }
 
@@ -392,16 +469,28 @@ impl BoxDraw {
     }
 
     /// How many passes draw the boxes: one for each run that holds boxes,
-    /// and one for a draw that holds none.
+    /// or one for a draw that holds none, then one for a
+    /// [`cover`](Self::cover).
     pub fn passes(&self) -> u32 {
-        u32::try_from(self.drawn().count())
-            .expect("a draw's runs number under 2^32")
-            .max(1)
+        self.runs() + u32::from(self.cover.is_some())
     }
 
     /// Draws the `at`th of the draw's [`passes`](Self::passes) into `pass`.
-    /// Draws nothing past the last run that holds boxes.
+    /// Draws nothing past the last.
     pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
+        if let Some((cover, [left, top, width, height])) =
+            self.cover.as_ref().filter(|_| at == self.runs())
+        {
+            if *width > 0 && *height > 0 {
+                pass.set_scissor_rect(*left, *top, *width, *height);
+                pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_pipeline(cover);
+                pass.draw(0..3, 0..1);
+            }
+
+            return;
+        }
+
         let Some(run) = self.drawn().nth(at as usize) else {
             return;
         };
@@ -421,6 +510,13 @@ impl BoxDraw {
             0,
             run.boxes.clone(),
         );
+    }
+
+    /// The passes the runs draw in.
+    fn runs(&self) -> u32 {
+        u32::try_from(self.drawn().count())
+            .expect("a draw's runs number under 2^32")
+            .max(1)
     }
 
     /// The runs that hold boxes, in draw order.

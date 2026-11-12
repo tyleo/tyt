@@ -364,8 +364,15 @@ in this order:
             occlusion
       - [ ] Placements that move, a model's load time, and a line in the
             frame budget
-2. Emission. The box view adds the contract's bloom, which B4 was to time:
-   the halo over the emission, added before the tonemap
+2. Emission
+      - [x] The box view adds the contract's bloom, which B4 was to time.
+            It draws its glowing boxes at half size before a frame's
+            passes, blurs them through levels that stand in for the
+            contract's octaves, and adds the halo before the tonemap. A
+            model that glows takes about 0.5 ms more on Quest, against a
+            line of 0.6
+      - [ ] B4's depth and motion vectors, and a level for each of the
+            two narrowest octaves
 3. Glass. The box view draws the contract's transmission, which B7 was to
    time: what lies behind a pane shows through it, tinted, and a mirror ray
    passes through it

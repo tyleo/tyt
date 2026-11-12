@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process,
 };
-use voxrender::RenderScene;
+use voxrender::{RenderBloom, RenderScene};
 use voxrender_bench::{
     TimedBench, bench_scene, lit_check, model_scene, run_b1, view_check, view_image,
 };
@@ -221,36 +221,38 @@ fn time(bench: TimedBench, times: &Times) -> Result<String> {
     })
 }
 
-/// The model at the path `scene`, or else the bench scene whose name starts
-/// with `scene`.
-fn scene_of(scene: &str) -> Result<RenderScene> {
+/// The model at the path `scene` under its bloom, or else the bench scene
+/// whose name starts with `scene` under none.
+fn scene_of(scene: &str) -> Result<(RenderScene, RenderBloom)> {
     let path = Path::new(scene);
 
     if path.is_file() {
         return model_scene(path).map_err(Error::Bench);
     }
 
-    bench_scene(scene).ok_or_else(|| Error::NoScene(scene.to_owned()))
+    bench_scene(scene)
+        .map(|scene| (scene, RenderBloom::default()))
+        .ok_or_else(|| Error::NoScene(scene.to_owned()))
 }
 
 fn check(scene: &str, size: u32) -> Result<String> {
-    let render_scene = scene_of(scene)?;
+    let (render_scene, bloom) = scene_of(scene)?;
     let gpu = headless_gpu()?;
 
-    view_check(&gpu, &render_scene, size).map_err(Error::Bench)
+    view_check(&gpu, &render_scene, bloom, size).map_err(Error::Bench)
 }
 
 fn check_lit(scene: &str) -> Result<String> {
-    let render_scene = scene_of(scene)?;
+    let (render_scene, _) = scene_of(scene)?;
     let gpu = headless_gpu()?;
 
     lit_check(&gpu, &render_scene).map_err(Error::Bench)
 }
 
 fn view(scene: &str, output: &Path, width: u32, height: u32) -> Result<()> {
-    let render_scene = scene_of(scene)?;
+    let (render_scene, bloom) = scene_of(scene)?;
     let gpu = headless_gpu()?;
-    let texels = view_image(&gpu, &render_scene, width, height).map_err(Error::Bench)?;
+    let texels = view_image(&gpu, &render_scene, bloom, width, height).map_err(Error::Bench)?;
 
     let file = File::create(output).map_err(Error::Write)?;
     let mut encoder = Encoder::new(BufWriter::new(file), width, height);

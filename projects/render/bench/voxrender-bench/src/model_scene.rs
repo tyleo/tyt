@@ -5,7 +5,7 @@ use ty_math::{
 };
 use voxconv::{DependenciesImpl, ReadFormat, load};
 use voxrender::{
-    RenderLight, RenderProjection, RenderScene, RenderShadow, RenderView, fit_distance,
+    RenderBloom, RenderLight, RenderProjection, RenderScene, RenderShadow, RenderView, fit_distance,
 };
 
 /// The degrees of azimuth and elevation vxl's hero view looks from.
@@ -21,9 +21,10 @@ const KEY: [f64; 2] = [-30.0, 30.0];
 /// The scene of the Voxel Json document at `path`: every object at its
 /// nodes' placements, in meters. The scene's first view is vxl's hero view
 /// of the model. Its lights are vxl's studio rig as that view places the
-/// rig. Errors if the document does not load, holds no live voxel, or
-/// holds a material the contract cannot shade.
-pub fn model_scene(path: &Path) -> Result<RenderScene> {
+/// rig. The bloom is the one vxl's review renders take. Errors if the
+/// document does not load, holds no live voxel, or holds a material the
+/// contract cannot shade.
+pub fn model_scene(path: &Path) -> Result<(RenderScene, RenderBloom)> {
     let model = |error: String| Error::Model {
         path: path.to_owned(),
         error,
@@ -92,5 +93,10 @@ pub fn model_scene(path: &Path) -> Result<RenderScene> {
         })
         .map_err(Error::Render)?;
 
-    Ok(scene)
+    let bloom = RenderBloom {
+        strength: 1.0,
+        ..RenderBloom::default()
+    };
+
+    Ok((scene, bloom))
 }
