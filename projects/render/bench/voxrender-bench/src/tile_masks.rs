@@ -15,6 +15,13 @@ const SOLIDS: usize = 4;
 /// The fewest cells a solid box holds.
 const SOLID_CELLS: u32 = 32;
 
+/// The most stray cells a tile gives up.
+const STRAYS: usize = 16;
+
+/// The cells of a box's face layer per stray cell it holds, at the least,
+/// for the cells to come off.
+const STRAY_SHARE: usize = 8;
+
 /// A box of cells: its low cell and the corner past its high cell.
 type CellBox = (TyVector3U32, TyVector3U32);
 
@@ -55,11 +62,18 @@ impl TileMasks {
     /// The masks of `object`'s non-empty tiles, with each tile's materials
     /// when `materials`. Errors if a tile holds over 256 materials.
     ///
-    /// When `solids`, each tile first gives up to four solid boxes. Each is
-    /// the largest slab of live cells alone off a face of the box around
-    /// the tile's other live cells, as long as one holds 32 cells or more.
-    /// A slab stays in the march when the cells left would cover over half
-    /// of the face it shows them.
+    /// When `solids`, each tile first gives up solid boxes of two kinds, as
+    /// long as it has one to give:
+    ///
+    /// 1. Stray cells, up to 16 a tile. A face of the box around the tile's
+    ///    other live cells gives up its layer's cells when they fill an
+    ///    eighth of the layer or less and the layer behind it is at least
+    ///    half full. Each run of them along a row makes a box, and the box
+    ///    around the rest shrinks by the layer
+    /// 2. Slabs, up to four a tile. A slab is the largest box of live cells
+    ///    alone off a face of the box around the rest. It holds 32 cells or
+    ///    more. A slab stays in the march when the cells left would cover over
+    ///    half of the face it shows them
     pub fn new(object: &RenderObject, solids: bool, materials: bool) -> Result<Self> {
         let bounds = object.bounds();
         let cells = dense_cells(object);
@@ -109,14 +123,27 @@ impl TileMasks {
             };
 
             if solids {
-                for _ in 0..SOLIDS {
-                    let Some((low, high)) = tile.around().and_then(|around| tile.slab(around))
-                    else {
+                let mut strays = 0;
+                let mut slabs = 0;
+
+                while let Some(around) = tile.around() {
+                    let boxes = if let Some((cells, boxes)) = tile.strays(around, STRAYS - strays) {
+                        strays += cells;
+
+                        boxes
+                    } else if let Some(slab) = (slabs < SOLIDS).then(|| tile.slab(around)).flatten()
+                    {
+                        slabs += 1;
+
+                        vec![slab]
+                    } else {
                         break;
                     };
 
-                    masks.solids.push((corner + low, corner + high));
-                    masks.solid_tiles.push(offset);
+                    for (low, high) in boxes {
+                        masks.solids.push((corner + low, corner + high));
+                        masks.solid_tiles.push(offset);
+                    }
                 }
             }
 
@@ -272,6 +299,96 @@ impl Tile {
         }
 
         Some((slab_low, slab_high))
+    }
+
+    /// Takes the cells left in the emptiest layer on a face of `around`,
+    /// the box around the cells left. Returns their count and a box for
+    /// each run of them along a row. Takes nothing and returns `None`
+    /// unless a layer holds at most `room` cells that fill at most one part
+    /// in [`STRAY_SHARE`] of it, before a layer that is at least half full.
+    fn strays(&mut self, (low, high): CellBox, room: usize) -> Option<(usize, Vec<CellBox>)> {
+        let extent = high - low;
+        let mut best: Option<(usize, Vec<CellBox>)> = None;
+
+        for axis in 0..3 {
+            let across = (extent.x * extent.y * extent.z / extent[axis]) as usize;
+
+            // Each face's layer, with the layer behind it.
+            for (at, behind) in [
+                (low[axis], low[axis] + 1),
+                (high[axis] - 1, high[axis].wrapping_sub(2)),
+            ] {
+                let mut layer_low = low;
+                let mut layer_high = high;
+
+                layer_low[axis] = at;
+                layer_high[axis] = at + 1;
+
+                // Rays that pass the strays stop soon only where the layer
+                // behind them is at least half full.
+                let mut behind_low = low;
+                let mut behind_high = high;
+
+                behind_low[axis] = behind;
+                behind_high[axis] = behind.wrapping_add(1);
+
+                let backed = extent[axis] > 1
+                    && (0..CELLS)
+                        .filter(|&index| {
+                            let cell = position(index);
+
+                            self.left[index]
+                                && cell.cmpge(behind_low).all()
+                                && cell.cmplt(behind_high).all()
+                        })
+                        .count()
+                        * 2
+                        >= across;
+
+                if !backed {
+                    continue;
+                }
+
+                // Index order runs along z, or along y in a layer across z,
+                // so a row's cells follow one another.
+                let row = if axis == 2 { 1 } else { 2 };
+                let mut cells = 0;
+                let mut runs: Vec<CellBox> = Vec::new();
+
+                for index in (0..CELLS).filter(|&index| self.left[index]) {
+                    let cell = position(index);
+
+                    if cell.cmplt(layer_low).any() || cell.cmpge(layer_high).any() {
+                        continue;
+                    }
+
+                    cells += 1;
+
+                    let mut before = cell;
+
+                    before[row] = before[row].wrapping_sub(1);
+
+                    match runs.last_mut() {
+                        Some((_, run_high)) if *run_high == before + 1 => run_high[row] += 1,
+                        _ => runs.push((cell, cell + 1)),
+                    }
+                }
+
+                let fewer = best.as_ref().is_none_or(|&(least, _)| cells < least);
+
+                if cells * STRAY_SHARE <= across && cells <= room && fewer {
+                    best = Some((cells, runs));
+                }
+            }
+        }
+
+        let (cells, runs) = best?;
+
+        for &(run_low, run_high) in &runs {
+            self.remove(run_low, run_high);
+        }
+
+        Some((cells, runs))
     }
 
     /// Whether every cell from `low` to before `high` is live.
@@ -445,6 +562,52 @@ mod tests {
             ]
         );
         assert!(masks.boxes.is_empty());
+    }
+
+    #[test]
+    fn stray_cells_over_a_floor_come_off_as_boxes() {
+        let material = U32Id::from_u32(0);
+
+        // A floor under a checkered layer, with three cells above it.
+        let object = painted_object("o", TyVector3U32::new(16, 4, 16), |p| {
+            let stray = p.y == 3 && [(3, 5), (3, 6), (10, 10)].contains(&(p.x, p.z));
+
+            (p.y < 2 || (p.y == 2 && (p.x + p.z) % 2 == 0) || stray).then_some(material)
+        });
+
+        let masks = TileMasks::new(&object, true, false).unwrap();
+
+        assert_eq!(
+            masks.solids,
+            [
+                (TyVector3U32::new(3, 3, 5), TyVector3U32::new(4, 4, 7)),
+                (TyVector3U32::new(10, 3, 10), TyVector3U32::new(11, 4, 11)),
+            ]
+        );
+        assert_eq!(
+            masks.boxes,
+            [(TyVector3U32::ZERO, TyVector3U32::new(16, 3, 16))]
+        );
+    }
+
+    #[test]
+    fn strays_over_a_sparse_layer_stay_in_the_march() {
+        let material = U32Id::from_u32(0);
+
+        // One cell over a layer that holds two cells.
+        let object = painted_object("o", TyVector3U32::new(16, 2, 16), |p| {
+            [(0, 0, 0), (15, 0, 15), (5, 1, 5)]
+                .contains(&(p.x, p.y, p.z))
+                .then_some(material)
+        });
+
+        let masks = TileMasks::new(&object, true, false).unwrap();
+
+        assert!(masks.solids.is_empty());
+        assert_eq!(
+            masks.boxes,
+            [(TyVector3U32::ZERO, TyVector3U32::new(16, 2, 16))]
+        );
     }
 
     #[test]
