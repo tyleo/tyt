@@ -1,7 +1,11 @@
 // A shaded view of the boxes around each tile's live cells, over
-// `mask_march.wgsl`. One multiview pass draws both eyes. A hit takes its
-// cell's material, a sun without shadows, and a hemisphere, under the
-// contract's tonemap.
+// `mask_march.wgsl`. Multiview passes draw both eyes. A hit shades as the
+// contract's opaque surface under one sun and the hemispheres: corner
+// occlusion, the sun's corner shadows from `LitRows`, Lambert and GGX, and
+// emission, under the contract's tonemap. A smooth face reflects the sky
+// alone. `BoxView` prepends `ROWS`, `ORDINAL`, and `MATERIALS`, the offsets
+// in a tile's words of its opaque rows, its place among the tiles, and its
+// materials.
 
 // Every eye is a perspective view.
 const RAY_W: f32 = 1.0;
@@ -10,7 +14,7 @@ struct Frame {
     // The unit direction to the sun in the world.
     sun: vec4<f32>,
 
-    // The sun's light on a matte face that looks at it.
+    // The sun's color times its strength.
     sunlight: vec4<f32>,
 
     // The hemisphere's light on a face that looks up, then on one that looks
@@ -35,6 +39,15 @@ struct Place {
     x: vec4<f32>,
     y: vec4<f32>,
     z: vec4<f32>,
+
+    // The first word of the placement's tiles' rows in `lit`, the rows a
+    // tile holds, the rows it holds along y, and a bit per axis the sun's
+    // rays stay still along.
+    lit: vec4<u32>,
+
+    // The direction to the sun in the grid, as the reference's walk
+    // quantizes it.
+    sun: vec4<f32>,
 }
 
 // Whose cell a hit holds.
@@ -77,8 +90,9 @@ struct Box {
 @group(0) @binding(1) var<storage, read> places: array<Place>;
 // Per object: its `TileMasks` words, with materials.
 @group(0) @binding(2) var<storage, read> bits: array<u32>;
-// Each material's base color.
-@group(0) @binding(3) var<storage, read> colors: array<vec4<f32>>;
+// Three words per material: its base color and metalness, its emission and
+// roughness, and its reflectance at normal incidence and occlusion strength.
+@group(0) @binding(3) var<storage, read> materials: array<vec4<f32>>;
 // Two words per box: its low cell and its placement's index, then the corner
 // past its high cell and the offset of its tile's words.
 @group(0) @binding(4) var<storage, read> boxes: array<vec4<u32>>;
@@ -86,6 +100,8 @@ struct Box {
 // around the shared space and the other box's index in `boxes` as bits,
 // plus `SOLID` for a solid one, then the high corner.
 @group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
+// Each placement's `LitRows` words.
+@group(0) @binding(6) var<storage, read> lit: array<u32>;
 
 // The box's vertex at the grid's `grid` for `eye`, on the face of code
 // `face`. `low` holds the box's low cell and its placement's index. `high`
@@ -211,29 +227,177 @@ fn other_of(box: Box, direction: vec3<f32>, index: u32) -> Other {
     );
 }
 
+// Whether `cell` of the tile whose words start at `tile` is opaque. The
+// tile's rows reach one cell past it on every side.
+fn opaque(tile: u32, cell: vec3<i32>) -> bool {
+    let row = bits[tile + ROWS + u32((cell.x + 1) * 18 + cell.y + 1)];
+
+    return ((row >> u32(cell.z + 1)) & 1u) == 1u;
+}
+
+// How open a face's corner is, from whether the two cells along the face's
+// edges and the one across the corner are opaque. Both edge cells together
+// close it.
+fn open(first: bool, second: bool, across: bool) -> f32 {
+    return select(f32(3u - u32(first) - u32(second) - u32(across)) / 3.0, 0.0, first && second);
+}
+
+// The hemispheres' light from the unit `direction`, with the sky meeting
+// the ground over a band `width` wide in the direction's +Y.
+fn sky_light(direction: vec3<f32>, width: f32) -> vec3<f32> {
+    return mix(frame.ground.rgb, frame.sky.rgb, clamp(0.5 + direction.y / (2.0 * width), 0.0, 1.0));
+}
+
 // The shaded color of `cell` in `source`'s tile, across the face on the one
 // axis of `across`. The face's normal points up its axis where the ray moves
-// down the axis.
-fn surface(source: Source, cell: vec3<i32>, across: vec3<bool>, ahead: vec3<bool>) -> vec4<f32> {
+// down the axis. The hit lies at `at` in the tile's cells, along a ray of
+// `direction` in them.
+fn surface(
+    source: Source,
+    cell: vec3<i32>,
+    across: vec3<bool>,
+    ahead: vec3<bool>,
+    at: vec3<f32>,
+    direction: vec3<f32>,
+) -> vec4<f32> {
     let tile = source.tile;
-    let header = bits[tile + 128u];
+    let header = bits[tile + MATERIALS];
     let size = header & 15u;
 
     var material = header >> 4u;
 
     if size != 0u {
-        let at = u32((cell.x * 16 + cell.y) * 16 + cell.z) * size;
-        let entry = (bits[tile + 129u + (at >> 5u)] >> (at & 31u)) & ((1u << size) - 1u);
+        let entry_at = u32((cell.x * 16 + cell.y) * 16 + cell.z) * size;
+        let entry = (bits[tile + MATERIALS + 1u + (entry_at >> 5u)] >> (entry_at & 31u))
+            & ((1u << size) - 1u);
 
-        material = bits[tile + 129u + 128u * size + entry];
+        material = bits[tile + MATERIALS + 1u + 128u * size + entry];
     }
 
-    let index = source.place;
-    let axis = select(select(places[index].x, places[index].y, across.y), places[index].z, across.z);
-    let normal = select(axis.xyz, -axis.xyz, any(across & ahead));
-    let up = 0.5 + 0.5 * normal.y;
-    let light = mix(frame.ground.rgb, frame.sky.rgb, up)
-        + frame.sunlight.rgb * max(dot(normal, frame.sun.xyz), 0.0);
+    let base = materials[material * 3u];
+    let glow = materials[material * 3u + 1u];
+    let gloss = materials[material * 3u + 2u];
+    let place = places[source.place];
 
-    return vec4<f32>(tonemap(colors[material].rgb * light), 1.0);
+    // The face's axis, then the two after it, as steps between cells.
+    let d = vec3<i32>(across);
+    let u = vec3<i32>(across.zxy);
+    let v = vec3<i32>(across.yzx);
+
+    let up = !any(across & ahead);
+    let axis = select(select(place.x, place.y, across.y), place.z, across.z);
+    let normal = select(-axis.xyz, axis.xyz, up);
+
+    // The cell the face looks into, and where the hit lies across the face.
+    let front = cell + select(-d, d, up);
+    let within = at - vec3<f32>(cell);
+    let along_u = clamp(dot(within, vec3<f32>(u)), 0.0, 1.0);
+    let along_v = clamp(dot(within, vec3<f32>(v)), 0.0, 1.0);
+
+    // The opaque cells around the one the face looks into.
+    let low_u = opaque(tile, front - u);
+    let high_u = opaque(tile, front + u);
+    let low_v = opaque(tile, front - v);
+    let high_v = opaque(tile, front + v);
+
+    let occlusion = mix(
+        mix(
+            open(low_u, low_v, opaque(tile, front - u - v)),
+            open(high_u, low_v, opaque(tile, front + u - v)),
+            along_u,
+        ),
+        mix(
+            open(low_u, high_v, opaque(tile, front - u + v)),
+            open(high_u, high_v, opaque(tile, front + u + v)),
+            along_u,
+        ),
+        along_v,
+    );
+
+    // The world direction to the eye.
+    let view = -normalize(
+        place.x.xyz * (direction.x * place.x.w)
+            + place.y.xyz * (direction.y * place.y.w)
+            + place.z.xyz * (direction.z * place.z.w),
+    );
+
+    let metallic = base.a;
+    let roughness = glow.a;
+    let alpha = max(roughness * roughness, 1.0e-3);
+    let alpha2 = alpha * alpha;
+    let reflectance = gloss.rgb;
+    let cosine = dot(normal, view);
+
+    var color = glow.rgb;
+
+    // The sun, where the face looks at it, scaled by the light that reaches
+    // the face's corners.
+    let sun_d = dot(place.sun.xyz, vec3<f32>(d)) * select(-1.0, 1.0, up);
+
+    if sun_d > 0.0 {
+        let sun_u = dot(place.sun.xyz, vec3<f32>(u));
+        let sun_v = dot(place.sun.xyz, vec3<f32>(v));
+        let still = ((vec3<u32>(place.lit.w) >> vec3<u32>(0u, 1u, 2u)) & vec3<u32>(1u)) == vec3<u32>(1u);
+        let rows = place.lit.x + bits[tile + ORDINAL] * place.lit.y;
+
+        // A ray that leaves the face's cell past a corner on both axes
+        // crosses the cell beside the face on the axis it moves faster
+        // along. A tie goes to the earlier axis.
+        let u_faster = abs(sun_u) > abs(sun_v) || (abs(sun_u) == abs(sun_v) && !across.y);
+
+        var lights = array<f32, 4>();
+
+        for (var corner = 0u; corner < 4u; corner++) {
+            let far_u = (corner & 1u) == 1u;
+            let far_v = (corner & 2u) == 2u;
+            let far = i32(up) * d + i32(far_u) * u + i32(far_v) * v;
+            let key = vec3<u32>(select(cell + far, 2 * cell + far, still));
+            let reaches = ((lit[rows + key.x * place.lit.z + key.y] >> key.z) & 1u) == 1u;
+
+            let out_u = select((sun_u < 0.0), (sun_u > 0.0), far_u);
+            let out_v = select((sun_v < 0.0), (sun_v > 0.0), far_v);
+            let beside = select(
+                select(low_v, high_v, far_v),
+                select(low_u, high_u, far_u),
+                u_faster,
+            );
+
+            lights[corner] = f32(reaches && !(out_u && out_v && beside));
+        }
+
+        let light = mix(
+            mix(lights[0], lights[1], along_u),
+            mix(lights[2], lights[3], along_u),
+            along_v,
+        );
+
+        // The contract's direct term: Lambert, and GGX with Smith
+        // visibility and Schlick's Fresnel.
+        let toward = frame.sun.xyz;
+        let n_dot_l = dot(normal, toward);
+        let n_dot_v = max(cosine, 1.0e-4);
+        let half = normalize(toward + view);
+        let n_dot_h = max(dot(normal, half), 0.0);
+        let v_dot_h = max(dot(view, half), 0.0);
+        let fresnel = reflectance + (1.0 - reflectance) * pow(1.0 - v_dot_h, 5.0);
+        let spread = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
+        let distribution = alpha2 / (3.14159265 * spread * spread);
+        let visibility = 0.5
+            / (n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0 - alpha2) + alpha2)
+                + n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0 - alpha2) + alpha2));
+        let diffuse = (1.0 - fresnel) * base.rgb * ((1.0 - metallic) / 3.14159265);
+
+        color += (diffuse + fresnel * (distribution * visibility))
+            * (max(n_dot_l, 0.0) * light)
+            * frame.sunlight.rgb;
+    }
+
+    // The hemispheres, on the face and off it toward the eye.
+    let unblocked = 1.0 - gloss.a * (1.0 - occlusion);
+    let mirror = normal * (2.0 * cosine) - view;
+
+    color += sky_light(normal, 1.0) * base.rgb * ((1.0 - metallic) * unblocked);
+    color += sky_light(mirror, alpha) * reflectance * unblocked;
+
+    return vec4<f32>(tonemap(color), 1.0);
 }

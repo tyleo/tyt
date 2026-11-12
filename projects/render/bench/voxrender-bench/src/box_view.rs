@@ -1,9 +1,12 @@
 use crate::{
-    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, PlacedBox, Result, TileMasks, ViewEye,
+    BoxCrosser, BoxDraw, BoxFaces, BoxPart, HitTargets, LitRows, PlacedBox, Result, TileMasks,
+    ViewEye,
 };
-use std::{collections::HashMap, f64::consts::PI, num::NonZeroU32};
+use branded_id::U32Id;
+use std::{collections::HashMap, num::NonZeroU32};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
-use voxrender::{RenderLight, RenderScene, grid_point, tonemap};
+use voxcore::material;
+use voxrender::{RenderLight, RenderScene, grid_point, grid_vector, quantize_direction, tonemap};
 use wgpu::{
     Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, Device, Queue, RenderPass,
     ShaderModuleDescriptor, ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureFormat,
@@ -11,7 +14,7 @@ use wgpu::{
 };
 
 /// The bytes of one of `box_view.wgsl`'s `Place`s.
-const PLACE_BYTES: usize = 128;
+const PLACE_BYTES: usize = 160;
 
 /// The bytes at the start of a `Place` that follow the eye: its matrix and
 /// its ray.
@@ -31,8 +34,9 @@ const SLACK: f32 = 0.25;
 /// depth in [`BoxView::DEPTH`]. The boxes draw nearest first. They sort
 /// again once the head has moved [`SLACK`] from where they last sorted.
 ///
-/// A hit takes its cell's base color, the scene's first sun without shadows,
-/// and its hemispheres, under the contract's tonemap.
+/// A hit shades as the contract's opaque surface under the scene's first
+/// sun and its hemispheres, with corner occlusion and the sun's corner
+/// shadows. A smooth face reflects the sky alone.
 pub struct BoxView {
     boxes: BoxDraw,
 
@@ -147,16 +151,41 @@ impl BoxView {
     pub const DEPTH: TextureFormat = HitTargets::DEPTH;
 
     /// Builds the view of `scene` for a two-layer target of `format`. Errors
-    /// if a tile holds over 256 materials.
-    pub fn new(device: &Device, scene: &RenderScene, format: TextureFormat) -> Result<Self> {
+    /// if a tile holds over 256 materials, or if a shadow's ray lies out of
+    /// a grid's range.
+    ///
+    /// When `shadows`, the sun casts its corner shadows. Their fill runs the
+    /// reference's walk, which crosses every placement for each ray, so a
+    /// scene of many placements takes long.
+    pub fn new(
+        device: &Device,
+        scene: &RenderScene,
+        format: TextureFormat,
+        shadows: bool,
+    ) -> Result<Self> {
         let mut words = Vec::new();
         let mut offsets = HashMap::new();
         let mut object_boxes = HashMap::new();
         let mut object_solids = HashMap::new();
         let mut object_tiles = HashMap::new();
+        let mut object_corners = HashMap::new();
+
+        // A material that passes no light at normal incidence.
+        let opaque = |material: u32| {
+            scene
+                .material(U32Id::from_u32(material))
+                .is_some_and(|material| {
+                    material::pass(
+                        material.base_color,
+                        material.metallic,
+                        material.transmission,
+                        material.ior,
+                    ) == TyLinSrgbF64::new(0.0, 0.0, 0.0)
+                })
+        };
 
         for (object_id, object) in scene.iter_objects() {
-            let masks = TileMasks::new(object, true, true)?;
+            let masks = TileMasks::new(object, true, Some(&opaque))?;
 
             offsets.insert(
                 object_id,
@@ -167,6 +196,7 @@ impl BoxView {
             object_boxes.insert(object_id, masks.boxes);
             object_solids.insert(object_id, masks.solids);
             object_tiles.insert(object_id, (masks.tiles, masks.solid_tiles));
+            object_corners.insert(object_id, masks.corners);
         }
 
         let object_ids: Vec<_> = scene
@@ -261,7 +291,7 @@ impl BoxView {
                     ..
                 } => {
                     if suns == 0 {
-                        sun = (rotation * TyVector3F64::Z, color * (strength / PI));
+                        sun = (rotation * TyVector3F64::Z, color * strength);
                     }
 
                     suns += 1;
@@ -300,23 +330,58 @@ impl BoxView {
             frame.extend(value.to_le_bytes());
         }
 
-        let materials = scene
+        let material_count = scene
             .iter_materials()
             .map(|(material_id, _)| material_id.to_u32() + 1)
             .max()
             .unwrap_or(0);
 
-        let mut colors = vec![0u8; materials.max(1) as usize * 16];
+        // Three `vec4<f32>`s a material: its base color and metalness, its
+        // emission and roughness, and its reflectance at normal incidence
+        // and occlusion strength.
+        let mut materials = vec![0f32; material_count.max(1) as usize * 12];
 
         for (material_id, material) in scene.iter_materials() {
-            let color = material.base_color.color;
-            let first = material_id.to_u32() as usize * 16;
+            let base = material.base_color.color;
+            let emission = material.emissive_color * material.emissive_strength;
+            let reflectance = material::normal_reflectance(base, material.metallic, material.ior);
 
-            for (at, value) in [color.red, color.green, color.blue].into_iter().enumerate() {
-                colors[first + at * 4..first + at * 4 + 4]
-                    .copy_from_slice(&(value as f32).to_le_bytes());
+            let values = [
+                base.red,
+                base.green,
+                base.blue,
+                material.metallic,
+                emission.red,
+                emission.green,
+                emission.blue,
+                material.roughness,
+                reflectance.red,
+                reflectance.green,
+                reflectance.blue,
+                material.occlusion_strength,
+            ];
+
+            let first = material_id.to_u32() as usize * 12;
+
+            for (slot, value) in materials[first..first + 12].iter_mut().zip(values) {
+                *slot = value as f32;
             }
         }
+
+        // The sun's corner shadows. Without them every placement reads one
+        // tile's worth of rows the light reaches.
+        let lit = if shadows && suns > 0 {
+            LitRows::new(scene, sun.0, &object_corners, &opaque)?
+        } else {
+            LitRows {
+                places: vec![[0, 0, 32, 0]; placements.len()],
+                directions: placements
+                    .iter()
+                    .map(|(transform, _)| quantize_direction(grid_vector(transform, sun.0)))
+                    .collect(),
+                words: vec![u32::MAX; 32 * 32],
+            }
+        };
 
         // A binding cannot be empty.
         if words.is_empty() {
@@ -343,9 +408,19 @@ impl BoxView {
             words.iter().flat_map(|word| word.to_le_bytes()).collect()
         };
 
+        let material_bytes: Vec<u8> = materials
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect();
+
         let frame = init("view frame", &frame, BufferUsages::UNIFORM);
         let bits = init("view bits", &words_bytes(&words), BufferUsages::STORAGE);
-        let colors = init("view colors", &colors, BufferUsages::STORAGE);
+        let materials = init("view materials", &material_bytes, BufferUsages::STORAGE);
+        let lit_rows = init(
+            "view lit rows",
+            &words_bytes(&lit.words),
+            BufferUsages::STORAGE,
+        );
         let box_list = init(
             "view boxes",
             &words_bytes(&box_words),
@@ -364,12 +439,14 @@ impl BoxView {
             mapped_at_creation: false,
         });
 
-        // A `Place` ends with the world direction of each of its grid's
-        // axes and the meters a cell spans along it.
+        // A `Place` ends with what holds from frame to frame: the world
+        // direction of each of its grid's axes with the meters a cell spans
+        // along it, its lit rows, and the direction to the sun in its grid.
         let mut place_bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
-        let each = placements.iter().chain(&placements);
+        let each = (0..placements.len()).chain(0..placements.len());
 
-        for (place, (transform, _)) in place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
+        for (place, index) in place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
+            let (transform, _) = &placements[index];
             let [x, y, z] = transform.scale.to_array();
 
             let axes = [
@@ -379,26 +456,42 @@ impl BoxView {
             ]
             .map(|(axis, meters)| (transform.rotation * axis).extend(meters).to_array());
 
-            for (bytes, value) in place[EYE_BYTES..]
-                .chunks_exact_mut(4)
-                .zip(axes.as_flattened())
-            {
-                bytes.copy_from_slice(&(*value as f32).to_le_bytes());
-            }
+            let floats = |values: &[f64]| -> Vec<u8> {
+                values
+                    .iter()
+                    .flat_map(|value| (*value as f32).to_le_bytes())
+                    .collect()
+            };
+
+            let [sun_x, sun_y, sun_z] = lit.directions[index].map(f64::from);
+
+            let rest: Vec<u8> = floats(axes.as_flattened())
+                .into_iter()
+                .chain(lit.places[index].into_iter().flat_map(u32::to_le_bytes))
+                .chain(floats(&[sun_x, sun_y, sun_z, 0.0]))
+                .collect();
+
+            place[EYE_BYTES..].copy_from_slice(&rest);
         }
 
         // SAFETY: a fragment reads only within a tile's words because each
         // step keeps its cell inside the tile's box. Its loop ends within
         // the box's extent. A tile's words hold its cells' materials, which
-        // index `colors`. A box's entries in `crossers` index `boxes`. The
-        // stages index `places` by an eye and a box's placement.
+        // index `materials`, and its place among the tiles, which with a
+        // face's corner indexes its placement's rows in `lit`. A box's
+        // entries in `crossers` index `boxes`. The stages index `places` by
+        // an eye and a box's placement.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
                     label: Some("box view"),
                     source: ShaderSource::Wgsl(
                         format!(
-                            "{}\n{}",
+                            "const ROWS: u32 = {}u;\nconst ORDINAL: u32 = {}u;\n\
+                             const MATERIALS: u32 = {}u;\n{}\n{}",
+                            TileMasks::ROWS,
+                            TileMasks::ORDINAL,
+                            TileMasks::MATERIALS,
                             include_str!("box_view.wgsl"),
                             include_str!("mask_march.wgsl")
                         )
@@ -449,9 +542,10 @@ impl BoxView {
                 (both, BufferBindingType::Uniform, &frame),
                 (both, storage, &places),
                 (ShaderStages::FRAGMENT, storage, &bits),
-                (ShaderStages::FRAGMENT, storage, &colors),
+                (ShaderStages::FRAGMENT, storage, &materials),
                 (ShaderStages::FRAGMENT, storage, &box_list),
                 (ShaderStages::FRAGMENT, storage, &crosser_list),
+                (ShaderStages::FRAGMENT, storage, &lit_rows),
             ],
             NonZeroU32::new(0b11),
         );

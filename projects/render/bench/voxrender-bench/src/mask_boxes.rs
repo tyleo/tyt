@@ -41,7 +41,7 @@ pub fn mask_boxes(
     let mut object_tiles = HashMap::new();
 
     for (object_id, object) in scene.iter_objects() {
-        let masks = TileMasks::new(object, solids, false)?;
+        let masks = TileMasks::new(object, solids, None)?;
 
         offsets.insert(
             object_id,

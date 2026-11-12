@@ -14,12 +14,19 @@ const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
 /// A [`BoxView`] of `scene` through its first view, as the sRGB texels of a
 /// `width` by `height` image, four bytes each, row by row. Both eyes draw
-/// the view, and the image holds the first. Errors unless the scene has a
-/// view and the device has multiview.
-pub fn view_image(gpu: &Gpu, scene: &RenderScene, width: u32, height: u32) -> Result<Vec<u8>> {
+/// the view, and the image holds the first. The sun casts its corner
+/// shadows when `shadows`. Errors unless the scene has a view and the
+/// device has multiview.
+pub fn view_image(
+    gpu: &Gpu,
+    scene: &RenderScene,
+    width: u32,
+    height: u32,
+    shadows: bool,
+) -> Result<Vec<u8>> {
     let (_, view) = scene.iter_views().next().ok_or(Error::NoView)?;
 
-    let mut boxes = BoxView::new(&gpu.device, scene, FORMAT)?;
+    let mut boxes = BoxView::new(&gpu.device, scene, FORMAT, shadows)?;
 
     let eye = ViewEye {
         world_to_clip: world_to_clip(scene, view, width, height),
