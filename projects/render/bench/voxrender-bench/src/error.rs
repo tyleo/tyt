@@ -23,6 +23,9 @@ pub enum Error {
     /// A model's document gave no scene.
     Model { path: PathBuf, error: String },
 
+    /// A directory gave no gallery of models.
+    Models { directory: PathBuf, error: String },
+
     /// The scene has no view to draw.
     NoView,
 
@@ -76,6 +79,11 @@ impl Display for Error {
             Error::Model { path, error } => {
                 write!(f, "the model at {} gave no scene: {error}", path.display())
             }
+            Error::Models { directory, error } => write!(
+                f,
+                "the models under {} gave no gallery: {error}",
+                directory.display()
+            ),
             Error::NoView => write!(f, "the scene has no view"),
             Error::NoSun => write!(f, "the scene has no directional light"),
             Error::NoTimestampQuery => write!(f, "the device lacks timestamp queries"),

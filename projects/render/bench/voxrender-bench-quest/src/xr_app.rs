@@ -1,5 +1,5 @@
 use crate::{
-    Error, EyeSwapchain, FrameTimes, GpuClock, Result, RunOptions, XrGpu, XrSystem,
+    Error, EyeSwapchain, FrameTimes, GalleryInput, GpuClock, Result, RunOptions, XrGpu, XrSystem,
     probe_focal_lengths, probe_session, probe_visibility_mask,
 };
 use openxr::{
@@ -10,16 +10,17 @@ use openxr::{
 };
 use std::{
     num::NonZeroU32,
+    path::Path,
     time::{Duration, Instant},
 };
 use voxrender_bench::{
-    Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, KernelProfile, PassTimer,
-    TimedBench, bench_scene,
+    Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, KernelProfile, ModelGallery,
+    PassTimer, TimedBench, bench_scene,
 };
 use wgpu::{
-    Color, CommandEncoderDescriptor, Extent3d, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
-    TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
+    Color, CommandEncoderDescriptor, Device, Extent3d, LoadOp, Operations,
+    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp,
+    TextureDescriptor, TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 /// The views the app draws.
@@ -31,6 +32,13 @@ const REFRESH_RATE: f32 = 90.0;
 /// The frames between two logs of the view's time on the CPU.
 const VIEW_FRAMES: u32 = 600;
 
+/// The directory of the gallery's models within the app's files.
+const MODELS: &str = "models";
+
+/// The most seconds one frame moves a gallery's wearer by. A longer gap
+/// between two frames is a stall.
+const STEP: f64 = 0.1;
+
 /// The color the pass clears both eyes to.
 const CLEAR: Color = Color {
     r: 0.02,
@@ -41,7 +49,7 @@ const CLEAR: Color = Color {
 
 /// An OpenXR session that runs B0's session probes. Each frame clears both
 /// eyes and times B2's kernels or runs the profile, or draws a scene's
-/// view.
+/// view or a gallery's model.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
@@ -72,8 +80,9 @@ pub struct XrApp {
 
 impl XrApp {
     /// Opens a session on the GPU and the eyes' swapchain. The frames run
-    /// what `options` picks.
-    pub fn new(xr: XrSystem, gpu: XrGpu, options: &RunOptions) -> Result<Self> {
+    /// what `options` picks. A gallery shows the models under `files`, the
+    /// app's files directory.
+    pub fn new(xr: XrSystem, gpu: XrGpu, options: &RunOptions, files: &Path) -> Result<Self> {
         let blend_modes = xr
             .instance
             .enumerate_environment_blend_modes(xr.system, VIEW_TYPE)
@@ -117,22 +126,28 @@ impl XrApp {
         let width = u32::try_from(swapchain.extent.width).expect("an eye's width is positive");
         let height = u32::try_from(swapchain.extent.height).expect("an eye's height is positive");
 
-        let work = if let Some(scene) = &options.view {
-            let depth = gpu.device.create_texture(&TextureDescriptor {
-                label: Some("view depth"),
-                size: Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 2,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: HeadsetView::DEPTH,
-                usage: TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+        let work = if options.models {
+            let gallery = ModelGallery::new(
+                &gpu.device,
+                &gpu.queue,
+                &files.join(MODELS),
+                options.model.as_deref(),
+                swapchain.format,
+                [width, height],
+            )
+            .map_err(Error::Bench)?;
 
+            log::info!("models {} under {MODELS}", gallery.count());
+
+            FrameWork::Models {
+                gallery: Box::new(gallery),
+                input: GalleryInput::new(&xr, &session)?,
+                depth: eye_depth(&gpu.device, width, height),
+                last: None,
+                tour: options.tour,
+                landed: None,
+            }
+        } else if let Some(scene) = &options.view {
             let render_scene = bench_scene(scene)
                 .ok_or_else(|| Error::Bench(BenchError::NoScene(scene.clone())))?;
 
@@ -153,7 +168,7 @@ impl XrApp {
                     )
                     .map_err(Error::Bench)?,
                 ),
-                depth: depth.create_view(&TextureViewDescriptor::default()),
+                depth: eye_depth(&gpu.device, width, height),
                 prepared: Duration::ZERO,
                 frames: 0,
             }
@@ -303,62 +318,96 @@ impl XrApp {
                 label: Some("frame"),
             });
 
-        // A view draws in passes of one draw each. Any other work clears
-        // the eyes in one pass.
-        let mut passes = 1;
+        let headset_eyes = [0, 1].map(|eye: usize| {
+            let pose = eyes[eye].pose;
+            let fov = eyes[eye].fov;
 
-        if let FrameWork::View {
-            view,
-            prepared,
-            frames,
-            ..
-        } = &mut self.work
-        {
-            let headset_eyes = [0, 1].map(|eye: usize| {
-                let pose = eyes[eye].pose;
-                let fov = eyes[eye].fov;
+            HeadsetEye {
+                position: [pose.position.x, pose.position.y, pose.position.z],
+                rotation: [
+                    pose.orientation.x,
+                    pose.orientation.y,
+                    pose.orientation.z,
+                    pose.orientation.w,
+                ],
+                tangents: [
+                    fov.angle_left.tan(),
+                    fov.angle_right.tan(),
+                    fov.angle_up.tan(),
+                    fov.angle_down.tan(),
+                ],
+            }
+        });
 
-                HeadsetEye {
-                    position: [pose.position.x, pose.position.y, pose.position.z],
-                    rotation: [
-                        pose.orientation.x,
-                        pose.orientation.y,
-                        pose.orientation.z,
-                        pose.orientation.w,
-                    ],
-                    tangents: [
-                        fov.angle_left.tan(),
-                        fov.angle_right.tan(),
-                        fov.angle_up.tan(),
-                        fov.angle_down.tan(),
-                    ],
+        // A view and a gallery draw in passes of one draw each. Any other
+        // work clears the eyes in one pass.
+        let passes = match &mut self.work {
+            FrameWork::View {
+                view,
+                prepared,
+                frames,
+                ..
+            } => {
+                let start = Instant::now();
+
+                view.prepare(&self.gpu.queue, &headset_eyes);
+                *prepared += start.elapsed();
+                *frames += 1;
+
+                if *frames == VIEW_FRAMES {
+                    log::info!(
+                        "view prepare: {:.3} ms a frame on the CPU over {VIEW_FRAMES} frames",
+                        prepared.as_secs_f64() * 1e3 / f64::from(VIEW_FRAMES)
+                    );
+
+                    *prepared = Duration::ZERO;
+                    *frames = 0;
                 }
-            });
 
-            let start = Instant::now();
-
-            view.prepare(&self.gpu.queue, &headset_eyes);
-            *prepared += start.elapsed();
-            *frames += 1;
-
-            if *frames == VIEW_FRAMES {
-                log::info!(
-                    "view prepare: {:.3} ms a frame on the CPU over {VIEW_FRAMES} frames",
-                    prepared.as_secs_f64() * 1e3 / f64::from(VIEW_FRAMES)
-                );
-
-                *prepared = Duration::ZERO;
-                *frames = 0;
+                view.passes()
             }
 
-            passes = view.passes();
-        }
+            FrameWork::Models {
+                gallery,
+                input,
+                last,
+                tour,
+                landed,
+                ..
+            } => {
+                let mut controls = input.read(&self.session)?;
+                let now = Instant::now();
+
+                let seconds = last
+                    .replace(now)
+                    .map_or(0.0, |last| (now - last).as_secs_f64().min(STEP));
+
+                // A tour steps on once its model has shown for its time.
+                if let (Some(tour), Some(since)) = (*tour, *landed)
+                    && (now - since).as_secs_f64() >= tour
+                {
+                    controls.step = 1;
+                    *landed = None;
+                }
+
+                if let Some(line) = gallery.prepare(&controls, &headset_eyes, seconds) {
+                    log::info!("models {line}");
+
+                    *landed = Some(now);
+                }
+
+                gallery.passes()
+            }
+
+            _ => 1,
+        };
 
         for at in 0..passes {
             let first = at == 0;
 
             let (sky, depth) = match &self.work {
                 FrameWork::View { view, depth, .. } => (view.sky(), Some(depth)),
+                FrameWork::Models { gallery, depth, .. } => (gallery.sky(), Some(depth)),
                 _ => (CLEAR, None),
             };
 
@@ -397,13 +446,15 @@ impl XrApp {
                 ..RenderPassDescriptor::default()
             });
 
-            if let FrameWork::View { view, .. } = &self.work {
-                view.draw(&mut pass, at);
+            match &self.work {
+                FrameWork::View { view, .. } => view.draw(&mut pass, at),
+                FrameWork::Models { gallery, .. } => gallery.draw(&mut pass, at),
+                _ => {}
             }
         }
 
         match &mut self.work {
-            FrameWork::View { .. } => {
+            FrameWork::View { .. } | FrameWork::Models { .. } => {
                 self.gpu.queue.submit([encoder.finish()]);
             }
 
@@ -509,4 +560,46 @@ enum FrameWork {
         /// The frames since the last log.
         frames: u32,
     },
+
+    /// A gallery's model, drawn into the eyes each frame. The app logs each
+    /// model as it lands on `models` lines.
+    Models {
+        gallery: Box<ModelGallery>,
+
+        input: GalleryInput,
+
+        /// Both eyes' depth, one layer each.
+        depth: TextureView,
+
+        /// When the last frame ran.
+        last: Option<Instant>,
+
+        /// The seconds a model shows before the gallery steps on by
+        /// itself.
+        tour: Option<f64>,
+
+        /// When the model in view landed, until a tour steps on from it.
+        landed: Option<Instant>,
+    },
+}
+
+/// A view of both eyes' depth for a `width` by `height` swapchain, one
+/// layer an eye.
+fn eye_depth(device: &Device, width: u32, height: u32) -> TextureView {
+    device
+        .create_texture(&TextureDescriptor {
+            label: Some("eye depth"),
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 2,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: HeadsetView::DEPTH,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        })
+        .create_view(&TextureViewDescriptor::default())
 }
