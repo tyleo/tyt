@@ -49,7 +49,8 @@ struct Source {
     // The index of the eye's `Place`.
     place: u32,
 
-    // The first word of the tile's materials.
+    // The bits of a cell's entry among the tile's materials, and above
+    // them the tile's first material in `materials`.
     header: u32,
 
     // The first of the tile's words in `lit`.
@@ -82,9 +83,10 @@ struct Box {
     // index of the eye's first `Place`.
     @location(7) @interpolate(flat) crossers: vec3<u32>,
 
-    // The first word of the tile's materials, then the first of its words
-    // in `lit`. A fragment reads both here, where a read from the tile's
-    // words would hold up the reads that follow from it.
+    // The tile's materials' word, as `Source::header` holds it, then the
+    // first of its words in `lit`. A fragment reads both here, where a
+    // read from the tile's words would hold up the reads that follow from
+    // it.
     @location(8) @interpolate(flat) shading: vec2<u32>,
 }
 
@@ -92,13 +94,14 @@ struct Box {
 @group(0) @binding(1) var<storage, read> places: array<Place>;
 // Per object: its `TileMasks` words, with materials.
 @group(0) @binding(2) var<storage, read> bits: array<u32>;
-// Three words per material: its base color and metalness, its emission and
-// roughness, and its reflectance at normal incidence and occlusion strength.
+// Three words per material of each tile's materials: its base color and
+// metalness, its emission and roughness, and its reflectance at normal
+// incidence and occlusion strength.
 @group(0) @binding(3) var<storage, read> materials: array<vec4<f32>>;
 // Three words per box: its low cell and its placement's index, the corner
 // past its high cell and the offset of its tile's words, and in the last
-// two parts the first word of the tile's materials and the first of its
-// words in `lit`.
+// two parts the tile's materials' word and the first of its words in
+// `lit`.
 @group(0) @binding(4) var<storage, read> boxes: array<vec4<u32>>;
 // Two words per box that shares space with a box: the low corner of a box
 // around the shared space and the other box's index in `boxes` as bits,
@@ -111,8 +114,7 @@ struct Box {
 // `face`. `low` holds the box's low cell and its placement's index. `high`
 // holds the corner past the box's high cell and the offset of its tile's
 // words. `more` holds the first of the box's entries in `crossers`, their
-// count, the first word of the tile's materials, and the first of its
-// words in `lit`.
+// count, the tile's materials' word, and the first of its words in `lit`.
 fn vertex_of(
     eye: u32,
     grid: vec3<u32>,
@@ -272,14 +274,15 @@ fn surface(
     let size = source.header & 15u;
     let index = u32((cell.x * 16 + cell.y) * 16 + cell.z);
 
+    // The cell's material: the tile's first, plus the cell's entry among
+    // the tile's.
     var material = source.header >> 4u;
 
     if size != 0u {
         let entry_at = index * size;
-        let entry = (bits[tile + MATERIALS + 1u + (entry_at >> 5u)] >> (entry_at & 31u))
-            & ((1u << size) - 1u);
 
-        material = bits[tile + MATERIALS + 1u + 128u * size + entry];
+        material += (bits[tile + MATERIALS + 1u + (entry_at >> 5u)] >> (entry_at & 31u))
+            & ((1u << size) - 1u);
     }
 
     let base = materials[material * 3u];

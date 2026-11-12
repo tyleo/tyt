@@ -312,13 +312,82 @@ impl BoxView {
             unblocked(&placements, sun.0)
         };
 
-        // What a box's fragments read of its tile with no load: the first
-        // word of the tile's materials, and the first of its lit words.
-        let shading = |placed: &PlacedBox, tile: u32| {
+        // A material's three `vec4<f32>`s: its base color and metalness, its
+        // emission and roughness, and its reflectance at normal incidence
+        // and occlusion strength. An id the scene lacks holds zeros.
+        let material_values = |id: u32| {
+            scene
+                .material(U32Id::from_u32(id))
+                .map_or([0.0; 12], |material| {
+                    let base = material.base_color.color;
+                    let emission = material.emissive_color * material.emissive_strength;
+                    let reflectance =
+                        material::normal_reflectance(base, material.metallic, material.ior);
+
+                    [
+                        base.red,
+                        base.green,
+                        base.blue,
+                        material.metallic,
+                        emission.red,
+                        emission.green,
+                        emission.blue,
+                        material.roughness,
+                        reflectance.red,
+                        reflectance.green,
+                        reflectance.blue,
+                        material.occlusion_strength,
+                    ]
+                    .map(|value| value as f32)
+                })
+        };
+
+        // Each tile's word of `size | first << 4`: the bits of a cell's
+        // entry among the tile's materials, and the tile's first material
+        // in `materials`. The tile's materials follow one another there, so
+        // a cell's entry leads to its material's values in one read. Tiles
+        // that hold the same materials in the same order share them.
+        let mut materials: Vec<f32> = Vec::new();
+        let mut firsts: HashMap<Vec<u32>, u32> = HashMap::new();
+        let mut headers: HashMap<u32, u32> = HashMap::new();
+
+        let mut header = |tile: u32| {
+            *headers.entry(tile).or_insert_with(|| {
+                let held = words[(tile + TileMasks::MATERIALS) as usize];
+                let size = held & 15;
+
+                let ids = if size == 0 {
+                    vec![held >> 4]
+                } else {
+                    // The ids end where the tile's occlusion words start.
+                    let ids = tile + TileMasks::MATERIALS + 1 + 128 * size;
+                    let end = tile + (words[(tile + TileMasks::SURFACE + 1) as usize] >> 12);
+
+                    words[ids as usize..end as usize].to_vec()
+                };
+
+                let first = *firsts.entry(ids).or_insert_with_key(|ids| {
+                    let first = materials.len() / 12;
+
+                    materials.extend(ids.iter().flat_map(|&id| material_values(id)));
+
+                    u32::try_from(first)
+                        .ok()
+                        .filter(|&first| first < 1 << 28)
+                        .expect("a scene's tiles' materials number under 2^28")
+                });
+
+                size | first << 4
+            })
+        };
+
+        // What a box's fragments read of its tile with no load: its
+        // materials' word and the first of its lit words.
+        let mut shading = |placed: &PlacedBox, tile: u32| {
             let first = lit.places[placed.placement as usize];
 
             [
-                words[(tile + TileMasks::MATERIALS) as usize],
+                header(tile),
                 first
                     + if shadowed {
                         words[(tile + TileMasks::FIRST) as usize]
@@ -407,44 +476,6 @@ impl BoxView {
             frame.extend(value.to_le_bytes());
         }
 
-        let material_count = scene
-            .iter_materials()
-            .map(|(material_id, _)| material_id.to_u32() + 1)
-            .max()
-            .unwrap_or(0);
-
-        // Three `vec4<f32>`s a material: its base color and metalness, its
-        // emission and roughness, and its reflectance at normal incidence
-        // and occlusion strength.
-        let mut materials = vec![0f32; material_count.max(1) as usize * 12];
-
-        for (material_id, material) in scene.iter_materials() {
-            let base = material.base_color.color;
-            let emission = material.emissive_color * material.emissive_strength;
-            let reflectance = material::normal_reflectance(base, material.metallic, material.ior);
-
-            let values = [
-                base.red,
-                base.green,
-                base.blue,
-                material.metallic,
-                emission.red,
-                emission.green,
-                emission.blue,
-                material.roughness,
-                reflectance.red,
-                reflectance.green,
-                reflectance.blue,
-                material.occlusion_strength,
-            ];
-
-            let first = material_id.to_u32() as usize * 12;
-
-            for (slot, value) in materials[first..first + 12].iter_mut().zip(values) {
-                *slot = value as f32;
-            }
-        }
-
         // A hit the depth test drops can read the words past its tile's
         // last surface cell.
         words.extend([0; 2]);
@@ -455,6 +486,10 @@ impl BoxView {
 
         if box_words.is_empty() {
             box_words.resize(12, 0);
+        }
+
+        if materials.is_empty() {
+            materials.resize(12, 0.0);
         }
 
         if crosser_words.is_empty() {
@@ -531,13 +566,14 @@ impl BoxView {
 
         // SAFETY: a fragment reads only within a tile's words because each
         // step keeps its cell inside the tile's box. Its loop ends within
-        // the box's extent. A tile's words hold its cells' materials, which
-        // index `materials`. A cell's place among its tile's surface cells
-        // is at most their count. Its occlusion words then end within two
-        // words of the tile's, and its word in `lit` within one of the
-        // placement's. Both buffers end with that many spare words. A
-        // box's entries in `crossers` index `boxes`. The stages index
-        // `places` by an eye and a box's placement.
+        // the box's extent. A cell's entry among its tile's materials is
+        // under their count, so it indexes `materials` past the tile's
+        // first. A cell's place among its tile's surface cells is at most
+        // their count. Its occlusion words then end within two words of the
+        // tile's, and its word in `lit` within one of the placement's. Both
+        // buffers end with that many spare words. A box's entries in
+        // `crossers` index `boxes`. The stages index `places` by an eye and
+        // a box's placement.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
