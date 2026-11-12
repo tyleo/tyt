@@ -271,7 +271,10 @@ code-level choices in
                               fragment steps from the eye through the
                               boxes it crosses. A view from inside a bush
                               takes 5.6 to 6.4 ms where it took 8.4
-                        - [ ] The crossing test as placements move
+                        - [x] The crossing test as placements move. It
+                              takes this Mac 0.03 ms over S1's boxes and
+                              13.7 ms over S2's. A mover holds 30 of the
+                              26,325. S6's view runs it each frame
                         - [ ] Why S1 shades a tenth more fragments over
                               three faces a box than over corners
                   - [x] A gallery of models. The Quest app shows the
@@ -333,7 +336,8 @@ The steps after S9 get their detail when S9 lands. They run in this order:
 
 1. The stereo view in the reference: two off-axis frusta and a head pose
 2. S6, the moving scene, joins the bench scenes. Its motion is a scripted
-   function of time
+   function of time. The box view then moves a placement each frame: its
+   matrices, the crossers of its boxes, and its lit words
 3. B3, one step per arm the B2 rate allows, then the shootout
 4. The reference rules B4 to B7 need, each before its benchmark: bloom at
    quarter resolution, the shadow memo's tier rules, `msaa4`, brick LOD, and
