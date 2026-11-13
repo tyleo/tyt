@@ -442,6 +442,12 @@ this order:
             on Quest and 5.4 to 6.2 at p99, with stale frames. A deal
             from lists a sort keeps, a cheaper aim, and a radix sort
             bring it to 1.4 to 1.7 and 2.7 to 3.2 with none
+      - [x] The 5 km valley in the gallery. Its 23 M voxels at 2 m fail
+            to load: the view sizes its buffers by each grid's cells. A
+            copy at 8 m voxels loads in 8.5 s on Quest and draws in
+            6.15 ms. The gallery opens with it
+      - [ ] The valley at 2 m near the head: buffers sized by live tiles,
+            and coarser voxels with distance
       - [ ] The project lead rules on the reference's brick LOD and boxes
             that span several tiles with their cells whole
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
