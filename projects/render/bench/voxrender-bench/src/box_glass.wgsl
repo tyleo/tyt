@@ -4,20 +4,25 @@
 // The target's blend scales what it holds by that share and adds the light.
 // `box_view.wgsl` and `mask_march.wgsl` come before this file.
 //
-// A box's `words.x` holds the offset of its tile's `GlassTiles` words in
-// `bits`, and its `crossers.x` the box around the tile's surfaces, 4 bits a
-// side: its low cell in the tile, then its high cell. A busy cell's word
-// holds where its material's values start in `materials`, which `past`
-// reads.
+// A box's words hold:
+//
+// 1. In `words.x`, the offset of its tile's `GlassTiles` words in `bits`
+// 2. In `crossers.x`, the box around the tile's surfaces, 4 bits a side: its
+//    low cell in the tile, then its high cell
+// 3. In `shading.y`, the first of the tile's words in `lit`
+//
+// A busy cell's word holds where its material's values start in
+// `materials`, which `past` lists, and its place among the tile's words in
+// `lit`. The cell's word in `lit` holds the sun's light on the cell's
+// surfaces as four 8-bit parts of one.
 //
 // A box spans its tile's opaque cells too. The opaque view's depth holds
 // the faces of the box around those, which can lie before a surface they
 // do not hide. A walk that starts on its box then starts no later. An opaque
 // cell ends the walk.
 //
-// A surface takes the sun whole, with no shadow, and reflects the
-// hemispheres alone. A ray that starts inside a material pays nothing for
-// it.
+// A surface reflects the hemispheres alone. A ray that starts inside a
+// material pays nothing for it.
 
 // `GlassTiles::ROWS`, the offset in a tile's words of its busy cells'
 // words, and `GlassTiles::OPAQUE`, an opaque cell's word.
@@ -77,6 +82,9 @@ struct Sides {
     // One minus the cosine between the view and the half vector, to the
     // fifth power.
     glint: f32,
+
+    // The first of the tile's words in `lit`.
+    lit: u32,
 }
 
 fn sides_of(box: Box) -> Sides {
@@ -103,6 +111,7 @@ fn sides_of(box: Box) -> Sides {
         turn * vec3<f32>(axes[0].y, axes[1].y, axes[2].y),
         view.y,
         off * off * off * off * off,
+        box.shading.y,
     );
 }
 
@@ -136,10 +145,10 @@ fn past(walked: Walked, sides: Sides, cell: u32, across: vec3<bool>, ahead: vec3
         return walked;
     }
 
-    let at = cell >> 8u;
+    let at = cell >> 20u;
 
     // A ray that leaves a material by the axis it entered on meets the
-    // same surface again.
+    // same surface again. It takes the sun as the cell it entered by did.
     if leaves && walked.entered == (at << 2u | axis) {
         return Walked(
             walked.light + walked.through * walked.added,
@@ -180,13 +189,23 @@ fn past(walked: Walked, sides: Sides, cell: u32, across: vec3<bool>, ahead: vec3
 
     color += mirrored * reflectance;
 
+    // The cell's word in `lit`: the sun's light that reaches its
+    // surfaces.
+    let shade = sides.lit + ((cell >> 8u) & 0xfffu);
+
     // The diffuse color under the hemispheres and the sun.
     if gloss.w > 0.5 {
         let diffuse = materials[at + 3u].rgb;
 
-        color += diffuse
-            * (sky_from(above, 0.5)
-                + (1.0 - fresnel) * (max(n_dot_l, 0.0) / 3.14159265) * frame.sunlight.rgb);
+        color += diffuse * sky_from(above, 0.5);
+
+        if n_dot_l > 0.0 {
+            color += diffuse
+                * (1.0 - fresnel)
+                * (n_dot_l / 3.14159265)
+                * frame.sunlight.rgb
+                * unpack4x8unorm(lit[shade]).rgb;
+        }
     }
 
     // The sun's highlight, as `sun_light` gives it, where the face's lobe
@@ -202,7 +221,10 @@ fn past(walked: Walked, sides: Sides, cell: u32, across: vec3<bool>, ahead: vec3
             / (n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0 - alpha2) + alpha2)
                 + n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0 - alpha2) + alpha2));
 
-        color += fresnel * (distribution * visibility * n_dot_l) * frame.sunlight.rgb;
+        color += fresnel
+            * (distribution * visibility * n_dot_l)
+            * frame.sunlight.rgb
+            * unpack4x8unorm(lit[shade]).rgb;
     }
 
     let added = most.a * color;

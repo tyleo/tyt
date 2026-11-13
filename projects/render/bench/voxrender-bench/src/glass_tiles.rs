@@ -19,10 +19,12 @@ const TILE: u32 = 16;
 /// in the order of a cell's index, `(y * 16 + x) * 16 + z`. A row's low 16
 /// bits hold its busy cells, and the bits above them the tile's busy cells
 /// before the row, as a shaded [`TileMasks`](crate::TileMasks)' rows do. A
-/// word for each busy cell follows in index order. An opaque cell's is
-/// [`OPAQUE`](Self::OPAQUE). Any other's low 6 bits hold a bit for each
-/// face with a surface, under the cell's material from bit 8. Face
-/// `2 * axis` looks down its axis and face `2 * axis + 1` up it.
+/// word for each busy cell follows in index order. An opaque cell's word is
+/// [`OPAQUE`](Self::OPAQUE). In any other cell's word, the low 6 bits hold a
+/// bit for each face with a surface, under the cell's place among the tile's
+/// [`cells`](Self::cells) in the 12 bits from bit 8, under the cell's
+/// material from bit 20. Face `2 * axis` looks down its axis and face
+/// `2 * axis + 1` up it.
 pub struct GlassTiles {
     /// The box each tile draws, as its low cell and the corner past its
     /// high cell: the box around its busy cells. The tile's opaque cells
@@ -36,6 +38,10 @@ pub struct GlassTiles {
 
     /// The offset in [`words`](Self::words) of each box's tile.
     pub tiles: Vec<u32>,
+
+    /// The indices in each box's tile of its cells with a surface, in
+    /// order.
+    pub cells: Vec<Vec<u16>>,
 
     /// Each tile's words.
     pub words: Vec<u32>,
@@ -55,7 +61,7 @@ impl GlassTiles {
     /// # Arguments
     ///
     /// 1. `opaque`: whether a material id passes no light
-    /// 2. `place`: what a cell's word holds for a material id, under 2^24
+    /// 2. `place`: what a cell's word holds for a material id, under 2^12
     pub fn new(
         object: &RenderObject,
         opaque: &dyn Fn(u32) -> bool,
@@ -84,6 +90,7 @@ impl GlassTiles {
             boxes: Vec::new(),
             surfaces: Vec::new(),
             tiles: Vec::new(),
+            cells: Vec::new(),
             words: Vec::new(),
         };
 
@@ -101,6 +108,7 @@ impl GlassTiles {
 
             let mut rows = vec![0; Self::ROWS as usize];
             let mut busy = Vec::new();
+            let mut surfaced = Vec::new();
 
             // The low and high corners around the cells with a surface,
             // then around every busy cell.
@@ -140,8 +148,10 @@ impl GlassTiles {
                     }
 
                     grow(&mut surfaces, cell);
+                    surfaced.push(index as u16);
 
-                    place(own - 1) << 8 | faces
+                    // A tile's 4096 cells keep a place under 2^12.
+                    place(own - 1) << 20 | (surfaced.len() as u32 - 1) << 8 | faces
                 } else if own != 0 {
                     Self::OPAQUE
                 } else {
@@ -170,6 +180,7 @@ impl GlassTiles {
 
             tiles.boxes.push(corners(drawn));
             tiles.surfaces.push(corners(surfaces));
+            tiles.cells.push(surfaced);
             tiles.tiles.push(
                 u32::try_from(tiles.words.len())
                     .expect("an object's glass words number under 2^32"),
@@ -224,11 +235,14 @@ mod tests {
             tiles.words[GlassTiles::ROWS as usize..],
             [
                 GlassTiles::OPAQUE,
-                11 << 8 | sides,
-                11 << 8 | sides | 0b10,
-                12 << 8 | sides | 0b11
+                11 << 20 | sides,
+                11 << 20 | 1 << 8 | sides | 0b10,
+                12 << 20 | 2 << 8 | sides | 0b11
             ]
         );
+
+        // A cell's index takes y, then x, then z.
+        assert_eq!(tiles.cells, [[16, 32, 48]]);
     }
 
     #[test]

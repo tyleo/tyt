@@ -661,5 +661,19 @@ they land.
   surface it last entered by for the exit on the same axis
 - `PassTerms` holds the parts of a material's pass that `LitFill` and the
   glass materials both take
+- `LitFill` lights a glass cell's surfaces too: its faces along the sun's
+  axes onto another material that passes light or onto none. A ray starts
+  on the face and moves toward the sun, so a face that looks away from the
+  sun takes what crossed its cell. The cell's word in `lit` holds the mean
+  over those faces' corners, with a blocked corner as black. The words
+  follow the opaque cells', a word a cell of a tile's `GlassTiles::cells`
+- A glass cell's word in `bits` holds its place among those cells in 12
+  bits, under where its material starts in `materials`. The glass
+  materials come first there, which keeps that in 12 bits and holds a
+  scene to 585 of them. A place among the glass materials times 7, past
+  where they start, cost a surface more: the fish tank took 5.16 ms where
+  this takes 5.01
+- A ray that reuses its entry's shade at the exit takes the sun as the
+  cell it entered by did
 - A device without dual-source blending draws no glass
 

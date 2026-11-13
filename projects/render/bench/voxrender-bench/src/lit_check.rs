@@ -35,7 +35,12 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         );
     }
 
-    let fill = LitFill::new(&gpu.device, scene, toward, &tiles, &every)?;
+    let glass = scene
+        .iter_objects()
+        .map(|(object_id, _)| (object_id, Vec::new()))
+        .collect();
+
+    let fill = LitFill::new(&gpu.device, scene, toward, &tiles, &glass, &every)?;
 
     fill.fill(&gpu.device, &gpu.queue);
 

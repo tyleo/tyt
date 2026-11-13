@@ -37,15 +37,25 @@ const MARGIN: f64 = 0.01;
 /// as the contract's shadow ray pays each surface. A corner is lit where
 /// some light reaches it. A record cell's tint holds the mean of what
 /// reaches its lit corners in each channel.
+///
+/// A glass cell is a cell of such a material with a surface. Its word
+/// holds the mean of what reaches the corners of its surfaces, from the
+/// side of each that the light falls on.
 pub struct LitFill {
     /// The first word of each placement's tiles' words.
     pub places: Vec<u32>,
 
-    /// A word for each record cell, then [`TileMasks::SPARE`] spare words.
-    /// The fill writes a word's low 24 bits and keeps the rest, which a
-    /// caller can write beforehand. With [`tints`](Self::tints), as many
-    /// words follow, which the fill writes whole: each record cell's
-    /// tint, 8 bits a channel from the low bits up.
+    /// The first word of each placement's glass tiles' words, which
+    /// follow every placement's tiles' words.
+    pub glass_places: Vec<u32>,
+
+    /// A word for each record cell, a word for each glass cell, then
+    /// [`TileMasks::SPARE`] spare words. The fill writes a word's low 24
+    /// bits and keeps the rest, which a caller can write beforehand. A
+    /// glass cell's 24 bits hold the sun's light on its surfaces, 8 bits a
+    /// channel from the low bits up. With [`tints`](Self::tints), as many
+    /// words follow. The fill writes each of them whole with a record cell's
+    /// tint in the same bits.
     pub lit: Buffer,
 
     /// How far past a record cell's word in [`lit`](Self::lit) its tint
@@ -72,12 +82,16 @@ impl LitFill {
     /// 1. `tiles`: each object's non-empty tiles in the order of their mask
     ///    words, as a tile's low corner and the indices of its record
     ///    cells
-    /// 2. `opaque`: whether a material id passes no light
+    /// 2. `glass`: each object's tiles of surfaces between materials that
+    ///    pass light, as a tile's low corner and the indices of its cells
+    ///    with a surface
+    /// 3. `opaque`: whether a material id passes no light
     pub fn new(
         device: &Device,
         scene: &RenderScene,
         toward: TyVector3F64,
         tiles: &HashMap<U32Id<BVoxObject>, Vec<(TyVector3U32, Vec<u16>)>>,
+        glass: &HashMap<U32Id<BVoxObject>, Vec<(TyVector3U32, Vec<u16>)>>,
         opaque: &dyn Fn(u32) -> bool,
     ) -> Result<Self> {
         // The walk's placements carry a view's rays, which the fill leaves
@@ -221,55 +235,60 @@ impl LitFill {
             .collect();
 
         let mut places = Vec::new();
+        let mut glass_places = Vec::new();
         let mut tile_words: Vec<u32> = Vec::new();
         let mut casters: Vec<u32> = Vec::new();
         let mut recorded: Vec<u32> = Vec::new();
 
-        for (index, (_, placement)) in scene.iter_placements().enumerate() {
-            places.push(
-                u32::try_from(recorded.len()).expect("a scene's lit words number under 2^32"),
-            );
+        // The opaque tiles' cells of every placement come first, then the
+        // glass tiles'.
+        let lists = [(tiles, &mut places), (glass, &mut glass_places)];
 
-            for (corner, cells) in &tiles[&placement.object_id] {
-                let tile = u32::try_from(tile_words.len() / 8)
-                    .ok()
-                    .filter(|&tile| tile < 1 << 20)
-                    .expect("a scene's placed tiles number under 2^20");
+        for (tiles, places) in lists {
+            for (index, (_, placement)) in scene.iter_placements().enumerate() {
+                places.push(
+                    u32::try_from(recorded.len()).expect("a scene's lit words number under 2^32"),
+                );
 
-                let (least, most) = boxed(index, *corner, (*corner + TILE).min(bounds[index]));
-                let first = casters.len();
+                for (corner, cells) in &tiles[&placement.object_id] {
+                    let tile = u32::try_from(tile_words.len() / 8)
+                        .ok()
+                        .filter(|&tile| tile < 1 << 20)
+                        .expect("a scene's placed tiles number under 2^20");
 
-                // A caster's box covers some of the tile's across the light
-                // and reaches as far toward it.
-                casters.extend(
-                    (0u32..)
-                        .zip(&casters_of)
-                        .filter_map(|(caster, (low, high))| {
+                    let (least, most) = boxed(index, *corner, (*corner + TILE).min(bounds[index]));
+                    let first = casters.len();
+
+                    // A caster's box covers some of the tile's across the light
+                    // and reaches as far toward it.
+                    casters.extend((0u32..).zip(&casters_of).filter_map(
+                        |(caster, (low, high))| {
                             let covers = (0..2).all(|axis| {
                                 low[axis] - MARGIN <= most[axis]
                                     && high[axis] + MARGIN >= least[axis]
                             });
 
                             (covers && high[2] + MARGIN >= least[2]).then_some(caster)
-                        }),
-                );
+                        },
+                    ));
 
-                let count = |value: usize| {
-                    u32::try_from(value).expect("a scene's casters number under 2^32")
-                };
+                    let count = |value: usize| {
+                        u32::try_from(value).expect("a scene's casters number under 2^32")
+                    };
 
-                tile_words.extend([
-                    corner.x,
-                    corner.y,
-                    corner.z,
-                    count(index),
-                    count(first),
-                    count(casters.len() - first),
-                    0,
-                    0,
-                ]);
+                    tile_words.extend([
+                        corner.x,
+                        corner.y,
+                        corner.z,
+                        count(index),
+                        count(first),
+                        count(casters.len() - first),
+                        0,
+                        0,
+                    ]);
 
-                recorded.extend(cells.iter().map(|&cell| tile << 12 | u32::from(cell)));
+                    recorded.extend(cells.iter().map(|&cell| tile << 12 | u32::from(cell)));
+                }
             }
         }
 
@@ -383,6 +402,7 @@ impl LitFill {
 
         Ok(LitFill {
             places,
+            glass_places,
             lit,
             tints,
             pipeline,

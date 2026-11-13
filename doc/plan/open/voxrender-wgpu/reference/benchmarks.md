@@ -2522,15 +2522,33 @@ buffer, with one copy of the shade in a loop of a surface a turn, took
 surfaces share, worked out once in a loop over the two, took 5.32 against
 5.07.
 
+**The sun on a glass surface.** A glass surface took the sun whole: a
+potion's liquid lit up inside its bottle. The shadow fill now lights each
+glass cell's surfaces. A surface scales the sun's term by its cell's
+light. Pixels off, then Quest's app GPU p50 in ms:
+
+| Model | Sun whole | Sun filled | Sun whole, ms | Sun filled, ms |
+| --- | ---: | ---: | ---: | ---: |
+| fish tank | 2655 | 2555 | 4.89 | 5.01 |
+| potion | 5552 | 4874 | 2.48 | 2.64 |
+| spaceship bridge | 4281 | 4231 | | |
+| lantern | 1362 | 1210 | 2.78 | 2.86 |
+| glass chart | 3165 of 14,488 | 3178 | | |
+| all 35 | 31,329 | 30,151 | | |
+
+A model with glass loads 0.1 s later. With no sun on glass at all the
+potion read 3956 and the lantern 1022, and the fish tank 7941: the water's
+diffuse color needs the sun.
+
 **Outcomes.**
 
 1. Glass, water, and what sits inside them draw as the contract draws
-   them, with the sun tinted and shadowed through them
-2. The fish tank takes 4.9 ms on Quest with its holes closed, 3.2 more
+   them, with the sun tinted and shadowed through them and on them
+2. The fish tank takes 5.0 ms on Quest with its holes closed, 3.3 more
    than with its water opaque. B7's line was 1.0 ms. A glass fragment
    costs about what an opaque one does, and the tank shows three to a
    pixel
-3. Left: the walk's cost, the sun on a glass surface, a mirror ray through
-   glass and from it, and an eye inside a material. A pane in the chart
-   shows the floor's reflection in the reference and the sky's here
+3. Left: the walk's cost, a mirror ray through glass and from it, and an
+   eye inside a material. A pane in the chart shows the floor's reflection
+   in the reference and the sky's here
 
