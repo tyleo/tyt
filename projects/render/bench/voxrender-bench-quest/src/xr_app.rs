@@ -142,6 +142,7 @@ impl XrApp {
                 first,
                 swapchain.format,
                 [width, height],
+                options.detail.unwrap_or(0.0),
             )
             .map_err(Error::Bench)?;
 
@@ -166,22 +167,26 @@ impl XrApp {
 
             let stand = HeadsetStand::at_view(view);
 
-            let tiles = TileScene::of(&render_scene, BoxView::draws_glass(&gpu.device))
+            let glass = BoxView::draws_glass(&gpu.device);
+
+            let tiles = TileScene::of(&render_scene, glass, options.detail.is_some())
                 .map_err(Error::Bench)?;
 
+            let mut view = HeadsetView::new(
+                &gpu.device,
+                &gpu.queue,
+                &tiles,
+                RenderBloom::default(),
+                stand,
+                swapchain.format,
+                [width, height],
+            )
+            .map_err(Error::Bench)?;
+
+            view.set_detail(options.detail.unwrap_or(0.0));
+
             FrameWork::View {
-                view: Box::new(
-                    HeadsetView::new(
-                        &gpu.device,
-                        &gpu.queue,
-                        &tiles,
-                        RenderBloom::default(),
-                        stand,
-                        swapchain.format,
-                        [width, height],
-                    )
-                    .map_err(Error::Bench)?,
-                ),
+                view: Box::new(view),
                 depth: eye_depth(&gpu.device, width, height),
                 walk: options.walk.map(|speed| (speed, stand)),
                 frames: 0,

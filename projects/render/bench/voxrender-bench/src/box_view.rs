@@ -1,7 +1,7 @@
 use crate::{
-    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, Error, GlassTiles,
-    LitFill, PassTerms, PlacedBox, Result, TileMasks, TileScene, ViewEye, box_view_shader,
-    quad_tlas, tile_quads,
+    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, DetailTree, Error,
+    GlassTiles, LISTS, LitFill, PassTerms, PlacedBox, Result, TileMasks, TileScene, ViewEye,
+    box_view_shader, quad_tlas, tile_quads,
 };
 use std::{collections::HashMap, mem, num::NonZeroU32};
 use ty_math::{
@@ -46,9 +46,11 @@ const SLACK: f64 = 0.25;
 /// which covers where the rasterizer rounds a corner to.
 const KEPT: f64 = 0.25;
 
-/// The lists of boxes a [`BoxHide`] tests for the view.
+/// The lists of a view's boxes, as a [`DetailTree`] counts them. A
+/// [`BoxHide`] tests the first two.
 const MARCHED: usize = 0;
 const SOLID: usize = 1;
+const GLASS: usize = 2;
 
 /// Where each kind of opaque box starts among a view's runs, and how many
 /// runs the kinds take. The held boxes and the inside ones take a run each.
@@ -99,6 +101,17 @@ pub struct BoxView {
     /// How many pages hold the scene's tiles. A page's words fit one
     /// binding, and a box's fragments read its page's.
     pages: usize,
+
+    /// The scene's tiles at each level, where its objects keep coarser
+    /// copies.
+    detail: Option<DetailTree>,
+
+    /// The fewest pixels a cell spans before a coarser copy's cells draw
+    /// in its place, or zero where no copy draws.
+    finest: f64,
+
+    /// The boxes the last sort drew, each list's as their places in it.
+    shown: [Vec<usize>; LISTS],
 
     /// The target's width and height.
     size: [u32; 2],
@@ -221,8 +234,10 @@ impl ViewBoxes {
     /// Fills `keys` with a key per box, nearest to `point` first, and
     /// returns how many of the boxes lie within `reach` of `point`. A key
     /// holds the bits of its box's squared distance above the box's index.
+    /// With `shown`, only the boxes at those indices take a key.
     fn nearest_first(
         &self,
+        shown: Option<&[usize]>,
         point: [f32; 3],
         reach: f32,
         keys: &mut Vec<u64>,
@@ -231,7 +246,9 @@ impl ViewBoxes {
         keys.clear();
 
         // A square is no less than zero, so its bits order as it does.
-        keys.extend((0u64..).zip(&self.bounds).map(|(index, bounds)| {
+        let key = |index: usize| {
+            let bounds = &self.bounds[index];
+
             let square: f32 = (0..3)
                 .map(|axis| {
                     let off = point[axis].clamp(bounds[axis], bounds[axis + 3]) - point[axis];
@@ -240,8 +257,13 @@ impl ViewBoxes {
                 })
                 .sum();
 
-            u64::from(square.to_bits()) << 32 | index
-        }));
+            u64::from(square.to_bits()) << 32 | index as u64
+        };
+
+        match shown {
+            Some(shown) => keys.extend(shown.iter().map(|&index| key(index))),
+            None => keys.extend((0..self.bounds.len()).map(key)),
+        }
 
         sort_keys(keys, spare);
         keys.partition_point(|&key| f32::from_bits((key >> 32) as u32) <= reach * reach)
@@ -453,6 +475,7 @@ impl BoxView {
             &(objects.iter())
                 .map(|object| object.masks.boxes.as_slice())
                 .collect::<Vec<_>>(),
+            &tiles.spans,
         );
 
         let solid = PlacedBox::list(
@@ -460,6 +483,7 @@ impl BoxView {
             &(objects.iter())
                 .map(|object| object.masks.solids.as_slice())
                 .collect::<Vec<_>>(),
+            &tiles.spans,
         );
 
         // Each marched box's entries in `crosser_words`, as their first and
@@ -549,13 +573,21 @@ impl BoxView {
         // The pages: each takes the groups in order that fit what one
         // binding holds of tiles' words and of lit words. A tinted scene's
         // lit words take a binding's first half, and its tints the second.
+        // The objects come before their coarser copies, finest first, so a
+        // view of copies alone draws from the pages that hold them.
         let most = (page_bytes / 4) as usize;
         let most_lit = (if tinted { most / 2 } else { most }) - TileMasks::SPARE as usize;
         let mut page_of = vec![0; objects.len()];
         let mut filled = (0, 0);
         let mut pages = 1;
 
-        for first in (0..objects.len()).filter(|&object| group[object] == object) {
+        let mut firsts: Vec<_> = (0..objects.len())
+            .filter(|&object| group[object] == object)
+            .collect();
+
+        firsts.sort_by_key(|&first| tiles.spans[first]);
+
+        for first in firsts {
             let members = || (first..objects.len()).filter(|&object| group[object] == first);
 
             let (bits, lit) = members().fold((0, 0), |(bits, lit), object| {
@@ -892,10 +924,11 @@ impl BoxView {
             }
         };
 
+        // A ray traces an object's quads, so its coarser copies cast none.
         let mut mirror_tile = |tile: (usize, u32)| {
-            *tile_mirrors
-                .entry(tile)
-                .or_insert_with(|| ids_of(tile).iter().any(|&id| mirror_reach(id) > 0.0))
+            *tile_mirrors.entry(tile).or_insert_with(|| {
+                tiles.spans[tile.0] == 1 && ids_of(tile).iter().any(|&id| mirror_reach(id) > 0.0)
+            })
         };
 
         // A tile glows where one of its materials' emission blooms.
@@ -1033,10 +1066,12 @@ impl BoxView {
             .then(|| {
                 // The corners of each placement's slabs in the world. Bit
                 // `a` of a corner's index picks the slab's far side on axis
-                // `a`.
+                // `a`. An object's slabs hide what lies behind them at
+                // any level, where a coarser copy's reach past its cells.
                 tiles
                     .placements
                     .iter()
+                    .filter(|(object, _)| tiles.spans[*object] == 1)
                     .flat_map(|(object, transform)| {
                         objects[*object].slabs.iter().map(|&(low, high)| {
                             [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
@@ -1144,7 +1179,10 @@ impl BoxView {
             &(0..objects.len())
                 .map(|object| glass_of(object).boxes.as_slice())
                 .collect::<Vec<_>>(),
+            &tiles.spans,
         );
+
+        let detail = DetailTree::new(tiles, [&marched, &solid, &glass]);
         let mut glass_boxes = ViewBoxes::default();
 
         let glass_words: Vec<_> = glass
@@ -1469,6 +1507,9 @@ impl BoxView {
             boxes,
             glow,
             pages,
+            detail,
+            finest: 0.0,
+            shown: Default::default(),
             size,
             frame,
             places,
@@ -1495,6 +1536,16 @@ impl BoxView {
                 a: 1.0,
             },
         })
+    }
+
+    /// Sets the fewest pixels one of an object's cells spans before a
+    /// coarser copy's cells draw in its place. The view draws a place at
+    /// the coarsest copy whose cells span that many pixels or fewer, in a
+    /// scene whose objects keep copies. Zero draws every object's cells,
+    /// as a view starts.
+    pub fn set_detail(&mut self, pixels: f64) {
+        self.finest = pixels;
+        self.sorted_for = None;
     }
 
     /// The color a pass that draws the view clears its target to: the
@@ -1555,8 +1606,24 @@ impl BoxView {
             moved.sqrt() + reach <= covered
         });
 
+        // The widest angle a pixel spans: the one on an eye's axis. A
+        // clip matrix's first two rows scale by two over the tangents the
+        // target spans.
+        let pixel = eyes
+            .iter()
+            .flat_map(|eye| {
+                let clip = eye.world_to_clip.to_cols_array();
+
+                [0, 1].map(|row| {
+                    let scale: f64 = (0..3).map(|column| clip[column * 4 + row].powi(2)).sum();
+
+                    2.0 / (scale.sqrt() * f64::from(self.size[row]))
+                })
+            })
+            .fold(0.0, f64::max);
+
         if !holds {
-            self.sort(queue, head, reach + slack);
+            self.sort(queue, head, reach + slack, pixel);
         }
 
         // The boxes deal out again when a sort moved them or the test
@@ -1570,22 +1637,6 @@ impl BoxView {
             if !holds {
                 hide.aim((positions[0] + positions[1]) / 2.0);
             }
-
-            // The widest angle a pixel spans: the one on an eye's axis. A
-            // clip matrix's first two rows scale by two over the tangents
-            // the target spans.
-            let pixel = eyes
-                .iter()
-                .flat_map(|eye| {
-                    let clip = eye.world_to_clip.to_cols_array();
-
-                    [0, 1].map(|row| {
-                        let scale: f64 = (0..3).map(|column| clip[column * 4 + row].powi(2)).sum();
-
-                        2.0 / (scale.sqrt() * f64::from(self.size[row]))
-                    })
-                })
-                .fold(0.0, f64::max);
 
             deals |= hide.test(positions, pixel * KEPT);
         }
@@ -1609,20 +1660,37 @@ impl BoxView {
     /// depth for an eye it holds, and its front faces for one it does not.
     /// Every solid box draws its front faces because a ray that starts
     /// inside one sees none of it.
-    fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32) {
+    fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32, pixel: f64) {
         let spare = &mut self.spare_keys;
 
-        self.solid
-            .nearest_first(head, covered, &mut self.solid_keys, spare);
+        // A cell a distance away spans a pixel where its side takes
+        // `pixel` of the distance.
+        let shown = self.detail.as_ref().map(|detail| {
+            detail.select(head, (self.finest * pixel) as f32, &mut self.shown);
 
-        self.near = self
-            .marched
-            .nearest_first(head, covered, &mut self.marched_keys, spare);
+            &self.shown
+        });
+
+        let shown = |list: usize| shown.map(|shown| shown[list].as_slice());
+
+        (self.solid).nearest_first(shown(SOLID), head, covered, &mut self.solid_keys, spare);
+
+        self.near = (self.marched).nearest_first(
+            shown(MARCHED),
+            head,
+            covered,
+            &mut self.marched_keys,
+            spare,
+        );
 
         if !self.glass.words.is_empty() {
-            self.glass_near = self
-                .glass
-                .nearest_first(head, covered, &mut self.glass_keys, spare);
+            self.glass_near = (self.glass).nearest_first(
+                shown(GLASS),
+                head,
+                covered,
+                &mut self.glass_keys,
+                spare,
+            );
         }
 
         self.sorted_for = Some((head, covered));

@@ -33,6 +33,12 @@ impl HeadsetView {
         })
     }
 
+    /// Sets the fewest pixels a cell spans before a coarser copy draws in
+    /// its place, as [`BoxView::set_detail`] takes them.
+    pub fn set_detail(&mut self, pixels: f64) {
+        self.boxes.set_detail(pixels);
+    }
+
     /// The color a pass that draws the view clears its target to.
     pub fn sky(&self) -> Color {
         self.boxes.sky()

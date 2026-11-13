@@ -31,6 +31,10 @@ const WALK: &str = "debug.voxrenderbench.walk";
 /// the swapchain takes along each side.
 const SCALE: &str = "debug.voxrenderbench.scale";
 
+/// The system property that holds the fewest pixels a voxel spans before
+/// a coarser copy of its object draws in its place.
+const DETAIL: &str = "debug.voxrenderbench.detail";
+
 /// The bench scene the app shows while [`VIEW`] is unset.
 const DEFAULT_VIEW: &str = "S1";
 
@@ -66,12 +70,17 @@ pub struct RunOptions {
     /// The part of the eyes' recommended size the swapchain takes along
     /// each side, 1 when the property is unset.
     pub scale: f64,
+
+    /// The fewest pixels a voxel spans before a coarser copy of its object
+    /// draws in its place. While the property is unset, every voxel draws
+    /// and no object keeps a copy.
+    pub detail: Option<f64>,
 }
 
 impl RunOptions {
     /// Reads the properties. Errors unless each flag is unset, `true`, or
-    /// `false`, the tour and the walk are each unset or a number over 0,
-    /// and the scale is unset or over 0 and at most 1.
+    /// `false`, the tour, the walk, and the detail are each unset or a
+    /// number over 0, and the scale is unset or over 0 and at most 1.
     pub fn read() -> Result<Self> {
         let text = |name| getprop(name).map(|value| (!value.is_empty()).then_some(value));
 
@@ -107,6 +116,7 @@ impl RunOptions {
             tour: positive(TOUR)?,
             walk: positive(WALK)?,
             scale,
+            detail: positive(DETAIL)?,
         })
     }
 }

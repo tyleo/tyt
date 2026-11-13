@@ -58,6 +58,10 @@ pub struct LitFill {
     /// The low and high corners of the box around each placement's grid
     /// along [`axes`](Self::axes).
     spans: Vec<Span>,
+
+    /// How many cells of the object it copies one of each placement's
+    /// cells spans.
+    sizes: Vec<u32>,
 }
 
 /// The low and high corners of a box along a light's axes.
@@ -219,6 +223,9 @@ impl LitFill {
             ),
             axes,
             spans,
+            sizes: (tiles.placements.iter())
+                .map(|(object, _)| tiles.spans[*object])
+                .collect(),
         }
     }
 
@@ -292,15 +299,20 @@ impl LitFill {
                     let first = casters.len();
 
                     // A caster's box covers some of the tile's across the light
-                    // and reaches as far toward it.
-                    casters.extend((0u32..).zip(&self.spans).filter_map(
-                        |(caster, (low, high))| {
+                    // and reaches as far toward it. Its cells span as many
+                    // of its object's as the tile's do: an object's coarser
+                    // copy shadows that copy's cells alone.
+                    let size = self.sizes[index];
+
+                    casters.extend((0u32..).zip(&self.spans).zip(&self.sizes).filter_map(
+                        |((caster, (low, high)), &cast)| {
                             let covers = (0..2).all(|axis| {
                                 low[axis] - MARGIN <= most[axis]
                                     && high[axis] + MARGIN >= least[axis]
                             });
 
-                            (covers && high[2] + MARGIN >= least[2]).then_some(caster)
+                            (cast == size && covers && high[2] + MARGIN >= least[2])
+                                .then_some(caster)
                         },
                     ));
 

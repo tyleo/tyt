@@ -1,4 +1,4 @@
-use crate::{BoxView, Error, Gpu, Result, TileScene, view_image};
+use crate::{BoxView, Error, Gpu, Result, TileScene, ViewOptions, view_image};
 use branded_id::U32Id;
 use ty_math::{TyLinSrgbF32, TySrgbU8};
 use voxrender::{BRenderView, RenderBloom, RenderOcclusion, RenderOutput, RenderScene};
@@ -26,8 +26,8 @@ impl MapRows for SerialRows {
 /// line when both eyes take one view. A line counts the pixels the
 /// reference hits something opaque in, how many of them have a channel off
 /// by more than `TOLERANCE`, and the mean difference of a channel. The
-/// view takes `page_bytes` as [`view_image`] does. Errors unless the views
-/// are the scene's and the device has multiview.
+/// view draws as `options` have it. Errors unless the views are the
+/// scene's and the device has multiview.
 pub fn view_check(
     gpu: &Gpu,
     scene: &RenderScene,
@@ -35,9 +35,10 @@ pub fn view_check(
     view_ids: [U32Id<BRenderView>; 2],
     width: u32,
     height: u32,
-    page_bytes: Option<u64>,
+    options: &ViewOptions,
 ) -> Result<String> {
-    let tiles = TileScene::of(scene, BoxView::draws_glass(&gpu.device))?;
+    let glass = BoxView::draws_glass(&gpu.device);
+    let tiles = TileScene::of(scene, glass, options.detail > 0.0)?;
 
     let texels = view_image(
         gpu,
@@ -46,7 +47,7 @@ pub fn view_check(
         bloom,
         view_ids,
         [width, height],
-        page_bytes,
+        options,
     )?;
     let black = TyLinSrgbF32::new(0.0, 0.0, 0.0);
 

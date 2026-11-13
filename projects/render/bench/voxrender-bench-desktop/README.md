@@ -51,3 +51,11 @@ smaller page, which draws a small scene in several:
 ```sh
 cargo run --release -p voxrender-bench-desktop -- view S1 room.png --page-bytes 1400000
 ```
+
+`view` and `view-check` take `--detail` with the fewest pixels a voxel
+spans. Each object then keeps coarser copies of itself, and the view draws a
+place at the coarsest copy whose voxels span that many pixels or fewer:
+
+```sh
+cargo run --release -p voxrender-bench-desktop -- view-check S5 --detail 1.4
+```

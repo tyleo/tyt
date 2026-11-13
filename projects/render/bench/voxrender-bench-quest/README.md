@@ -149,12 +149,24 @@ front. While a model loads on a thread of its own, the model before it
 stays in view under a dimmed sky. The app logs each model on a `models`
 line with the time its load took and how much of that built its tiles.
 
-Two more properties steer a run:
+Three more properties steer a run:
 
 1. `debug.voxrenderbench.model` starts the gallery at the first model whose
    path holds the property's text
 2. `debug.voxrenderbench.tour` steps the gallery to the next model once each
    has shown for the property's count of seconds
+3. `debug.voxrenderbench.detail` draws coarser voxels where a model's own
+   would span under the property's count of pixels
+
+With the detail set, each object keeps copies of itself at half, a quarter,
+and so on of its voxels along each side. A copy's voxel is filled where one
+of the eight it covers is, with the material most of them share. The view
+draws each place at the coarsest copy whose voxels span the count of pixels
+or fewer. A landscape on the table then draws a few thousand boxes of voxels
+a pixel wide, where its own would draw a hundred thousand of voxels a third
+as wide. A count of 1.4 changes few pixels of a still frame. Unset, every
+voxel draws and no object keeps a copy. A bench scene's view takes the
+property too.
 
 ### Test models
 

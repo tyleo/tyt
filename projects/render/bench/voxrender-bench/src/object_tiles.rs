@@ -27,6 +27,11 @@ pub struct ObjectTiles {
     /// [`masks`](Self::masks)' tiles plus one, or zero for a tile with no
     /// opaque cell.
     places: Vec<u32>,
+
+    /// For each tile of the grid in raster order: its place among
+    /// [`glass`](Self::glass)' tiles plus one, or zero for a tile with no
+    /// surface between materials that pass light.
+    glass_places: Vec<u32>,
 }
 
 impl ObjectTiles {
@@ -46,13 +51,22 @@ impl ObjectTiles {
     ) -> Result<Self> {
         let masks = TileMasks::new(grid, true, Some(opaque))?;
         let counts = (grid.bounds + TILE - 1) / TILE;
-        let mut places = vec![0; (counts.x * counts.y * counts.z) as usize];
 
-        for (place, corner) in (1..).zip(&masks.corners) {
-            let tile = *corner / TILE;
+        // Each tile's place plus one among the tiles whose low corners
+        // `corners` gives, in the grid's raster order.
+        let placed = |corners: &mut dyn Iterator<Item = TyVector3U32>| {
+            let mut places = vec![0; (counts.x * counts.y * counts.z) as usize];
 
-            places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize] = place;
-        }
+            for (place, corner) in (1..).zip(corners) {
+                let tile = corner / TILE;
+
+                places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize] = place;
+            }
+
+            places
+        };
+
+        let places = placed(&mut masks.corners.iter().copied());
 
         let glass = match glass {
             Some(place) => GlassTiles::new(grid, opaque, place),
@@ -66,6 +80,8 @@ impl ObjectTiles {
             },
         };
 
+        let glass_places = placed(&mut glass.boxes.iter().map(|&(low, _)| low));
+
         Ok(ObjectTiles {
             bounds: grid.bounds,
             masks,
@@ -73,14 +89,30 @@ impl ObjectTiles {
             slabs: solid_slabs(grid, opaque),
             casters: CasterTiles::new(grid, opaque)?,
             places,
+            glass_places,
         })
+    }
+
+    /// The tiles along each axis of the grid.
+    pub fn counts(&self) -> TyVector3U32 {
+        (self.bounds + TILE - 1) / TILE
     }
 
     /// The place among [`masks`](Self::masks)' tiles of the tile at `tile`
     /// among the grid's tiles, or `None` for a tile with no opaque cell.
     pub fn tile_at(&self, tile: TyVector3U32) -> Option<usize> {
-        let counts = (self.bounds + TILE - 1) / TILE;
+        let counts = self.counts();
         let place = self.places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize];
+
+        place.checked_sub(1).map(|place| place as usize)
+    }
+
+    /// The place among [`glass`](Self::glass)' tiles of the tile at `tile`
+    /// among the grid's tiles, or `None` for a tile with no surface
+    /// between materials that pass light.
+    pub fn glass_at(&self, tile: TyVector3U32) -> Option<usize> {
+        let counts = self.counts();
+        let place = self.glass_places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize];
 
         place.checked_sub(1).map(|place| place as usize)
     }
