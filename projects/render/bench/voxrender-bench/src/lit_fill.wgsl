@@ -16,6 +16,14 @@
 // A shadow ray starts this far in from its face's edges.
 const INSET: i32 = 8;
 
+// What an opaque cell holds in place of a material's key.
+const SOLID: u32 = 0xffffffffu;
+
+// The bit of a tile's word that marks a tile whose keys follow its bits,
+// and the words of a tile's bits.
+const KEYED: u32 = 0x80000000u;
+const BIT_WORDS: u32 = 128u;
+
 // The bits of a word that hold its lit corners. The fill keeps the rest.
 const LIT: u32 = 0xffffffu;
 
@@ -40,7 +48,7 @@ struct Light {
 
 @group(0) @binding(0) var<uniform> fill: Fill;
 @group(0) @binding(1) var<storage, read> placements: array<Placement>;
-// Per object: its dense cells.
+// Per object: its cells by tile, as `CasterTiles` lays them out.
 @group(0) @binding(2) var<storage, read> cells: array<u32>;
 @group(0) @binding(3) var<storage, read> lights: array<Light>;
 // Two words per placed tile: its low corner and its placement, then the
@@ -55,19 +63,49 @@ struct Light {
 // tint as four 8-bit parts of one.
 @group(0) @binding(7) var<storage, read_write> lit: array<u32>;
 // Three per material key: what its surface passes at most, under the share
-// no voxel covers. Its reflectance at normal incidence, under whether it
-// is opaque. What its reflectance rises by toward grazing.
+// no voxel covers. Its reflectance at normal incidence. What its
+// reflectance rises by toward grazing.
 @group(0) @binding(8) var<storage, read> passes: array<vec4<f32>>;
 
-fn opaque(material: u32) -> bool {
-    return passes[material * 3u + 1u].w != 0.0;
+// The word of the tile that holds `position` of `placement`'s grid.
+fn tile_word(placement: Placement, position: vec3<i32>) -> u32 {
+    let counts = (placement.bounds.xyz + vec3<i32>(15)) >> vec3<u32>(4u);
+    let tile = position >> vec3<u32>(4u);
+
+    return cells[placement.cells.x + u32((tile.x * counts.y + tile.y) * counts.z + tile.z)];
 }
 
-// Whether an opaque cell sits at `position` of `placement`'s grid.
-fn opaque_at(placement: Placement, position: vec3<i32>) -> bool {
-    let inside = all(position >= vec3<i32>(0)) && all(position < placement.bounds.xyz);
+// What the cell at `position` of `placement`'s grid holds, in the tile of
+// word `tile`: zero when empty, `SOLID` when opaque, else the key of its
+// material, which passes light.
+fn key_in(placement: Placement, tile: u32, position: vec3<i32>) -> u32 {
+    if tile == 0u {
+        return 0u;
+    }
 
-    return inside && opaque(material_at(placement, position));
+    let local = vec3<u32>(position) & vec3<u32>(15u);
+    let index = (local.x * 16u + local.y) * 16u + local.z;
+    let first = placement.cells.x + (tile & ~KEYED);
+
+    if ((cells[first + (index >> 5u)] >> (index & 31u)) & 1u) != 0u {
+        return SOLID;
+    }
+
+    if (tile & KEYED) == 0u {
+        return 0u;
+    }
+
+    return (cells[first + BIT_WORDS + (index >> 1u)] >> ((index & 1u) * 16u)) & 0xffffu;
+}
+
+// What the cell at `position` of `placement`'s grid holds, as `key_in`
+// tells it, and zero outside the grid.
+fn key_at(placement: Placement, position: vec3<i32>) -> u32 {
+    if any(position < vec3<i32>(0)) || any(position >= placement.bounds.xyz) {
+        return 0u;
+    }
+
+    return key_in(placement, tile_word(placement, position), position);
 }
 
 // The contract's pass of `material`: the share of the light in each channel
@@ -105,16 +143,24 @@ fn passed(placement: Placement, ray: Ray, fades: vec3<f32>) -> vec3<f32> {
     var cell = mirrored.cell;
     var through = vec3<f32>(1.0);
 
+    // The walk's cell in the grid, which a mirrored axis counts down, and
+    // the cell's tile with its word. No tile of the grid matches the first.
+    var position = select(cell, bounds - vec3<i32>(1) - cell, flip);
+    var tile = vec3<i32>(-2);
+    var word = 0u;
+
     // The material of the cell the ray is in, and whether the ray is yet
     // to leave the material it starts in.
     var inside = 0u;
     var started = false;
 
     if entry < 0 {
-        inside = material_at(placement, select(cell, bounds - vec3<i32>(1) - cell, flip));
+        tile = position >> vec3<u32>(4u);
+        word = tile_word(placement, position);
+        inside = key_in(placement, word, position);
 
         if inside != 0u {
-            if opaque(inside) {
+            if inside == SOLID {
                 return vec3<f32>(0.0);
             }
 
@@ -141,9 +187,7 @@ fn passed(placement: Placement, ray: Ray, fades: vec3<f32>) -> vec3<f32> {
     let y_change = vec3<i32>(-change.x, 0, change.z);
     let z_change = vec3<i32>(0, -change.x, -change.y);
 
-    let strides = voxel_strides(placement, flip);
-    var voxel = linear_voxel(placement, select(cell, bounds - vec3<i32>(1) - cell, flip));
-
+    let toward = select(vec3<i32>(1), vec3<i32>(-1), flip);
     let steps = bounds.x + bounds.y + bounds.z + 3;
 
     for (var n = 0; n < steps; n++) {
@@ -164,15 +208,23 @@ fn passed(placement: Placement, ray: Ray, fades: vec3<f32>) -> vec3<f32> {
         }
 
         error += select(select(x_change, y_change, axis == 1), z_change, axis == 2);
-        voxel += pick(strides, axis);
+        position += select(vec3<i32>(0), toward, axis_mask(axis));
 
-        let material = cells[placement.cells.x + u32(voxel)];
+        // A tile with no live cell costs its cells no load.
+        let next = position >> vec3<u32>(4u);
+
+        if any(next != tile) {
+            tile = next;
+            word = tile_word(placement, position);
+        }
+
+        let material = key_in(placement, word, position);
 
         if material == inside {
             continue;
         }
 
-        if material != 0u && opaque(material) {
+        if material == SOLID {
             return vec3<f32>(0.0);
         }
 
@@ -243,9 +295,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     var light = vec3<f32>(0.0);
     var corners = 0.0;
 
-    let own = material_at(placement, cell);
+    let own = key_at(placement, cell);
 
-    if !opaque(own) {
+    if own != SOLID {
         for (var n = 0; n < 6; n++) {
             let d = n >> 1u;
             let up = (n & 1) == 1;
@@ -258,13 +310,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
             beside[d] += select(-1, 1, up);
 
-            var other = 0u;
+            let other = key_at(placement, beside);
 
-            if all(beside >= vec3<i32>(0)) && all(beside < placement.bounds.xyz) {
-                other = material_at(placement, beside);
-            }
-
-            if other == own || opaque(other) {
+            if other == own || other == SOLID {
                 continue;
             }
 
@@ -301,7 +349,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 
         front[d] += select(-1, 1, up);
 
-        if opaque_at(placement, front) {
+        if key_at(placement, front) == SOLID {
             continue;
         }
 

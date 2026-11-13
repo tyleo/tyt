@@ -42,6 +42,10 @@ pub enum Error {
 
     /// A tile holds more materials than its cells' entries index.
     TileMaterials { materials: usize },
+
+    /// A material that passes light has an id over what a shadow ray's
+    /// tile holds for a cell.
+    PassingMaterial { id: u32 },
 }
 
 impl Display for Error {
@@ -69,6 +73,9 @@ impl Display for Error {
             Error::MapRange(error) => write!(f, "a readback range was unavailable: {error}"),
             Error::TileMaterials { materials } => {
                 write!(f, "a tile holds {materials} materials, over 256")
+            }
+            Error::PassingMaterial { id } => {
+                write!(f, "material {id} passes light and its id is over 65534")
             }
         }
     }
