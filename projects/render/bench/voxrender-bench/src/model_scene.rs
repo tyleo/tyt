@@ -20,10 +20,10 @@ const KEY: [f64; 2] = [-30.0, 30.0];
 
 /// The scene of the Voxel Json document at `path`: every object at its
 /// nodes' placements, in meters. The scene's first view is vxl's hero view
-/// of the model. Its lights are vxl's studio rig as that view places the
-/// rig. The bloom is the one vxl's review renders take. Errors if the
-/// document does not load, holds no live voxel, or holds a material the
-/// contract cannot shade.
+/// of the model for a square image. Its lights are vxl's studio rig as that
+/// view places the rig. The bloom is the one vxl's review renders take.
+/// Errors if the document does not load, holds no live voxel, or holds a
+/// material the contract cannot shade.
 pub fn model_scene(path: &Path) -> Result<(RenderScene, RenderBloom)> {
     let model = |error: String| Error::Model {
         path: path.to_owned(),
@@ -66,7 +66,7 @@ pub fn model_scene(path: &Path) -> Result<(RenderScene, RenderBloom)> {
                 bounds.center + hero * fit_distance(&bounds, fov, 1, 1),
                 rotation,
             ),
-            projection: RenderProjection::Perspective { fov },
+            projection: RenderProjection::from_fov(fov, 1, 1).map_err(Error::Render)?,
         })
         .map_err(Error::Render)?;
 

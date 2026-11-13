@@ -12,8 +12,9 @@ cargo run --release -p voxrender-bench-desktop -- lit-check S1
 ```
 
 `view` draws a bench scene's first view as the shaded box raster and writes
-it as a PNG. `view-check` draws that view and the reference's image of it and
-prints how many of the pixels that hit something opaque differ. `lit-check`
+it as a PNG. The view takes the image's shape. `view-check` draws that view
+and the reference's image of it over a square image and prints how many of
+the pixels that hit something opaque differ. `lit-check`
 fills a scene's corner shadows on the GPU as the view does and again on the
 CPU through the reference's walk. It prints how many corners differ. All three
 take the start of a bench scene's name, such as `S1`.
@@ -32,4 +33,13 @@ lights stay where the first view put them:
 
 ```sh
 cargo run --release -p voxrender-bench-desktop -- view-check tank.voxjz --eye 0.1 0.08 0.7 --look-at 0 0.05 0
+```
+
+`view-check --headset` looks through a Quest 3's two eyes in place of the
+view. The eyes sit 64 mm apart about the view's position and draw in one
+frame. Each eye's edges sit off its axis as the headset gives them. The
+command prints a line an eye:
+
+```sh
+cargo run --release -p voxrender-bench-desktop -- view-check S1 --headset
 ```

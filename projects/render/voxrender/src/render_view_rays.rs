@@ -6,8 +6,8 @@ use crate::{
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 
 /// The rays through the pixel centers of a view over an image. Rows run top
-/// to bottom. A perspective ray fans out from the view's position by its
-/// field of view and the image's aspect. An orthographic ray runs along the
+/// to bottom. A perspective ray fans out from the view's position between
+/// the view's four edges. An orthographic ray runs along the
 /// view's -Z from a point on an image plane whose shorter axis spans the
 /// view's scale.
 ///
@@ -64,9 +64,17 @@ impl RenderViewRays {
         };
 
         match view.projection {
-            RenderProjection::Perspective { fov } => {
-                let half = (fov / 2.0).tan();
-                let (corner, step_x, step_y) = spread(half * aspect, half);
+            RenderProjection::Perspective {
+                left,
+                right,
+                up,
+                down,
+            } => {
+                let (corner, step_x, step_y) = spread((right - left) / 2.0, (up - down) / 2.0);
+
+                // Edges off the view's axis move the image's center.
+                let center = rotation * TyVector3F64::X * ((right + left) / 2.0)
+                    + rotation * TyVector3F64::Y * ((up + down) / 2.0);
 
                 Self {
                     width,
@@ -74,7 +82,7 @@ impl RenderViewRays {
                     origin: position,
                     origin_x: TyVector3F64::ZERO,
                     origin_y: TyVector3F64::ZERO,
-                    direction: forward + corner,
+                    direction: forward + (corner + center),
                     direction_x: step_x,
                     direction_y: step_y,
                 }
@@ -227,7 +235,7 @@ mod tests {
     fn perspective_rays_fan_from_the_position_by_the_field_of_view() {
         let view = RenderView {
             pose: TyPoseF64::new(TyVector3F64::new(0.0, 0.0, 5.0), TyQuaternionF64::IDENTITY),
-            projection: RenderProjection::Perspective { fov: PI / 2.0 },
+            projection: RenderProjection::from_fov(PI / 2.0, 4, 2).unwrap(),
         };
 
         let rays = RenderViewRays::new(&view, 4, 2);
@@ -249,6 +257,32 @@ mod tests {
         assert!(close(
             rays.ray(2, 1).direction,
             TyVector3F64::new(0.5, -0.5, -1.0).normalize()
+        ));
+    }
+
+    #[test]
+    fn perspective_rays_fan_between_edges_off_the_views_axis() {
+        let view = RenderView {
+            pose: TyPoseF64::new(TyVector3F64::new(0.0, 0.0, 5.0), TyQuaternionF64::IDENTITY),
+            projection: RenderProjection::Perspective {
+                left: -1.0,
+                right: 3.0,
+                up: 2.0,
+                down: 0.0,
+            },
+        };
+
+        let rays = RenderViewRays::new(&view, 4, 2);
+
+        // Each pixel spans a slope of one across and one down. The top-left
+        // pixel's center sits half a pixel in from the left and up edges.
+        assert!(close(
+            rays.ray(0, 0).direction,
+            TyVector3F64::new(-0.5, 1.5, -1.0).normalize()
+        ));
+        assert!(close(
+            rays.ray(3, 1).direction,
+            TyVector3F64::new(2.5, 0.5, -1.0).normalize()
         ));
     }
 
@@ -279,7 +313,13 @@ mod tests {
     #[test]
     fn the_steps_sum_to_each_pixels_ray() {
         let projections = [
-            RenderProjection::Perspective { fov: 1.2 },
+            RenderProjection::from_fov(1.2, 5, 3).unwrap(),
+            RenderProjection::Perspective {
+                left: -0.9,
+                right: 0.6,
+                up: 0.7,
+                down: -1.1,
+            },
             RenderProjection::Orthographic { scale: 3.0 },
         ];
 

@@ -705,7 +705,7 @@ mod tests {
                     bounds.center + direction * fit_distance(&bounds, fov, 8, 8),
                     TyQuaternionF64::from_look_direction(-direction, TyVector3F64::Y).unwrap(),
                 ),
-                projection: RenderProjection::Perspective { fov },
+                projection: RenderProjection::from_fov(fov, 8, 8).unwrap(),
             })
             .unwrap();
 

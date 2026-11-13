@@ -119,7 +119,7 @@ mod tests {
         let bounds = TyVector3U32::splat(8);
 
         for projection in [
-            RenderProjection::Perspective { fov: 0.8 },
+            RenderProjection::from_fov(0.8, 37, 23).unwrap(),
             RenderProjection::Orthographic { scale: 6.0 },
         ] {
             let rays = RenderViewRays::new(&RenderView { pose, projection }, 37, 23);
@@ -154,7 +154,7 @@ mod tests {
     fn a_view_out_of_a_grids_range_has_no_grid_rays() {
         let view = RenderView {
             pose: TyPoseF64::new(TyVector3F64::new(0.0, 0.0, 5.0), TyQuaternionF64::IDENTITY),
-            projection: RenderProjection::Perspective { fov: 0.8 },
+            projection: RenderProjection::from_fov(0.8, 4, 4).unwrap(),
         };
         let tiny = TyTransformF64::new(
             TyVector3F64::ZERO,

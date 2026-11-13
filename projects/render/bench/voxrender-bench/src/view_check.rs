@@ -1,6 +1,7 @@
 use crate::{Error, Gpu, Result, view_image};
+use branded_id::U32Id;
 use ty_math::{TyLinSrgbF32, TySrgbU8};
-use voxrender::{RenderBloom, RenderOcclusion, RenderOutput, RenderScene};
+use voxrender::{BRenderView, RenderBloom, RenderOcclusion, RenderOutput, RenderScene};
 use voxrender_cpu::{MapRows, render};
 
 /// The 8-bit steps a channel can differ by before its pixel counts as off.
@@ -19,55 +20,73 @@ impl MapRows for SerialRows {
     }
 }
 
-/// Compares the shaded [`BoxView`](crate::BoxView) of `scene`'s first view
-/// with the reference's image of it under `bloom` over a `size` square image
-/// and returns a line of the result. The line counts the pixels the
+/// Compares the shaded [`BoxView`](crate::BoxView) of `scene` through two of
+/// its views, the left eye's first, with the reference's image of each under
+/// `bloom` over a `width` by `height` image. Returns a line an eye, or one
+/// line when both eyes take one view. A line counts the pixels the
 /// reference hits something opaque in, how many of them have a channel off
 /// by more than `TOLERANCE`, and the mean difference of a channel. Errors
-/// unless the scene has a view and the device has multiview.
-pub fn view_check(gpu: &Gpu, scene: &RenderScene, bloom: RenderBloom, size: u32) -> Result<String> {
-    let (view_id, _) = scene.iter_views().next().ok_or(Error::NoView)?;
-
-    let image = render(
-        &SerialRows,
-        scene,
-        view_id,
-        RenderOcclusion::Corner,
-        bloom,
-        size,
-        size,
-    )
-    .map_err(Error::Render)?;
-
-    let reference = RenderOutput::from_image(&image, Some(TySrgbU8::new(0, 0, 0)));
-    let texels = view_image(gpu, scene, bloom, size, size)?;
+/// unless the views are the scene's and the device has multiview.
+pub fn view_check(
+    gpu: &Gpu,
+    scene: &RenderScene,
+    bloom: RenderBloom,
+    view_ids: [U32Id<BRenderView>; 2],
+    width: u32,
+    height: u32,
+) -> Result<String> {
+    let texels = view_image(gpu, scene, bloom, view_ids, width, height)?;
     let black = TyLinSrgbF32::new(0.0, 0.0, 0.0);
 
-    let (mut pixels, mut off, mut sum) = (0u64, 0u64, 0u64);
+    let eyes: &[(&str, usize)] = if view_ids[0] == view_ids[1] {
+        &[("", 0)]
+    } else {
+        &[("left eye: ", 0), ("right eye: ", 1)]
+    };
 
-    for ((pixel, want), got) in image
-        .pixels()
-        .iter()
-        .zip(reference.pixels())
-        .zip(texels.chunks_exact(4))
-    {
-        if pixel.transmittance != black {
-            continue;
+    let mut report = String::new();
+
+    for &(label, eye) in eyes {
+        let image = render(
+            &SerialRows,
+            scene,
+            view_ids[eye],
+            RenderOcclusion::Corner,
+            bloom,
+            width,
+            height,
+        )
+        .map_err(Error::Render)?;
+
+        let reference = RenderOutput::from_image(&image, Some(TySrgbU8::new(0, 0, 0)));
+        let (mut pixels, mut off, mut sum) = (0u64, 0u64, 0u64);
+
+        for ((pixel, want), got) in image
+            .pixels()
+            .iter()
+            .zip(reference.pixels())
+            .zip(texels[eye].chunks_exact(4))
+        {
+            if pixel.transmittance != black {
+                continue;
+            }
+
+            let differences = [want.red, want.green, want.blue]
+                .into_iter()
+                .zip(got)
+                .map(|(want, &got)| want.abs_diff(got));
+
+            pixels += 1;
+            off += u64::from(differences.clone().any(|difference| difference > TOLERANCE));
+            sum += differences.map(u64::from).sum::<u64>();
         }
 
-        let differences = [want.red, want.green, want.blue]
-            .into_iter()
-            .zip(got)
-            .map(|(want, &got)| want.abs_diff(got));
-
-        pixels += 1;
-        off += u64::from(differences.clone().any(|difference| difference > TOLERANCE));
-        sum += differences.map(u64::from).sum::<u64>();
+        report += &format!(
+            "{label}{pixels} opaque pixels, {off} off by over {TOLERANCE} ({:.3}%), mean difference {:.3} of 255\n",
+            off as f64 / pixels.max(1) as f64 * 100.0,
+            sum as f64 / (pixels.max(1) * 3) as f64
+        );
     }
 
-    Ok(format!(
-        "{pixels} opaque pixels, {off} off by over {TOLERANCE} ({:.3}%), mean difference {:.3} of 255\n",
-        off as f64 / pixels.max(1) as f64 * 100.0,
-        sum as f64 / (pixels.max(1) * 3) as f64
-    ))
+    Ok(report)
 }

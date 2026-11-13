@@ -11,14 +11,16 @@ use voxrender::{RenderProjection, RenderView, fit_distance, fit_scale};
 /// Resolves a view's `transform` and `projection` to world space. Errors if a
 /// `subject` frame, an orbit without a center, or a `fit` has no subject, an
 /// orbit about a center takes a `fit`, a `node` frame's glob matches no node
-/// path or several, or a look-at aims at the view's own position.
+/// path or several, a look-at aims at the view's own position, or a field of
+/// view lies outside `(0, 180)` degrees.
 ///
 /// # Arguments
 /// * `element` - the view, which errors report.
 /// * `subject` - the world bounds of the view's subject, or `None` when it
 ///   has no voxel.
 /// * `width`, `height` - the image size in pixels, whose shorter axis a
-///   `fit` fills.
+///   `fit` fills and whose shape sets a perspective view's left and right
+///   edges.
 pub fn resolve_view(
     element: &RenderElement,
     transform: &PoseTransform,
@@ -119,9 +121,9 @@ pub fn resolve_view(
         .ok_or_else(|| Error::render_record(element.clone(), "looks at its own position"))?;
 
     let projection = match *projection {
-        ViewProjection::Perspective { fov } => RenderProjection::Perspective {
-            fov: TyAngleUnit::Degrees.to_radians(fov),
-        },
+        ViewProjection::Perspective { fov } => {
+            RenderProjection::from_fov(TyAngleUnit::Degrees.to_radians(fov), width, height)?
+        }
 
         ViewProjection::Orthographic {
             scale: FitOrFixed::Fixed(scale),
@@ -205,9 +207,7 @@ mod tests {
         assert_eq!(view.pose.rotation, rotation);
         assert_eq!(
             view.projection,
-            RenderProjection::Perspective {
-                fov: 90f64.to_radians()
-            }
+            RenderProjection::from_fov(90f64.to_radians(), 10, 10).unwrap()
         );
     }
 

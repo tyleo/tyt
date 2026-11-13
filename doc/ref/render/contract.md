@@ -224,6 +224,11 @@ regardless of orientation, so every fitted view of one subject sits at one
 distance. An orbit about a world point takes its distance and orthographic
 scale in meters.
 
+The renderer takes a perspective view as the slopes of its image's four
+edges from the view's axis. A field of view becomes edges centered on that
+axis, with the left and right edges set by the image's shape. A view whose
+edges sit off the axis, such as a headset's eye, draws under the same rules.
+
 ## Bloom
 
 Bloom is a halo over the emissive term alone, added to the linear image
