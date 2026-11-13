@@ -3,9 +3,6 @@ use ty_math::TyVector3F64;
 /// The shadow a box of opaque cells casts from an eye behind the face it
 /// shows the eye widest.
 pub struct FaceShadow {
-    /// The face's solid angle from the eye, near enough to rank shadows by.
-    pub wide: f64,
-
     /// The face's plane, then the four planes through the eye and the
     /// face's edges, each as a unit normal and an offset in world meters. A
     /// point `p` lies in the shadow when `normal . p + offset` is no less
@@ -47,7 +44,7 @@ impl FaceShadow {
             }
         }
 
-        let (face, normal, wide) = widest?;
+        let (face, normal, _) = widest?;
         let center = (face[0] + face[2]) / 2.0;
         let mut planes = [normal.extend(-normal.dot(center)).to_array(); 5];
 
@@ -60,7 +57,7 @@ impl FaceShadow {
             planes[edge + 1] = side.extend(-side.dot(eye)).to_array();
         }
 
-        Some(FaceShadow { wide, planes })
+        Some(FaceShadow { planes })
     }
 }
 
@@ -111,9 +108,6 @@ mod tests {
         assert!(!shades(&shadow, [20.0, -5.0, 0.0]));
         assert!(!shades(&shadow, [20.0, 4.0, 9.0]));
         assert!(!shades(&shadow, [20.0, 4.0, -9.0]));
-
-        // A face 64 m2 wide, 10 m off.
-        assert!((shadow.wide - 0.64).abs() < 1e-9);
     }
 
     #[test]
