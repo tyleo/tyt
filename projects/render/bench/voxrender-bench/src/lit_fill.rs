@@ -1,4 +1,4 @@
-use crate::{Error, PassTerms, Result, TileMasks};
+use crate::{CasterTiles, Error, PassTerms, Result, TileMasks};
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyVector3F64, TyVector3U32};
@@ -102,33 +102,36 @@ impl LitFill {
             .to_scene_grid_rays(scene)
             .map_err(Error::Render)?;
 
-        let mut dense = Vec::new();
+        let mut caster_words = Vec::new();
         let mut offsets = HashMap::new();
 
         for (object_id, object) in scene.iter_objects() {
             offsets.insert(
                 object_id,
-                u32::try_from(dense.len()).expect("a scene's cells number under 2^32"),
+                u32::try_from(caster_words.len())
+                    .expect("a scene's caster words number under 2^32"),
             );
 
-            dense.extend(dense_cells(object));
+            let tiles = CasterTiles::new(object.bounds(), &dense_cells(object), opaque)?;
+
+            caster_words.extend(tiles.words);
         }
 
-        // `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each value up
-        // to the greatest a cell holds, its material's id plus one. An id
-        // the scene lacks passes the light whole.
-        let keys = dense.iter().max().map_or(1, |greatest| greatest + 1);
+        // `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each key up
+        // to the greatest a material has, its id plus one. An id the scene
+        // lacks passes the light whole.
+        let keys = scene
+            .iter_materials()
+            .map(|(id, _)| id.to_u32() + 2)
+            .max()
+            .unwrap_or(1);
 
         let passes: Vec<f32> = (0..keys)
             .flat_map(|key| {
-                let id = key.checked_sub(1);
-                let blocks = if id.is_some_and(opaque) { 1.0 } else { 0.0 };
-
-                id.and_then(|id| scene.material(U32Id::from_u32(id)))
+                key.checked_sub(1)
+                    .and_then(|id| scene.material(U32Id::from_u32(id)))
                     .map_or(
-                        [
-                            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, blocks, 0.0, 0.0, 0.0, 0.0,
-                        ],
+                        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                         |material| {
                             let PassTerms {
                                 most,
@@ -145,7 +148,7 @@ impl LitFill {
                                 reflectance.red,
                                 reflectance.green,
                                 reflectance.blue,
-                                blocks,
+                                0.0,
                                 rise.red,
                                 rise.green,
                                 rise.blue,
@@ -325,7 +328,11 @@ impl LitFill {
             &placement_bytes,
             BufferUsages::STORAGE,
         );
-        let dense = init("lit fill cells", &bytes(&dense), BufferUsages::STORAGE);
+        let caster_words = init(
+            "lit fill cells",
+            &bytes(&caster_words),
+            BufferUsages::STORAGE,
+        );
         let lights = init("lit fill lights", &lights, BufferUsages::STORAGE);
         let passes = init(
             "lit fill passes",
@@ -352,10 +359,11 @@ impl LitFill {
 
         // SAFETY: an invocation past the scene's record cells returns. A
         // record cell indexes its placed tile, which indexes its placement
-        // and its casters. The walk reads only its placement's cells, and
-        // each of its loops ends within a grid's extent. A face's front
-        // cell reads the cells only inside the grid. A cell's value
-        // indexes `passes`, which holds each value up to the greatest.
+        // and its casters. The walk reads a cell only inside its
+        // placement's grid, and each of its loops ends within a grid's
+        // extent. A cell inside a grid lies in one of its tiles, whose word
+        // leads to the tile's words. A cell's key indexes `passes`, which
+        // holds each key up to the greatest.
         let module = unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
@@ -383,7 +391,7 @@ impl LitFill {
             entries: &[
                 &frame,
                 &placements,
-                &dense,
+                &caster_words,
                 &lights,
                 &tile_words,
                 &casters,
