@@ -23,6 +23,10 @@ const MODEL: &str = "debug.voxrenderbench.model";
 /// before it steps to the next.
 const TOUR: &str = "debug.voxrenderbench.tour";
 
+/// The system property that holds the meters a second the view's wearer
+/// walks.
+const WALK: &str = "debug.voxrenderbench.walk";
+
 /// The system property that holds the part of the eyes' recommended size
 /// the swapchain takes along each side.
 const SCALE: &str = "debug.voxrenderbench.scale";
@@ -55,6 +59,10 @@ pub struct RunOptions {
     /// with no button pressed.
     pub tour: Option<f64>,
 
+    /// The meters a second the view's wearer walks down the scene and back
+    /// with no step taken.
+    pub walk: Option<f64>,
+
     /// The part of the eyes' recommended size the swapchain takes along
     /// each side, 1 when the property is unset.
     pub scale: f64,
@@ -62,20 +70,22 @@ pub struct RunOptions {
 
 impl RunOptions {
     /// Reads the properties. Errors unless each flag is unset, `true`, or
-    /// `false`, the tour is unset or a positive count of seconds, and the
-    /// scale is unset or over 0 and at most 1.
+    /// `false`, the tour and the walk are each unset or a number over 0,
+    /// and the scale is unset or over 0 and at most 1.
     pub fn read() -> Result<Self> {
         let text = |name| getprop(name).map(|value| (!value.is_empty()).then_some(value));
 
-        let tour = text(TOUR)?
-            .map(|value| {
-                value
-                    .parse()
-                    .ok()
-                    .filter(|&seconds: &f64| seconds.is_finite() && seconds > 0.0)
-                    .ok_or(Error::SecondsProperty { name: TOUR, value })
-            })
-            .transpose()?;
+        let positive = |name| {
+            text(name)?
+                .map(|value| {
+                    value
+                        .parse()
+                        .ok()
+                        .filter(|&number: &f64| number.is_finite() && number > 0.0)
+                        .ok_or(Error::PositiveProperty { name, value })
+                })
+                .transpose()
+        };
 
         let scale = text(SCALE)?
             .map(|value| {
@@ -94,7 +104,8 @@ impl RunOptions {
             models: flag(MODELS, false)?,
             tests: flag(TESTS, false)?,
             model: text(MODEL)?,
-            tour,
+            tour: positive(TOUR)?,
+            walk: positive(WALK)?,
             scale,
         })
     }

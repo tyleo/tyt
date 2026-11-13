@@ -8,11 +8,7 @@ use openxr::{
     Rect2Di, ReferenceSpaceType, Session, SessionState, Space, SwapchainSubImage,
     ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
 };
-use std::{
-    num::NonZeroU32,
-    path::Path,
-    time::{Duration, Instant},
-};
+use std::{num::NonZeroU32, path::Path, time::Instant};
 use voxrender::RenderBloom;
 use voxrender_bench::{
     Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, ModelGallery, bench_scene,
@@ -30,7 +26,7 @@ const VIEW_TYPE: ViewConfigurationType = ViewConfigurationType::PRIMARY_STEREO;
 const REFRESH_RATE: f32 = 90.0;
 
 /// The frames between two logs of the view's time on the CPU.
-const VIEW_FRAMES: u32 = 600;
+const VIEW_FRAMES: usize = 600;
 
 /// The directory of the gallery's models within the app's files.
 const MODELS: &str = "models";
@@ -156,6 +152,8 @@ impl XrApp {
                 .next()
                 .ok_or(Error::Bench(BenchError::NoView))?;
 
+            let stand = HeadsetStand::at_view(view);
+
             FrameWork::View {
                 view: Box::new(
                     HeadsetView::new(
@@ -163,15 +161,16 @@ impl XrApp {
                         &gpu.queue,
                         &render_scene,
                         RenderBloom::default(),
-                        HeadsetStand::at_view(view),
+                        stand,
                         swapchain.format,
                         [width, height],
                     )
                     .map_err(Error::Bench)?,
                 ),
                 depth: eye_depth(&gpu.device, width, height),
-                prepared: Duration::ZERO,
+                walk: options.walk.map(|speed| (speed, stand)),
                 frames: 0,
+                prepared: Vec::with_capacity(VIEW_FRAMES),
             }
         };
 
@@ -320,24 +319,36 @@ impl XrApp {
         let passes = match &mut self.work {
             FrameWork::View {
                 view,
-                prepared,
+                walk,
                 frames,
+                prepared,
                 ..
             } => {
+                // Each run of the app draws the same views because a walk
+                // steps by frames drawn.
+                if let Some((speed, from)) = *walk {
+                    let seconds = f64::from(*frames) / f64::from(REFRESH_RATE);
+
+                    view.stand = from.walked(&headset_eyes, seconds, speed);
+                }
+
+                *frames += 1;
+
                 let start = Instant::now();
 
                 view.prepare(&self.gpu.queue, &headset_eyes);
-                *prepared += start.elapsed();
-                *frames += 1;
+                prepared.push(start.elapsed().as_secs_f64() * 1e3);
 
-                if *frames == VIEW_FRAMES {
+                if prepared.len() == VIEW_FRAMES {
+                    prepared.sort_by(f64::total_cmp);
+
                     log::info!(
-                        "view prepare: {:.3} ms a frame on the CPU over {VIEW_FRAMES} frames",
-                        prepared.as_secs_f64() * 1e3 / f64::from(VIEW_FRAMES)
+                        "view prepare: {:.3} ms a frame on the CPU over {VIEW_FRAMES} frames, p99 {:.3}",
+                        prepared.iter().sum::<f64>() / VIEW_FRAMES as f64,
+                        prepared[(VIEW_FRAMES * 99).div_ceil(100) - 1]
                     );
 
-                    *prepared = Duration::ZERO;
-                    *frames = 0;
+                    prepared.clear();
                 }
 
                 view.passes()
@@ -482,12 +493,15 @@ enum FrameWork {
         /// Both eyes' depth, one layer each.
         depth: TextureView,
 
-        /// The time the frames since the last log spent readying the view
-        /// on the CPU.
-        prepared: Duration,
+        /// A walk's meters a second and the stand it starts from.
+        walk: Option<(f64, HeadsetStand)>,
 
-        /// The frames since the last log.
+        /// The frames drawn.
         frames: u32,
+
+        /// The milliseconds each frame since the last log spent readying
+        /// the view on the CPU.
+        prepared: Vec<f64>,
     },
 
     /// A gallery's model, drawn into the eyes each frame. The app logs each
