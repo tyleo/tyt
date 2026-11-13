@@ -429,9 +429,17 @@ this order:
             table of distances reads 46% fewer cells on S2 and runs
             slower. A box outside the view costs 8 ns. The boxes behind
             nearer ones cost S2 1.9 ms: 454 of its 26,325 own a pixel
-      - [ ] The project lead rules on a test that keeps a hidden box from
-            drawing, the reference's brick LOD, and boxes that span
-            several tiles with their cells whole
+      - [x] The project lead ruled on a test that keeps a hidden box from
+            drawing: build it
+      - [x] `BoxHide` leaves out the boxes that lie whole behind a solid
+            slab from both eyes. S2 takes 5.12 ms on Quest, from 6.63, for
+            0.9 ms of CPU. A scene under 4096 boxes has no test
+      - [x] Two trials lost. A pyramid of the frame's depth costs the
+            1.0 ms its test saves. A compute pass over the slabs' shadows
+            costs 0.56 ms of the 1.06 it saves
+      - [ ] The test's time under a moving head
+      - [ ] The project lead rules on the reference's brick LOD and boxes
+            that span several tiles with their cells whole
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
    first. Glass at half size follows as a property that is off by default
       - [x] A ray steps to its tile's surfaces through the tile's bits.

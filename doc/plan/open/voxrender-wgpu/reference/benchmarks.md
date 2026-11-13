@@ -2891,3 +2891,97 @@ lantern 3.39 against 2.76.
 3. Quest's driver fails a pipeline with clip distances under multiview
 4. Quest gains nothing from shading a wave's surfaces together. What the
    record adds to a step costs more
+
+## Boxes behind slabs, 2026-11-13
+
+A test that keeps S2's hidden boxes from drawing, by three mechanisms.
+The third stays.
+
+- Device and method: as in Where S2's frame goes, in one sitting. A
+  scratch build takes its mechanism from a property, and builds take
+  turns
+- CPU: the app's time to ready a view's frame, a mean over 600 frames
+- Exact: this Mac draws a view with a mechanism on and off after the same
+  frames from other eyes, and compares the two images' bytes
+
+**Last frame's boxes, then a depth pyramid.** A frame drew the boxes the
+last frame's test passed. Passes then reduced the frame's depth to the
+farthest of each 8 by 8 pixels, and on through four coarser levels. A
+compute pass tested each box's rectangle against that pyramid and wrote a
+word of flags a box. Each run then drew again, and a vertex stage placed
+only the boxes that passed with no draw yet. The images matched on this
+Mac in 44 runs. On Quest S2 took 7.44 ms against 6.57:
+
+| Step | ms |
+| --- | ---: |
+| The first draw leaves out the boxes the last test hid | -0.97 |
+| The pyramid | 1.02 |
+| The test | 0.18 |
+| The second draw of each run | 0.64 |
+
+The pyramid's first level reads both eyes' 5.9 M depths. With one read of
+four depths a texel in place of 16, the level costs 0.27 ms. The coarser
+levels cost 0.05 ms together. From S2's first view the test passed 1661
+of the 26,325 boxes.
+
+**Slabs.** A slab is a box of an object's opaque cells alone, such as the
+inner layer of a wall. A box shows an eye no pixel when it lies whole
+behind a slab's face, inside the four planes through the eye and the
+face's edges. From S2's first view 19,707 boxes lie in the view. The 64
+slabs the eye sees widest hide 17,514 of them. The 16 widest hide 13,319,
+and all 4027 hide 18,294.
+
+**Slabs' shadows in a compute pass.** A compute pass tested each box's
+corners against each eye's shadows and wrote the flags. One draw of each
+run followed. Each 64 boxes first sorted the shadows by the box around
+them. S2:
+
+| Build | ms |
+| --- | ---: |
+| No test | 6.65 |
+| 16 shadows | 6.28 |
+| 32 shadows | 6.31 |
+| 64 shadows | 6.15 to 6.38 |
+| 64 shadows, with draws that read flags the test leaves alone | 7.21 |
+
+The pass costs 0.15 ms and 0.0065 ms more a shadow. With 64 shadows the
+draws save 1.06 ms.
+
+**Slabs' shadows on the CPU.** `BoxHide` tests the world box around each
+box as a frame is readied. The frame's runs leave out the boxes it hides
+from both eyes, and the shaders stay as they were. This Mac's images
+match with the test on and off in 96 runs: 16 scenes and models, each
+after six runs of frames from other eyes, with every scene tested.
+
+| Scene | Boxes | Left out | Before | After | CPU before | CPU after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| S2 | 26,325 | 22,743 | 6.63 | 5.12 | 0.28 | 1.14 |
+| S5 | 23,296 | 0 | 3.30 | 3.34 | 0.10 | 0.11 |
+| S1 | 426 | no test | 1.88 | 1.84 | 0.09 | 0.09 |
+| S4 | 2345 | no test | 3.01 | 3.01 | 0.10 | 0.10 |
+
+The test's time on S2, as it came down:
+
+| The test | ms a frame |
+| --- | ---: |
+| Each group of 64 boxes against each shadow, then its boxes | 5.3 |
+| A tree a placement. One tree in 16 searches, and the rest ask only whether a box's last shadow still holds it | 1.1 |
+| Nodes of 44 bytes with each tree's root first | 0.80 |
+
+A scene under 4096 boxes has no test. With one, S1 left out 41 boxes and
+S4 14. Neither frame's time moved, and the tests cost 0.10 and 0.18 ms of
+CPU. Finding an object's slabs takes this Mac about 20 ms a million
+cells. No trial model has 4096 boxes.
+
+**Outcomes.**
+
+1. S2 takes 5.12 ms on Quest, from 6.63, for 0.9 ms of CPU. A box left
+   out saves 66 ns
+2. Reading a frame's depth back costs what S2's hidden boxes do. The
+   pyramid takes 1.0 ms, and the draw it spares takes 1.0 ms
+3. A compute pass before the draws costs 0.15 ms with no work in it. A
+   box the vertices drop still costs its vertices, about 20 ns
+4. Slabs' shadows hide what the depth hid on S2, and need no depth
+5. No other bench scene and no trial model gains
+6. The headset rests through each run. The test's time under a moving
+   head is unmeasured
