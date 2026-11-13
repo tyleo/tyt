@@ -9,7 +9,7 @@ const VIEW: &str = "debug.voxrenderbench.view";
 /// statistics.
 const STATISTICS: &str = "debug.voxrenderbench.statistics";
 
-/// The system property that turns on the gallery of models.
+/// The system property that turns off the gallery of models.
 const MODELS: &str = "debug.voxrenderbench.models";
 
 /// The system property that turns on the gallery of test models.
@@ -45,7 +45,7 @@ pub struct RunOptions {
     pub statistics: bool,
 
     /// Whether the app shows the gallery of the models in its files in
-    /// place of a scene.
+    /// place of a scene, true when the property is unset.
     pub models: bool,
 
     /// Whether the gallery shows the test models in the app's files in
@@ -101,7 +101,7 @@ impl RunOptions {
         Ok(RunOptions {
             view: text(VIEW)?.unwrap_or_else(|| DEFAULT_VIEW.to_owned()),
             statistics: flag(STATISTICS, false)?,
-            models: flag(MODELS, false)?,
+            models: flag(MODELS, true)?,
             tests: flag(TESTS, false)?,
             model: text(MODEL)?,
             tour: positive(TOUR)?,

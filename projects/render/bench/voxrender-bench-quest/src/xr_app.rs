@@ -34,6 +34,10 @@ const MODELS: &str = "models";
 /// The directory of the gallery's test models within the app's files.
 const TESTS: &str = "tests";
 
+/// The model the gallery opens with when its directory holds it and no
+/// property picks another, as a path within the directory.
+const FIRST: &str = "valley-5km/valley-5km.voxjz";
+
 /// The most seconds one frame moves a gallery's wearer by. A longer gap
 /// between two frames is a stall.
 const STEP: f64 = 0.1;
@@ -123,11 +127,18 @@ impl XrApp {
         };
 
         let work = if let Some(shelf) = shelf {
+            let directory = files.join(shelf);
+
+            let first = options
+                .model
+                .as_deref()
+                .or_else(|| directory.join(FIRST).is_file().then_some(FIRST));
+
             let gallery = ModelGallery::new(
                 &gpu.device,
                 &gpu.queue,
-                &files.join(shelf),
-                options.model.as_deref(),
+                &directory,
+                first,
                 swapchain.format,
                 [width, height],
             )

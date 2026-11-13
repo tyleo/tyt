@@ -76,11 +76,13 @@ A reboot also clears the property.
 
 ## View
 
-With no property set, the app shows the bench scene S1 around the wearer.
-The box raster draws the scene for both eyes each frame.
-`debug.voxrenderbench.view` holds the start of another bench scene's name:
+`debug.voxrenderbench.models false` has the app show the bench scene S1
+around the wearer in place of its gallery. The box raster draws the scene
+for both eyes each frame. `debug.voxrenderbench.view` holds the start of
+another bench scene's name:
 
 ```sh
+adb shell setprop debug.voxrenderbench.models false
 adb shell setprop debug.voxrenderbench.view S2
 adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
 ```
@@ -110,18 +112,20 @@ sunlight that crosses them.
 
 ## Models
 
-`debug.voxrenderbench.models true` has the app show a gallery of Voxel Json
-models one at a time in place of a scene. The gallery draws each model as
-the view draws a scene. The gallery holds every `.voxj` and `.voxjz` document
-under `models` in the app's files. The models show in the order of their
-paths. `adb push` cannot create folders there, so the models go through a
-temporary folder:
+With no property set, the app shows a gallery of Voxel Json models one at
+a time. The gallery draws each model as the view draws a scene. The gallery
+holds every `.voxj` and `.voxjz` document under `models` in the app's
+files. The app stops at start while that folder holds none. The models show
+in the order of their paths. The gallery opens with
+`valley-5km/valley-5km.voxjz` when the folder holds it. The voxrender-wgpu
+[benchmarks](../../../../doc/plan/open/voxrender-wgpu/reference/benchmarks.md#the-5-km-valley-2026-11-13)
+give the commands that make that copy of the valley. `adb push` cannot
+create folders there, so the models go through a temporary folder:
 
 ```sh
 adb push <models-dir> /data/local/tmp/models
 adb shell cp -r /data/local/tmp/models /sdcard/Android/data/com.tyleo.voxrenderbench/files/
 adb shell rm -r /data/local/tmp/models
-adb shell setprop debug.voxrenderbench.models true
 adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
 ```
 
@@ -151,8 +155,6 @@ Two more properties steer a run:
    path holds the property's text
 2. `debug.voxrenderbench.tour` steps the gallery to the next model once each
    has shown for the property's count of seconds
-
-`setprop debug.voxrenderbench.models false` returns the app to its scene.
 
 ### Test models
 
