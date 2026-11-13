@@ -2816,3 +2816,78 @@ and S2's walls march.
    21,044 of 23,296, S4 1040 of 2345, and S1 200 of 426
 7. A hidden box costs by its triangles. The low-resolution depth test
    kills pixels once the near plane lets it, and S2's time holds
+
+## Glass's cost, exact cuts, 2026-11-13
+
+What the fish tank's glass fragments do, and three exact changes to them.
+One stays.
+
+- Device and method: as in Trial models, with a model held for 26 s.
+  Builds take turns in one sitting
+- Counts: this Mac, as in Where S2's frame goes, through a model's view
+  drawn for both eyes
+
+**The fish tank's glass fragments, counted.** The surfaces' box leaves
+the holes that Glass behind its tile's opaque box closed.
+
+| Glass fragments | The busy cells' box | The surfaces' box |
+| --- | ---: | ---: |
+| Start | 6.01 M | 3.94 M |
+| Cross the surfaces' box | 4.39 M | 3.94 M |
+| Pass a surface | 3.08 M | 2.88 M |
+| Cells read | 44.4 M | 34.3 M |
+
+**The fish tank on Quest, by what its glass fragments do.** App GPU p50
+in ms, before the change below:
+
+| The glass fragments | The busy cells' box | The surfaces' box |
+| --- | ---: | ---: |
+| None: the frame ends before the glass | 1.96 | |
+| Drop out at once | 2.18 | |
+| Drop out after the test of the surfaces' box | 2.16 | |
+| Walk, and shade no surface | 2.96 | 2.71 |
+| All | 4.95 | 4.15 |
+
+Closing the holes cost the tank 0.8 ms. The 6.0 M fragments take 0.2 ms
+to start and drop. The walks and the surfaces take the rest.
+
+**Clip distances.** A vertex stage gave each vertex of a glass box its
+distances inside the rays that cross the surfaces' box: two across each
+axis, from the two lines through the eye that touch the box's shadow
+along the axis. The rasterizer then starts the 4.39 M fragments alone.
+Each model's count of pixels off the reference holds on this Mac. Quest's
+driver loses the device when it builds the pipeline under multiview. The
+fragments the stage spares cost under 0.2 ms.
+
+**Steps to the surfaces through bits.** A walk took its steps from the
+face of the busy cells' box, with a test for a surface at each. A cell
+before the surfaces' box is opaque or empty. A ray now steps to that box
+through the tile's bits. The walk starts there.
+
+| Model | Before | After | Pixels off the reference |
+| --- | ---: | ---: | ---: |
+| fish tank | 4.98 | 4.65 | 2555 |
+| potion | 2.55 | 2.55 | 4874 |
+| lantern | 2.79 | 2.75 | 1210 |
+| spaceship bridge | 1.92 | 1.90 | 4231 |
+| glass chart | 1.82 | 1.72 | 3178 |
+
+Each count holds. The images move on 9 pixels of 2.96 M at the most. From
+an eye low in the glass chart the old walk left 20 stray pixels that the
+new one draws as their neighbors.
+
+**A record of surfaces.** A walk kept the surfaces it met in a register
+of four and shaded them in a loop of their own. The images hold. The fish
+tank takes 6.20 ms against 4.67, the potion 3.68 against 2.57, and the
+lantern 3.39 against 2.76.
+
+**Outcomes.**
+
+1. The fish tank takes 4.65 ms on Quest, from 4.98. Closing its holes now
+   costs it 0.5 ms
+2. Glass fragments that drop out a box at a time cost little. The
+   earlier trial's patterns among a pixel's neighbors cost most of a
+   shade
+3. Quest's driver fails a pipeline with clip distances under multiview
+4. Quest gains nothing from shading a wave's surfaces together. What the
+   record adds to a step costs more

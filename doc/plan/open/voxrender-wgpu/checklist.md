@@ -434,6 +434,13 @@ this order:
             several tiles with their cells whole
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
    first. Glass at half size follows as a property that is off by default
+      - [x] A ray steps to its tile's surfaces through the tile's bits.
+            The fish tank takes 4.65 ms on Quest, from 4.98
+      - [x] Two trials lost. Clip distances would start a glass fragment
+            only where its ray crosses the surfaces, and Quest's driver
+            fails them under multiview. A walk that shades its surfaces
+            in a loop of their own runs a third slower
+      - [ ] Glass at half size
 8. S6, the moving scene, joins the bench scenes. Its motion is a scripted
    function of time. The box view then moves a placement each frame: its
    matrices, the crossers of its boxes, and its lit words
