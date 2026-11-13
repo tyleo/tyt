@@ -18,8 +18,8 @@
 //
 // A box spans its tile's opaque cells too. The opaque view's depth holds
 // the faces of the box around those, which can lie before a surface they
-// do not hide. A walk that starts on its box then starts no later. An opaque
-// cell ends the walk.
+// do not hide. A ray that starts on its box then starts no later. An opaque
+// cell ends it, on its way to the surfaces or among them.
 //
 // A surface reflects the hemispheres alone. A ray that starts inside a
 // material leaves it for nothing in the box that holds the eye. A walk in
@@ -250,28 +250,56 @@ fn glass_walk(box: Box, start: vec3<f32>, direction: vec3<f32>, entry: vec3<bool
     let turn = select(-rate, rate, ahead);
     let nears = (select(high, low, ahead) - start) * turn;
     let fars = (select(low, high, ahead) - start) * turn;
+    let near = max(max(nears.x, max(nears.y, nears.z)), 0.0);
     let far = min(fars.x, min(fars.y, fars.z));
 
-    if far <= max(max(nears.x, max(nears.y, nears.z)), 0.0) {
+    if far <= near {
         discard;
     }
 
-    let cell = clamp(floor(start), box.low, box.high - 1.0);
     let strides = select(vec3<i32>(-16, -256, -1), vec3<i32>(16, 256, 1), ahead);
-    let within = start - cell;
+
+    // A busy cell on the ray's way to that box is opaque because the box
+    // holds every surface. It hides the surfaces. The ray steps to the box
+    // through the cells' bits alone, and the walk starts there. The fish
+    // tank drew 0.3 ms faster on Quest than with the walk's steps all the
+    // way. A ray whose first cell lies in the box has no way to step.
+    let outset = clamp(floor(start), box.low, box.high - 1.0);
+
+    if near > 0.0 && (any(outset < low) || any(outset >= high)) {
+        let within = start - outset;
+
+        var march = March(bit_of(outset), abs(select(within, 1.0 - within, ahead)) * rate, entry, 0.0);
+
+        loop {
+            if live(tile, march.bit) {
+                discard;
+            }
+
+            if !advance(&march, rate, strides, near * 0.99999) {
+                break;
+            }
+        }
+    }
+
+    // Where the walk starts, and the axis of the face it starts across.
+    let origin = start + direction * near;
+    let first = select(entry, least(-nears), vec3<bool>(near > 0.0));
+    let cell = clamp(floor(origin), low, high - 1.0);
+    let within = origin - cell;
     let next = abs(select(within, 1.0 - within, ahead)) * rate;
-    let end = far * 0.99999;
+    let end = (far - near) * 0.99999;
 
     let sides = sides_of(box);
 
-    var march = March(bit_of(cell), next, entry, 0.0);
+    var march = March(bit_of(cell), next, first, 0.0);
     var walked = Walked(vec3<f32>(0.0), vec3<f32>(1.0), 3u, vec3<f32>(0.0), vec3<f32>(1.0));
 
     // The word of the cell the ray stands in.
     var word = busy_cell(tile, march.bit);
 
-    if enters && word != OPAQUE {
-        walked = past(walked, sides, word, entry, ahead, false);
+    if (enters || near > 0.0) && word != OPAQUE {
+        walked = past(walked, sides, word, first, ahead, false);
     }
 
     while word != OPAQUE && advance(&march, rate, strides, end) {
