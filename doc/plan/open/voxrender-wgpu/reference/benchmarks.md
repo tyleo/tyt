@@ -2322,6 +2322,22 @@ in 71% of its time. It also casts a ray from each rough face of the valley,
 which took half again its time. The reach of two cells takes those rays
 back at 45,638 pixels off the reference, from 41,982.
 
+**A shadow at what a mirror ray meets.** The quad a mirror ray meets takes
+the sun with no shadow. A trial cast a second ray from the point toward the
+sun and dropped the sun where a quad stood in its way. The trial models'
+pixels off fell from 30,151 to 29,944 and the roughness chart's from 2489
+to 2391. Quest's app GPU p50 in ms:
+
+| Model | Sun whole at a mirror's hit | Sun shadowed |
+| --- | ---: | ---: |
+| chess set | 2.01 | 2.87 |
+| dragon | 2.21 | 2.98 |
+| pocket watch | 1.34 | 1.85 |
+| valley | 1.89 | 2.08 |
+
+The second ray costs a smooth model a third again its time for 207 pixels
+of 543,559. The trial drops.
+
 **Outcomes.**
 
 1. What a mirror ray meets shows by the share of the face's lobe that
@@ -2335,7 +2351,9 @@ back at 45,638 pixels off the reference, from 41,982.
 3. A face casts no ray that would end within two cells. Every trial model
    then draws in its old time or less on Quest, and a model of smooth
    faces in two thirds of it
-4. The chart joins the trial models in the headset's gallery
+4. The chart joins the bench's test models
+5. What a mirror ray meets keeps the sun with no shadow. A shadow ray
+   there costs more than it shows
 
 ## Bloom in the box view, 2026-11-12
 

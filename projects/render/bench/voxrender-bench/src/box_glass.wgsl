@@ -22,7 +22,8 @@
 // cell ends the walk.
 //
 // A surface reflects the hemispheres alone. A ray that starts inside a
-// material pays nothing for it.
+// material leaves it for nothing in the box that holds the eye. A walk in
+// any other box starts over and charges that exit.
 
 // `GlassTiles::ROWS`, the offset in a tile's words of its busy cells'
 // words, and `GlassTiles::OPAQUE`, an opaque cell's word.
