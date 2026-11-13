@@ -11,8 +11,8 @@ use std::{
 };
 use voxrender::{RenderBloom, RenderScene};
 use voxrender_bench::{
-    BoxView, Error as BenchError, ModelTiles, TileScene, bench_scene, lit_check, look_from,
-    model_scene, retain_headset_views, shape_view, view_check, view_image,
+    BoxView, Error as BenchError, ModelTiles, TileScene, ViewOptions, bench_scene, lit_check,
+    look_from, model_scene, retain_headset_views, shape_view, view_check, view_image,
 };
 
 // Internal API
@@ -70,7 +70,7 @@ enum Command {
         look: Look,
 
         #[command(flatten)]
-        pages: Pages,
+        draw: Draw,
     },
 
     /// Compares the shaded view of a bench scene or of a model with the
@@ -100,7 +100,7 @@ enum Command {
         look: Look,
 
         #[command(flatten)]
-        pages: Pages,
+        draw: Draw,
     },
 
     /// Compares the GPU's fill of the corner shadows of a bench scene or of
@@ -139,14 +139,28 @@ struct Look {
     look_at: Option<Vec<f64>>,
 }
 
-/// How a view pages a scene's tiles.
+/// How a view draws a scene.
 #[derive(Clone, Debug, Args)]
-struct Pages {
+struct Draw {
     /// The most bytes of a scene's tiles one page holds, in place of what
     /// one of the device's storage bindings holds. A small page draws a
     /// small scene in several.
     #[arg(value_name = "bytes", long, value_parser = value_parser!(u64).range(1024..))]
     page_bytes: Option<u64>,
+
+    /// The fewest pixels a voxel spans before a coarser copy of its object
+    /// draws in its place. Without it, every voxel draws.
+    #[arg(value_name = "pixels", long)]
+    detail: Option<f64>,
+}
+
+impl Draw {
+    fn options(&self) -> ViewOptions {
+        ViewOptions {
+            page_bytes: self.page_bytes,
+            detail: self.detail.unwrap_or(0.0),
+        }
+    }
 }
 
 fn main() {
@@ -159,16 +173,16 @@ fn main() {
             width,
             height,
             look,
-            pages,
-        } => view(&scene, &look, &pages, &output, width, height).map(|()| String::new()),
+            draw,
+        } => view(&scene, &look, &draw, &output, width, height).map(|()| String::new()),
 
         Command::ViewCheck {
             scene,
             size,
             headset,
             look,
-            pages,
-        } => check(&scene, &look, &pages, size, headset),
+            draw,
+        } => check(&scene, &look, &draw, size, headset),
 
         Command::LitCheck { scene } => check_lit(&scene),
     };
@@ -217,7 +231,7 @@ fn looked(scene: &str, look: &Look) -> Result<(RenderScene, RenderBloom)> {
     Ok((render_scene, bloom))
 }
 
-fn check(scene: &str, look: &Look, pages: &Pages, size: u32, headset: bool) -> Result<String> {
+fn check(scene: &str, look: &Look, draw: &Draw, size: u32, headset: bool) -> Result<String> {
     let (mut render_scene, bloom) = looked(scene, look)?;
 
     let view_ids = if headset {
@@ -240,7 +254,7 @@ fn check(scene: &str, look: &Look, pages: &Pages, size: u32, headset: bool) -> R
         view_ids,
         size,
         size,
-        pages.page_bytes,
+        &draw.options(),
     )
     .map_err(Error::Bench)
 }
@@ -255,19 +269,21 @@ fn check_lit(scene: &str) -> Result<String> {
 fn view(
     scene: &str,
     look: &Look,
-    pages: &Pages,
+    draw: &Draw,
     output: &Path,
     width: u32,
     height: u32,
 ) -> Result<()> {
     let gpu = headless_gpu()?;
     let glass = BoxView::draws_glass(&gpu.device);
+    let options = draw.options();
+    let coarser = options.detail > 0.0;
     let path = Path::new(scene);
 
     // A model loads an object at a time, and a scene with its view alone
     // frames it.
     let (tiles, mut frame, bloom) = if path.is_file() {
-        let model = ModelTiles::load(path, glass).map_err(Error::Bench)?;
+        let model = ModelTiles::load(path, glass, coarser).map_err(Error::Bench)?;
         let mut frame = RenderScene::default();
 
         frame
@@ -277,7 +293,7 @@ fn view(
         (model.tiles, frame, model.bloom)
     } else {
         let (render_scene, bloom) = scene_of(scene)?;
-        let tiles = TileScene::of(&render_scene, glass).map_err(Error::Bench)?;
+        let tiles = TileScene::of(&render_scene, glass, coarser).map_err(Error::Bench)?;
 
         (tiles, render_scene, bloom)
     };
@@ -297,7 +313,7 @@ fn view(
         bloom,
         [view_id; 2],
         [width, height],
-        pages.page_bytes,
+        &options,
     )
     .map_err(Error::Bench)?;
 

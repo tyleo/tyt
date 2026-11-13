@@ -72,12 +72,18 @@ pub struct TileMasks {
     /// The offset in [`words`](Self::words) of each solid box's tile.
     pub solid_tiles: Vec<u32>,
 
+    /// The place of each solid box's tile among the non-empty tiles.
+    pub solid_places: Vec<u32>,
+
     /// The box around each tile's live cells outside its solid boxes, in
     /// raster order.
     pub boxes: Vec<CellBox>,
 
     /// The offset in [`words`](Self::words) of each box's tile.
     pub tiles: Vec<u32>,
+
+    /// The place of each box's tile among the non-empty tiles.
+    pub places: Vec<u32>,
 
     /// Each non-empty tile's low corner, in the order of the tiles' words.
     pub corners: Vec<TyVector3U32>,
@@ -161,8 +167,10 @@ impl TileMasks {
         let mut masks = TileMasks {
             solids: Vec::new(),
             solid_tiles: Vec::new(),
+            solid_places: Vec::new(),
             boxes: Vec::new(),
             tiles: Vec::new(),
+            places: Vec::new(),
             corners: Vec::new(),
             offsets: Vec::new(),
             recorded: Vec::new(),
@@ -321,6 +329,8 @@ impl TileMasks {
     /// `offset` and whose cells are `live`: its solid boxes when `solids`,
     /// then the box around its other live cells.
     fn push_boxes(&mut self, corner: TyVector3U32, offset: u32, live: Vec<bool>, solids: bool) {
+        let place = u32::try_from(self.corners.len()).expect("an object's tiles number under 2^32");
+
         self.corners.push(corner);
         self.offsets.push(offset);
 
@@ -349,6 +359,7 @@ impl TileMasks {
                 for (low, high) in boxes {
                     self.solids.push((corner + low, corner + high));
                     self.solid_tiles.push(offset);
+                    self.solid_places.push(place);
                 }
             }
         }
@@ -356,6 +367,7 @@ impl TileMasks {
         if let Some((low, high)) = tile.around() {
             self.boxes.push((corner + low, corner + high));
             self.tiles.push(offset);
+            self.places.push(place);
         }
     }
 }

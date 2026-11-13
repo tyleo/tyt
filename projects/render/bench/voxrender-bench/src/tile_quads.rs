@@ -11,7 +11,8 @@ const TILE: u32 = 16;
 type CellBox = (TyVector3U32, TyVector3U32);
 
 /// Each object's opaque quads, in the order of `tiles`' objects. A greedy
-/// run merges the cells of one material alone, so a quad holds one.
+/// run merges the cells of one material alone, so a quad holds one. An
+/// object's coarser copies keep none, because a ray traces the object.
 ///
 /// With `reach`, an object keeps only the quads a mirror ray can meet.
 /// `reach` gives the cells a ray from a face of a material runs, or zero
@@ -25,24 +26,30 @@ type CellBox = (TyVector3U32, TyVector3U32);
 /// run merges within a tile there. An object whose every cell lies in one
 /// box merges across its tiles, as it does with no `reach`.
 pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<ObjectQuads> {
+    let copies = || tiles.spans.iter().map(|&span| span > 1);
+
     let Some(reach) = reach else {
-        return tiles
-            .objects
-            .iter()
-            .map(|object| {
+        return (tiles.objects.iter().zip(copies()))
+            .map(|(object, copy)| {
                 let mut quads = ObjectQuads::default();
 
-                push_region(&mut quads, object, (TyVector3U32::ZERO, object.bounds));
+                if !copy {
+                    push_region(&mut quads, object, (TyVector3U32::ZERO, object.bounds));
+                }
 
                 quads
             })
             .collect();
     };
 
-    let casts: Vec<_> = tiles
-        .objects
-        .iter()
-        .map(|object| cast_boxes(object, reach))
+    let casts: Vec<_> = (tiles.objects.iter().zip(copies()))
+        .map(|(object, copy)| {
+            if copy {
+                Vec::new()
+            } else {
+                cast_boxes(object, reach)
+            }
+        })
         .collect();
 
     // The world box each placement's rays can end in, for each box of its
@@ -77,6 +84,10 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
     let mut kept: Vec<Vec<CellBox>> = vec![Vec::new(); tiles.objects.len()];
 
     for (object, transform) in &tiles.placements {
+        if tiles.spans[*object] > 1 {
+            continue;
+        }
+
         let bounds = tiles.objects[*object].bounds;
 
         let (least, most) = corners(TyVector3F64::ZERO, bounds.as_dvec3())
@@ -338,7 +349,7 @@ mod tests {
 
         let _: U32Id<_> = glossy;
 
-        TileScene::of(&scene, false).unwrap()
+        TileScene::of(&scene, false, false).unwrap()
     }
 
     #[test]

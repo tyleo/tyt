@@ -59,6 +59,10 @@ pub struct ModelGallery {
 
     size: [u32; 2],
 
+    /// The fewest pixels a cell spans before a coarser copy draws in its
+    /// place, or zero for a gallery whose models keep no copies.
+    detail: f64,
+
     directory: PathBuf,
 
     /// The models' documents, in the order of their paths.
@@ -104,8 +108,10 @@ impl ModelGallery {
     /// starts loading the first for a two-layer target of `format` whose
     /// width and height are `size`. With `first`, the gallery starts at
     /// the first document whose path under `directory` holds that text.
-    /// Errors if the directory does not list, holds no document, or holds
-    /// none with `first` in its path.
+    /// With a `detail` over zero, each model keeps coarser copies of its
+    /// objects, and its view takes `detail` as [`HeadsetView::set_detail`]
+    /// does. Errors if the directory does not list, holds no document, or
+    /// holds none with `first` in its path.
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -113,6 +119,7 @@ impl ModelGallery {
         first: Option<&str>,
         format: TextureFormat,
         size: [u32; 2],
+        detail: f64,
     ) -> Result<Self> {
         let mut paths = Vec::new();
 
@@ -135,6 +142,7 @@ impl ModelGallery {
             queue: queue.clone(),
             format,
             size,
+            detail,
             directory: directory.to_owned(),
             paths,
             shown: None,
@@ -265,16 +273,17 @@ impl ModelGallery {
         let path = self.paths[self.wanted].clone();
         let format = self.format;
         let size = self.size;
+        let detail = self.detail;
 
         thread::spawn(move || {
             let start = Instant::now();
 
             let glass = BoxView::draws_glass(&device);
 
-            let loaded = ModelTiles::load(&path, glass).and_then(|model| {
+            let loaded = ModelTiles::load(&path, glass, detail > 0.0).and_then(|model| {
                 let tiled = start.elapsed().as_secs_f64();
 
-                let view = HeadsetView::new(
+                let mut view = HeadsetView::new(
                     &device,
                     &queue,
                     &model.tiles,
@@ -283,6 +292,8 @@ impl ModelGallery {
                     format,
                     size,
                 )?;
+
+                view.set_detail(detail);
 
                 Ok((
                     view,

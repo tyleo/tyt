@@ -26,12 +26,12 @@ pub struct ModelTiles {
 impl ModelTiles {
     /// Loads the document at `path` an object at a time. The loader holds
     /// one object's grid while the scene keeps the tiles of the rest, so a
-    /// document can hold more cells than the device has room for. With
-    /// `glass`, the scene keeps the surfaces between materials that pass
-    /// light. Errors if the document does not load, holds no live voxel,
-    /// or holds a material the contract cannot shade, and as
+    /// document can hold more cells than the device has room for. The
+    /// scene takes `glass` and `coarser` as [`TileScene::new`] does. Errors
+    /// if the document does not load, holds no live voxel, or holds a
+    /// material the contract cannot shade, and as
     /// [`TileScene::push_scene`] does.
-    pub fn load(path: &Path, glass: bool) -> Result<Self> {
+    pub fn load(path: &Path, glass: bool, coarser: bool) -> Result<Self> {
         let model = |error: String| Error::Model {
             path: path.to_owned(),
             error,
@@ -79,7 +79,7 @@ impl ModelTiles {
             .map(|object| mem::take(&mut object.bounds))
             .collect();
 
-        let mut tiles = TileScene::new(glass);
+        let mut tiles = TileScene::new(glass, coarser);
         let mut bounds: Option<TyBoundsF64> = None;
 
         for index in 0..held.len() {

@@ -25,6 +25,7 @@ mod tile_scene;
 mod view_check;
 mod view_eye;
 mod view_image;
+mod view_options;
 
 pub use bench_scene::*;
 pub use box_view::*;
@@ -47,6 +48,7 @@ pub use tile_scene::*;
 pub use view_check::*;
 pub use view_eye::*;
 pub use view_image::*;
+pub use view_options::*;
 
 // Internal API
 
@@ -64,6 +66,7 @@ mod caster_tiles;
 mod cell_grid;
 mod cell_noise;
 mod city_scene;
+mod detail_tree;
 mod eye_view;
 mod face_shadow;
 mod fitted_view;
@@ -107,6 +110,7 @@ pub(crate) use caster_tiles::*;
 pub(crate) use cell_grid::*;
 pub(crate) use cell_noise::*;
 pub(crate) use city_scene::*;
+pub(crate) use detail_tree::*;
 pub(crate) use eye_view::*;
 pub(crate) use face_shadow::*;
 pub(crate) use fitted_view::*;

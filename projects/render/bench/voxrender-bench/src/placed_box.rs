@@ -21,6 +21,10 @@ pub struct PlacedBox {
     /// The corner past the box's high cell.
     pub high: TyVector3U32,
 
+    /// How many of its object's cells one of the box's cells spans, over
+    /// one for a box of an object's coarser copy.
+    pub span: u32,
+
     /// The placement's transform.
     transform: TyTransformF64,
 
@@ -37,9 +41,12 @@ impl PlacedBox {
     ///    object's cells to the world
     /// 2. `boxes`: each object's boxes as low cells and the corners past
     ///    their high cells
+    /// 3. `spans`: how many cells of the object it copies one of each
+    ///    object's cells spans
     pub fn list(
         placements: &[(usize, TyTransformF64)],
         boxes: &[&[(TyVector3U32, TyVector3U32)]],
+        spans: &[u32],
     ) -> Vec<Self> {
         let mut placed = Vec::new();
 
@@ -70,6 +77,7 @@ impl PlacedBox {
                     brick,
                     low,
                     high,
+                    span: spans[*object],
                     transform: *transform,
                     world,
                 });
@@ -141,8 +149,10 @@ impl PlacedBox {
     }
 
     /// For each of `marched`, the boxes of other placements that share
-    /// space with it. A crosser's entry holds a box's index in `marched`
-    /// followed by `solid`.
+    /// space with it and span as many cells of their objects. A view draws
+    /// an object or one of its coarser copies in a place, never both, so
+    /// boxes that span unlike counts never draw over one another's cells. A
+    /// crosser's entry holds a box's index in `marched` followed by `solid`.
     pub fn crossers(marched: &[Self], solid: &[Self]) -> Vec<Vec<BoxCrosser>> {
         // Every box with its index. A sweep along x then compares only
         // boxes whose spans meet.
@@ -174,6 +184,7 @@ impl PlacedBox {
                 }
 
                 let apart = a.placement == b.placement
+                    || a.span != b.span
                     || (a.world.0 + TOUCH).cmpge(b.world.1).any()
                     || (b.world.0 + TOUCH).cmpge(a.world.1).any()
                     || a.parted_from(b);
@@ -255,7 +266,7 @@ mod tests {
         });
 
         let cube = [(TyVector3U32::ZERO, TyVector3U32::splat(16))];
-        let placed = PlacedBox::list(&placements, &[&cube]);
+        let placed = PlacedBox::list(&placements, &[&cube], &[1]);
 
         // The second and third cubes share the cells from x = 24 to 32:
         // the second's 8 to 16, and the third's 0 to 8.

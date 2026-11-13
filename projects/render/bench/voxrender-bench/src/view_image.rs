@@ -1,4 +1,6 @@
-use crate::{BoxView, Error, Gpu, Result, TileScene, ViewEye, map_readback, world_to_clip};
+use crate::{
+    BoxView, Error, Gpu, Result, TileScene, ViewEye, ViewOptions, map_readback, world_to_clip,
+};
 use branded_id::U32Id;
 use std::num::NonZeroU32;
 use voxrender::{BRenderView, Error as RenderError, RenderBloom, RenderScene};
@@ -15,10 +17,9 @@ const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
 /// A [`BoxView`] of `tiles` under `bloom` through two of `scene`'s views,
 /// one an eye, as each eye's sRGB texels of an image whose width and
-/// height are `size`, four bytes each, row by row. With `page_bytes`, the
-/// view's pages take that many bytes each, as [`BoxView::paged`] has them.
-/// Errors unless the views are the scene's and the device has multiview,
-/// and as the view does.
+/// height are `size`, four bytes each, row by row. The view draws as
+/// `options` have it. Errors unless the views are the scene's and the
+/// device has multiview, and as the view does.
 pub fn view_image(
     gpu: &Gpu,
     tiles: &TileScene,
@@ -26,7 +27,7 @@ pub fn view_image(
     bloom: RenderBloom,
     view_ids: [U32Id<BRenderView>; 2],
     size: [u32; 2],
-    page_bytes: Option<u64>,
+    options: &ViewOptions,
 ) -> Result<[Vec<u8>; 2]> {
     let [width, height] = size;
 
@@ -43,10 +44,12 @@ pub fn view_image(
 
     let eyes = [eye(view_ids[0])?, eye(view_ids[1])?];
 
-    let mut boxes = match page_bytes {
+    let mut boxes = match options.page_bytes {
         Some(bytes) => BoxView::paged(&gpu.device, &gpu.queue, tiles, bloom, FORMAT, size, bytes),
         None => BoxView::new(&gpu.device, &gpu.queue, tiles, bloom, FORMAT, size),
     }?;
+
+    boxes.set_detail(options.detail);
 
     boxes.prepare(&gpu.queue, &eyes, 1.0);
 

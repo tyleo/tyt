@@ -22,7 +22,7 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         .ok_or(Error::NoSun)?;
 
     // Every material counts as opaque.
-    let mut scene_tiles = TileScene::new(false);
+    let mut scene_tiles = TileScene::new(false, false);
 
     scene_tiles.solid = true;
     scene_tiles.push_scene(scene)?;
