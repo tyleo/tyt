@@ -10,7 +10,7 @@ use ty_math::{
 };
 use voxcore::material;
 use voxrender::{RenderBloom, RenderLight, RenderScene, grid_point, tonemap};
-use voxsurface::{SurfaceMethod, mesh_grid};
+use voxsurface::{SurfaceMethod, mesh_grid_keyed};
 use wgpu::{
     AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
     Device, Extent3d, Features, FilterMode, LoadOp, Operations, Queue, RenderPass,
@@ -972,12 +972,21 @@ impl BoxView {
                 queue,
                 scene,
                 |object| {
-                    mesh_grid(
+                    // A quad shades as one material, so a run merges the
+                    // cells of one material alone.
+                    mesh_grid_keyed(
                         &MaterialGrid {
                             object,
                             opaque: &opaque,
                         },
                         SurfaceMethod::Greedy,
+                        &|cell| {
+                            object
+                                .voxel_material(cell)
+                                .expect("a grid's cell holds a material")
+                                .to_u32()
+                        },
+                        &|_| true,
                     )
                 },
                 |_, first_quad| first_quad,
