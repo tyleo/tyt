@@ -211,20 +211,8 @@ fn vertex_of(
     );
 }
 
-// A corner of the box, for its back faces. Bit `a` of `corner` picks the
-// box's high face on axis `a`.
-@vertex
-fn place(
-    @builtin(view_index) eye: u32,
-    @location(0) corner: u32,
-    @location(1) low: vec4<u32>,
-    @location(2) high: vec4<u32>,
-    @location(3) more: vec4<u32>,
-) -> Box {
-    return vertex_of(eye, corner_of(corner, low, high), corner_face(corner), low, high, more);
-}
-
-// `place` for the back faces `inside` shades.
+// A corner of the box, for the back faces `inside` shades. Bit `a` of
+// `corner` picks the box's high face on axis `a`.
 @vertex
 fn place_near(
     @builtin(view_index) eye: u32,
@@ -240,7 +228,7 @@ fn place_near(
     return box;
 }
 
-// `place` for the back faces `held` shades, at the nearest depth. A box
+// `place_near` for the back faces `held` shades, at the nearest depth. A box
 // that does not hold the eye draws nothing.
 @vertex
 fn place_held(

@@ -1,4 +1,4 @@
-use crate::{BoxBindings, BoxFaces, BoxPart, HitTargets};
+use crate::{BoxBindings, BoxFaces, BoxPart};
 use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
@@ -47,7 +47,7 @@ const GLASS_BIAS: i32 = 1024;
 type PipelineKey<'a> = (usize, &'a str, &'a str, bool, bool);
 
 /// A view's boxes and the pipelines that draw their faces, with depth in
-/// [`HitTargets::DEPTH`].
+/// [`DEPTH`](Self::DEPTH).
 ///
 /// Each run draws in a pass of its own, which loads what the pass before it
 /// stored. On Quest a second draw in a pass costs every box and pixel of
@@ -93,10 +93,13 @@ impl BoxDraw {
     /// The bytes of a box's three `vec4<u32>`s.
     pub const BOX_BYTES: usize = 48;
 
+    /// The depth format. Depth runs reversed in f32.
+    pub const DEPTH: TextureFormat = TextureFormat::Depth32Float;
+
     /// Builds the pipelines over `modules`, whose vertex entries take a
-    /// vertex's bits and a box's three `vec4<u32>`s: `place`, `place_near`,
-    /// and `place_held` a corner of the box, and `place_front` a vertex of
-    /// one of its three faces toward the view. A module needs the entries
+    /// vertex's bits and a box's three `vec4<u32>`s: `place_near` and
+    /// `place_held` a corner of the box, and `place_front` a vertex of one
+    /// of its three faces toward the view. A module needs the entries
     /// its parts' faces draw through.
     ///
     /// # Arguments
@@ -275,7 +278,7 @@ impl BoxDraw {
                     ..PrimitiveState::default()
                 },
                 depth_stencil: Some(DepthStencilState {
-                    format: HitTargets::DEPTH,
+                    format: Self::DEPTH,
                     depth_write_enabled: Some(!glass),
                     depth_compare: Some(CompareFunction::Greater),
                     stencil: StencilState::default(),
@@ -333,7 +336,6 @@ impl BoxDraw {
 
             let (vertex, backs) = match part.faces {
                 BoxFaces::Front => ("place_front", false),
-                BoxFaces::Back => ("place", true),
                 BoxFaces::NearBack => ("place_near", true),
                 BoxFaces::Held => ("place_held", true),
             };
@@ -424,7 +426,7 @@ impl BoxDraw {
             },
             primitive: PrimitiveState::default(),
             depth_stencil: Some(DepthStencilState {
-                format: HitTargets::DEPTH,
+                format: Self::DEPTH,
                 depth_write_enabled: Some(false),
                 depth_compare: Some(CompareFunction::Equal),
                 stencil: StencilState::default(),

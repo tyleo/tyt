@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "voxrender's GPU benchmarks as a Meta Quest OpenXR app."
+description = "voxrender-bench's headset view and model gallery as a Meta Quest OpenXR app."
 publish = false
 
 [lib]

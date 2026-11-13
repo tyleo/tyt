@@ -4,7 +4,7 @@
 //
 // `front`, `crossed`, `inside`, and `held` discard a miss and keep the depth
 // their vertices give, which lets the depth test run before the march.
-// `exact` writes the hit's depth. `solid` marches nothing.
+// `solid` marches nothing.
 //
 // Under face depth the nearest face wins a pixel. That face must then hold
 // the pixel's first hit, so a front face's fragment finds the first hit of
@@ -58,11 +58,6 @@
 // What a perspective view's reversed depth scales by to come a part in 1024
 // nearer.
 const NEARER: f32 = 1.0 + 1.0 / 1024.0;
-
-struct Fragment {
-    @location(0) hit: vec4<f32>,
-    @builtin(frag_depth) depth: f32,
-}
 
 // The bit of a `crossers` entry that marks a solid box.
 const SOLID: u32 = 0x80000000u;
@@ -549,22 +544,6 @@ fn inside(box: Box) -> @location(0) vec4<f32> {
     }
 
     return shade(source_of(box), hit, box.point, direction_of(box));
-}
-
-// A back face's fragment that writes its hit's depth. A depth of zero fails
-// the depth test, so a miss writes nothing.
-@fragment
-fn exact(box: Box) -> Fragment {
-    let hit = hit_from_back(box);
-
-    if !hit.found {
-        return Fragment(vec4<f32>(0.0), 0.0);
-    }
-
-    return Fragment(
-        shade(source_of(box), hit, box.point, direction_of(box)),
-        (box.clip.z - hit.along * box.fall * (1.0 - RAY_W)) / (1.0 + hit.along * RAY_W),
-    );
 }
 
 // A solid box's fragment. The rasterizer's point lies on a live cell's face.

@@ -11,9 +11,8 @@ use voxrender::{
     },
 };
 
-/// The golden, precision-sim, and bench scenes B1 runs over, each with the
-/// name its report gives it.
-pub fn b1_scenes() -> Vec<(&'static str, RenderScene)> {
+/// The golden, precision-sim, and bench scenes, each with its name.
+pub fn bench_scenes() -> Vec<(&'static str, RenderScene)> {
     vec![
         ("cube", cube_scene(RenderShadow::PerPixel)),
         ("glass", glass_scene(RenderShadow::PerPixel)),

@@ -1,5 +1,5 @@
 use crate::{
-    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, GlassTiles, HitTargets, LitFill,
+    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, GlassTiles, LitFill,
     MaterialGrid, PassTerms, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
 };
 use branded_id::U32Id;
@@ -240,7 +240,7 @@ impl BoxView {
     pub const MIRROR_REACH: f32 = 2.0;
 
     /// The format of the depth a pass that draws the view clears to zero.
-    pub const DEPTH: TextureFormat = HitTargets::DEPTH;
+    pub const DEPTH: TextureFormat = BoxDraw::DEPTH;
 
     /// Builds the view of `scene` under `bloom` and submits the fill of the
     /// sun's corner shadows. The view draws to a two-layer target of

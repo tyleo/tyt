@@ -181,7 +181,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ### Quest builds
 
-`voxrender-bench-quest` runs voxrender's GPU benchmarks as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The crate's [README](projects/render/bench/voxrender-bench-quest/README.md) holds the build and run commands. Gradle needs no install because the crate checks in its wrapper.
+`voxrender-bench-quest` runs voxrender-bench's headset view and model gallery as a Meta Quest 3 app. Gradle and cargo-ndk build it on macOS with the tools below. Each step follows its tool's recommended install. The crate's [README](projects/render/bench/voxrender-bench-quest/README.md) holds the build and run commands. Gradle needs no install because the crate checks in its wrapper.
 
 1. A JDK starts Gradle. Gradle then fetches the JDK its daemon pins. Adoptium recommends a package manager:
 

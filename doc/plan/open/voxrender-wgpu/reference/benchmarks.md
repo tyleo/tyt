@@ -2605,3 +2605,23 @@ draws whole, with no torn tile.
    eye inside a material. A pane in the chart shows the floor's reflection
    in the reference and the sky's here
 
+
+## The arms that lost, 2026-11-13
+
+The bench dropped every arm the box raster beat. Commit `8738c1cb` is the
+last that holds them. At that commit `voxrender-bench-desktop` runs `b1`,
+`b1-times`, and `b2-times`, and the Quest app runs B1, B2's timer, and the
+profile, as the sections above ran them.
+
+| Gone | Its runs above |
+| --- | --- |
+| The tree walk and its 64-tree | B2, S9.4 rungs 2 and 3, S9.7 |
+| The ray query's marches over bricks and triangles | B2, S9.4 rung 8 |
+| The first box rasters, which drew ids | S9.4 raster then march |
+| The greedy-mesh raster | S9.3 raster |
+| The step loops, the launch kernels, and the depth and subgroup probes | B2 re-baseline, S9.4 rungs 6 and 9 |
+| B1's id check, B2's timer, and the kernel profile | B1, B2 |
+
+The view draws the same after the pass. `view-check` on this Mac counts 6
+pixels off on S1, 99 on S5, 17 on S2, 72 on S4, and none inside a bush.
+`lit-check` counts 15 of S1's 107,743 corners.

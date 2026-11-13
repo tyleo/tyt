@@ -5,9 +5,8 @@ use wgpu::{
     RequestAdapterOptions,
 };
 
-/// The high-performance adapter's device with default limits, and with
-/// timestamp queries, ray queries, subgroups, multiview, multisampled
-/// arrays, and early depth tests when the adapter has them.
+/// The high-performance adapter's device with default limits, and with ray
+/// queries, multiview, and dual-source blending when the adapter has them.
 pub fn headless_gpu() -> Result<Gpu> {
     let instance = Instance::default();
 
@@ -18,13 +17,7 @@ pub fn headless_gpu() -> Result<Gpu> {
     .map_err(Error::Adapter)?;
 
     let features = adapter.features()
-        & (Features::TIMESTAMP_QUERY
-            | Features::EXPERIMENTAL_RAY_QUERY
-            | Features::SUBGROUP
-            | Features::MULTIVIEW
-            | Features::MULTISAMPLE_ARRAY
-            | Features::SHADER_EARLY_DEPTH_TEST
-            | Features::DUAL_SOURCE_BLENDING);
+        & (Features::EXPERIMENTAL_RAY_QUERY | Features::MULTIVIEW | Features::DUAL_SOURCE_BLENDING);
 
     let mut limits = if features.contains(Features::EXPERIMENTAL_RAY_QUERY) {
         Limits::default().using_acceleration_structure_values(adapter.limits())
@@ -32,7 +25,7 @@ pub fn headless_gpu() -> Result<Gpu> {
         Limits::default()
     };
 
-    // The multiview raster draws both eyes.
+    // A view draws both eyes in multiview passes.
     if features.contains(Features::MULTIVIEW) {
         limits.max_multiview_view_count = 2;
     }
@@ -41,8 +34,8 @@ pub fn headless_gpu() -> Result<Gpu> {
         label: Some("voxrender-bench-desktop"),
         required_features: features,
         required_limits: limits,
-        // SAFETY: the bench accepts ray queries' experimental status. Its ids
-        // check their hits against the reference.
+        // SAFETY: the bench accepts ray queries' experimental status.
+        // `view-check` judges what they draw against the reference.
         experimental_features: unsafe { ExperimentalFeatures::enabled() },
         ..DeviceDescriptor::default()
     }))

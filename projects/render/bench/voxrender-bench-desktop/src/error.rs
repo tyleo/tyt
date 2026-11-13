@@ -5,9 +5,9 @@ use std::{
     io::Error as IOError,
 };
 use voxrender_bench::Error as BenchError;
-use wgpu::{PollError, RequestAdapterError, RequestDeviceError};
+use wgpu::{RequestAdapterError, RequestDeviceError};
 
-/// Why the app failed to run a benchmark.
+/// Why the app failed.
 #[derive(Debug)]
 pub enum Error {
     /// No GPU adapter was found.
@@ -16,11 +16,8 @@ pub enum Error {
     /// The adapter would not open a device.
     Device(RequestDeviceError),
 
-    /// The benchmark failed.
+    /// The view or its check failed.
     Bench(BenchError),
-
-    /// Waiting on the GPU failed.
-    Poll(PollError),
 
     /// No bench scene's name starts with the text.
     NoScene(String),
@@ -38,7 +35,6 @@ impl Display for Error {
             Error::Adapter(error) => write!(f, "no GPU adapter: {error}"),
             Error::Device(error) => write!(f, "no GPU device: {error}"),
             Error::Bench(error) => write!(f, "{error}"),
-            Error::Poll(error) => write!(f, "waiting on the GPU failed: {error}"),
             Error::NoScene(name) => write!(f, "no bench scene's name starts with {name:?}"),
             Error::Write(error) => write!(f, "the image's file would not open: {error}"),
             Error::Png(error) => write!(f, "the image would not encode: {error}"),
