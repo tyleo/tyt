@@ -334,8 +334,8 @@ code-level choices in
             - [x] A frame's time splits into 0.3 ms, about 55 ns a box,
                   and 0.29 to 0.84 ns a pixel. Three faces over 7 corners
                   take S5 to 3.40 ms, under B3's line
-            - [ ] The project lead tries the scale in the headset and
-                  keeps it or drops it
+            - [x] The scale stays a property. The eyes draw at full size
+                  unless a frame cannot fit
             - [ ] Quad views, four views of 840 by 880. By the split they
                   gain S1 and S4 a quarter and cost S5. The app draws
                   them once B6's LOD holds a scene's boxes down
@@ -347,8 +347,9 @@ code-level choices in
 ## Later
 
 The steps after S9 get their detail as they come up. On 2026-11-12 the
-project lead put the trial models' look in the headset first. The steps run
-in this order:
+project lead put the trial models' look in the headset first. On 2026-11-13
+the lead moved level of detail ahead of the moving scene. The steps run in
+this order:
 
 1. Reflections that follow the contract's materials
       - [x] A rough face mirrors less. The reference showed a face's mirror
@@ -399,14 +400,20 @@ in this order:
             sorts
 4. A pass over the bench's code and tests that drops what the box raster
    left without a use
-5. The stereo view in the reference: two off-axis frusta and a head pose
-6. S6, the moving scene, joins the bench scenes. Its motion is a scripted
+5. A perspective view by its four edges in `voxrender`. `view-check` then
+   compares a headset's two eyes with the reference
+6. Level of detail. The reference's brick LOD rule comes first, with the
+   point both eyes measure a distance from. The box view's LOD and B6
+   follow
+7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
+   first. Glass at half size follows as a property that is off by default
+8. S6, the moving scene, joins the bench scenes. Its motion is a scripted
    function of time. The box view then moves a placement each frame: its
    matrices, the crossers of its boxes, and its lit words
-7. B3, one step per arm the B2 rate allows, then the shootout
-8. The reference rules B5 and B6 need, each before its benchmark: the
-   shadow memo's tier rules, `msaa4`, and brick LOD
-9. B5 and B6. A step starts with a study where its line in the frame
-   budget is in doubt. B5 is one. A fill of the tiles one mover changes
-   takes 1.8 to 3.6 ms on Quest against a line of 1.0 ms
-10. B8 to B12
+9. B3's run of the box raster at p99 on S1 and S5. S9 timed the other arms
+10. The reference rules B5 needs before it runs: the shadow memo's tier
+    rules and `msaa4`
+11. B5. It starts with a study because its line in the frame budget is in
+    doubt. A fill of the tiles one mover changes takes 1.8 to 3.6 ms on
+    Quest against a line of 1.0 ms
+12. B8 to B12. B12 runs the box raster on each phone first

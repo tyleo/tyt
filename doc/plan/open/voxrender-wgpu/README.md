@@ -31,9 +31,11 @@ The research found that a full-density march on Quest 3 likely falls about 3x
 short of the frame budget. The finding rests on estimates. Nobody has measured
 our walk on the device, so this plan measures before it builds. The research's
 section 7 lays out benchmarks B0 to B12, each with its setup, a pass or fail
-threshold, and the action for each outcome. B3 picks the Quest front end from
-five candidates. The renderer's design settles after B3. The steps that build
-it join this plan then.
+threshold, and the action for each outcome. B3 was to pick the Quest front end
+from five candidates. S9's runs picked it early. The box raster, B3's fragment
+march over proxies, is the one arm under the 3.5 ms line on S1 and S5. The
+project lead confirmed it on 2026-11-13. The steps that build the renderer
+join this plan as they come up.
 
 A benchmark that needs a contract rule gets the rule in the reference first. A
 GPU tier is then judged against goldens the reference renders under that rule.
@@ -99,6 +101,17 @@ knows transparency, so a raster arm can show the glass the reference renders.
    `voxrender-bench-quest`'s README holds the build and run commands
 8. Phones come last. B12 and the phone half of B1 run when a device is at
    hand
+9. One renderer serves desktop, Quest, and phones. A phone runs the box
+   raster first. A second renderer needs a measured failure on a phone. This
+   replaces the two phone tiers of the research's
+   [section 3.14](reference/research.md#314-phones)
+10. A fix that keeps the image exact comes before a lossy cut. A lossy cut is
+    a property that is off by default. The render scale is one. Glass at half
+    size would be another
+11. `voxrender`'s perspective projection holds one set of values, the slopes
+    of its four edges. The layers above map a field of view or a headset's
+    eye into those slopes. The renderer never branches on how a view was
+    given
 
 ## Out of scope
 
