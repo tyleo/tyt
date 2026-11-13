@@ -43,9 +43,7 @@ const LOST: f64 = 1.0 / 1024.0 / 1024.0;
 /// for its next, up to [`LONGEST`] tests. A box that comes to hide can then
 /// draw for some frames more, which costs time and no pixel.
 pub struct BoxHide {
-    /// Each slab's corners in the world, as [`FaceShadow::new`] takes
-    /// them.
-    slabs: Vec<[TyVector3F64; 8]>,
+    slabs: Vec<Slab>,
 
     /// The slab in each of the eyes' shadows. A slab keeps its place from
     /// one aim to the next, so the shadow a box remembers stays that
@@ -56,6 +54,61 @@ pub struct BoxHide {
 
     /// What a box keeps inside a shadow's planes by, in world meters.
     lost: f64,
+}
+
+/// A slab of opaque cells, with what an aim ranks it by.
+struct Slab {
+    /// The corners in the world, as [`FaceShadow::new`] takes them.
+    corners: [TyVector3F64; 8],
+
+    center: TyVector3F64,
+
+    /// Each axis's unit direction, half the slab's length along it, and the
+    /// area of a face across it.
+    axes: [(TyVector3F64, f64, f64); 3],
+}
+
+impl Slab {
+    fn new(corners: [TyVector3F64; 8]) -> Self {
+        // A face's normal runs along the edge across it because a slab's
+        // edges meet at right angles.
+        let edges = [1, 2, 4].map(|far| corners[far] - corners[0]);
+        let lengths = edges.map(TyVector3F64::length);
+
+        Slab {
+            corners,
+            center: (corners[0] + corners[7]) / 2.0,
+            axes: [0, 1, 2].map(|axis| {
+                let area = lengths[(axis + 1) % 3] * lengths[(axis + 2) % 3];
+
+                (edges[axis] / lengths[axis], lengths[axis] / 2.0, area)
+            }),
+        }
+    }
+
+    /// The solid angle of the face `eye` sees widest, near enough to rank
+    /// slabs by. Zero where the eye faces no face from outside.
+    fn wide(&self, eye: TyVector3F64) -> f64 {
+        let off = eye - self.center;
+
+        self.axes
+            .iter()
+            .map(|&(along, half, area)| {
+                let out = along.dot(off);
+
+                // The eye stands this far before the plane of the face it
+                // can see.
+                let before = out.abs() - half;
+                let to = off - along * half.copysign(out);
+
+                if before > 0.0 {
+                    area * before / to.length().powi(3)
+                } else {
+                    0.0
+                }
+            })
+            .fold(0.0, f64::max)
+    }
 }
 
 /// One of the lists of boxes a test covers.
@@ -438,7 +491,7 @@ impl BoxHide {
 
         BoxHide {
             aimed: vec![None; slabs.len().min(SHADOWS)],
-            slabs,
+            slabs: slabs.into_iter().map(Slab::new).collect(),
             lists,
             lost: reach * LOST,
         }
@@ -446,14 +499,20 @@ impl BoxHide {
 
     /// Picks the slabs whose shadows the eyes have: the widest from `head`.
     pub fn aim(&mut self, head: TyVector3F64) {
-        let mut wide: Vec<_> = (0..self.slabs.len())
-            .filter_map(|slab| {
-                FaceShadow::new(&self.slabs[slab], head).map(|shadow| (shadow.wide, slab))
-            })
+        let mut wide: Vec<_> = self
+            .slabs
+            .iter()
+            .zip(0..)
+            .map(|(slab, index)| (slab.wide(head), index))
+            .filter(|&(wide, _)| wide > 0.0)
             .collect();
 
-        wide.sort_by(|a, b| b.0.total_cmp(&a.0));
-        wide.truncate(self.aimed.len());
+        let places = self.aimed.len();
+
+        if wide.len() > places {
+            wide.select_nth_unstable_by(places, |a, b| b.0.total_cmp(&a.0));
+            wide.truncate(places);
+        }
 
         // A slab among the widest keeps its place, and the rest take the
         // places left.
@@ -485,7 +544,7 @@ impl BoxHide {
             self.aimed
                 .iter()
                 .map(|&slab| {
-                    slab.and_then(|slab| FaceShadow::new(&self.slabs[slab], eye))
+                    slab.and_then(|slab| FaceShadow::new(&self.slabs[slab].corners, eye))
                         .map_or([[0.0, 0.0, 0.0, -1.0]; 5], |shadow| shadow.planes)
                 })
                 .collect::<Vec<_>>()
@@ -540,21 +599,23 @@ impl BoxHide {
 
 #[cfg(test)]
 mod tests {
-    use crate::BoxHide;
+    use crate::{BoxHide, box_hide::Slab};
     use ty_math::TyVector3F64;
 
-    /// A wall from (10, 0, -4) to (11, 8, 4), with the boxes of `bounds` in
-    /// one list.
-    fn hide(bounds: Vec<[f32; 6]>) -> BoxHide {
-        let wall = [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
+    /// The corners of a wall from (10, 0, -4) to (11, 8, 4).
+    fn wall() -> [TyVector3F64; 8] {
+        [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
             let far = |axis: u32, meters: f64| f64::from(corner >> axis & 1) * meters;
 
             TyVector3F64::new(10.0 + far(0, 1.0), far(1, 8.0), far(2, 8.0) - 4.0)
-        });
+        })
+    }
 
+    /// The test of the boxes of `bounds`, in one list, against the wall.
+    fn hide(bounds: Vec<[f32; 6]>) -> BoxHide {
         let run = bounds.len();
 
-        BoxHide::new(vec![wall], vec![(bounds, vec![run])])
+        BoxHide::new(vec![wall()], vec![(bounds, vec![run])])
     }
 
     /// Eyes 6 cm apart that look down +X from 4 m up.
@@ -572,6 +633,20 @@ mod tests {
         (0..bounds.len())
             .map(|index| hide.hides(0, index))
             .collect()
+    }
+
+    #[test]
+    fn a_slab_ranks_by_the_face_an_eye_sees_widest() {
+        let slab = Slab::new(wall());
+
+        // The near face spans 64 m2, 10 m off. The top face is edge on.
+        assert!((slab.wide(TyVector3F64::new(0.0, 4.0, 0.0)) - 0.64).abs() < 1e-9);
+
+        // From high above, the top face's 8 m2 shows widest.
+        assert!((slab.wide(TyVector3F64::new(10.5, 108.0, 0.0)) - 8.0e-4).abs() < 1e-9);
+
+        // An eye inside the wall faces none of its faces.
+        assert_eq!(slab.wide(TyVector3F64::new(10.5, 4.0, 0.0)), 0.0);
     }
 
     #[test]

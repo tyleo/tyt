@@ -4,7 +4,7 @@ use crate::{
     solid_slabs,
 };
 use branded_id::U32Id;
-use std::{collections::HashMap, num::NonZeroU32};
+use std::{collections::HashMap, mem, num::NonZeroU32};
 use ty_math::{
     TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64, TyVector3U32,
 };
@@ -51,6 +51,17 @@ const KEPT: f64 = 0.25;
 /// The lists of boxes a [`BoxHide`] tests for the view.
 const MARCHED: usize = 0;
 const SOLID: usize = 1;
+
+/// Where each kind of opaque box starts among a view's runs, and how many
+/// runs the kinds take. The held boxes and the inside ones take a run each.
+/// Each other kind takes two: its boxes with no mirror, then those with
+/// one.
+const HELD_RUN: usize = 0;
+const INSIDE_RUN: usize = 1;
+const SOLID_RUN: usize = 2;
+const FRONT_RUN: usize = 4;
+const CROSSED_RUN: usize = 6;
+const RUNS: usize = 8;
 
 /// The fewest boxes a scene has for its view to test them. On Quest a
 /// hidden box saves 66 ns of a frame, so a scene with fewer can hide too
@@ -128,11 +139,18 @@ pub struct BoxView {
     /// there a box drew its back faces.
     sorted_for: Option<([f32; 3], f32)>,
 
+    /// Each run's opaque boxes as of the last sort, in the order they
+    /// draw.
+    order: [Vec<usize>; RUNS],
+
     /// The last sort's boxes and keys, kept for their room.
     sorted: Vec<u8>,
     solid_keys: Vec<u64>,
     marched_keys: Vec<u64>,
     glass_keys: Vec<u64>,
+
+    /// Room a sort moves its keys through.
+    spare_keys: Vec<u64>,
 
     sky: Color,
 }
@@ -195,20 +213,16 @@ impl ViewBoxes {
         keys.into_iter().filter(|&key| self.glow[index_of(key)])
     }
 
-    /// The keys of `keys` whose boxes have `mirror`.
-    fn of<'a>(
-        &'a self,
-        keys: impl IntoIterator<Item = u64> + 'a,
-        mirror: bool,
-    ) -> impl Iterator<Item = u64> + 'a {
-        keys.into_iter()
-            .filter(move |&key| self.mirror[index_of(key)] == mirror)
-    }
-
     /// Fills `keys` with a key per box, nearest to `point` first, and
     /// returns how many of the boxes lie within `reach` of `point`. A key
     /// holds the bits of its box's squared distance above the box's index.
-    fn nearest_first(&self, point: [f32; 3], reach: f32, keys: &mut Vec<u64>) -> usize {
+    fn nearest_first(
+        &self,
+        point: [f32; 3],
+        reach: f32,
+        keys: &mut Vec<u64>,
+        spare: &mut Vec<u64>,
+    ) -> usize {
         keys.clear();
 
         // A square is no less than zero, so its bits order as it does.
@@ -224,7 +238,7 @@ impl ViewBoxes {
             u64::from(square.to_bits()) << 32 | index
         }));
 
-        keys.sort_unstable();
+        sort_keys(keys, spare);
         keys.partition_point(|&key| f32::from_bits((key >> 32) as u32) <= reach * reach)
     }
 
@@ -241,18 +255,41 @@ impl ViewBoxes {
     }
 }
 
+/// Sorts `keys` by their upper halves, least first, with `spare`'s room.
+/// Keys whose upper halves match keep their order. A moving head sorts a
+/// city's 26,000 keys each few frames, and on Quest these passes take
+/// 0.4 ms less of such a frame than `sort_unstable` does.
+fn sort_keys(keys: &mut Vec<u64>, spare: &mut Vec<u64>) {
+    spare.clear();
+    spare.resize(keys.len(), 0);
+
+    // Three passes of 11 bits cover an upper half.
+    for shift in [32, 43, 54] {
+        let digit = |key: u64| (key >> shift) as usize & 0x7ff;
+        let mut starts = [0; 0x800];
+
+        for &key in keys.iter() {
+            starts[digit(key)] += 1;
+        }
+
+        let mut next = 0;
+
+        for start in &mut starts {
+            next += mem::replace(start, next);
+        }
+
+        for &key in keys.iter() {
+            spare[starts[digit(key)]] = key;
+            starts[digit(key)] += 1;
+        }
+
+        mem::swap(keys, spare);
+    }
+}
+
 /// The index of the box a sort's `key` holds.
 fn index_of(key: u64) -> usize {
     (key & 0xffff_ffff) as usize
-}
-
-/// The keys of `keys` whose boxes `hide` leaves in its list `list`.
-fn shown<'a>(
-    hide: Option<&'a BoxHide>,
-    list: usize,
-    keys: impl Iterator<Item = u64> + 'a,
-) -> impl Iterator<Item = u64> + 'a {
-    keys.filter(move |&key| !hide.is_some_and(|hide| hide.hides(list, index_of(key))))
 }
 
 /// The keys of `keys` whose boxes have `crosses` in `crossing`.
@@ -1344,10 +1381,12 @@ impl BoxView {
             near: 0,
             glass_near: 0,
             sorted_for: None,
+            order: Default::default(),
             sorted: Vec::new(),
             solid_keys: Vec::new(),
             marched_keys: Vec::new(),
             glass_keys: Vec::new(),
+            spare_keys: Vec::new(),
             sky: Color {
                 r: f64::from(above.red),
                 g: f64::from(above.green),
@@ -1461,24 +1500,60 @@ impl BoxView {
         }
     }
 
-    /// Sorts the boxes nearest to `head` first. A marched box within
-    /// `covered` of `head` counts as near, because an eye can come to stand
-    /// inside it before the next sort.
+    /// Sorts the boxes nearest to `head` first and lists each run's opaque
+    /// boxes in that order. A marched box within `covered` of `head` counts
+    /// as near, because an eye can come to stand inside it before the next
+    /// sort. A near marched box draws its back faces. Such a box that
+    /// crosses another placement's box draws its back faces at the nearest
+    /// depth for an eye it holds, and its front faces for one it does not.
+    /// Every solid box draws its front faces because a ray that starts
+    /// inside one sees none of it.
     fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32) {
+        let spare = &mut self.spare_keys;
+
         self.solid
-            .nearest_first(head, covered, &mut self.solid_keys);
+            .nearest_first(head, covered, &mut self.solid_keys, spare);
 
         self.near = self
             .marched
-            .nearest_first(head, covered, &mut self.marched_keys);
+            .nearest_first(head, covered, &mut self.marched_keys, spare);
 
         if !self.glass.words.is_empty() {
             self.glass_near = self
                 .glass
-                .nearest_first(head, covered, &mut self.glass_keys);
+                .nearest_first(head, covered, &mut self.glass_keys, spare);
         }
 
         self.sorted_for = Some((head, covered));
+
+        for run in &mut self.order {
+            run.clear();
+        }
+
+        for (at, &key) in self.marched_keys.iter().enumerate() {
+            let index = index_of(key);
+            let near = at < self.near;
+            let mirror = usize::from(self.marched.mirror[index]);
+
+            if self.crossing[index] {
+                if near {
+                    self.order[HELD_RUN].push(index);
+                }
+
+                self.order[CROSSED_RUN + mirror].push(index);
+            } else if near {
+                self.order[INSIDE_RUN].push(index);
+            } else {
+                self.order[FRONT_RUN + mirror].push(index);
+            }
+        }
+
+        for &key in &self.solid_keys {
+            let index = index_of(key);
+            let mirror = usize::from(self.solid.mirror[index]);
+
+            self.order[SOLID_RUN + mirror].push(index);
+        }
 
         // The glowing boxes take the view's runs for the halo's draw.
         if let Some(glow) = &mut self.glow {
@@ -1516,43 +1591,34 @@ impl BoxView {
         }
     }
 
-    /// Deals the sorted boxes into their runs. A near marched box draws its
-    /// back faces. Such a box that crosses another placement's box draws
-    /// its back faces at the nearest depth for an eye it holds, and its
-    /// front faces for one it does not. Every solid box draws its front
-    /// faces because a ray that starts inside one sees none of it. A run of
-    /// front faces leaves out the boxes the test hides.
+    /// Deals the sorted boxes into their runs. A run of front faces leaves
+    /// out the boxes the test hides.
     fn deal(&mut self, queue: &Queue) {
-        let (near, far) = self.marched_keys.split_at(self.near);
-        let crossing = &self.crossing;
-        let hide = self.hide.as_ref();
-
         self.sorted.clear();
 
-        let solid = &self.solid;
-        let marched = &self.marched;
-        let solids = || shown(hide, SOLID, self.solid_keys.iter().copied());
-        let plain = || shown(hide, MARCHED, crossing_keys(far, crossing, false));
-        let crossed = || {
-            shown(
-                hide,
-                MARCHED,
-                crossing_keys(&self.marched_keys, crossing, true),
-            )
-        };
+        let mut counts = Vec::with_capacity(RUNS + 2);
 
-        // Each run of front faces draws twice: the boxes with no mirror,
-        // then those with one.
-        let mut counts = vec![
-            marched.extend(crossing_keys(near, crossing, true), &mut self.sorted),
-            marched.extend(crossing_keys(near, crossing, false), &mut self.sorted),
-            solid.extend(solid.of(solids(), false), &mut self.sorted),
-            solid.extend(solid.of(solids(), true), &mut self.sorted),
-            marched.extend(marched.of(plain(), false), &mut self.sorted),
-            marched.extend(marched.of(plain(), true), &mut self.sorted),
-            marched.extend(marched.of(crossed(), false), &mut self.sorted),
-            marched.extend(marched.of(crossed(), true), &mut self.sorted),
-        ];
+        for (run, order) in self.order.iter().enumerate() {
+            let (boxes, list) = if (SOLID_RUN..FRONT_RUN).contains(&run) {
+                (&self.solid, SOLID)
+            } else {
+                (&self.marched, MARCHED)
+            };
+
+            // The runs from the solid ones on draw front faces.
+            let hide = self.hide.as_ref().filter(|_| run >= SOLID_RUN);
+            let before = self.sorted.len();
+
+            for &index in order {
+                if !hide.is_some_and(|hide| hide.hides(list, index)) {
+                    self.sorted.extend_from_slice(&boxes.words[index]);
+                }
+            }
+
+            let count = (self.sorted.len() - before) / BoxDraw::BOX_BYTES;
+
+            counts.push(u32::try_from(count).expect("a scene's boxes number under 2^32"));
+        }
 
         // Glass draws farthest first: every box through its front faces,
         // then the boxes an eye can stand in through their back faces.
@@ -1691,5 +1757,29 @@ impl BoxView {
         let bottom = high[1].clamp(top, height).ceil();
 
         [left, top, right - left, bottom - top].map(|pixels| pixels as u32)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::box_view::sort_keys;
+
+    #[test]
+    fn keys_sort_by_their_upper_halves_and_ties_keep_their_order() {
+        // Upper halves that differ within each pass's bits.
+        let uppers = [0x7f80_0000, 3, 0x0040_0001, 3, 0, 0x0000_0801, 0x0040_0000];
+
+        let mut keys: Vec<u64> = uppers
+            .iter()
+            .zip(0..)
+            .map(|(upper, index)| upper << 32 | index)
+            .collect();
+
+        let mut sorted = keys.clone();
+
+        sorted.sort_unstable();
+        sort_keys(&mut keys, &mut Vec::new());
+
+        assert_eq!(keys, sorted);
     }
 }
