@@ -57,13 +57,12 @@ const SLACK: f64 = 0.25;
 /// tonemap. [`glow`](Self::glow) makes the halo before a frame's passes, and
 /// a last pass adds it over the sky.
 ///
-/// The cells that pass light draw after the opaque ones, where the device
-/// blends two colors a fragment: a fragment walks its box through the
-/// surfaces between such materials, and the blend tints what the target
-/// holds by what they pass and adds their light. The boxes draw farthest
-/// first as of the last sort. Elsewhere those cells do not draw. They tint
-/// the sun's light on the opaque faces behind them, and their own surfaces
-/// take the sun with no shadow.
+/// The cells that pass light draw after the opaque ones where the device
+/// blends two colors a fragment. A fragment walks its box through the
+/// surfaces between such materials. The blend tints what the target holds
+/// by what those surfaces pass and adds their light. The boxes draw farthest
+/// first as of the last sort. Elsewhere those cells do not draw. The cells
+/// tint the sun's light on the faces behind them and on their surfaces.
 pub struct BoxView {
     boxes: BoxDraw,
 
@@ -289,6 +288,31 @@ impl BoxView {
                 })
         };
 
+        // The surfaces between materials that pass light draw as glass
+        // where the device blends a tint a channel. A cell's word holds
+        // where its material's seven values start in `materials`.
+        let blends = device.features().contains(Features::DUAL_SOURCE_BLENDING);
+        let mut glass_ids: Vec<u32> = Vec::new();
+        let mut object_glass = HashMap::new();
+        let mut object_glass_cells = HashMap::new();
+        let mut glass_tiles = HashMap::new();
+
+        let mut place = |id: u32| {
+            let place = glass_ids
+                .iter()
+                .position(|&placed| placed == id)
+                .unwrap_or_else(|| {
+                    glass_ids.push(id);
+
+                    glass_ids.len() - 1
+                });
+
+            u32::try_from(place * 7)
+                .ok()
+                .filter(|&place| place < 1 << 12)
+                .expect("a scene's glass materials number under 586")
+        };
+
         for (object_id, object) in scene.iter_objects() {
             let masks = TileMasks::new(object, true, Some(&opaque))?;
 
@@ -298,6 +322,36 @@ impl BoxView {
             );
 
             words.extend(masks.words);
+
+            let glass = if blends {
+                GlassTiles::new(object, &opaque, &mut place)
+            } else {
+                GlassTiles {
+                    boxes: Vec::new(),
+                    surfaces: Vec::new(),
+                    tiles: Vec::new(),
+                    cells: Vec::new(),
+                    words: Vec::new(),
+                }
+            };
+
+            let first = u32::try_from(words.len()).expect("a scene's mask words number under 2^32");
+
+            words.extend(glass.words);
+            glass_tiles.insert(object_id, (first, glass.tiles, glass.surfaces));
+
+            // Each glass tile's low corner and its cells with a surface.
+            object_glass_cells.insert(
+                object_id,
+                glass
+                    .boxes
+                    .iter()
+                    .map(|(low, _)| *low / 16 * 16)
+                    .zip(glass.cells)
+                    .collect::<Vec<_>>(),
+            );
+
+            object_glass.insert(object_id, glass.boxes);
             object_boxes.insert(object_id, masks.boxes);
             object_solids.insert(object_id, masks.solids);
             object_tiles.insert(object_id, (masks.tiles, masks.solid_tiles));
@@ -401,6 +455,25 @@ impl BoxView {
             );
         }
 
+        // A word for each glass cell follows: the first of each glass
+        // tile's, for each placement.
+        let glass_lit: Vec<Vec<u32>> = object_ids
+            .iter()
+            .map(|object_id| {
+                object_glass_cells[object_id]
+                    .iter()
+                    .map(|(_, cells)| {
+                        let first = u32::try_from(lit_words.len())
+                            .expect("a scene's lit words number under 2^32");
+
+                        lit_words.resize(lit_words.len() + cells.len(), 0);
+
+                        first
+                    })
+                    .collect()
+            })
+            .collect();
+
         lit_words.extend([0; TileMasks::SPARE as usize]);
 
         // The sun's corner shadows, which the GPU fills into the words' low
@@ -408,10 +481,24 @@ impl BoxView {
         // zero, and its faces skip the sun's term.
         // Where a material passes light, the fill adds each cell's tint.
         let (lit_corners, tints) = if suns > 0 {
-            let fill = LitFill::new(device, scene, sun.0, &object_recorded, &opaque)?;
+            let fill = LitFill::new(
+                device,
+                scene,
+                sun.0,
+                &object_recorded,
+                &object_glass_cells,
+                &opaque,
+            )?;
+
+            let glass_places: Vec<_> = glass_lit
+                .iter()
+                .zip(&fill.glass_places)
+                .map(|(tiles, &place)| tiles.first().copied().unwrap_or(place))
+                .collect();
 
             assert_eq!(
-                fill.places, lit_places,
+                (&fill.places, &fill.glass_places),
+                (&lit_places, &glass_places),
                 "the fill lays out the view's words"
             );
 
@@ -463,7 +550,73 @@ impl BoxView {
         // follow one another there, so a cell's place among them leads to
         // its material's values in one read. Tiles that hold the same
         // materials in the same order share them.
-        let mut materials: Vec<f32> = Vec::new();
+        // A glass material holds the seven `vec4<f32>`s `box_glass.wgsl`'s
+        // `past` lists.
+        // An id the scene lacks passes the light whole.
+        let mut absent = [0.0; 28];
+
+        absent[..3].fill(1.0);
+
+        let glass_values = |id: u32| {
+            scene
+                .material(U32Id::from_u32(id))
+                .map_or(absent, |material| {
+                    let terms = PassTerms::new(material);
+                    let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
+                    let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
+                    let alpha = (material.roughness * material.roughness).max(1.0e-3);
+                    let emission = material.emissive_color * material.emissive_strength;
+                    let transmitted = material.transmission * (1.0 - material.metallic);
+                    let diffuse = material.base_color.color
+                        * ((1.0 - material.metallic) * (1.0 - material.transmission));
+                    let rise = terms.rise * transmitted;
+
+                    // A reflectance with no hue fits one channel.
+                    let gloss = terms.reflectance;
+                    let plain = gloss.red == gloss.green && gloss.red == gloss.blue;
+
+                    let follows = if !plain || emission != black {
+                        2.0
+                    } else if diffuse != black {
+                        1.0
+                    } else {
+                        0.0
+                    };
+
+                    let colors = [
+                        (
+                            white * terms.uncovered + terms.most * (white - gloss),
+                            material.base_color.alpha,
+                        ),
+                        (terms.most * terms.rise, 0.5 / alpha),
+                        (
+                            TyLinSrgbF64::new(gloss.red, rise.red, alpha * alpha),
+                            follows,
+                        ),
+                        (diffuse, 0.0),
+                        (gloss, 0.0),
+                        (rise, 0.0),
+                        (emission, 0.0),
+                    ];
+
+                    let mut values = [0.0; 28];
+
+                    for (values, (color, last)) in values.chunks_exact_mut(4).zip(colors) {
+                        values.copy_from_slice(
+                            &[color.red, color.green, color.blue, last].map(|value| value as f32),
+                        );
+                    }
+
+                    values
+                })
+        };
+
+        // The glass materials come first, where a cell's word reaches them
+        // in 12 bits. A tile's first material counts in threes after them.
+        let mut materials: Vec<f32> = glass_ids.iter().flat_map(|&id| glass_values(id)).collect();
+
+        materials.resize(materials.len().next_multiple_of(12), 0.0);
+
         let mut firsts: HashMap<Vec<u32>, u32> = HashMap::new();
         let mut tile_firsts: HashMap<u32, u32> = HashMap::new();
 
@@ -761,105 +914,6 @@ impl BoxView {
             quad_words.push(0);
         }
 
-        // The surfaces between materials that pass light draw as glass
-        // where the device blends a tint a channel. A glass material holds
-        // the seven `vec4<f32>`s `box_glass.wgsl`'s `past` lists.
-        let blends = device.features().contains(Features::DUAL_SOURCE_BLENDING);
-        let mut glass_places: HashMap<u32, u32> = HashMap::new();
-        let mut object_glass = HashMap::new();
-        let mut glass_tiles = HashMap::new();
-
-        // An id the scene lacks passes the light whole.
-        let mut absent = [0.0; 28];
-
-        absent[..3].fill(1.0);
-
-        let glass_values = |id: u32| {
-            scene
-                .material(U32Id::from_u32(id))
-                .map_or(absent, |material| {
-                    let terms = PassTerms::new(material);
-                    let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
-                    let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
-                    let alpha = (material.roughness * material.roughness).max(1.0e-3);
-                    let emission = material.emissive_color * material.emissive_strength;
-                    let transmitted = material.transmission * (1.0 - material.metallic);
-                    let diffuse = material.base_color.color
-                        * ((1.0 - material.metallic) * (1.0 - material.transmission));
-                    let rise = terms.rise * transmitted;
-
-                    // A reflectance with no hue fits one channel.
-                    let gloss = terms.reflectance;
-                    let plain = gloss.red == gloss.green && gloss.red == gloss.blue;
-
-                    let follows = if !plain || emission != black {
-                        2.0
-                    } else if diffuse != black {
-                        1.0
-                    } else {
-                        0.0
-                    };
-
-                    let colors = [
-                        (
-                            white * terms.uncovered + terms.most * (white - gloss),
-                            material.base_color.alpha,
-                        ),
-                        (terms.most * terms.rise, 0.5 / alpha),
-                        (
-                            TyLinSrgbF64::new(gloss.red, rise.red, alpha * alpha),
-                            follows,
-                        ),
-                        (diffuse, 0.0),
-                        (gloss, 0.0),
-                        (rise, 0.0),
-                        (emission, 0.0),
-                    ];
-
-                    let mut values = [0.0; 28];
-
-                    for (values, (color, last)) in values.chunks_exact_mut(4).zip(colors) {
-                        values.copy_from_slice(
-                            &[color.red, color.green, color.blue, last].map(|value| value as f32),
-                        );
-                    }
-
-                    values
-                })
-        };
-
-        for (object_id, object) in scene.iter_objects() {
-            let mut place = |id: u32| {
-                *glass_places.entry(id).or_insert_with(|| {
-                    let place = materials.len() / 4;
-
-                    materials.extend(glass_values(id));
-
-                    u32::try_from(place)
-                        .ok()
-                        .filter(|&place| place < 1 << 24)
-                        .expect("a scene's material values number under 2^24")
-                })
-            };
-
-            let tiles = if blends {
-                GlassTiles::new(object, &opaque, &mut place)
-            } else {
-                GlassTiles {
-                    boxes: Vec::new(),
-                    surfaces: Vec::new(),
-                    tiles: Vec::new(),
-                    words: Vec::new(),
-                }
-            };
-
-            let first = u32::try_from(words.len()).expect("a scene's mask words number under 2^32");
-
-            words.extend(tiles.words);
-            object_glass.insert(object_id, tiles.boxes);
-            glass_tiles.insert(object_id, (first, tiles.tiles, tiles.surfaces));
-        }
-
         let glass = PlacedBox::list(scene, &object_glass);
         let mut glass_boxes = ViewBoxes::default();
 
@@ -875,8 +929,11 @@ impl BoxView {
                 let [far_x, far_y, far_z] = ((high - 1) % 16).to_array();
                 let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
 
-                let words =
+                let mut words =
                     placed.words(placed.placement, first + tiles[placed.brick], [surfaces, 0]);
+
+                // The first of the tile's words in `lit`.
+                words[11] = glass_lit[placed.placement as usize][placed.brick];
 
                 glass_boxes.push(placed, words, false, false);
 

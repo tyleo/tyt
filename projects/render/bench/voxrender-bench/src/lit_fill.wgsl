@@ -6,6 +6,12 @@
 // some of the light reaches it. What the materials on the way pass of the
 // light in each channel lands in the cell's tint as the mean over its lit
 // corners.
+//
+// A cell of a material that passes light fills as a glass cell. Its word
+// takes the mean of the light on the corners of its surfaces: its faces
+// along the light's axes onto a cell of another material that passes
+// light, or onto none. A ray starts on the face and moves toward the
+// light, so it tells what falls on the face from the light's side.
 
 // A shadow ray starts this far in from its face's edges.
 const INSET: i32 = 8;
@@ -236,6 +242,51 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     // The light the lit corners take, and their count.
     var light = vec3<f32>(0.0);
     var corners = 0.0;
+
+    let own = material_at(placement, cell);
+
+    if !opaque(own) {
+        for (var n = 0; n < 6; n++) {
+            let d = n >> 1u;
+            let up = (n & 1) == 1;
+
+            if pick(toward, d) == 0 {
+                continue;
+            }
+
+            var beside = cell;
+
+            beside[d] += select(-1, 1, up);
+
+            var other = 0u;
+
+            if all(beside >= vec3<i32>(0)) && all(beside < placement.bounds.xyz) {
+                other = material_at(placement, beside);
+            }
+
+            if other == own || opaque(other) {
+                continue;
+            }
+
+            let u = (d + 1) % 3;
+            let v = (d + 2) % 3;
+
+            for (var c = 0u; c < 4u; c++) {
+                var origin = cell * ONE;
+
+                origin[d] += select(0, ONE, up);
+                origin[u] += select(INSET, ONE - INSET, (c & 1u) != 0u);
+                origin[v] += select(INSET, ONE - INSET, (c & 2u) != 0u);
+
+                light += light_through(origin, source, shadowers.x, shadowers.y);
+                corners += 1.0;
+            }
+        }
+
+        lit[at] = pack4x8unorm(vec4<f32>(light / max(corners, 1.0), 0.0));
+
+        return;
+    }
 
     for (var d = 0; d < 3; d++) {
         let along = pick(toward, d);

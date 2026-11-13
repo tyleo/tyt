@@ -389,7 +389,10 @@ in this order:
             for 0.03 ms on Quest
       - [x] A glass fragment shades its surfaces in fewer instructions.
             The fish tank takes 4.9 ms on Quest, down from 5.7
-      - [ ] The sun on a glass surface, which takes it whole
+      - [x] The sun on a glass surface. The shadow fill lights each
+            glass cell's surfaces too. A surface scales the sun's term by
+            its cell's light. The trial models' pixels off fall to
+            30,151, and the fish tank takes 5.0 ms on Quest
       - [ ] The walk's cost, a mirror ray through glass and from it, an
             eye inside a material, and the order of the boxes between
             sorts
