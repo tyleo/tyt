@@ -38,137 +38,223 @@ const ALL_SIDES: [SdfSide; 6] = [
     SdfSide::PositiveZ,
 ];
 
-/// Runs the steps of the object at `object_id` over its grid on the lattice of
-/// cells `voxel_size` across, with the object's shapes posed by `pose`, which
-/// takes a shape's point to its lattice point in meters.
-/// `place_path` holds the part names of the place an error reports. Each
-/// step's record holds its writes under `record_writes`. `dependencies`
-/// spreads each step's cells across threads.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "sampling reads the document, the place, and the lattice"
-)]
-pub fn sample_grid<D: MapCells>(
-    dependencies: &D,
-    state: &SdfState,
-    shapes: &SdfShapes,
+/// Runs one object's steps over any box of lattice cells. The shapes are posed
+/// once and shared by every box.
+pub struct ObjectSampler<'a> {
+    state: &'a SdfState,
+
+    lattice: LatticeShapes<'a>,
+
     object_id: U32Id<BSdfObject>,
-    place_path: &[String],
+
+    /// The part names of the place an error reports, joined by slashes.
+    path: String,
+
     voxel_size: f64,
+
     pose: TyPoseF64,
+
     record_writes: bool,
-) -> Result<SdfGrid> {
-    let lattice = LatticeShapes::new(shapes, voxel_size, pose);
-    let object = &state.objects[object_id.to_usize_id()];
-    let path = place_path.join("/");
+}
 
-    let range = object
-        .step_ids
-        .iter()
-        .flat_map(|step_id| match &state.steps[step_id.to_usize_id()] {
-            SdfStep::Add { shape_id, .. } => {
-                vec![lattice.cells(*shape_id).expect("an add shape has a box")]
-            }
-
-            SdfStep::Set { points, size, .. } => points
-                .iter()
-                .map(|point| set_cells(*point, *size, voxel_size, pose))
-                .collect(),
-
-            SdfStep::Carve { .. } | SdfStep::Coat { .. } | SdfStep::Paint { .. } => Vec::new(),
-        })
-        .reduce(|range, cells| range.union(&cells));
-
-    let (min, size) = match range {
-        Some(range) => {
-            let extent = range.max - range.min;
-            let count = extent.x * extent.y * extent.z;
-
-            if count > MOST_CELLS {
-                let corner = |cells: TyVector3F64| {
-                    let position = cells * voxel_size;
-
-                    format!(
-                        "[{}, {}, {}]",
-                        meters(position.x),
-                        meters(position.y),
-                        meters(position.z)
-                    )
-                };
-
-                return Err(Error::invalid(format!(
-                    "{path}: grid over {} .. {} must hold at most {MOST_CELLS} cells, not {count}",
-                    corner(range.min),
-                    corner(range.max)
-                )));
-            }
-
-            (
-                lattice_cell(range.min)
-                    .map_err(|message| Error::invalid(format!("{path}: {message}")))?,
-                TyVector3U32::new(extent.x as u32, extent.y as u32, extent.z as u32),
-            )
-        }
-
-        None => (TyVector3I32::ZERO, TyVector3U32::ZERO),
-    };
-
-    let mut grid = SdfGrid {
-        object_id,
-        min,
-        size,
-        cells: vec![SdfCell::default(); (size.x * size.y * size.z) as usize],
-        steps: Vec::with_capacity(object.step_ids.len()),
-    };
-
-    // The `add` step owning each cell, kept only for a part whose steps read
-    // it.
-    let mut owners = object
-        .step_ids
-        .iter()
-        .any(|step_id| match &state.steps[step_id.to_usize_id()] {
-            SdfStep::Coat { onto_ids, .. } | SdfStep::Paint { onto_ids, .. } => onto_ids.is_some(),
-            SdfStep::Add { .. } | SdfStep::Carve { .. } | SdfStep::Set { .. } => false,
-        })
-        .then(|| vec![None; grid.cells.len()]);
-
-    // Each `add` or `carve` shape run so far, with `true` for an `add`.
-    let mut solids = Vec::new();
-    let mut set_ran = false;
-
-    for (index, step_id) in object.step_ids.iter().enumerate() {
-        let step = &state.steps[step_id.to_usize_id()];
-
-        let mut run = StepRun {
-            lattice: &lattice,
-            patterns: &state.patterns,
-            grid: &mut grid,
-            owners: owners.as_deref_mut(),
-            solids: &solids,
-            live_is_solid: !set_ran,
-            step_id: *step_id,
-            step: index as u32,
+impl<'a> ObjectSampler<'a> {
+    /// The steps of the object at `object_id` on the lattice of cells
+    /// `voxel_size` across, with the object's shapes posed by `pose`, which
+    /// takes a shape's point to its lattice point in meters.
+    /// `place_path` holds the part names of the place an error reports. Each
+    /// step's record holds its writes under `record_writes`.
+    pub fn new(
+        state: &'a SdfState,
+        shapes: &'a SdfShapes,
+        object_id: U32Id<BSdfObject>,
+        place_path: &[String],
+        voxel_size: f64,
+        pose: TyPoseF64,
+        record_writes: bool,
+    ) -> Self {
+        Self {
+            state,
+            lattice: LatticeShapes::new(shapes, voxel_size, pose),
+            object_id,
+            path: place_path.join("/"),
             voxel_size,
             pose,
             record_writes,
-            record: SdfStepRecord::default(),
-        };
-
-        run.run(dependencies, step)
-            .map_err(|message| Error::invalid(format!("{path}/{}: {message}", step.name())))?;
-
-        let record = run.record;
-        grid.steps.push(record);
-
-        match step {
-            SdfStep::Add { shape_id, .. } => solids.push((*shape_id, true)),
-            SdfStep::Carve { shape_id, .. } => solids.push((*shape_id, false)),
-            SdfStep::Set { .. } => set_ran = true,
-            SdfStep::Coat { .. } | SdfStep::Paint { .. } => {}
         }
     }
 
-    Ok(grid)
+    /// The cell box around the object's `add` and `set` steps, or `None` when
+    /// it has none.
+    pub fn reach(&self) -> Option<Bounds3d> {
+        self.filled_boxes()
+            .reduce(|reach, cells| reach.union(&cells))
+    }
+
+    /// Whether an `add` or `set` box overlaps the cells from `min` up to `max`.
+    /// No other step fills a cell.
+    pub fn reaches(&self, min: TyVector3I32, max: TyVector3I32) -> bool {
+        let (min, max) = (min.as_dvec3(), max.as_dvec3());
+
+        self.filled_boxes()
+            .any(|cells| cells.min.cmplt(max).all() && cells.max.cmpgt(min).all())
+    }
+
+    /// The object's grid over [`reach`](Self::reach) after its steps run.
+    /// Errors on a box over the cell cap or past the 32-bit range, and on the
+    /// first failed step. `dependencies` spreads each step's cells across
+    /// threads.
+    pub fn grid<D: MapCells>(&self, dependencies: &D) -> Result<SdfGrid> {
+        let Some(reach) = self.reach() else {
+            return self.sample(dependencies, TyVector3I32::ZERO, TyVector3U32::ZERO);
+        };
+
+        let extent = reach.max - reach.min;
+        let count = extent.x * extent.y * extent.z;
+
+        if count > MOST_CELLS {
+            let corner = |cells: TyVector3F64| {
+                let position = cells * self.voxel_size;
+
+                format!(
+                    "[{}, {}, {}]",
+                    meters(position.x),
+                    meters(position.y),
+                    meters(position.z)
+                )
+            };
+
+            return Err(Error::invalid(format!(
+                "{}: grid over {} .. {} must hold at most {MOST_CELLS} cells, not {count}",
+                self.path,
+                corner(reach.min),
+                corner(reach.max)
+            )));
+        }
+
+        self.sample(
+            dependencies,
+            self.lattice_cell(reach.min)?,
+            TyVector3U32::new(extent.x as u32, extent.y as u32, extent.z as u32),
+        )
+    }
+
+    /// The object's grid of `size` cells from the lattice index `min`, after
+    /// its steps run. Errors on the first failed step. `dependencies`
+    /// spreads each step's cells across threads.
+    pub fn sample<D: MapCells>(
+        &self,
+        dependencies: &D,
+        min: TyVector3I32,
+        size: TyVector3U32,
+    ) -> Result<SdfGrid> {
+        let state = self.state;
+        let object = &state.objects[self.object_id.to_usize_id()];
+
+        let mut grid = SdfGrid {
+            object_id: self.object_id,
+            min,
+            size,
+            cells: vec![SdfCell::default(); (size.x * size.y * size.z) as usize],
+            steps: Vec::with_capacity(object.step_ids.len()),
+        };
+
+        // The `add` step owning each cell, kept only for a part whose steps read
+        // it.
+        let mut owners = object
+            .step_ids
+            .iter()
+            .any(|step_id| match &state.steps[step_id.to_usize_id()] {
+                SdfStep::Coat { onto_ids, .. } | SdfStep::Paint { onto_ids, .. } => {
+                    onto_ids.is_some()
+                }
+                SdfStep::Add { .. } | SdfStep::Carve { .. } | SdfStep::Set { .. } => false,
+            })
+            .then(|| vec![None; grid.cells.len()]);
+
+        // Each `add` or `carve` shape run so far, with `true` for an `add`.
+        let mut solids = Vec::new();
+        let mut set_ran = false;
+
+        for (index, step_id) in object.step_ids.iter().enumerate() {
+            let step = &state.steps[step_id.to_usize_id()];
+
+            let mut run = StepRun {
+                lattice: &self.lattice,
+                patterns: &state.patterns,
+                grid: &mut grid,
+                owners: owners.as_deref_mut(),
+                solids: &solids,
+                live_is_solid: !set_ran,
+                step_id: *step_id,
+                step: index as u32,
+                voxel_size: self.voxel_size,
+                pose: self.pose,
+                record_writes: self.record_writes,
+                record: SdfStepRecord::default(),
+            };
+
+            run.run(dependencies, step).map_err(|message| {
+                Error::invalid(format!("{}/{}: {message}", self.path, step.name()))
+            })?;
+
+            let record = run.record;
+            grid.steps.push(record);
+
+            match step {
+                SdfStep::Add { shape_id, .. } => solids.push((*shape_id, true)),
+                SdfStep::Carve { shape_id, .. } => solids.push((*shape_id, false)),
+                SdfStep::Set { .. } => set_ran = true,
+                SdfStep::Coat { .. } | SdfStep::Paint { .. } => {}
+            }
+        }
+
+        Ok(grid)
+    }
+
+    /// The lattice index of the whole-number cell corner `corner`. Errors on a
+    /// corner past the 32-bit range.
+    pub fn lattice_cell(&self, corner: TyVector3F64) -> Result<TyVector3I32> {
+        let range = f64::from(i32::MIN)..=f64::from(i32::MAX);
+
+        if corner
+            .to_array()
+            .iter()
+            .all(|coordinate| range.contains(coordinate))
+        {
+            Ok(corner.as_ivec3())
+        } else {
+            Err(Error::invalid(format!(
+                "{}: grid must lie within 2^31 cells of the origin, not at [{}, {}, {}] cells",
+                self.path, corner.x, corner.y, corner.z
+            )))
+        }
+    }
+
+    /// The cell box of each `add` shape and `set` cube in the object's step
+    /// list.
+    fn filled_boxes(&self) -> impl Iterator<Item = Bounds3d> {
+        let object = &self.state.objects[self.object_id.to_usize_id()];
+
+        object
+            .step_ids
+            .iter()
+            .flat_map(|step_id| match &self.state.steps[step_id.to_usize_id()] {
+                SdfStep::Add { shape_id, .. } => {
+                    vec![
+                        self.lattice
+                            .cells(*shape_id)
+                            .expect("an add shape has a box"),
+                    ]
+                }
+
+                SdfStep::Set { points, size, .. } => points
+                    .iter()
+                    .map(|point| set_cells(*point, *size, self.voxel_size, self.pose))
+                    .collect(),
+
+                SdfStep::Carve { .. } | SdfStep::Coat { .. } | SdfStep::Paint { .. } => Vec::new(),
+            })
+    }
 }
 
 /// One step running over a grid.
@@ -627,24 +713,5 @@ fn set_cells(point: TyVector3F64, size: f64, voxel_size: f64, pose: TyPoseF64) -
     Bounds3d {
         min: (center - half - 0.5).ceil(),
         max: (center + half - 0.5).ceil(),
-    }
-}
-
-/// The lattice index of the whole-number cell corner `corner`. Errors on a
-/// corner past the 32-bit range.
-fn lattice_cell(corner: TyVector3F64) -> StdResult<TyVector3I32, String> {
-    let range = f64::from(i32::MIN)..=f64::from(i32::MAX);
-
-    if corner
-        .to_array()
-        .iter()
-        .all(|coordinate| range.contains(coordinate))
-    {
-        Ok(corner.as_ivec3())
-    } else {
-        Err(format!(
-            "grid must lie within 2^31 cells of the origin, not at [{}, {}, {}] cells",
-            corner.x, corner.y, corner.z
-        ))
     }
 }

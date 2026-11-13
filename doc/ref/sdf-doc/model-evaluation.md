@@ -51,10 +51,10 @@ vxl ships no profiles. When two files define one name, the later file wins.
 A profile holds flags by their camel-case names, with the values the command
 line takes:
 
-| Profile  | Keys                                                                |
-| -------- | ------------------------------------------------------------------- |
-| build    | `runtime`, `intern`, `libraries`, `fonts`, `vars`, `varsFrom`       |
-| voxelize | `resolution`, `voxelSize`, `frame`, `fillMode`, `flatten`, `report` |
+| Profile  | Keys                                                                        |
+| -------- | --------------------------------------------------------------------------- |
+| build    | `runtime`, `intern`, `libraries`, `fonts`, `vars`, `varsFrom`               |
+| voxelize | `resolution`, `voxelSize`, `frame`, `fillMode`, `flatten`, `report`, `tile` |
 
 `libraries` lists library names, `fonts` maps names to [fonts](#fonts), `vars`
 maps names to JSON values, and `varsFrom` lists profile names. `resolution`
@@ -227,6 +227,10 @@ opaque and a face neighbor lets light through. A material lets light through
 when any channel passes above zero at normal incidence. Cells outside the grid
 count as empty.
 
+`--tile <n>` samples each part's grid in cubes of `n` cells on a side, starting
+at the grid's least corner. The surface test reads neighbors across cube faces,
+so the cubes keep exactly the cells an untiled run keeps.
+
 ## The voxj document
 
 Each root part writes a root node at its pivot, in meters, scaled by `g` on
@@ -253,6 +257,9 @@ every place shares it. Under `--flatten nodes`, each place writes its own
 object. Under `--flatten objects`, each root part and joint writes one object
 for every part at or below it that no lower joint claims. Where two parts fill
 one cell, the later place wins.
+
+Under `--tile`, a part's node holds one object per cube that keeps a cell, in
+cube order with x outermost.
 
 An object takes its part's name, and its `bounds` fit its cells. A part with no
 live cell writes no object.
@@ -329,15 +336,16 @@ lists. An error the model throws stops the build with its message.
 
 1. The flags take the values `vxl mesh-doc voxelize` lists. `--voxel-size` is
    above zero, and `--resolution` takes a whole count above zero
-2. `--voxel-size` and `--resolution` exclude each other, and `--flatten nodes`
-   and `--flatten objects` need `--frame world`
+2. `--voxel-size` and `--resolution` exclude each other, `--flatten nodes`
+   and `--flatten objects` need `--frame world`, and `--tile` needs
+   `--frame world`, `--flatten none`, and `--report false`
 3. The document passes the
    [sdfj format's validation](../../../projects/sdf/formats/sdfj/docs/sdf-json-file-format.md#validation).
    A failing `shades` reports the largest spread that fits, rounded down to
    three decimals
 4. A `--resolution` reference side is above zero
-5. Each part's grid, and each root part's object under `--flatten objects`,
-   holds at most 2^27 cells
+5. Each part's untiled grid, and each root part's object under
+   `--flatten objects`, holds at most 2^27 cells. `--tile` takes 1 to 512 cells
 6. Each `coat`'s `depth` reaches at least the voxel size
 7. No distance reads NaN
 8. The model holds at least one live cell

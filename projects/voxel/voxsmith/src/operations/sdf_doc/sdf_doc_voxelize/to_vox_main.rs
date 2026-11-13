@@ -1,16 +1,16 @@
 use crate::{
     Error, Result,
     operations::sdf_doc::{
-        PlaceFrame, SdfCell, SdfGrid, SdfPlace, SdfSampling, SdfVoxMainOptions, WHOLE_TOLERANCE,
-        is_exposed, meters, retain_sdf_palette, see_through_materials, whole_voxels,
+        ObjectCells, PlaceFrame, PlaceNode, SdfCell, SdfGrid, SdfSampling, SdfVoxMainOptions,
+        assemble_vox_main, is_exposed, node_transform, placed_nodes, see_through_materials,
     },
     utilities::{FillMode, FlattenMode, VoxelFrame},
 };
-use branded_id::{IdSlice, IdVec, IteratorExt, U32Id};
-use sdfcore::{BSdfMaterial, BSdfNode};
-use std::collections::{HashMap, HashSet};
-use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
-use voxcore::{BVoxHierarchyNode, BVoxObject, BVoxVoxel, VoxHierarchyNode, VoxMain, VoxObject};
+use branded_id::{IdSlice, U32Id};
+use sdfcore::BSdfMaterial;
+use std::collections::HashMap;
+use ty_math::{TyTransformF64, TyVector3I32};
+use voxcore::{VoxMain, VoxObject};
 
 /// The voxj document of the grids in `sampling` under `options` by model
 /// evaluation. Errors on flattening grids sampled under the local frame or
@@ -53,148 +53,11 @@ pub fn to_vox_main(sampling: &SdfSampling, options: &SdfVoxMainOptions) -> Resul
         FlattenMode::Nodes | FlattenMode::Objects => flattened(sampling, &kept, options.flatten)?,
     };
 
-    let mut first_met = Vec::new();
-    let mut met = HashSet::new();
-
-    for object in &objects {
-        for material_id in object.materials.iter().flatten() {
-            if met.insert(*material_id) {
-                first_met.push(*material_id);
-            }
-        }
-    }
-
-    let mut main = VoxMain::default();
-    let (palette_id, palette_materials) =
-        retain_sdf_palette(&mut main, &sampling.materials, &first_met)?;
-
-    let mut object_ids = Vec::with_capacity(objects.len());
-
-    for object in &objects {
-        let mut vox_object = VoxObject::new(object.name.clone(), object.size)
-            .expect("a part's grid fits voxcore's cell limit");
-        vox_object.set_origin(object.min + object.base);
-        vox_object
-            .retain_layer(palette_id)
-            .expect("a fresh object has no live voxel");
-
-        for (voxel_id, material_id) in object.materials.iter().enumerate_ids() {
-            if let Some(material_id) = material_id {
-                vox_object
-                    .retain_voxel(voxel_id, &[palette_materials[material_id]])
-                    .expect("a raster index is a voxel of the object sampling its one layer");
-            }
-        }
-
-        object_ids.push(main.retain_object(vox_object)?);
-    }
-
-    let mut node_ids: Vec<U32Id<BVoxHierarchyNode>> = Vec::with_capacity(nodes.len());
-    let mut children = Vec::with_capacity(nodes.len());
-
-    for node in &nodes {
-        let node_id = main.retain_hierarchy_node(VoxHierarchyNode {
-            name: node.name.clone(),
-            transform: node.transform,
-            ..VoxHierarchyNode::default()
-        })?;
-        node_ids.push(node_id);
-
-        let mut child_object_ids = Vec::new();
-        let mut voxels: Vec<(TyVector3F64, Vec<U32Id<BVoxObject>>)> = Vec::new();
-
-        for &object_index in &node.object_indices {
-            let residual = snap(node.lattice_offset - objects[object_index].base.as_dvec3());
-
-            if residual == TyVector3F64::ZERO {
-                child_object_ids.push(object_ids[object_index]);
-            } else {
-                match voxels.iter_mut().find(|(known, _)| *known == residual) {
-                    Some((_, object_ids_at)) => object_ids_at.push(object_ids[object_index]),
-                    None => voxels.push((residual, vec![object_ids[object_index]])),
-                }
-            }
-        }
-
-        let mut child_node_ids = Vec::new();
-
-        for (residual, object_ids_at) in voxels {
-            let voxels_node_id = main.retain_hierarchy_node(VoxHierarchyNode {
-                name: "voxels".to_owned(),
-                transform: TyTransformF64 {
-                    position: residual,
-                    ..TyTransformF64::IDENTITY
-                },
-                child_object_ids: object_ids_at,
-                ..VoxHierarchyNode::default()
-            })?;
-            child_node_ids.push(voxels_node_id);
-        }
-
-        children.push((child_node_ids, child_object_ids));
-    }
-
-    for (index, (mut child_node_ids, child_object_ids)) in children.into_iter().enumerate() {
-        child_node_ids.extend(
-            nodes[index]
-                .child_indices
-                .iter()
-                .map(|&child_index| node_ids[child_index]),
-        );
-
-        main.set_hierarchy_node_children(node_ids[index], child_node_ids, child_object_ids)?;
-
-        if nodes[index].root {
-            main.push_root_hierarchy_node_id(node_ids[index])?;
-        }
-    }
-
-    Ok(main)
+    assemble_vox_main(objects, &nodes, &sampling.materials)
 }
 
 /// A live cell's lattice index beside its material.
 type LiveCell = (TyVector3I32, U32Id<BSdfMaterial>);
-
-/// One object the document holds.
-struct ObjectCells {
-    /// The part's name.
-    name: String,
-
-    /// The lattice index of the least cell of the box around the live cells.
-    min: TyVector3I32,
-
-    /// The cells along each axis of the box around the live cells.
-    size: TyVector3U32,
-
-    /// The material of each cell of the box in a raster with x outermost, or
-    /// `None` for an empty cell.
-    materials: IdVec<BVoxVoxel, Option<U32Id<BSdfMaterial>>>,
-
-    /// The whole voxels the object's origin adds to `min`. The object's first
-    /// place fixes them.
-    base: TyVector3I32,
-}
-
-/// One node the document holds for a part.
-struct PlaceNode {
-    /// The part's name.
-    name: String,
-
-    /// Whether the node is a root node.
-    root: bool,
-
-    /// The indices of the nodes under this one.
-    child_indices: Vec<usize>,
-
-    transform: TyTransformF64,
-
-    /// The objects at the place.
-    object_indices: Vec<usize>,
-
-    /// The offset in voxels from a lattice index to the node's frame: `f` in
-    /// model evaluation.
-    lattice_offset: TyVector3F64,
-}
 
 /// The objects and nodes of each part under the frame `sampling` was sampled
 /// in. A part writes one node for all its places, under each parent's node.
@@ -205,134 +68,31 @@ fn placed(
 ) -> Result<(Vec<ObjectCells>, Vec<PlaceNode>)> {
     let mut objects = Vec::new();
     let mut grid_objects: HashMap<usize, Option<usize>> = HashMap::new();
-    let mut nodes: Vec<PlaceNode> = Vec::new();
 
-    // The index in `nodes` of each part's node beside the index of the part's
-    // first place.
-    let mut part_nodes: HashMap<U32Id<BSdfNode>, (usize, usize)> = HashMap::new();
+    let nodes = placed_nodes(
+        &sampling.places,
+        sampling.frame,
+        sampling.voxel_size,
+        |index, lattice_offset| {
+            let place = &sampling.places[index];
+            let name = place.path.last().expect("a place has a part");
 
-    // The index in `nodes` of each place's node, and whether the place wrote it.
-    let mut place_nodes: Vec<(usize, bool)> = Vec::with_capacity(sampling.places.len());
-
-    for (index, place) in sampling.places.iter().enumerate() {
-        if let Some(&(node_index, first)) = part_nodes.get(&place.node_id) {
-            check_shared_place(sampling, first, index)?;
-            place_nodes.push((node_index, false));
-            add_child(&mut nodes, &place_nodes, place.parent, node_index);
-            continue;
-        }
-
-        let shift = match sampling.frame {
-            VoxelFrame::World => place.offset,
-            VoxelFrame::Local => TyVector3F64::ZERO,
-        };
-        let lattice_offset = -(place.pivot - place.offset + shift) / sampling.voxel_size;
-        let name = place.path.last().expect("a place has a part").clone();
-
-        let object_indices = place
-            .grid_indices
-            .iter()
-            .filter_map(|&grid_index| {
-                *grid_objects.entry(grid_index).or_insert_with(|| {
-                    let grid = &sampling.grids[grid_index];
-                    let cells = grid_cells(grid, &kept[grid_index]);
-                    let object = object_cells(name.clone(), &cells, lattice_offset)?;
-                    objects.push(object);
-                    Some(objects.len() - 1)
+            Ok(place
+                .grid_indices
+                .iter()
+                .filter_map(|&grid_index| {
+                    *grid_objects.entry(grid_index).or_insert_with(|| {
+                        let grid = &sampling.grids[grid_index];
+                        let cells = grid_cells(grid, &kept[grid_index]);
+                        objects.push(ObjectCells::new(name.clone(), &cells, lattice_offset)?);
+                        Some(objects.len() - 1)
+                    })
                 })
-            })
-            .collect();
-
-        let node_index = nodes.len();
-        part_nodes.insert(place.node_id, (node_index, index));
-        place_nodes.push((node_index, true));
-
-        nodes.push(PlaceNode {
-            name,
-            root: place.parent.is_none(),
-            child_indices: Vec::new(),
-            transform: node_transform(sampling, place),
-            object_indices,
-            lattice_offset,
-        });
-        add_child(&mut nodes, &place_nodes, place.parent, node_index);
-    }
+                .collect())
+        },
+    )?;
 
     Ok((objects, nodes))
-}
-
-/// Errors unless the place at `index` can share the node of its part's first
-/// place at `first`. One node takes one position from its parent's pivot, and
-/// under the world frame one object holds the cells of both places.
-fn check_shared_place(sampling: &SdfSampling, first: usize, index: usize) -> Result<()> {
-    let places = &sampling.places;
-    let first_path = places[first].path.join("/");
-    let fail = |message: String| {
-        Error::invalid(format!(
-            "{}: part must sit {message}",
-            places[index].path.join("/")
-        ))
-    };
-
-    // A root part sits in one place, so every later place sits under a part.
-    let spot = |index: usize| {
-        let place = &places[index];
-        let parent = place
-            .parent
-            .expect("a part in several places sits under parts");
-
-        place.pivot - places[parent].pivot
-    };
-    let (first_spot, spot) = (spot(first), spot(index));
-
-    if whole_voxels((spot - first_spot) / sampling.voxel_size) != Some(TyVector3I32::ZERO) {
-        return Err(fail(format!(
-            "{} from its parent's pivot as at {first_path}, not {}; give its parents one pivot \
-             or build a fresh part for each place",
-            listed(first_spot),
-            listed(spot),
-        )));
-    }
-
-    if sampling.frame == VoxelFrame::World {
-        let voxels = (places[index].offset - places[first].offset) / sampling.voxel_size;
-
-        if whole_voxels(voxels).is_none() {
-            return Err(fail(format!(
-                "a whole number of voxels from {first_path}, not {} voxels; give it \
-                 whole-voxel offsets, sample under the local frame, or build a fresh part for \
-                 each place",
-                listed(voxels),
-            )));
-        }
-    }
-
-    Ok(())
-}
-
-/// `value` as an error message shows it.
-fn listed(value: TyVector3F64) -> String {
-    format!(
-        "[{}, {}, {}]",
-        meters(value.x),
-        meters(value.y),
-        meters(value.z)
-    )
-}
-
-/// Lists the node at `node_index` under the node of the place at `parent` when
-/// that place wrote its node. Every place of a part lists the same children.
-fn add_child(
-    nodes: &mut [PlaceNode],
-    place_nodes: &[(usize, bool)],
-    parent: Option<usize>,
-    node_index: usize,
-) {
-    if let Some(parent) = parent
-        && let (parent_index, true) = place_nodes[parent]
-    {
-        nodes[parent_index].child_indices.push(node_index);
-    }
 }
 
 /// One node for each kept place, nested under the node of the nearest kept
@@ -391,8 +151,8 @@ fn flattened(
         if flatten == FlattenMode::Objects {
             let cells: Vec<LiveCell> = below.into_iter().flat_map(|(_, cells)| cells).collect();
 
-            if let Some((min, max)) = cell_box(&cells) {
-                let volume = VoxObject::volume_of((max - min + 1).as_uvec3());
+            if let Some(object) = ObjectCells::new(name.clone(), &cells, lattice_offset) {
+                let volume = VoxObject::volume_of(object.size);
 
                 if volume > VoxObject::MAX_GRID_CELLS {
                     return Err(Error::invalid(format!(
@@ -401,15 +161,13 @@ fn flattened(
                         VoxObject::MAX_GRID_CELLS,
                     )));
                 }
-            }
 
-            objects.extend(object_cells(name.clone(), &cells, lattice_offset));
+                objects.push(object);
+            }
         } else {
-            objects.extend(
-                below
-                    .into_iter()
-                    .filter_map(|(part, cells)| object_cells(part.clone(), &cells, lattice_offset)),
-            );
+            objects.extend(below.into_iter().filter_map(|(part, cells)| {
+                ObjectCells::new(part.clone(), &cells, lattice_offset)
+            }));
         }
 
         let (parent, transform) = match place.parent {
@@ -429,7 +187,10 @@ fn flattened(
                 )
             }
 
-            None => (None, node_transform(sampling, place)),
+            None => (
+                None,
+                node_transform(&sampling.places, sampling.voxel_size, place),
+            ),
         };
 
         let node_index = nodes.len();
@@ -472,84 +233,6 @@ fn grid_cells(grid: &SdfGrid, cells: &[SdfCell]) -> Vec<LiveCell> {
                 .map(|material_id| (grid.min + offset, material_id))
         })
         .collect()
-}
-
-/// The least and greatest lattice indices of `cells`, or `None` for no cells.
-fn cell_box(cells: &[LiveCell]) -> Option<(TyVector3I32, TyVector3I32)> {
-    cells.iter().fold(None, |bounds, (cell, _)| {
-        Some(bounds.map_or(
-            (*cell, *cell),
-            |(min, max): (TyVector3I32, TyVector3I32)| (min.min(*cell), max.max(*cell)),
-        ))
-    })
-}
-
-/// The object named `name` holding `cells`, or `None` for no cells. A later
-/// cell at one lattice index wins it. The object's first place sits
-/// `lattice_offset` voxels from the lattice.
-fn object_cells(
-    name: String,
-    cells: &[LiveCell],
-    lattice_offset: TyVector3F64,
-) -> Option<ObjectCells> {
-    let (min, max) = cell_box(cells)?;
-    let size = (max - min + 1).as_uvec3();
-    let mut materials = IdVec::from_vec(vec![None; VoxObject::volume_of(size) as usize]);
-
-    for (cell, material_id) in cells {
-        let position = (*cell - min).as_uvec3();
-        let voxel_id =
-            VoxObject::raster_id(size, position).expect("a live cell lies inside its box");
-        materials[voxel_id.to_usize_id()] = Some(*material_id);
-    }
-
-    let base = TyVector3F64::from_array(lattice_offset.to_array().map(|component| {
-        let rounded = component.round();
-
-        if (component - rounded).abs() <= WHOLE_TOLERANCE {
-            rounded
-        } else {
-            component.floor()
-        }
-    }))
-    .as_ivec3();
-
-    Some(ObjectCells {
-        name,
-        min,
-        size,
-        materials,
-        base,
-    })
-}
-
-/// The transform of `place`'s node.
-fn node_transform(sampling: &SdfSampling, place: &SdfPlace) -> TyTransformF64 {
-    match place.parent {
-        Some(parent) => TyTransformF64 {
-            position: (place.pivot - sampling.places[parent].pivot) / sampling.voxel_size,
-            rotation: place.rotation,
-            ..TyTransformF64::IDENTITY
-        },
-
-        None => TyTransformF64 {
-            position: place.pivot,
-            rotation: place.rotation,
-            scale: TyVector3F64::splat(sampling.voxel_size),
-        },
-    }
-}
-
-/// `offset` with each component within [`WHOLE_TOLERANCE`] of zero read as
-/// zero.
-fn snap(offset: TyVector3F64) -> TyVector3F64 {
-    TyVector3F64::from_array(offset.to_array().map(|component| {
-        if component.abs() <= WHOLE_TOLERANCE {
-            0.0
-        } else {
-            component
-        }
-    }))
 }
 
 /// The cells of `grid` with each hidden live cell emptied.

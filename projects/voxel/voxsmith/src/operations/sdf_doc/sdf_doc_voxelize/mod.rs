@@ -13,7 +13,9 @@ mod sdf_sample_options;
 mod sdf_sampling;
 mod sdf_shapes;
 mod sdf_step_record;
+mod sdf_tile_options;
 mod sdf_vox_main_options;
+mod tiled_vox_main;
 mod to_vox_main;
 
 pub use report::*;
@@ -29,7 +31,9 @@ pub use sdf_sample_options::*;
 pub use sdf_sampling::*;
 pub use sdf_shapes::*;
 pub use sdf_step_record::*;
+pub use sdf_tile_options::*;
 pub use sdf_vox_main_options::*;
+pub use tiled_vox_main::*;
 pub use to_vox_main::*;
 
 // Internal API

@@ -2,9 +2,8 @@ use crate::{
     Error, Result,
     dependencies::sdf_doc::MapCells,
     operations::sdf_doc::{
-        EntryPaths, PlaceFrame, SdfCellBounds, SdfGrid, SdfSampleOptions, SdfSampling, SdfShapes,
-        SdfStepRecord, check_document, check_shape_boxes, collect_places, resolve_materials,
-        sample_grid, sample_voxel_size, text_outlines, whole_voxels,
+        CheckedModel, ObjectSampler, PlaceFrame, SdfCellBounds, SdfGrid, SdfSampleOptions,
+        SdfSampling, SdfStepRecord, whole_voxels,
     },
     utilities::VoxelFrame,
 };
@@ -27,16 +26,12 @@ pub fn sample<D: MapCells>(
     }
 
     let state = main.state();
-    let mut places = collect_places(state);
-    let paths = EntryPaths::new(state, &places);
-
-    check_document(state, &places, &paths)?;
-    let materials = resolve_materials(state, &paths)?;
-
-    let shapes = SdfShapes::new(main, text_outlines(main, &paths)?);
-    check_shape_boxes(state, &shapes, &paths)?;
-
-    let voxel_size = sample_voxel_size(state, &places, &shapes, options.resolution)?;
+    let CheckedModel {
+        mut places,
+        materials,
+        shapes,
+        voxel_size,
+    } = CheckedModel::new(main, options.resolution)?;
     let mut grids = Vec::new();
     let mut shared_grids = HashMap::new();
 
@@ -76,16 +71,18 @@ pub fn sample<D: MapCells>(
         for &object_id in &state.nodes[place.node_id.to_usize_id()].child_object_ids {
             let grid_index = match options.frame {
                 VoxelFrame::World => {
-                    grids.push(sample_grid(
-                        dependencies,
-                        state,
-                        &shapes,
-                        object_id,
-                        &place.path,
-                        voxel_size,
-                        pose,
-                        options.record_writes,
-                    )?);
+                    grids.push(
+                        ObjectSampler::new(
+                            state,
+                            &shapes,
+                            object_id,
+                            &place.path,
+                            voxel_size,
+                            pose,
+                            options.record_writes,
+                        )
+                        .grid(dependencies)?,
+                    );
                     grids.len() - 1
                 }
 
@@ -93,16 +90,18 @@ pub fn sample<D: MapCells>(
                     Some(grid_index) => *grid_index,
 
                     None => {
-                        grids.push(sample_grid(
-                            dependencies,
-                            state,
-                            &shapes,
-                            object_id,
-                            &place.path,
-                            voxel_size,
-                            TyPoseF64::IDENTITY,
-                            options.record_writes,
-                        )?);
+                        grids.push(
+                            ObjectSampler::new(
+                                state,
+                                &shapes,
+                                object_id,
+                                &place.path,
+                                voxel_size,
+                                TyPoseF64::IDENTITY,
+                                options.record_writes,
+                            )
+                            .grid(dependencies)?,
+                        );
                         shared_grids.insert(object_id, grids.len() - 1);
                         grids.len() - 1
                     }

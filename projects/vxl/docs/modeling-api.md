@@ -41,6 +41,9 @@ writes a `.voxj` document:
    voxelizes at its pose on the grid of the joint or root part it flattens into.
    Each joint keeps its node and voxelizes unrotated
 6. `--report` prints the [report](#report) and writes it to `table-report.txt`
+7. `--tile <cells>` samples each part in cubes that many cells on a side, so a
+   part can pass the 2^27-cell grid cap. It needs `--frame world` and no
+   `--flatten` or `--report`
 
 ### Profiles
 

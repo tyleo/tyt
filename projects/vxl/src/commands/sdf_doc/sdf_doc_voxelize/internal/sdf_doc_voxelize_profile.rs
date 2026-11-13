@@ -29,6 +29,9 @@ pub struct SdfDocVoxelizeProfile {
 
     /// Mirrors `--report`.
     pub(crate) report: Option<bool>,
+
+    /// Mirrors `--tile`.
+    pub(crate) tile: Option<u32>,
 }
 
 impl Profile for SdfDocVoxelizeProfile {
@@ -66,7 +69,8 @@ mod tests {
                 "frame": "world",
                 "fillMode": "surface",
                 "flatten": "objects",
-                "report": false
+                "report": false,
+                "tile": 64
             }"#,
         );
 
@@ -82,6 +86,7 @@ mod tests {
         assert_eq!(profile.fill_mode, Some(NamedCliValue(FillMode::Surface)));
         assert_eq!(profile.flatten, Some(NamedCliValue(FlattenMode::Objects)));
         assert_eq!(profile.report, Some(false));
+        assert_eq!(profile.tile, Some(64));
     }
 
     #[test]
@@ -98,6 +103,7 @@ mod tests {
             r#"{ "voxelSize": 0 }"#,
             r#"{ "frame": "both" }"#,
             r#"{ "flatten": true }"#,
+            r#"{ "tile": -1 }"#,
             r#"{ "scale": "keep" }"#,
             r#"{ "output": "chair.voxj" }"#,
         ] {

@@ -12,7 +12,10 @@ use voxconv::{
 };
 use voxsmith::{
     dependencies::DependenciesImpl as VoxsmithDependenciesImpl,
-    operations::sdf_doc::{SdfSampleOptions, SdfVoxMainOptions, report, sample, to_vox_main},
+    operations::sdf_doc::{
+        SdfSampleOptions, SdfTileOptions, SdfVoxMainOptions, report, sample, tiled_vox_main,
+        to_vox_main,
+    },
     utilities::{FillMode, FlattenMode, GridResolution, VoxelFrame},
 };
 
@@ -61,6 +64,12 @@ pub struct SdfDocVoxelize {
     )]
     report: Option<bool>,
 
+    /// Samples each part in cubes this many cells on a side, one cube at a
+    /// time, so a part can pass the 2^27-cell grid cap. Writes an object per
+    /// cube. Needs `--frame world`, `--flatten none`, and `--report false`.
+    #[arg(value_name = "tile", long)]
+    tile: Option<u32>,
+
     /// Applies saved voxelize flags. A flag given here overrides the element
     /// it mirrors. Either voxel-size flag overrides both `resolution` and
     /// `voxelSize`. The profiles come from every `.vxlconfig`'s
@@ -82,6 +91,9 @@ struct Settings {
     vox_main: SdfVoxMainOptions,
 
     report: bool,
+
+    /// The tile edge in cells, for a tiled run.
+    tile: Option<u32>,
 }
 
 impl SdfDocVoxelize {
@@ -114,8 +126,26 @@ impl SdfDocVoxelize {
             &self.input,
             LoadOptions { fonts: true },
         )?;
-        let sampling = sample(&VoxsmithDependenciesImpl, &main, &settings.sample)?;
-        let document = to_vox_main(&sampling, &settings.vox_main)?;
+        // A tiled run holds no grids for the report to read.
+        let (document, sampling) = match settings.tile {
+            Some(tile) => (
+                tiled_vox_main(
+                    &VoxsmithDependenciesImpl,
+                    &main,
+                    &SdfTileOptions {
+                        resolution: settings.sample.resolution,
+                        fill_mode: settings.vox_main.fill_mode,
+                        tile,
+                    },
+                )?,
+                None,
+            ),
+
+            None => {
+                let sampling = sample(&VoxsmithDependenciesImpl, &main, &settings.sample)?;
+                (to_vox_main(&sampling, &settings.vox_main)?, Some(sampling))
+            }
+        };
 
         warn_slashed_names(&dependencies, document.state())?;
 
@@ -130,6 +160,8 @@ impl SdfDocVoxelize {
         )?;
 
         if settings.report {
+            let sampling = sampling.expect("a run that reports samples untiled");
+
             // The report reads the grids of the world frame under either
             // frame.
             let world = match sampling.frame {
@@ -169,7 +201,8 @@ impl SdfDocVoxelize {
     }
 
     /// The settings these flags set over `profile`. A flag overrides the
-    /// element it mirrors. Errors on flattening beside `--frame local`.
+    /// element it mirrors. Errors on flattening beside `--frame local`, and
+    /// on tiling beside `--frame local`, flattening, or the report.
     fn resolve(&self, profile: &SdfDocVoxelizeProfile) -> Result<Settings> {
         let profile_resolution = profile.grid_resolution()?;
 
@@ -197,6 +230,21 @@ impl SdfDocVoxelize {
         }
 
         let report = self.report.or(profile.report).unwrap_or(false);
+        let tile = self.tile.or(profile.tile);
+
+        if tile.is_some() {
+            if frame == VoxelFrame::Local {
+                return Err(Error::usage("--tile needs --frame world"));
+            }
+
+            if flatten != FlattenMode::None {
+                return Err(Error::usage("--tile needs --flatten none"));
+            }
+
+            if report {
+                return Err(Error::usage("--tile needs --report false"));
+            }
+        }
 
         Ok(Settings {
             // Under the local frame the report samples the world frame again.
@@ -214,6 +262,7 @@ impl SdfDocVoxelize {
                 flatten,
             },
             report,
+            tile,
         })
     }
 }
@@ -297,6 +346,48 @@ mod tests {
                 &["--frame", "local"][..],
                 r#"{ "flatten": "objects" }"#,
                 "--flatten objects needs --frame world",
+            ),
+        ] {
+            let error = resolve(args, profile).unwrap_err().to_string();
+            assert!(error.contains(message), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_tile_comes_from_the_flag_over_the_profile() {
+        let tile = |args: &[&str], json: &str| {
+            let mut argv = vec!["voxelize", "chair.sdfj"];
+            argv.extend_from_slice(args);
+
+            SdfDocVoxelize::try_parse_from(argv)
+                .unwrap()
+                .resolve(&serde_json::from_str(json).unwrap())
+                .unwrap()
+                .tile
+        };
+
+        assert_eq!(tile(&[], "{}"), None);
+        assert_eq!(tile(&[], r#"{ "tile": 64 }"#), Some(64));
+        assert_eq!(tile(&["--tile", "128"], r#"{ "tile": 64 }"#), Some(128));
+    }
+
+    #[test]
+    fn tiling_beside_the_local_frame_flattening_or_the_report_errors() {
+        for (args, profile, message) in [
+            (
+                &["--tile", "64", "--frame", "local"][..],
+                "{}",
+                "--tile needs --frame world",
+            ),
+            (
+                &["--flatten", "nodes"][..],
+                r#"{ "tile": 64 }"#,
+                "--tile needs --flatten none",
+            ),
+            (
+                &["--tile", "64", "--report"][..],
+                "{}",
+                "--tile needs --report false",
             ),
         ] {
             let error = resolve(args, profile).unwrap_err().to_string();
