@@ -2789,8 +2789,15 @@ give this Mac the full view's image. Quest runs them in 4.77 ms against
 own no pixel cost S2 1.8 ms, about 95 ns each with their fragments.
 
 By the driver's counters S2's triangles cover 23.2 M pixels a frame. The
-454 boxes' cover 9.3 M. The driver's count of pixels its low-resolution
-depth test kills reads zero on every view.
+454 boxes' cover 9.3 M.
+
+**The low-resolution depth test.** The driver's count of pixels the test
+kills reads zero on every view. The view's near plane lies a millionth of
+a meter out, which leaves each depth under what the test resolves. With
+the plane at 5 cm the test kills 2.2 M pixels a frame on S2. The view
+takes 6.66 ms against 6.64, S1 1.83 against 1.91, and S5 3.29 against
+3.32. A fragment that can discard writes no depth for the test to read,
+and S2's walls march.
 
 **Outcomes.**
 
@@ -2807,5 +2814,5 @@ depth test kills reads zero on every view.
 6. A test that keeps hidden boxes from drawing has up to 1.9 ms of S2's
    6.6 to win. No other bench scene hides most of its boxes: S5 shows
    21,044 of 23,296, S4 1040 of 2345, and S1 200 of 426
-7. Whether Quest's low-resolution depth test runs under multiview, or in
-   a pass that loads its depth, is not tested
+7. A hidden box costs by its triangles. The low-resolution depth test
+   kills pixels once the near plane lets it, and S2's time holds
