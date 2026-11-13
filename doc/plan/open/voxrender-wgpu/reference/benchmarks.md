@@ -3121,3 +3121,54 @@ loses the tint's hue.
 2. The estimate of what it adds leaves the fish tank 0.1 to 0.4 ms and
    costs the lantern time. Glass at half size is not built
 
+## The 5 km valley, 2026-11-13
+
+A valley far past the trial models' size, and the copy of it the gallery
+can load.
+
+- The model: `src/valley/valley.voxjz` of the voxel-creations repo at its
+  commit 5d370ac. A valley 5120 m square at 2 m voxels, filled at its
+  surface alone. It holds 23,250,129 voxels in 130 objects of up to 256
+  cells a side
+- Device and method: as in Trial models, with the model held for 40 s.
+  This Mac draws the model's hero view at 840 by 880 through `view`
+- Memory: the most this Mac's process held, and the app's on Quest from
+  `dumpsys meminfo`
+
+**The copies.** vxl merges each block of cells into one voxel that takes
+the block's commonest material, and the node's scale keeps the scene's
+size:
+
+```sh
+vxl object downsample --factor 4 --keep any --select '**' valley.voxjz merged.voxjz
+vxl node set scale --scale 8 8 8 --select-index 0 merged.voxjz valley-5km.voxjz
+```
+
+`--keep any` keeps a block that holds one live cell. The default keeps a
+block half full, which leaves 17,875 voxels of a surface one voxel thick.
+
+| Voxel | Voxels | File | This Mac | Its memory |
+| --- | ---: | ---: | --- | ---: |
+| 2 m | 23,250,129 | 15.5 MB | fails after 18 s: a buffer of 5.34 GB | 24.6 GB |
+| 4 m | 7,183,587 | 4.9 MB | fails: a buffer of 670 MB | 3.2 GB |
+| 8 m | 1,726,621 | 1.2 MB | draws in 3.7 s | 0.70 GB |
+| 16 m | 388,504 | 0.28 MB | draws in 2.1 s | 0.13 GB |
+
+The buffers that fail hold the shadow fill's cells, a word for each cell of
+each object's grid. wgpu's limit for a buffer is 256 MB.
+
+**The 8 m copy on Quest.** It loads in 8.4 to 8.6 s and draws from the
+table stand in 6.15 ms at p50 and 6.37 at p99, at 90 frames a second. The
+app holds 916 MB, 623 MB of it graphics. From the table stand an 8 m voxel
+spans about 1.4 pixels at the model's middle.
+
+**Outcomes.**
+
+1. The gallery opens with the valley at 8 m voxels, a voxel for about
+   each 13 of the model's
+2. The view sizes its buffers by the cells of each object's grid. The
+   valley's 130 grids hold 1.34 billion cells for 23 M voxels
+3. From the table stand the 8 m copy shows what the eyes can resolve. A
+   wearer who grows the model or stands in it needs the 2 m voxels near
+   the head alone, which is level of detail's work
+
