@@ -1,3 +1,5 @@
+use crate::HeadsetEye;
+use std::f64::consts::{FRAC_PI_3, TAU};
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyVector3F64};
 use voxrender::{RenderView, fit_scale};
 
@@ -18,6 +20,20 @@ const BACK: f64 = 1.5;
 
 /// The least and the most scene meters a meter of the tracking space spans.
 const SCALES: [f64; 2] = [1.0 / 1024.0, 4096.0];
+
+/// The meters a walk goes ahead before it turns back.
+const WALK: f64 = 60.0;
+
+/// The steps a second of a walk, and the meters a step lifts the head by
+/// and shifts it to a side by.
+const STEPS: f64 = 2.0;
+const BOB: f64 = 0.03;
+const SWAY: f64 = 0.02;
+
+/// The radians a walker's head turns to each side, and the seconds from
+/// one look to a side to the next look there.
+const LOOK: f64 = FRAC_PI_3;
+const LOOKS: f64 = 4.0;
 
 /// Where a headset's tracking space sits in a scene. The space's -Z is
 /// ahead of the wearer and its +Y is up.
@@ -71,6 +87,24 @@ impl HeadsetStand {
             turn: 0.0,
             scale: 1.0,
         }
+    }
+
+    /// The stand `seconds` into a walk from this one at `speed` meters of
+    /// the tracking space a second. The walk goes [`WALK`] meters ahead and
+    /// back. The head between `eyes` rises and sways with each step and
+    /// looks from side to side.
+    pub fn walked(self, eyes: &[HeadsetEye; 2], seconds: f64, speed: f64) -> Self {
+        let along = (speed * seconds) % (2.0 * WALK);
+        let ahead = WALK - (along - WALK).abs();
+        let bob = BOB * (TAU * STEPS * seconds).sin();
+        let sway = SWAY * (TAU * STEPS / 2.0 * seconds).sin();
+        let look = LOOK * (TAU * seconds / LOOKS).sin();
+
+        let [x, y, z] =
+            [0, 1, 2].map(|axis| f64::from(eyes[0].position[axis] + eyes[1].position[axis]) / 2.0);
+
+        self.moved(TyVector3F64::new(sway, bob, -ahead))
+            .turned(TyVector3F64::new(x, y, z), look)
     }
 
     /// The rotation from the tracking space into the scene.
@@ -127,8 +161,8 @@ impl HeadsetStand {
 
 #[cfg(test)]
 mod tests {
-    use crate::HeadsetStand;
-    use std::f64::consts::FRAC_PI_2;
+    use crate::{HeadsetEye, HeadsetStand};
+    use std::f64::consts::{FRAC_PI_2, FRAC_PI_3};
     use ty_math::{TyBoundsF64, TyVector3F64};
     use voxrender::fit_scale;
 
@@ -176,6 +210,37 @@ mod tests {
 
         // A growth past the least scale stops there.
         assert_eq!(stand().grown(pivot, 1e9).scale, 1.0 / 1024.0);
+    }
+
+    #[test]
+    fn a_walk_goes_ahead_and_comes_back() {
+        let eyes = [-0.03, 0.03].map(|x| HeadsetEye {
+            position: [x, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            tangents: [-1.0, 1.0, 1.0, -1.0],
+        });
+
+        let from = HeadsetStand {
+            origin: TyVector3F64::ZERO,
+            turn: 0.0,
+            scale: 1.0,
+        };
+
+        // Whole seconds land between steps and between looks to a side.
+        let walked = from.walked(&eyes, 10.0, 2.0);
+        assert!(close(walked.origin, TyVector3F64::new(0.0, 0.0, -20.0)));
+        assert!(walked.turn.abs() < 1e-9);
+
+        // 50 s at 2 m a second is 60 m ahead and 40 m back.
+        assert!(close(
+            from.walked(&eyes, 50.0, 2.0).origin,
+            TyVector3F64::new(0.0, 0.0, -20.0)
+        ));
+
+        // A look to a side turns the stand about the head.
+        let looking = from.walked(&eyes, 1.0, 2.0);
+        assert!((looking.turn - FRAC_PI_3).abs() < 1e-9);
+        assert!(close(looking.origin, TyVector3F64::new(0.0, 0.0, -2.0)));
     }
 
     #[test]

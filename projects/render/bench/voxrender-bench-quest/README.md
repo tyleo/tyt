@@ -85,9 +85,20 @@ adb shell setprop debug.voxrenderbench.view S2
 adb shell am start -n com.tyleo.voxrenderbench/android.app.NativeActivity
 ```
 
-The wearer starts at the scene's first view. The app logs the view's time on
-the CPU every 600 frames on a `view` line beside B0's GPU frame times.
-`'setprop debug.voxrenderbench.view ""'` returns the app to S1.
+The wearer starts at the scene's first view. Every 600 frames the app logs
+the view's mean and p99 time on the CPU on a `view` line beside B0's GPU
+frame times. `'setprop debug.voxrenderbench.view ""'` returns the app to S1.
+
+`debug.voxrenderbench.walk` holds a speed in meters a second. The app then
+walks the wearer 60 m ahead from the view and back at that speed. The head
+bobs with each step and looks 60 degrees to each side. Two runs draw the
+same views because the walk steps by frames drawn:
+
+```sh
+adb shell setprop debug.voxrenderbench.walk 1.4
+```
+
+`'setprop debug.voxrenderbench.walk ""'` stops the walk.
 
 The view shades as the contract's opaque surface under the scene's first sun
 and its hemispheres. The GPU fills the sun's shadows at start. A face's

@@ -92,8 +92,8 @@ pub enum Error {
     /// A flag's system property holds a value other than `true` or `false`.
     FlagProperty { name: &'static str, value: String },
 
-    /// A system property holds a value other than a positive count of seconds.
-    SecondsProperty { name: &'static str, value: String },
+    /// A system property holds a value other than a number over 0.
+    PositiveProperty { name: &'static str, value: String },
 
     /// A system property holds a value other than a scale over 0 and at most 1.
     ScaleProperty { name: &'static str, value: String },
@@ -139,10 +139,12 @@ impl Display for Error {
             Error::FlagProperty { name, value } => {
                 write!(f, "the property {name} holds {value:?}, not true or false")
             }
-            Error::SecondsProperty { name, value } => write!(
-                f,
-                "the property {name} holds {value:?}, not a positive count of seconds"
-            ),
+            Error::PositiveProperty { name, value } => {
+                write!(
+                    f,
+                    "the property {name} holds {value:?}, not a number over 0"
+                )
+            }
             Error::ScaleProperty { name, value } => write!(
                 f,
                 "the property {name} holds {value:?}, not a scale over 0 and at most 1"
