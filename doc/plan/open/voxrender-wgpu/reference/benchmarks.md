@@ -2703,3 +2703,109 @@ over two runs each. The last column counts a still of the first view at
    leaves them
 4. A still changes on few pixels. What a level's switch looks like as the
    head moves stays unseen
+
+## Where S2's frame goes, 2026-11-13
+
+Why S2's view takes four times S1's time, and what three exact cuts give
+back.
+
+- Device and method: as in Records by row, in one sitting. The headset
+  rests off the face and looks 7 degrees up from each scene's first view
+- Counters: `ovrgpuprofiler` over 10 s of a view at 90 frames a second,
+  less its counts over the cube scene's view
+- Runs: a scratch build ends a frame after its first run of boxes or its
+  second. A run's share is the difference of two builds because its work
+  follows from the runs before it alone
+- Unshaded: a scratch build whose hit writes its cell alone
+- Counts: a scratch build on this Mac draws the eyes the headset logged,
+  at 1680 by 1760. A fragment that passes its depth test adds one to its
+  pixel. A miss adds one through a twin of its box that draws just before
+  the box and writes no depth
+
+**S2 against S1.**
+
+| | S1 | S2 |
+| --- | ---: | ---: |
+| GPU ms over the cube's 0.37 | 1.54 | 6.27 |
+| Pixels a box covers, of the eyes' 5.91 M | 3.45 M | 5.64 M |
+| Fragments a frame | 3.93 M | 8.67 M |
+| Fragments a covered pixel | 1.15 | 1.54 |
+| Fragments that march | 15% | 60% |
+| Instructions a fragment | 227 | 325 |
+
+This Mac counts 3.98 M fragments for S1 and 8.70 M for S2, within 1% of
+the headset's. Quest runs the fragments that pass their depth tests at
+their turns and no others.
+
+**S2's runs.**
+
+| Run | Boxes | Fragments | That miss | ms | ms unshaded | Instructions a fragment |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Solid | 4721 | 3.32 M | | 1.18 | 0.57 | 233 |
+| Marched | 15,449 | 4.64 M | 0.82 M | 3.88 | 3.06 | 359 |
+| Marched, crossing | 6155 | 0.74 M | 0.05 M | 1.21 | 1.04 | 525 |
+
+Shading takes 1.6 of the frame's 6.3 ms. Of the 7.82 M fragments that
+shade, 2.18 M end under a nearer one.
+
+**The marches by what they draw.** A march reads a cell a step, its first
+included.
+
+| Cells | Marches | That miss | Cells read | A hit | A miss |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Buildings, 20 to 30 cm | 2.50 M | 0.21 M | 6.2 M | 1.7 | 10.7 |
+| Trees, 10 cm | 1.84 M | 0.59 M | 14.9 M | 7.3 | 9.8 |
+| Cars, 5 cm | 0.90 M | 0.07 M | 1.6 M | 1.7 | 2.9 |
+
+A tree's crown fills 55% of an ellipsoid. The box around a tile's part of
+it holds empty corners. The tile under the crown holds the trunk and the
+crown's base in one box.
+
+**A march that skips.** A tile held each cell's distance from its nearest
+live cell, 4 bits a cell: the most of the offsets along the axes. A march
+read the distance in place of the cell's bit and moved that many cells at
+once. The image check and the counts of hits and misses hold on every
+scene.
+
+| | S1 | S5 | S2 | S4 | Inside a bush |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Cells read, kept | 1.6 M | 3.5 M | 22.7 M | 7.9 M | 46.7 M |
+| Cells read, skipping | 1.1 M | 3.5 M | 12.2 M | 5.2 M | 32.1 M |
+| Quest ms, kept | 1.91 | 3.32 | 6.64 | 3.02 | 5.72 |
+| Quest ms, skipping | 1.86 | 3.78 | 7.02 | 3.53 | 6.78 |
+
+A move that can skip holds about twice a step's instructions. A hit then
+reads its row's word after the distance. S2's fragments ran 6% more
+instructions and the bush's 35% more. A cell of S5's floor lies beside a
+live cell, where the distance skips nothing.
+
+**Boxes outside the view.** A sort dropped the boxes outside both eyes'
+frusta, 7137 of S2's 26,325. S2 ran in 6.57 ms against 6.64, 8 ns a box.
+
+**Boxes behind nearer ones.** 454 of S2's boxes own a pixel of either
+eye's image: 87 solid, 302 marched, and 65 that cross. Drawn alone they
+give this Mac the full view's image. Quest runs them in 4.77 ms against
+6.63 and shades 8.16 M fragments. The 18,734 boxes inside the view that
+own no pixel cost S2 1.8 ms, about 95 ns each with their fragments.
+
+By the driver's counters S2's triangles cover 23.2 M pixels a frame. The
+454 boxes' cover 9.3 M. The driver's count of pixels its low-resolution
+depth test kills reads zero on every view.
+
+**Outcomes.**
+
+1. S2's frame costs 4.1 times S1's from one pose: 2.2 times the
+   fragments, 1.43 times the instructions a fragment, and 1.29 times the
+   time an instruction
+2. The march and the boxes hold S2's time. Unshaded, the frame takes 4.7
+   of its 6.3 ms
+3. Trees run 35% of S2's marches and read 66% of their cells
+4. The skipping march loses on every scene but S1. Steps are too small a
+   share of a fragment for a costlier step to pay
+5. A box outside the view costs 8 ns. A frustum test on the CPU has
+   0.06 ms of S2 to save
+6. A test that keeps hidden boxes from drawing has up to 1.9 ms of S2's
+   6.6 to win. No other bench scene hides most of its boxes: S5 shows
+   21,044 of 23,296, S4 1040 of 2345, and S1 200 of 426
+7. Whether Quest's low-resolution depth test runs under multiview, or in
+   a pass that loads its depth, is not tested

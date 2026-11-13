@@ -420,9 +420,18 @@ this order:
       - [x] A study of what the research's rule would buy. Cells at 1.4
             pixels take S2 from 6.6 ms to 6.2 on Quest and leave S1, S4,
             and the models as they are. S2's pixels hold its time
-      - [ ] The project lead rules on what follows: the reference's brick
-            LOD, boxes that span several tiles with their cells whole, or
-            S2's pixels first
+      - [x] The project lead ruled on what follows: S2's pixels first
+      - [x] A study of where S2's frame goes. It shades 2.2 times S1's
+            fragments, and 60% of them march where 15% of S1's do. The
+            march and the boxes hold its time. Shading takes 1.6 of its
+            6.3 ms
+      - [x] Three exact cuts, timed. A march that skips empty cells by a
+            table of distances reads 46% fewer cells on S2 and runs
+            slower. A box outside the view costs 8 ns. The boxes behind
+            nearer ones cost S2 1.9 ms: 454 of its 26,325 own a pixel
+      - [ ] The project lead rules on a test that keeps a hidden box from
+            drawing, the reference's brick LOD, and boxes that span
+            several tiles with their cells whole
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
    first. Glass at half size follows as a property that is off by default
 8. S6, the moving scene, joins the bench scenes. Its motion is a scripted
