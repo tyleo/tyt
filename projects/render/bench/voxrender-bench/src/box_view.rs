@@ -1,16 +1,13 @@
 use crate::{
     BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, GlassTiles, LitFill,
-    MaterialGrid, PassTerms, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
-    solid_slabs,
+    PassTerms, PlacedBox, TileMasks, TileScene, ViewEye, box_view_shader, quad_tlas, tile_quads,
 };
-use branded_id::U32Id;
 use std::{collections::HashMap, mem, num::NonZeroU32};
 use ty_math::{
     TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64, TyVector3U32,
 };
 use voxcore::material;
-use voxrender::{RenderBloom, RenderLight, RenderScene, grid_point, tonemap};
-use voxsurface::{SurfaceMethod, mesh_grid_keyed};
+use voxrender::{RenderBloom, RenderLight, grid_point, tonemap};
 use wgpu::{
     AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
     Device, Extent3d, Features, FilterMode, LoadOp, Operations, Queue, RenderPass,
@@ -315,22 +312,28 @@ impl BoxView {
     /// The format of the depth a pass that draws the view clears to zero.
     pub const DEPTH: TextureFormat = BoxDraw::DEPTH;
 
-    /// Builds the view of `scene` under `bloom` and submits the fill of the
+    /// Whether a view on `device` draws the surfaces between materials that
+    /// pass light, which takes a device that blends two colors a fragment.
+    /// A [`TileScene`] keeps those surfaces for such a view.
+    pub fn draws_glass(device: &Device) -> bool {
+        device.features().contains(Features::DUAL_SOURCE_BLENDING)
+    }
+
+    /// Builds the view of `tiles` under `bloom` and submits the fill of the
     /// sun's corner shadows. The view draws to a two-layer target of
-    /// `format` whose width and height are `size`. Errors if a tile holds
-    /// over 256 materials, or if the scene has a sun and no view.
+    /// `format` whose width and height are `size`.
     pub fn new(
         device: &Device,
         queue: &Queue,
-        scene: &RenderScene,
+        tiles: &TileScene,
         bloom: RenderBloom,
         format: TextureFormat,
         size: [u32; 2],
-    ) -> Result<Self> {
+    ) -> Self {
         // The scene blooms where an emission's brightest channel passes
         // the threshold.
         let glows = bloom.strength > 0.0
-            && scene.iter_materials().any(|(_, material)| {
+            && tiles.materials.iter().any(|material| {
                 let emission = material.emissive_color * material.emissive_strength;
 
                 emission.red.max(emission.green).max(emission.blue) > bloom.threshold
@@ -339,116 +342,47 @@ impl BoxView {
         let radius = bloom.radius;
         let bloom = glows.then(|| (BoxBloom::new(device, size, bloom), bloom.threshold as f32));
 
-        let mut words = Vec::new();
-        let mut offsets = HashMap::new();
-        let mut object_boxes = HashMap::new();
-        let mut object_solids = HashMap::new();
-        let mut object_tiles = HashMap::new();
-        let mut object_recorded = HashMap::new();
-        let mut object_entries = HashMap::new();
-
-        // A material that passes no light at normal incidence.
-        let opaque = |material: u32| {
-            scene
-                .material(U32Id::from_u32(material))
-                .is_some_and(|material| {
-                    material::pass(
-                        material.base_color,
-                        material.metallic,
-                        material.transmission,
-                        material.ior,
-                    ) == TyLinSrgbF64::new(0.0, 0.0, 0.0)
-                })
-        };
+        let count = |value: usize| u32::try_from(value).expect("a scene's words number under 2^32");
+        let objects = &tiles.objects;
 
         // The surfaces between materials that pass light draw as glass
-        // where the device blends a tint a channel. A cell's word holds
-        // where its material's seven values start in `materials`.
-        let blends = device.features().contains(Features::DUAL_SOURCE_BLENDING);
-        let mut glass_ids: Vec<u32> = Vec::new();
-        let mut object_glass = HashMap::new();
-        let mut object_glass_cells = HashMap::new();
-        let mut glass_tiles = HashMap::new();
-
-        let mut place = |id: u32| {
-            let place = glass_ids
-                .iter()
-                .position(|&placed| placed == id)
-                .unwrap_or_else(|| {
-                    glass_ids.push(id);
-
-                    glass_ids.len() - 1
-                });
-
-            u32::try_from(place * 7)
-                .ok()
-                .filter(|&place| place < 1 << 12)
-                .expect("a scene's glass materials number under 586")
+        // where the device blends a tint a channel.
+        let blends = Self::draws_glass(device);
+        let no_glass = GlassTiles {
+            boxes: Vec::new(),
+            surfaces: Vec::new(),
+            tiles: Vec::new(),
+            cells: Vec::new(),
+            words: Vec::new(),
         };
 
-        for (object_id, object) in scene.iter_objects() {
-            let masks = TileMasks::new(object, true, Some(&opaque))?;
-
-            offsets.insert(
-                object_id,
-                u32::try_from(words.len()).expect("a scene's mask words number under 2^32"),
-            );
-
-            words.extend(masks.words);
-
-            let glass = if blends {
-                GlassTiles::new(object, &opaque, &mut place)
+        let glass_of = |object: usize| {
+            if blends {
+                &objects[object].glass
             } else {
-                GlassTiles {
-                    boxes: Vec::new(),
-                    surfaces: Vec::new(),
-                    tiles: Vec::new(),
-                    cells: Vec::new(),
-                    words: Vec::new(),
-                }
-            };
+                &no_glass
+            }
+        };
 
-            let first = u32::try_from(words.len()).expect("a scene's mask words number under 2^32");
+        // Each object's mask words, then its glass tiles' words, with where
+        // each starts.
+        let mut words = Vec::new();
+        let mut offsets = Vec::new();
 
-            words.extend(glass.words);
-            glass_tiles.insert(object_id, (first, glass.tiles, glass.surfaces));
+        for (index, object) in objects.iter().enumerate() {
+            let first = count(words.len());
 
-            // Each glass tile's low corner and its cells with a surface.
-            object_glass_cells.insert(
-                object_id,
-                glass
-                    .boxes
-                    .iter()
-                    .map(|(low, _)| *low / 16 * 16)
-                    .zip(glass.cells)
-                    .collect::<Vec<_>>(),
-            );
-
-            object_glass.insert(object_id, glass.boxes);
-            object_boxes.insert(object_id, masks.boxes);
-            object_solids.insert(object_id, masks.solids);
-            object_tiles.insert(object_id, (masks.tiles, masks.solid_tiles));
-            object_entries.insert(object_id, masks.entries);
-            object_recorded.insert(
-                object_id,
-                masks
-                    .corners
-                    .into_iter()
-                    .zip(masks.recorded)
-                    .collect::<Vec<_>>(),
-            );
+            words.extend(&object.masks.words);
+            offsets.push((first, count(words.len())));
+            words.extend(&glass_of(index).words);
         }
 
-        let object_ids: Vec<_> = scene
-            .iter_placements()
-            .map(|(_, placement)| placement.object_id)
-            .collect();
+        let object_of: Vec<_> = tiles.placements.iter().map(|&(object, _)| object).collect();
 
-        let placements: Vec<_> = scene
-            .iter_placements()
-            .map(|(_, placement)| {
-                let transform = placement.transform;
-
+        let placements: Vec<_> = tiles
+            .placements
+            .iter()
+            .map(|&(_, transform)| {
                 (
                     transform,
                     TyMatrix4x4F64::from_scale_rotation_translation(
@@ -460,15 +394,31 @@ impl BoxView {
             })
             .collect();
 
-        let marched = PlacedBox::list(scene, &object_boxes);
-        let solid = PlacedBox::list(scene, &object_solids);
+        let marched = PlacedBox::list(
+            &tiles.placements,
+            &(objects.iter())
+                .map(|object| object.masks.boxes.as_slice())
+                .collect::<Vec<_>>(),
+        );
+
+        let solid = PlacedBox::list(
+            &tiles.placements,
+            &(objects.iter())
+                .map(|object| object.masks.solids.as_slice())
+                .collect::<Vec<_>>(),
+        );
 
         // A box's tile sits past its object's first word.
         let tile = |placed: &PlacedBox, solid: bool| {
-            let object_id = object_ids[placed.placement as usize];
-            let (tiles, solid_tiles) = &object_tiles[&object_id];
+            let object = object_of[placed.placement as usize];
+            let masks = &objects[object].masks;
 
-            offsets[&object_id] + if solid { solid_tiles } else { tiles }[placed.brick]
+            offsets[object].0
+                + if solid {
+                    &masks.solid_tiles
+                } else {
+                    &masks.tiles
+                }[placed.brick]
         };
 
         let mut sun = (TyVector3F64::Y, TyLinSrgbF64::new(0.0, 0.0, 0.0));
@@ -476,7 +426,7 @@ impl BoxView {
         let mut ground = sky;
         let mut suns = 0;
 
-        for (_, light) in scene.iter_lights() {
+        for light in &tiles.lights {
             match *light {
                 RenderLight::Directional {
                     rotation,
@@ -515,13 +465,13 @@ impl BoxView {
         let mut lit_places = Vec::new();
         let mut lit_words: Vec<u32> = Vec::new();
 
-        for object_id in &object_ids {
-            lit_places.push(
-                u32::try_from(lit_words.len()).expect("a scene's lit words number under 2^32"),
-            );
+        for &object in &object_of {
+            lit_places.push(count(lit_words.len()));
 
             lit_words.extend(
-                object_entries[object_id]
+                objects[object]
+                    .masks
+                    .entries
                     .iter()
                     .flatten()
                     .map(|&entry| u32::from(entry) << 24),
@@ -530,14 +480,14 @@ impl BoxView {
 
         // A word for each glass cell follows: the first of each glass
         // tile's, for each placement.
-        let glass_lit: Vec<Vec<u32>> = object_ids
+        let glass_lit: Vec<Vec<u32>> = object_of
             .iter()
-            .map(|object_id| {
-                object_glass_cells[object_id]
+            .map(|&object| {
+                glass_of(object)
+                    .cells
                     .iter()
-                    .map(|(_, cells)| {
-                        let first = u32::try_from(lit_words.len())
-                            .expect("a scene's lit words number under 2^32");
+                    .map(|cells| {
+                        let first = count(lit_words.len());
 
                         lit_words.resize(lit_words.len() + cells.len(), 0);
 
@@ -554,14 +504,7 @@ impl BoxView {
         // zero, and its faces skip the sun's term.
         // Where a material passes light, the fill adds each cell's tint.
         let (lit_corners, tints) = if suns > 0 {
-            let fill = LitFill::new(
-                device,
-                scene,
-                sun.0,
-                &object_recorded,
-                &object_glass_cells,
-                &opaque,
-            )?;
+            let fill = LitFill::new(device, tiles, sun.0, blends);
 
             let glass_places: Vec<_> = glass_lit
                 .iter()
@@ -591,32 +534,28 @@ impl BoxView {
 
         // A material's three `vec4<f32>`s: its base color and metalness, its
         // emission and roughness, and its reflectance at normal incidence
-        // and occlusion strength. An id the scene lacks holds zeros.
+        // and occlusion strength.
         let material_values = |id: u32| {
-            scene
-                .material(U32Id::from_u32(id))
-                .map_or([0.0; 12], |material| {
-                    let base = material.base_color.color;
-                    let emission = material.emissive_color * material.emissive_strength;
-                    let reflectance =
-                        material::normal_reflectance(base, material.metallic, material.ior);
+            let material = &tiles.materials[id as usize];
+            let base = material.base_color.color;
+            let emission = material.emissive_color * material.emissive_strength;
+            let reflectance = material::normal_reflectance(base, material.metallic, material.ior);
 
-                    [
-                        base.red,
-                        base.green,
-                        base.blue,
-                        material.metallic,
-                        emission.red,
-                        emission.green,
-                        emission.blue,
-                        material.roughness,
-                        reflectance.red,
-                        reflectance.green,
-                        reflectance.blue,
-                        material.occlusion_strength,
-                    ]
-                    .map(|value| value as f32)
-                })
+            [
+                base.red,
+                base.green,
+                base.blue,
+                material.metallic,
+                emission.red,
+                emission.green,
+                emission.blue,
+                material.roughness,
+                reflectance.red,
+                reflectance.green,
+                reflectance.blue,
+                material.occlusion_strength,
+            ]
+            .map(|value| value as f32)
         };
 
         // Each tile's first material in `materials`. The tile's materials
@@ -625,68 +564,64 @@ impl BoxView {
         // materials in the same order share them.
         // A glass material holds the seven `vec4<f32>`s `box_glass.wgsl`'s
         // `past` lists.
-        // An id the scene lacks passes the light whole.
-        let mut absent = [0.0; 28];
-
-        absent[..3].fill(1.0);
-
         let glass_values = |id: u32| {
-            scene
-                .material(U32Id::from_u32(id))
-                .map_or(absent, |material| {
-                    let terms = PassTerms::new(material);
-                    let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
-                    let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
-                    let alpha = (material.roughness * material.roughness).max(1.0e-3);
-                    let emission = material.emissive_color * material.emissive_strength;
-                    let transmitted = material.transmission * (1.0 - material.metallic);
-                    let diffuse = material.base_color.color
-                        * ((1.0 - material.metallic) * (1.0 - material.transmission));
-                    let rise = terms.rise * transmitted;
+            let material = &tiles.materials[id as usize];
+            let terms = PassTerms::new(material);
+            let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
+            let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
+            let alpha = (material.roughness * material.roughness).max(1.0e-3);
+            let emission = material.emissive_color * material.emissive_strength;
+            let transmitted = material.transmission * (1.0 - material.metallic);
+            let diffuse = material.base_color.color
+                * ((1.0 - material.metallic) * (1.0 - material.transmission));
+            let rise = terms.rise * transmitted;
 
-                    // A reflectance with no hue fits one channel.
-                    let gloss = terms.reflectance;
-                    let plain = gloss.red == gloss.green && gloss.red == gloss.blue;
+            // A reflectance with no hue fits one channel.
+            let gloss = terms.reflectance;
+            let plain = gloss.red == gloss.green && gloss.red == gloss.blue;
 
-                    let follows = if !plain || emission != black {
-                        2.0
-                    } else if diffuse != black {
-                        1.0
-                    } else {
-                        0.0
-                    };
+            let follows = if !plain || emission != black {
+                2.0
+            } else if diffuse != black {
+                1.0
+            } else {
+                0.0
+            };
 
-                    let colors = [
-                        (
-                            white * terms.uncovered + terms.most * (white - gloss),
-                            material.base_color.alpha,
-                        ),
-                        (terms.most * terms.rise, 0.5 / alpha),
-                        (
-                            TyLinSrgbF64::new(gloss.red, rise.red, alpha * alpha),
-                            follows,
-                        ),
-                        (diffuse, 0.0),
-                        (gloss, 0.0),
-                        (rise, 0.0),
-                        (emission, 0.0),
-                    ];
+            let colors = [
+                (
+                    white * terms.uncovered + terms.most * (white - gloss),
+                    material.base_color.alpha,
+                ),
+                (terms.most * terms.rise, 0.5 / alpha),
+                (
+                    TyLinSrgbF64::new(gloss.red, rise.red, alpha * alpha),
+                    follows,
+                ),
+                (diffuse, 0.0),
+                (gloss, 0.0),
+                (rise, 0.0),
+                (emission, 0.0),
+            ];
 
-                    let mut values = [0.0; 28];
+            let mut values = [0.0; 28];
 
-                    for (values, (color, last)) in values.chunks_exact_mut(4).zip(colors) {
-                        values.copy_from_slice(
-                            &[color.red, color.green, color.blue, last].map(|value| value as f32),
-                        );
-                    }
+            for (values, (color, last)) in values.chunks_exact_mut(4).zip(colors) {
+                values.copy_from_slice(
+                    &[color.red, color.green, color.blue, last].map(|value| value as f32),
+                );
+            }
 
-                    values
-                })
+            values
         };
 
         // The glass materials come first, where a cell's word reaches them
         // in 12 bits. A tile's first material counts in threes after them.
-        let mut materials: Vec<f32> = glass_ids.iter().flat_map(|&id| glass_values(id)).collect();
+        let mut materials: Vec<f32> = tiles
+            .glass_materials
+            .iter()
+            .flat_map(|&id| glass_values(id))
+            .collect();
 
         materials.resize(materials.len().next_multiple_of(12), 0.0);
 
@@ -715,23 +650,29 @@ impl BoxView {
         let traced = device.features().contains(Features::EXPERIMENTAL_RAY_QUERY);
         let mut tile_mirrors: HashMap<u32, bool> = HashMap::new();
 
+        // The cells a mirror ray from a face of a material runs, or zero
+        // for a material whose faces cast none.
+        let mirror_reach = |id: u32| {
+            let values = material_values(id);
+            let alpha = (values[7] * values[7]).max(1.0e-3);
+            let reflectance = values[8].max(values[9]).max(values[10]);
+            let far = (reflectance / Self::MIRROR_CUT - 1.0).max(0.0).sqrt() / alpha;
+
+            if traced && values[7] < 1.0 && far > Self::MIRROR_REACH {
+                far
+            } else {
+                0.0
+            }
+        };
+
         let mut mirror_tile = |tile: u32| {
             *tile_mirrors.entry(tile).or_insert_with(|| {
                 let palette = words[(tile + TileMasks::PALETTE) as usize];
                 let ids = (tile + (palette & 0xffff)) as usize;
 
-                traced
-                    && words[ids..ids + (palette >> 16) as usize]
-                        .iter()
-                        .any(|&id| {
-                            let values = material_values(id);
-                            let alpha = (values[7] * values[7]).max(1.0e-3);
-                            let reflectance = values[8].max(values[9]).max(values[10]);
-                            let far =
-                                (reflectance / Self::MIRROR_CUT - 1.0).max(0.0).sqrt() / alpha;
-
-                            values[7] < 1.0 && far > Self::MIRROR_REACH
-                        })
+                words[ids..ids + (palette >> 16) as usize]
+                    .iter()
+                    .any(|&id| mirror_reach(id) > 0.0)
             })
         };
 
@@ -878,30 +819,21 @@ impl BoxView {
 
         let hide = (marched.len() + solid.len() >= TESTED)
             .then(|| {
-                let object_slabs: HashMap<_, _> = scene
-                    .iter_objects()
-                    .map(|(object_id, object)| (object_id, solid_slabs(object, &opaque)))
-                    .collect();
-
                 // The corners of each placement's slabs in the world. Bit
                 // `a` of a corner's index picks the slab's far side on axis
                 // `a`.
-                scene
-                    .iter_placements()
-                    .flat_map(|(_, placement)| {
-                        object_slabs[&placement.object_id]
-                            .iter()
-                            .map(|&(low, high)| {
-                                [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
-                                    let far =
-                                        TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
+                tiles
+                    .placements
+                    .iter()
+                    .flat_map(|(object, transform)| {
+                        objects[*object].slabs.iter().map(|&(low, high)| {
+                            [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
+                                let far =
+                                    TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
 
-                                    placement
-                                        .transform
-                                        .transform_point((low + (high - low) * far).as_dvec3())
-                                })
+                                transform.transform_point((low + (high - low) * far).as_dvec3())
                             })
-                            .collect::<Vec<_>>()
+                        })
                     })
                     .collect::<Vec<_>>()
             })
@@ -965,63 +897,18 @@ impl BoxView {
         // face under its material's place in `materials`.
         let mut quad_words: Vec<u32> = Vec::new();
 
-        // The bloom's source casts a ray to each glowing hit too.
+        // The bloom's source casts a ray from each glowing hit to the eye,
+        // which any quad can hide. A mirror ray alone meets only the quads
+        // within its reach.
         let tlas = (mirrors || traced && bloom.is_some()).then(|| {
-            let quads = QuadTlas::new(
-                device,
-                queue,
-                scene,
-                |object| {
-                    // A quad shades as one material, so a run merges the
-                    // cells of one material alone.
-                    mesh_grid_keyed(
-                        &MaterialGrid {
-                            object,
-                            opaque: &opaque,
-                        },
-                        SurfaceMethod::Greedy,
-                        &|cell| {
-                            object
-                                .voxel_material(cell)
-                                .expect("a grid's cell holds a material")
-                                .to_u32()
-                        },
-                        &|_| true,
-                    )
-                },
-                |_, first_quad| first_quad,
-            );
+            let reach = |id: u32| f64::from(mirror_reach(id));
 
-            assert!(
-                quads.faces.len() < 1 << 24,
-                "a scene's quads number under 2^24"
-            );
-
-            // Each object's quads follow one another, as their cells do.
-            let mut objects: Vec<_> = quads.first_quads.iter().collect();
-
-            objects.sort_by_key(|&(_, &first)| first);
+            let quads = tile_quads(tiles, if bloom.is_some() { None } else { Some(&reach) });
 
             let mut places: HashMap<u32, u32> = HashMap::new();
-            let mut cells = quads.cells.iter();
 
-            for (at, (object_id, _)) in objects.iter().enumerate() {
-                let object = scene
-                    .object(**object_id)
-                    .expect("the object is the scene's");
-
-                let end = objects
-                    .get(at + 1)
-                    .map_or(quads.faces.len(), |&(_, &first)| first as usize);
-
-                while quad_words.len() < end {
-                    let cell = *cells.next().expect("each quad covers a cell");
-
-                    let id = object
-                        .voxel_material(cell)
-                        .expect("a quad's cell holds a material")
-                        .to_u32();
-
+            for object in &quads {
+                for (&id, &face) in object.materials.iter().zip(&object.faces) {
                     let place = *places.entry(id).or_insert_with(|| {
                         let place = materials.len() / 12;
 
@@ -1033,24 +920,33 @@ impl BoxView {
                             .expect("a scene's materials number under 2^29")
                     });
 
-                    quad_words.push(place << 3 | quads.faces[quad_words.len()]);
+                    quad_words.push(place << 3 | face);
                 }
             }
 
-            quads.tlas
+            quad_tlas(device, queue, &quads, &tiles.placements)
         });
 
         if quad_words.is_empty() {
             quad_words.push(0);
         }
 
-        let glass = PlacedBox::list(scene, &object_glass);
+        let glass = PlacedBox::list(
+            &tiles.placements,
+            &(0..objects.len())
+                .map(|object| glass_of(object).boxes.as_slice())
+                .collect::<Vec<_>>(),
+        );
         let mut glass_boxes = ViewBoxes::default();
 
         let glass_words: Vec<_> = glass
             .iter()
             .map(|placed| {
-                let (first, tiles, surfaces) = &glass_tiles[&object_ids[placed.placement as usize]];
+                let object = object_of[placed.placement as usize];
+                let first = offsets[object].1;
+                let GlassTiles {
+                    tiles, surfaces, ..
+                } = glass_of(object);
 
                 // The box around the tile's surfaces, 4 bits a side: its
                 // low cell in the tile, then its high cell.
@@ -1374,7 +1270,7 @@ impl BoxView {
             sky.blue as f32,
         ));
 
-        Ok(BoxView {
+        BoxView {
             boxes,
             glow,
             size,
@@ -1402,7 +1298,7 @@ impl BoxView {
                 b: f64::from(above.blue),
                 a: 1.0,
             },
-        })
+        }
     }
 
     /// The color a pass that draws the view clears its target to: the

@@ -1,7 +1,5 @@
-use crate::{Error, Result, live_boxes};
+use crate::{CellGrid, Error, Result, live_boxes};
 use ty_math::TyVector3U32;
-use voxrender::RenderObject;
-use voxrender_wgpu::dense_cells;
 
 /// The cells along each side of a tile.
 const TILE: u32 = 16;
@@ -84,6 +82,10 @@ pub struct TileMasks {
     /// Each non-empty tile's low corner, in the order of the tiles' words.
     pub corners: Vec<TyVector3U32>,
 
+    /// The offset in [`words`](Self::words) of each non-empty tile, in the
+    /// same order.
+    pub offsets: Vec<u32>,
+
     /// The indices of each non-empty tile's record cells in index order,
     /// in the order of the tiles' words. Empty unless the view is shaded.
     pub recorded: Vec<Vec<u16>>,
@@ -118,9 +120,9 @@ impl TileMasks {
     /// The offset in a shaded tile's words of its record cells' records.
     pub const RECORDS: u32 = Self::PALETTE + 1;
 
-    /// The masks of `object`'s non-empty tiles. With `opaque`, which says
-    /// whether a material id passes no light, each tile's words go on for
-    /// a shaded view. Errors if a tile holds over 256 materials.
+    /// The masks of `grid`'s non-empty tiles. With `opaque`, which says
+    /// whether a material passes no light, each tile's words go on for a
+    /// shaded view. Errors if a tile holds over 256 materials.
     ///
     /// When `solids`, each tile first gives up solid boxes of two kinds, as
     /// long as it has one to give:
@@ -135,12 +137,12 @@ impl TileMasks {
     ///    more. A slab stays in the march when the cells left would cover over
     ///    half of the face it shows them
     pub fn new(
-        object: &RenderObject,
+        grid: &CellGrid,
         solids: bool,
         opaque: Option<&dyn Fn(u32) -> bool>,
     ) -> Result<Self> {
-        let bounds = object.bounds();
-        let cells = dense_cells(object);
+        let bounds = grid.bounds;
+        let cells = &grid.cells;
 
         // The value of the cell at `cell`: 0 when empty or outside the
         // object, else its material id plus one.
@@ -162,6 +164,7 @@ impl TileMasks {
             boxes: Vec::new(),
             tiles: Vec::new(),
             corners: Vec::new(),
+            offsets: Vec::new(),
             recorded: Vec::new(),
             entries: Vec::new(),
             words: Vec::new(),
@@ -170,7 +173,7 @@ impl TileMasks {
         // The object's record cells so far.
         let mut record_cells = 0;
 
-        for (low, _) in live_boxes(object, TILE) {
+        for (low, _) in live_boxes(grid, TILE) {
             let corner = low / TILE * TILE;
 
             // Each cell's value: 0 when empty, else its material id plus
@@ -319,6 +322,7 @@ impl TileMasks {
     /// then the box around its other live cells.
     fn push_boxes(&mut self, corner: TyVector3U32, offset: u32, live: Vec<bool>, solids: bool) {
         self.corners.push(corner);
+        self.offsets.push(offset);
 
         let mut tile = Tile {
             left: live.clone(),
@@ -614,7 +618,7 @@ fn position(index: usize) -> TyVector3U32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TileMasks, bench_scenes, painted_object};
+    use crate::{CellGrid, TileMasks, bench_scenes, painted_object};
     use branded_id::U32Id;
     use std::collections::HashMap;
     use ty_math::TyVector3U32;
@@ -659,7 +663,8 @@ mod tests {
             },
         );
 
-        let masks = TileMasks::new(&object, false, Some(&|id| id == 0)).unwrap();
+        let grid = CellGrid::new(&object, &|id| id);
+        let masks = TileMasks::new(&grid, false, Some(&|id| id == 0)).unwrap();
 
         // A row runs along z, so the wall's cell and the glass cell each
         // start a row.
@@ -668,7 +673,7 @@ mod tests {
         assert!(!is_set(&masks.words, 0, 16, true));
 
         // With no word on what is opaque, every cell is live.
-        assert_eq!(TileMasks::new(&object, false, None).unwrap().boxes.len(), 2);
+        assert_eq!(TileMasks::new(&grid, false, None).unwrap().boxes.len(), 2);
     }
 
     /// Whether `cell` of `object` is live.
@@ -682,10 +687,12 @@ mod tests {
     fn the_solids_and_masks_hold_every_live_cell_of_each_scene() {
         for (name, scene) in bench_scenes() {
             for (object_id, object) in scene.iter_objects() {
+                let grid = CellGrid::new(object, &|id| id);
+
                 for (solids, materials) in [(false, false), (true, false), (true, true)] {
                     let every = |_| true;
                     let opaque: Option<&dyn Fn(u32) -> bool> = materials.then_some(&every);
-                    let masks = TileMasks::new(object, solids, opaque).unwrap();
+                    let masks = TileMasks::new(&grid, solids, opaque).unwrap();
                     let bounds = object.bounds();
                     let mut held = vec![false; (bounds.x * bounds.y * bounds.z) as usize];
 
@@ -838,7 +845,8 @@ mod tests {
         });
 
         let every = |_| true;
-        let masks = TileMasks::new(&object, false, Some(&every)).unwrap();
+        let grid = CellGrid::new(&object, &|id| id);
+        let masks = TileMasks::new(&grid, false, Some(&every)).unwrap();
 
         // The floor's cell at x = 1 and z = 1, beside the wall.
         let rank = rank(&masks.words, 0, 16 + 1);
@@ -860,7 +868,7 @@ mod tests {
             (p.y < 2 || p.x < 2).then_some(material)
         });
 
-        let masks = TileMasks::new(&object, true, None).unwrap();
+        let masks = TileMasks::new(&CellGrid::new(&object, &|id| id), true, None).unwrap();
 
         assert_eq!(
             masks.solids,
@@ -883,7 +891,7 @@ mod tests {
             (p.y < 2 || (p.y == 2 && (p.x + p.z) % 2 == 0) || stray).then_some(material)
         });
 
-        let masks = TileMasks::new(&object, true, None).unwrap();
+        let masks = TileMasks::new(&CellGrid::new(&object, &|id| id), true, None).unwrap();
 
         assert_eq!(
             masks.solids,
@@ -909,7 +917,7 @@ mod tests {
                 .then_some(material)
         });
 
-        let masks = TileMasks::new(&object, true, None).unwrap();
+        let masks = TileMasks::new(&CellGrid::new(&object, &|id| id), true, None).unwrap();
 
         assert!(masks.solids.is_empty());
         assert_eq!(
@@ -927,7 +935,7 @@ mod tests {
             (p.y < 2 || (p.x + p.z) % 2 == 0).then_some(material)
         });
 
-        let masks = TileMasks::new(&object, true, None).unwrap();
+        let masks = TileMasks::new(&CellGrid::new(&object, &|id| id), true, None).unwrap();
 
         assert!(masks.solids.is_empty());
         assert_eq!(

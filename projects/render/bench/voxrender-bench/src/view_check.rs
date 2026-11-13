@@ -1,4 +1,4 @@
-use crate::{Error, Gpu, Result, view_image};
+use crate::{BoxView, Error, Gpu, Result, TileScene, view_image};
 use branded_id::U32Id;
 use ty_math::{TyLinSrgbF32, TySrgbU8};
 use voxrender::{BRenderView, RenderBloom, RenderOcclusion, RenderOutput, RenderScene};
@@ -35,7 +35,8 @@ pub fn view_check(
     width: u32,
     height: u32,
 ) -> Result<String> {
-    let texels = view_image(gpu, scene, bloom, view_ids, width, height)?;
+    let tiles = TileScene::of(scene, BoxView::draws_glass(&gpu.device))?;
+    let texels = view_image(gpu, &tiles, scene, bloom, view_ids, width, height)?;
     let black = TyLinSrgbF32::new(0.0, 0.0, 0.0);
 
     let eyes: &[(&str, usize)] = if view_ids[0] == view_ids[1] {

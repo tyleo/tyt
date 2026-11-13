@@ -1,7 +1,5 @@
-use crate::live_boxes;
+use crate::{CellGrid, live_boxes};
 use ty_math::TyVector3U32;
-use voxrender::RenderObject;
-use voxrender_wgpu::dense_cells;
 
 /// The cells along each side of a tile.
 const TILE: u32 = 16;
@@ -55,20 +53,20 @@ impl GlassTiles {
     /// An opaque cell's word.
     pub const OPAQUE: u32 = 1 << 6;
 
-    /// The tiles of `object` that hold a surface between materials that
+    /// The tiles of `grid` that hold a surface between materials that
     /// pass light.
     ///
     /// # Arguments
     ///
-    /// 1. `opaque`: whether a material id passes no light
-    /// 2. `place`: what a cell's word holds for a material id, under 2^12
+    /// 1. `opaque`: whether a material passes no light
+    /// 2. `place`: what a cell's word holds for a material, under 2^12
     pub fn new(
-        object: &RenderObject,
+        grid: &CellGrid,
         opaque: &dyn Fn(u32) -> bool,
         place: &mut dyn FnMut(u32) -> u32,
     ) -> Self {
-        let bounds = object.bounds();
-        let cells = dense_cells(object);
+        let bounds = grid.bounds;
+        let cells = &grid.cells;
 
         // The value of the cell at `cell`: 0 when empty or outside the
         // object, else its material id plus one.
@@ -94,7 +92,7 @@ impl GlassTiles {
             words: Vec::new(),
         };
 
-        for (low, _) in live_boxes(object, TILE) {
+        for (low, _) in live_boxes(grid, TILE) {
             let corner = (low / TILE * TILE).to_array().map(i64::from);
 
             // The tile's cell of `index`, in the object's grid.
@@ -195,7 +193,7 @@ impl GlassTiles {
 
 #[cfg(test)]
 mod tests {
-    use crate::{GlassTiles, painted_object};
+    use crate::{CellGrid, GlassTiles, painted_object};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
 
@@ -207,7 +205,8 @@ mod tests {
             [Some(0), Some(1), Some(1), Some(2), None][position.x as usize].map(U32Id::from_u32)
         });
 
-        let tiles = GlassTiles::new(&object, &|id| id == 0, &mut |id| id + 10);
+        let grid = CellGrid::new(&object, &|id| id);
+        let tiles = GlassTiles::new(&grid, &|id| id == 0, &mut |id| id + 10);
 
         // The wall joins the box the tile draws.
         assert_eq!(
@@ -249,7 +248,8 @@ mod tests {
     fn a_body_of_glass_is_busy_at_its_skin_alone() {
         // A cube of glass 4 cells a side holds 8 cells with no surface.
         let object = painted_object("cube", TyVector3U32::splat(4), |_| Some(U32Id::from_u32(1)));
-        let tiles = GlassTiles::new(&object, &|_| false, &mut |id| id);
+        let grid = CellGrid::new(&object, &|id| id);
+        let tiles = GlassTiles::new(&grid, &|_| false, &mut |id| id);
 
         assert_eq!(tiles.words.len(), GlassTiles::ROWS as usize + 64 - 8);
     }
@@ -261,7 +261,7 @@ mod tests {
         });
 
         assert!(
-            GlassTiles::new(&object, &|_| true, &mut |id| id)
+            GlassTiles::new(&CellGrid::new(&object, &|id| id), &|_| true, &mut |id| id)
                 .boxes
                 .is_empty()
         );

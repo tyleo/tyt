@@ -1,4 +1,4 @@
-use crate::{BoxView, Error, Gpu, Result, ViewEye, map_readback, world_to_clip};
+use crate::{BoxView, Error, Gpu, Result, TileScene, ViewEye, map_readback, world_to_clip};
 use branded_id::U32Id;
 use std::num::NonZeroU32;
 use voxrender::{BRenderView, Error as RenderError, RenderBloom, RenderScene};
@@ -13,12 +13,13 @@ use wgpu::{
 /// The format of the image's texels.
 const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
-/// A [`BoxView`] of `scene` under `bloom` through two of its views, one an
-/// eye, as each eye's sRGB texels of a `width` by `height` image, four
-/// bytes each, row by row. Errors unless the views are the scene's and the
-/// device has multiview.
+/// A [`BoxView`] of `tiles` under `bloom` through two of `scene`'s views,
+/// one an eye, as each eye's sRGB texels of a `width` by `height` image,
+/// four bytes each, row by row. Errors unless the views are the scene's
+/// and the device has multiview.
 pub fn view_image(
     gpu: &Gpu,
+    tiles: &TileScene,
     scene: &RenderScene,
     bloom: RenderBloom,
     view_ids: [U32Id<BRenderView>; 2],
@@ -41,11 +42,11 @@ pub fn view_image(
     let mut boxes = BoxView::new(
         &gpu.device,
         &gpu.queue,
-        scene,
+        tiles,
         bloom,
         FORMAT,
         [width, height],
-    )?;
+    );
 
     boxes.prepare(&gpu.queue, &eyes, 1.0);
 

@@ -11,8 +11,8 @@ use std::{
 };
 use voxrender::{RenderBloom, RenderScene};
 use voxrender_bench::{
-    Error as BenchError, bench_scene, lit_check, look_from, model_scene, retain_headset_views,
-    shape_view, view_check, view_image,
+    BoxView, Error as BenchError, ModelTiles, TileScene, bench_scene, lit_check, look_from,
+    model_scene, retain_headset_views, shape_view, view_check, view_image,
 };
 
 // Internal API
@@ -179,14 +179,22 @@ fn scene_of(scene: &str) -> Result<(RenderScene, RenderBloom)> {
         .ok_or_else(|| Error::NoScene(scene.to_owned()))
 }
 
-fn looked(scene: &str, look: &Look) -> Result<(RenderScene, RenderBloom)> {
-    let (mut render_scene, bloom) = scene_of(scene)?;
-
+/// Moves the first view of `scene` to where `look` looks from, if it
+/// looks from anywhere.
+fn look_through(scene: &mut RenderScene, look: &Look) -> Result<()> {
     if let (Some(eye), Some(look_at)) = (&look.eye, &look.look_at) {
         let point = |values: &[f64]| [values[0], values[1], values[2]];
 
-        look_from(&mut render_scene, point(eye), point(look_at)).map_err(Error::Bench)?;
+        look_from(scene, point(eye), point(look_at)).map_err(Error::Bench)?;
     }
+
+    Ok(())
+}
+
+fn looked(scene: &str, look: &Look) -> Result<(RenderScene, RenderBloom)> {
+    let (mut render_scene, bloom) = scene_of(scene)?;
+
+    look_through(&mut render_scene, look)?;
 
     Ok((render_scene, bloom))
 }
@@ -218,18 +226,37 @@ fn check_lit(scene: &str) -> Result<String> {
 }
 
 fn view(scene: &str, look: &Look, output: &Path, width: u32, height: u32) -> Result<()> {
-    let (mut render_scene, bloom) = looked(scene, look)?;
+    let gpu = headless_gpu()?;
+    let glass = BoxView::draws_glass(&gpu.device);
+    let path = Path::new(scene);
 
-    shape_view(&mut render_scene, width, height).map_err(Error::Bench)?;
+    // A model loads an object at a time, and a scene with its view alone
+    // frames it.
+    let (tiles, mut frame, bloom) = if path.is_file() {
+        let model = ModelTiles::load(path, glass).map_err(Error::Bench)?;
+        let mut frame = RenderScene::default();
 
-    let (view_id, _) = render_scene
+        frame
+            .retain_view(model.view)
+            .map_err(|error| Error::Bench(BenchError::Render(error)))?;
+
+        (model.tiles, frame, model.bloom)
+    } else {
+        let (render_scene, bloom) = scene_of(scene)?;
+        let tiles = TileScene::of(&render_scene, glass).map_err(Error::Bench)?;
+
+        (tiles, render_scene, bloom)
+    };
+
+    look_through(&mut frame, look)?;
+    shape_view(&mut frame, width, height).map_err(Error::Bench)?;
+
+    let (view_id, _) = frame
         .iter_views()
         .next()
         .ok_or(Error::Bench(BenchError::NoView))?;
 
-    let gpu = headless_gpu()?;
-
-    let [texels, _] = view_image(&gpu, &render_scene, bloom, [view_id; 2], width, height)
+    let [texels, _] = view_image(&gpu, &tiles, &frame, bloom, [view_id; 2], width, height)
         .map_err(Error::Bench)?;
 
     let file = File::create(output).map_err(Error::Write)?;

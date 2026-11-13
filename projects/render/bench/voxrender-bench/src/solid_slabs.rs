@@ -1,6 +1,5 @@
+use crate::CellGrid;
 use ty_math::TyVector3U32;
-use voxrender::RenderObject;
-use voxrender_wgpu::dense_cells;
 
 /// The most slabs an object gives.
 const MOST: usize = 8;
@@ -17,21 +16,22 @@ const OFFERS: usize = 4;
 /// A box of cells as its low cell and the corner past its high cell.
 type Slab = ([usize; 3], [usize; 3]);
 
-/// Up to [`MOST`] boxes of `object`'s opaque cells alone, widest face
-/// first, each as its low cell and the corner past its high cell. `opaque`
-/// says whether a material id passes no light. What lies behind such a box
+/// Up to [`MOST`] boxes of `grid`'s opaque cells alone, widest face first,
+/// each as its low cell and the corner past its high cell. `opaque` says
+/// whether a material passes no light. What lies behind such a box
 /// cannot show, which lets a view leave it out.
 ///
 /// Each layer of cells across an axis offers its largest rectangles of
 /// opaque cells. The widest offers win. One grows along its axis for as
 /// long as the layers beside it fill its rectangle.
 pub fn solid_slabs(
-    object: &RenderObject,
+    grid: &CellGrid,
     opaque: &dyn Fn(u32) -> bool,
 ) -> Vec<(TyVector3U32, TyVector3U32)> {
-    let bounds = object.bounds().to_array().map(|side| side as usize);
+    let bounds = grid.bounds.to_array().map(|side| side as usize);
 
-    let solid: Vec<bool> = dense_cells(object)
+    let solid: Vec<bool> = grid
+        .cells
         .iter()
         .map(|&value| value.checked_sub(1).is_some_and(opaque))
         .collect();
@@ -201,7 +201,7 @@ fn largest_rectangle(size: [usize; 2], filled: &[bool]) -> (usize, [usize; 2], [
 
 #[cfg(test)]
 mod tests {
-    use crate::{painted_object, solid_slabs};
+    use crate::{CellGrid, painted_object, solid_slabs};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
 
@@ -215,7 +215,7 @@ mod tests {
             paint(cell).map(U32Id::from_u32)
         });
 
-        solid_slabs(&object, &|material| material == 0)
+        solid_slabs(&CellGrid::new(&object, &|id| id), &|material| material == 0)
             .into_iter()
             .map(|(low, high)| (low.to_array(), high.to_array()))
             .collect()

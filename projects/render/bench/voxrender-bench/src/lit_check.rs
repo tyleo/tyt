@@ -1,4 +1,6 @@
-use crate::{Error, Gpu, LitCorners, LitFill, Result, TileMasks, map_readback};
+use crate::{
+    CellGrid, Error, Gpu, LitCorners, LitFill, Result, TileMasks, TileScene, map_readback,
+};
 use std::collections::HashMap;
 use ty_math::TyVector3F64;
 use voxrender::{RenderLight, RenderScene};
@@ -19,28 +21,13 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         })
         .ok_or(Error::NoSun)?;
 
-    let every = |_| true;
-    let mut tiles = HashMap::new();
+    // Every material counts as opaque.
+    let mut scene_tiles = TileScene::new(false);
 
-    for (object_id, object) in scene.iter_objects() {
-        let masks = TileMasks::new(object, true, Some(&every))?;
+    scene_tiles.solid = true;
+    scene_tiles.push_scene(scene)?;
 
-        tiles.insert(
-            object_id,
-            masks
-                .corners
-                .into_iter()
-                .zip(masks.recorded)
-                .collect::<Vec<_>>(),
-        );
-    }
-
-    let glass = scene
-        .iter_objects()
-        .map(|(object_id, _)| (object_id, Vec::new()))
-        .collect();
-
-    let fill = LitFill::new(&gpu.device, scene, toward, &tiles, &glass, &every)?;
+    let fill = LitFill::new(&gpu.device, &scene_tiles, toward, false);
 
     fill.fill(&gpu.device, &gpu.queue);
 
@@ -68,6 +55,22 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         .chunks_exact(4)
         .map(|word| u32::from_le_bytes(word.try_into().expect("a chunk holds four bytes")))
         .collect();
+
+    let every = |_| true;
+    let mut tiles = HashMap::new();
+
+    for (object_id, object) in scene.iter_objects() {
+        let masks = TileMasks::new(&CellGrid::new(object, &|id| id), true, Some(&every))?;
+
+        tiles.insert(
+            object_id,
+            masks
+                .corners
+                .into_iter()
+                .zip(masks.recorded)
+                .collect::<Vec<_>>(),
+        );
+    }
 
     let walked = LitCorners::new(scene, toward, &tiles, &every)?;
 

@@ -1,14 +1,13 @@
+use crate::CellGrid;
 use ty_math::TyVector3U32;
-use voxrender::RenderObject;
-use voxrender_wgpu::dense_cells;
 
-/// The box around the live cells of each non-empty brick of `object`, as
-/// its low cell and the corner past its high cell, in raster order. A brick
+/// The box around the live cells of each non-empty brick of `grid`, as its
+/// low cell and the corner past its high cell, in raster order. A brick
 /// spans `brick` cells a side.
-pub fn live_boxes(object: &RenderObject, brick: u32) -> Vec<(TyVector3U32, TyVector3U32)> {
-    let bounds = object.bounds();
+pub fn live_boxes(grid: &CellGrid, brick: u32) -> Vec<(TyVector3U32, TyVector3U32)> {
+    let bounds = grid.bounds;
     let counts = (bounds + brick - 1) / brick;
-    let cells = dense_cells(object);
+    let cells = &grid.cells;
 
     // A brick without a live cell keeps a low corner past its high one.
     let mut boxes =
@@ -37,7 +36,7 @@ pub fn live_boxes(object: &RenderObject, brick: u32) -> Vec<(TyVector3U32, TyVec
 
 #[cfg(test)]
 mod tests {
-    use crate::{live_boxes, painted_object};
+    use crate::{CellGrid, live_boxes, painted_object};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
 
@@ -52,7 +51,7 @@ mod tests {
         });
 
         assert_eq!(
-            live_boxes(&object, 16),
+            live_boxes(&CellGrid::new(&object, &|id| id), 16),
             [
                 (TyVector3U32::ZERO, TyVector3U32::new(16, 2, 16)),
                 (TyVector3U32::new(40, 3, 5), TyVector3U32::new(41, 4, 6)),
