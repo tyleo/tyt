@@ -1,10 +1,13 @@
 use crate::{
-    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxPart, GlassTiles, LitFill,
+    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, GlassTiles, LitFill,
     MaterialGrid, PassTerms, PlacedBox, QuadTlas, Result, TileMasks, ViewEye, box_view_shader,
+    solid_slabs,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, num::NonZeroU32};
-use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
+use ty_math::{
+    TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64, TyVector3U32,
+};
 use voxcore::material;
 use voxrender::{RenderBloom, RenderLight, RenderScene, grid_point, tonemap};
 use voxsurface::{SurfaceMethod, mesh_grid};
@@ -41,11 +44,25 @@ const REACH: f64 = 0.02;
 /// sort again, in a headset's meters.
 const SLACK: f64 = 0.25;
 
+/// The part of a pixel that a hidden box keeps inside a shadow's sides,
+/// which covers where the rasterizer rounds a corner to.
+const KEPT: f64 = 0.25;
+
+/// The lists of boxes a [`BoxHide`] tests for the view.
+const MARCHED: usize = 0;
+const SOLID: usize = 1;
+
+/// The fewest boxes a scene has for its view to test them. On Quest a
+/// hidden box saves 66 ns of a frame, so a scene with fewer can hide too
+/// few to pay for the test.
+const TESTED: usize = 4096;
+
 /// A shaded view of a scene's boxes for both eyes of a headset: the box
 /// raster with solid boxes, a mask march, and face depth. Each frame takes
 /// its eyes and draws in multiview passes over a two-layer target with
 /// depth in [`BoxView::DEPTH`]. The boxes draw nearest first. They sort
-/// again once the head has moved [`SLACK`] from where they last sorted.
+/// again once the head has moved [`SLACK`] from where they last sorted. A
+/// frame leaves out the boxes its [`BoxHide`] hides from both eyes.
 ///
 /// A hit shades as the contract's opaque surface under the scene's first
 /// sun and its hemispheres, with corner occlusion and the sun's corner
@@ -96,6 +113,16 @@ pub struct BoxView {
 
     /// Whether each marched box shares space with another placement's box.
     crossing: Vec<bool>,
+
+    /// The test that keeps hidden boxes from drawing, for a scene of
+    /// [`TESTED`] boxes or more with a slab to hide one.
+    hide: Option<BoxHide>,
+
+    /// How many of the last sort's marched boxes lie where an eye can come
+    /// to stand inside one before the next sort, and how many of its glass
+    /// boxes.
+    near: usize,
+    glass_near: usize,
 
     /// Where the head stood when the boxes last sorted, and how far from
     /// there a box drew its back faces.
@@ -217,6 +244,15 @@ impl ViewBoxes {
 /// The index of the box a sort's `key` holds.
 fn index_of(key: u64) -> usize {
     (key & 0xffff_ffff) as usize
+}
+
+/// The keys of `keys` whose boxes `hide` leaves in its list `list`.
+fn shown<'a>(
+    hide: Option<&'a BoxHide>,
+    list: usize,
+    keys: impl Iterator<Item = u64> + 'a,
+) -> impl Iterator<Item = u64> + 'a {
+    keys.filter(move |&key| !hide.is_some_and(|hide| hide.hides(list, index_of(key))))
 }
 
 /// The keys of `keys` whose boxes have `crosses` in `crossing`.
@@ -803,6 +839,54 @@ impl BoxView {
 
         let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
 
+        let hide = (marched.len() + solid.len() >= TESTED)
+            .then(|| {
+                let object_slabs: HashMap<_, _> = scene
+                    .iter_objects()
+                    .map(|(object_id, object)| (object_id, solid_slabs(object, &opaque)))
+                    .collect();
+
+                // The corners of each placement's slabs in the world. Bit
+                // `a` of a corner's index picks the slab's far side on axis
+                // `a`.
+                scene
+                    .iter_placements()
+                    .flat_map(|(_, placement)| {
+                        object_slabs[&placement.object_id]
+                            .iter()
+                            .map(|&(low, high)| {
+                                [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
+                                    let far =
+                                        TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
+
+                                    placement
+                                        .transform
+                                        .transform_point((low + (high - low) * far).as_dvec3())
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .filter(|slabs| !slabs.is_empty())
+            .map(|slabs| {
+                // A list's boxes come a placement at a time.
+                let runs = |placed: &[PlacedBox]| {
+                    placed
+                        .chunk_by(|a, b| a.placement == b.placement)
+                        .map(<[PlacedBox]>::len)
+                        .collect()
+                };
+
+                BoxHide::new(
+                    slabs,
+                    vec![
+                        (marched_boxes.bounds.clone(), runs(&marched)),
+                        (solid_boxes.bounds.clone(), runs(&solid)),
+                    ],
+                )
+            });
+
         let mut frame = Vec::new();
 
         let lights = [
@@ -1256,6 +1340,9 @@ impl BoxView {
             marched: marched_boxes,
             glass: glass_boxes,
             crossing,
+            hide,
+            near: 0,
+            glass_near: 0,
             sorted_for: None,
             sorted: Vec::new(),
             solid_keys: Vec::new(),
@@ -1277,8 +1364,9 @@ impl BoxView {
     }
 
     /// Readies the next draw for `eyes`. The boxes sort again when the head
-    /// has left the last sort's reach. A meter of the headset's spans `scale`
-    /// of the scene's meters.
+    /// has left the last sort's reach, and deal out again when the test of
+    /// hidden boxes changes its answer for one. A meter of the headset's
+    /// spans `scale` of the scene's meters.
     pub fn prepare(&mut self, queue: &Queue, eyes: &[ViewEye; 2], scale: f64) {
         let each = eyes.iter().flat_map(|eye| {
             self.placements
@@ -1331,6 +1419,41 @@ impl BoxView {
             self.sort(queue, head, reach + slack);
         }
 
+        // The boxes deal out again when a sort moved them or the test
+        // changed its answer for one.
+        let mut deals = !holds;
+
+        if let Some(hide) = &mut self.hide {
+            let positions = [eyes[0].position, eyes[1].position];
+
+            // The shadows hold while the sort does.
+            if !holds {
+                hide.aim((positions[0] + positions[1]) / 2.0);
+            }
+
+            // The widest angle a pixel spans: the one on an eye's axis. A
+            // clip matrix's first two rows scale by two over the tangents
+            // the target spans.
+            let pixel = eyes
+                .iter()
+                .flat_map(|eye| {
+                    let clip = eye.world_to_clip.to_cols_array();
+
+                    [0, 1].map(|row| {
+                        let scale: f64 = (0..3).map(|column| clip[column * 4 + row].powi(2)).sum();
+
+                        2.0 / (scale.sqrt() * f64::from(self.size[row]))
+                    })
+                })
+                .fold(0.0, f64::max);
+
+            deals |= hide.test(positions, pixel * KEPT);
+        }
+
+        if deals {
+            self.deal(queue);
+        }
+
         if let Some(reach) = self.glow.as_ref().map(|glow| glow.reach) {
             let pixels = self.halo_pixels(eyes, reach);
 
@@ -1338,65 +1461,32 @@ impl BoxView {
         }
     }
 
-    /// Sorts the boxes nearest to `head` first into their runs. A marched
-    /// box within `covered` of `head` draws its back faces because an eye
-    /// can come to stand inside it before the next sort. Such a box that
-    /// crosses another placement's box draws its back faces at the nearest
-    /// depth for an eye it holds, and its front faces for one it does not.
-    /// Every solid box draws its front faces because a ray that starts
-    /// inside one sees none of it.
+    /// Sorts the boxes nearest to `head` first. A marched box within
+    /// `covered` of `head` counts as near, because an eye can come to stand
+    /// inside it before the next sort.
     fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32) {
         self.solid
             .nearest_first(head, covered, &mut self.solid_keys);
 
-        let within = self
+        self.near = self
             .marched
             .nearest_first(head, covered, &mut self.marched_keys);
-        let (near, far) = self.marched_keys.split_at(within);
-        let crossing = &self.crossing;
 
-        self.sorted.clear();
-
-        let solid = &self.solid;
-        let marched = &self.marched;
-        let plain = || crossing_keys(far, crossing, false);
-        let crossed = || crossing_keys(&self.marched_keys, crossing, true);
-
-        // Each run of front faces draws twice: the boxes with no mirror,
-        // then those with one.
-        let mut counts = vec![
-            marched.extend(crossing_keys(near, crossing, true), &mut self.sorted),
-            marched.extend(crossing_keys(near, crossing, false), &mut self.sorted),
-            solid.extend(
-                solid.of(self.solid_keys.iter().copied(), false),
-                &mut self.sorted,
-            ),
-            solid.extend(
-                solid.of(self.solid_keys.iter().copied(), true),
-                &mut self.sorted,
-            ),
-            marched.extend(marched.of(plain(), false), &mut self.sorted),
-            marched.extend(marched.of(plain(), true), &mut self.sorted),
-            marched.extend(marched.of(crossed(), false), &mut self.sorted),
-            marched.extend(marched.of(crossed(), true), &mut self.sorted),
-        ];
-
-        // Glass draws farthest first: every box through its front faces,
-        // then the boxes an eye can stand in through their back faces.
         if !self.glass.words.is_empty() {
-            let glass = &self.glass;
-            let within = glass.nearest_first(head, covered, &mut self.glass_keys);
-            let farthest_first = |keys: &[u64]| keys.iter().rev().copied().collect::<Vec<_>>();
-
-            counts.push(glass.extend(farthest_first(&self.glass_keys), &mut self.sorted));
-            counts.push(glass.extend(farthest_first(&self.glass_keys[..within]), &mut self.sorted));
+            self.glass_near = self
+                .glass
+                .nearest_first(head, covered, &mut self.glass_keys);
         }
 
-        self.boxes.rewrite(queue, &self.sorted, &counts);
         self.sorted_for = Some((head, covered));
 
-        // The glowing boxes take the same runs for the halo's draw.
+        // The glowing boxes take the view's runs for the halo's draw.
         if let Some(glow) = &mut self.glow {
+            let (near, far) = self.marched_keys.split_at(self.near);
+            let crossing = &self.crossing;
+            let solid = &self.solid;
+            let marched = &self.marched;
+
             self.sorted.clear();
 
             let counts = [
@@ -1412,12 +1502,72 @@ impl BoxView {
                     solid.glowing(self.solid_keys.iter().copied()),
                     &mut self.sorted,
                 ),
-                marched.extend(marched.glowing(plain()), &mut self.sorted),
-                marched.extend(marched.glowing(crossed()), &mut self.sorted),
+                marched.extend(
+                    marched.glowing(crossing_keys(far, crossing, false)),
+                    &mut self.sorted,
+                ),
+                marched.extend(
+                    marched.glowing(crossing_keys(&self.marched_keys, crossing, true)),
+                    &mut self.sorted,
+                ),
             ];
 
             glow.boxes.rewrite(queue, &self.sorted, &counts);
         }
+    }
+
+    /// Deals the sorted boxes into their runs. A near marched box draws its
+    /// back faces. Such a box that crosses another placement's box draws
+    /// its back faces at the nearest depth for an eye it holds, and its
+    /// front faces for one it does not. Every solid box draws its front
+    /// faces because a ray that starts inside one sees none of it. A run of
+    /// front faces leaves out the boxes the test hides.
+    fn deal(&mut self, queue: &Queue) {
+        let (near, far) = self.marched_keys.split_at(self.near);
+        let crossing = &self.crossing;
+        let hide = self.hide.as_ref();
+
+        self.sorted.clear();
+
+        let solid = &self.solid;
+        let marched = &self.marched;
+        let solids = || shown(hide, SOLID, self.solid_keys.iter().copied());
+        let plain = || shown(hide, MARCHED, crossing_keys(far, crossing, false));
+        let crossed = || {
+            shown(
+                hide,
+                MARCHED,
+                crossing_keys(&self.marched_keys, crossing, true),
+            )
+        };
+
+        // Each run of front faces draws twice: the boxes with no mirror,
+        // then those with one.
+        let mut counts = vec![
+            marched.extend(crossing_keys(near, crossing, true), &mut self.sorted),
+            marched.extend(crossing_keys(near, crossing, false), &mut self.sorted),
+            solid.extend(solid.of(solids(), false), &mut self.sorted),
+            solid.extend(solid.of(solids(), true), &mut self.sorted),
+            marched.extend(marched.of(plain(), false), &mut self.sorted),
+            marched.extend(marched.of(plain(), true), &mut self.sorted),
+            marched.extend(marched.of(crossed(), false), &mut self.sorted),
+            marched.extend(marched.of(crossed(), true), &mut self.sorted),
+        ];
+
+        // Glass draws farthest first: every box through its front faces,
+        // then the boxes an eye can stand in through their back faces.
+        if !self.glass.words.is_empty() {
+            let glass = &self.glass;
+            let farthest_first = |keys: &[u64]| keys.iter().rev().copied().collect::<Vec<_>>();
+
+            counts.push(glass.extend(farthest_first(&self.glass_keys), &mut self.sorted));
+            counts.push(glass.extend(
+                farthest_first(&self.glass_keys[..self.glass_near]),
+                &mut self.sorted,
+            ));
+        }
+
+        self.boxes.rewrite(queue, &self.sorted, &counts);
     }
 
     /// How many passes draw the boxes [`prepare`](Self::prepare) sorted, at
