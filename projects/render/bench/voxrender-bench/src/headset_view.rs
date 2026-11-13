@@ -1,4 +1,4 @@
-use crate::{BoxView, HeadsetEye, HeadsetStand, TileScene, ViewEye};
+use crate::{BoxView, HeadsetEye, HeadsetStand, Result, TileScene, ViewEye};
 use ty_math::{TyQuaternionF64, TyVector3F64};
 use voxrender::RenderBloom;
 use wgpu::{Color, CommandEncoder, Device, Queue, RenderPass, TextureFormat};
@@ -16,7 +16,8 @@ impl HeadsetView {
     pub const DEPTH: TextureFormat = BoxView::DEPTH;
 
     /// Builds the view of `tiles` under `bloom` from `stand` for a two-layer
-    /// target of `format` whose width and height are `size`.
+    /// target of `format` whose width and height are `size`. Errors as
+    /// [`BoxView::new`] does.
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -25,11 +26,11 @@ impl HeadsetView {
         stand: HeadsetStand,
         format: TextureFormat,
         size: [u32; 2],
-    ) -> Self {
-        HeadsetView {
-            boxes: BoxView::new(device, queue, tiles, bloom, format, size),
+    ) -> Result<Self> {
+        Ok(HeadsetView {
+            boxes: BoxView::new(device, queue, tiles, bloom, format, size)?,
             stand,
-        }
+        })
     }
 
     /// The color a pass that draws the view clears its target to.

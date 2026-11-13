@@ -6,9 +6,9 @@ use std::{
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor,
-    BlendOperation, BlendState, Buffer, BufferUsages, ColorTargetState, ColorWrites,
-    CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState, FrontFace,
-    IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayout,
+    BlendOperation, BlendState, Buffer, BufferDescriptor, BufferUsages, ColorTargetState,
+    ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState,
+    FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayout,
     PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPass, RenderPipeline,
     RenderPipelineDescriptor, SamplerBindingType, ShaderModule, ShaderStages, StencilState,
     TextureFormat, TextureSampleType, TextureViewDimension, VertexAttribute, VertexBufferLayout,
@@ -49,8 +49,9 @@ type PipelineKey<'a> = (usize, &'a str, &'a str, bool, bool);
 /// A view's boxes and the pipelines that draw their faces, with depth in
 /// [`DEPTH`](Self::DEPTH).
 ///
-/// Each run draws in a pass of its own, which loads what the pass before it
-/// stored. On Quest a second draw in a pass costs every box and pixel of
+/// The boxes draw in runs: a count of boxes through one part's pipeline
+/// over one page's bindings. Each run draws in a pass of its own, which
+/// loads what the pass before it stored. On Quest a second draw in a pass costs every box and pixel of
 /// the pass: over the plain ids it cost S5 0.65 ms for 4096 boxes and S2
 /// 2.8 ms for 25,301, and a shaded model of 800 boxes drew a third slower
 /// in one pass than in a pass a run. The passes between cost under 0.02 ms
@@ -59,10 +60,14 @@ type PipelineKey<'a> = (usize, &'a str, &'a str, bool, bool);
 /// A run of front faces draws each box's three faces toward the view: 6
 /// triangles over 7 corners, where the box makes 12 over 8.
 pub struct BoxDraw {
-    /// The runs in draw order.
-    parts: Vec<Run>,
+    parts: Vec<Part>,
 
-    bind_group: BindGroup,
+    /// The runs in draw order. A draw has none until its first
+    /// [`rewrite`](Self::rewrite).
+    runs: Vec<Run>,
+
+    /// Each page's bindings.
+    bind_groups: Vec<BindGroup>,
 
     corners: Buffer,
 
@@ -78,13 +83,22 @@ pub struct BoxDraw {
     cover: Option<(RenderPipeline, [u32; 4])>,
 }
 
-/// One run of a draw's boxes.
-struct Run {
+/// What draws one part's boxes.
+struct Part {
     pipeline: RenderPipeline,
 
-    /// Whether the run draws each box's three faces toward the view, where
-    /// any other run draws over its boxes' corners.
+    /// Whether the part draws each box's three faces toward the view,
+    /// where any other part draws over its boxes' corners.
     fronts: bool,
+}
+
+/// One run of a draw's boxes.
+struct Run {
+    /// The run's part among the draw's.
+    part: usize,
+
+    /// The page whose bindings the run's boxes read.
+    page: usize,
 
     boxes: Range<u32>,
 }
@@ -105,33 +119,26 @@ impl BoxDraw {
     /// # Arguments
     ///
     /// 1. `format`: the format of the target the fragments write
-    /// 2. `parts`: the runs of boxes in draw order
-    /// 3. `bindings`: what the shaders bind in group 0
+    /// 2. `parts`: what draws the boxes
+    /// 3. `pages`: what the shaders bind in group 0 for each page of the
+    ///    boxes, at least one. The pages bind alike but for their buffers
     /// 4. `multiview_mask`: the mask of the passes the boxes draw in
     pub fn new(
         device: &Device,
         modules: &[&ShaderModule],
         format: TextureFormat,
         parts: &[BoxPart<'_>],
-        bindings: &BoxBindings<'_>,
+        pages: &[BoxBindings<'_>],
         multiview_mask: Option<NonZeroU32>,
     ) -> Self {
         let BoxBindings {
             buffers: bindings,
             sampled,
             tlas,
-        } = *bindings;
-
-        let mut box_bytes: Vec<u8> = parts
-            .iter()
-            .flat_map(|part| part.boxes.iter().flatten())
-            .flat_map(|word| word.to_le_bytes())
-            .collect();
+        } = pages[0];
 
         // A buffer cannot be empty.
-        if box_bytes.is_empty() {
-            box_bytes.resize(Self::BOX_BYTES, 0);
-        }
+        let room = parts.iter().map(|part| part.room).sum::<usize>().max(1);
 
         let init = |label, contents: &[u8], usage| {
             device.create_buffer_init(&BufferInitDescriptor {
@@ -155,11 +162,12 @@ impl BoxDraw {
                 .collect::<Vec<_>>(),
             BufferUsages::INDEX,
         );
-        let boxes = init(
-            "boxes",
-            &box_bytes,
-            BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        );
+        let boxes = device.create_buffer(&BufferDescriptor {
+            label: Some("boxes"),
+            size: (room * Self::BOX_BYTES) as u64,
+            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         let buffers = u32::try_from(bindings.len()).expect("a draw's bindings number under 2^32");
 
@@ -306,8 +314,7 @@ impl BoxDraw {
             })
         };
 
-        let mut first = 0;
-        let mut runs = Vec::new();
+        let mut drawn = Vec::new();
 
         // Each pipeline built so far with its module, entries, and faces, for
         // a later run to share.
@@ -331,61 +338,61 @@ impl BoxDraw {
         };
 
         for part in parts {
-            let end =
-                first + u32::try_from(part.boxes.len()).expect("a scene's boxes number under 2^32");
-
             let (vertex, backs) = match part.faces {
                 BoxFaces::Front => ("place_front", false),
                 BoxFaces::NearBack => ("place_near", true),
                 BoxFaces::Held => ("place_held", true),
             };
 
-            runs.push(Run {
+            drawn.push(Part {
                 pipeline: shared(part.module, vertex, part.fragment, backs, part.glass),
                 fronts: part.faces == BoxFaces::Front,
-                boxes: first..end,
             });
-
-            first = end;
         }
 
-        let mut resources: Vec<_> = (0u32..)
-            .zip(bindings)
-            .map(|(binding, (_, _, buffer))| BindGroupEntry {
-                binding,
-                resource: buffer.as_entire_binding(),
+        let bind_groups = pages
+            .iter()
+            .map(|page| {
+                let mut resources: Vec<_> = (0u32..)
+                    .zip(page.buffers)
+                    .map(|(binding, (_, _, buffer))| BindGroupEntry {
+                        binding,
+                        resource: buffer.as_entire_binding(),
+                    })
+                    .collect();
+
+                if let Some((texture, sampler)) = page.sampled {
+                    resources.extend([
+                        BindGroupEntry {
+                            binding: buffers,
+                            resource: BindingResource::TextureView(texture),
+                        },
+                        BindGroupEntry {
+                            binding: buffers + 1,
+                            resource: BindingResource::Sampler(sampler),
+                        },
+                    ]);
+                }
+
+                if let Some(tlas) = page.tlas {
+                    resources.push(BindGroupEntry {
+                        binding: buffers + 2,
+                        resource: BindingResource::AccelerationStructure(tlas),
+                    });
+                }
+
+                device.create_bind_group(&BindGroupDescriptor {
+                    label: Some("box raster"),
+                    layout: &bind_group_layout,
+                    entries: &resources,
+                })
             })
             .collect();
 
-        if let Some((texture, sampler)) = sampled {
-            resources.extend([
-                BindGroupEntry {
-                    binding: buffers,
-                    resource: BindingResource::TextureView(texture),
-                },
-                BindGroupEntry {
-                    binding: buffers + 1,
-                    resource: BindingResource::Sampler(sampler),
-                },
-            ]);
-        }
-
-        if let Some(tlas) = tlas {
-            resources.push(BindGroupEntry {
-                binding: buffers + 2,
-                resource: BindingResource::AccelerationStructure(tlas),
-            });
-        }
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("box raster"),
-            layout: &bind_group_layout,
-            entries: &resources,
-        });
-
         BoxDraw {
-            parts: runs,
-            bind_group,
+            parts: drawn,
+            runs: Vec::new(),
+            bind_groups,
             corners,
             indices,
             boxes,
@@ -463,27 +470,44 @@ impl BoxDraw {
     }
 
     /// Replaces the boxes with `boxes`, [`BOX_BYTES`](Self::BOX_BYTES) each,
-    /// of which each run takes its count of `counts` in draw order. Panics
-    /// unless `counts` has a count for each part and `boxes` holds those
-    /// boxes and no more than the draw was built with.
-    pub fn rewrite(&mut self, queue: &Queue, boxes: &[u8], counts: &[u32]) {
-        assert_eq!(counts.len(), self.parts.len(), "each part has its count");
+    /// which the runs of `runs` take in draw order. A run holds its part
+    /// among the draw's, its page, and its count of boxes. Panics unless
+    /// `boxes` holds the runs' boxes and no more than the draw has room
+    /// for.
+    pub fn rewrite(&mut self, queue: &Queue, boxes: &[u8], runs: &[(usize, usize, u32)]) {
         assert_eq!(
             boxes.len() as u64,
-            u64::from(counts.iter().sum::<u32>()) * Self::BOX_BYTES as u64,
-            "the counts cover the boxes"
+            runs.iter()
+                .map(|&(_, _, count)| u64::from(count))
+                .sum::<u64>()
+                * Self::BOX_BYTES as u64,
+            "the runs cover the boxes"
         );
         assert!(
             boxes.len() as u64 <= self.boxes.size(),
-            "the runs hold no more boxes than the draw was built with"
+            "the runs hold no more boxes than the draw has room for"
         );
 
         queue.write_buffer(&self.boxes, 0, boxes);
 
         let mut first = 0;
 
-        for (run, count) in self.parts.iter_mut().zip(counts) {
-            run.boxes = first..first + count;
+        self.runs.clear();
+
+        for &(part, page, count) in runs {
+            assert!(
+                part < self.parts.len() && page < self.bind_groups.len(),
+                "a run draws one of the draw's parts over one of its pages"
+            );
+
+            if count > 0 {
+                self.runs.push(Run {
+                    part,
+                    page,
+                    boxes: first..first + count,
+                });
+            }
+
             first += count;
         }
     }
@@ -503,7 +527,7 @@ impl BoxDraw {
         {
             if *width > 0 && *height > 0 {
                 pass.set_scissor_rect(*left, *top, *width, *height);
-                pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_bind_group(0, &self.bind_groups[0], &[]);
                 pass.set_pipeline(cover);
                 pass.draw(0..3, 0..1);
             }
@@ -511,22 +535,24 @@ impl BoxDraw {
             return;
         }
 
-        let Some(run) = self.drawn().nth(at as usize) else {
+        let Some(run) = self.runs.get(at as usize) else {
             return;
         };
+
+        let part = &self.parts[run.part];
 
         // A box's corners make the first triangles of `indices`, and its
         // three faces toward the view make the rest.
         let corners = 0..TRIANGLES.len() as u32;
         let fronts = corners.end..corners.end + FRONTS.len() as u32;
 
-        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_bind_group(0, &self.bind_groups[run.page], &[]);
         pass.set_vertex_buffer(0, self.corners.slice(..));
         pass.set_vertex_buffer(1, self.boxes.slice(..));
         pass.set_index_buffer(self.indices.slice(..), IndexFormat::Uint16);
-        pass.set_pipeline(&run.pipeline);
+        pass.set_pipeline(&part.pipeline);
         pass.draw_indexed(
-            if run.fronts { fronts } else { corners },
+            if part.fronts { fronts } else { corners },
             0,
             run.boxes.clone(),
         );
@@ -534,13 +560,8 @@ impl BoxDraw {
 
     /// The passes the runs draw in.
     fn runs(&self) -> u32 {
-        u32::try_from(self.drawn().count())
+        u32::try_from(self.runs.len())
             .expect("a draw's runs number under 2^32")
             .max(1)
-    }
-
-    /// The runs that hold boxes, in draw order.
-    fn drawn(&self) -> impl Iterator<Item = &Run> {
-        self.parts.iter().filter(|run| !run.boxes.is_empty())
     }
 }

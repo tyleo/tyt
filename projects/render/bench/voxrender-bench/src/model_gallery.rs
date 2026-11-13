@@ -91,8 +91,9 @@ struct Shown {
 }
 
 /// What a loading thread sends back: the model's view on its table, its
-/// bounds, and the seconds the load took, or why it failed.
-type Loaded = Result<(HeadsetView, TyBoundsF64, f64)>;
+/// bounds, and the seconds its tiles and then its view took, or why the
+/// load failed.
+type Loaded = Result<(HeadsetView, TyBoundsF64, [f64; 2])>;
 
 impl ModelGallery {
     /// The format of the depth a pass that draws the gallery clears to
@@ -268,7 +269,11 @@ impl ModelGallery {
         thread::spawn(move || {
             let start = Instant::now();
 
-            let loaded = ModelTiles::load(&path, BoxView::draws_glass(&device)).map(|model| {
+            let glass = BoxView::draws_glass(&device);
+
+            let loaded = ModelTiles::load(&path, glass).and_then(|model| {
+                let tiled = start.elapsed().as_secs_f64();
+
                 let view = HeadsetView::new(
                     &device,
                     &queue,
@@ -277,9 +282,13 @@ impl ModelGallery {
                     HeadsetStand::table(&model.bounds),
                     format,
                     size,
-                );
+                )?;
 
-                (view, model.bounds, start.elapsed().as_secs_f64())
+                Ok((
+                    view,
+                    model.bounds,
+                    [tiled, start.elapsed().as_secs_f64() - tiled],
+                ))
             });
 
             // The gallery may have gone, and then nobody waits.
@@ -312,7 +321,7 @@ impl ModelGallery {
         let place = format!("{} of {}", index + 1, self.paths.len());
 
         match loaded {
-            Ok((view, bounds, seconds)) => {
+            Ok((view, bounds, [tiled, viewed])) => {
                 if index == self.wanted {
                     self.shown = Some(Shown {
                         view,
@@ -321,7 +330,11 @@ impl ModelGallery {
                     });
                 }
 
-                Some(format!("{place} {name}: loaded in {:.0} ms", seconds * 1e3))
+                Some(format!(
+                    "{place} {name}: loaded in {:.0} ms, its tiles in {:.0} ms",
+                    (tiled + viewed) * 1e3,
+                    tiled * 1e3
+                ))
             }
 
             // The model before stays in view, and the next step moves past

@@ -27,9 +27,17 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
     scene_tiles.solid = true;
     scene_tiles.push_scene(scene)?;
 
-    let fill = LitFill::new(&gpu.device, &scene_tiles, toward, false);
+    let placements: Vec<_> = (0..scene_tiles.placements.len()).collect();
 
-    fill.fill(&gpu.device, &gpu.queue);
+    let fill = LitFill::new(&gpu.device, &scene_tiles, toward).page(
+        &gpu.device,
+        &scene_tiles,
+        &placements,
+        false,
+        None,
+    );
+
+    fill.fill(&gpu.device, &gpu.queue)?;
 
     let readback = gpu.device.create_buffer(&BufferDescriptor {
         label: Some("lit readback"),
