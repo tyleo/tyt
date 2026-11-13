@@ -452,7 +452,12 @@ this order:
             only where its ray crosses the surfaces, and Quest's driver
             fails them under multiview. A walk that shades its surfaces
             in a loop of their own runs a third slower
-      - [ ] Glass at half size
+      - [x] The most glass at half size can save. A quarter of the
+            glass's pixels saves the fish tank 1.5 ms on Quest, the potion
+            1.0, and the lantern 0.6. A second pass over the glass, a read
+            of the eyes' depth, two targets, and a pass over the eyes come
+            out of that
+      - [ ] The project lead rules on building glass at half size
 8. S6, the moving scene, joins the bench scenes. Its motion is a scripted
    function of time. The box view then moves a placement each frame: its
    matrices, the crossers of its boxes, and its lit words

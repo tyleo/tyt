@@ -3073,3 +3073,51 @@ its time in Boxes behind slabs.
 4. Each frame of a walk still pays the test's 0.8 ms and a deal's 0.3 to
    0.4
 5. The walk is a script. A worn headset's motion is unmeasured
+
+## Glass at half size, a ceiling, 2026-11-13
+
+What a model's glass would cost at a quarter of its pixels, before the
+passes that glass at half size adds.
+
+- Device and method: as in Trial models, with a model held for 24 s.
+  Builds take turns in one sitting
+- The probe: a scratch build draws a model's glass runs through a
+  viewport half the target's width and height. Each glass box then covers
+  a quarter of its pixels, and a fragment's work stays as it was. The
+  image is wrong, and the glass tests its depth against another part of
+  the frame
+
+| Model | Glass at full size | Glass at a quarter of its pixels | Saved |
+| --- | ---: | ---: | ---: |
+| fish tank | 4.65 | 3.18 | 1.47 |
+| potion | 2.49 | 1.53 | 0.96 |
+| lantern | 2.74 | 2.18 | 0.56 |
+
+The fish tank takes 1.96 ms with no glass, as Glass's cost found. Its
+glass takes 2.69 ms at full size and 1.22 at a quarter of its pixels: 45%
+of the time for 25% of the fragments.
+
+**What glass at half size adds.** None of it is built or timed here.
+
+1. A second pass over the glass. Glass at half size keeps its tint and
+   its light apart until a pass lays them over the eyes. The tint and the
+   light take a pass each because a fragment blends two colors into one
+   target alone. A walk that shades no surface takes under a third of the
+   time of one that shades them all
+2. A read of the eyes' depth at half size. One read of four depths a
+   texel took 0.27 ms in Boxes behind slabs
+3. Two targets at half size to store, and a pass over the eyes that lays
+   them down
+
+By the times above and the bloom's, those come to an estimated 1.1 to
+1.4 ms. A tint kept as one number would need one pass over the glass. It
+loses the tint's hue.
+
+**Outcomes.**
+
+1. A quarter of the glass's pixels saves the fish tank 1.5 ms, the
+   potion 1.0, and the lantern 0.6. That is the most glass at half size
+   can save them
+2. The estimate of what it adds leaves the fish tank 0.1 to 0.4 ms and
+   costs the lantern time. Glass at half size is not built
+
