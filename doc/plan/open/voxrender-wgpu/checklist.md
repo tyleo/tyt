@@ -446,8 +446,21 @@ this order:
             to load: the view sizes its buffers by each grid's cells. A
             copy at 8 m voxels loads in 8.5 s on Quest and draws in
             6.15 ms. The gallery opens with it
-      - [ ] The valley at 2 m near the head: buffers sized by live tiles,
-            and coarser voxels with distance
+      - [x] The valley at 2 m in the headset. A view builds from each
+            object's tiles, which a loader makes an object at a time on
+            the spare cores. Its tiles and lit words fill pages of one
+            binding each. The valley loads on Quest in 53 s
+      - [x] Coarser voxels with distance, as a count of pixels that is
+            off unless set. An object keeps copies at half its voxels a
+            side, and a sort draws each tile at the coarsest copy whose
+            voxels span the count or fewer. At 1.4 pixels the valley
+            draws from the table in 5.98 ms, from 35.6
+      - [ ] The valley at life size from within. At 1.4 pixels it takes
+            15.5 to 19.0 ms on Quest, and 8.3 at 5.6 pixels
+      - [ ] The shadow bake's rays step a tile at a time through tiles
+            with no cell. The bake is 16 s of the valley's 53
+      - [ ] The project lead rules on a count of pixels the gallery sets
+            by default
       - [ ] The project lead rules on the reference's brick LOD and boxes
             that span several tiles with their cells whole
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes

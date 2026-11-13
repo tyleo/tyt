@@ -3172,3 +3172,102 @@ spans about 1.4 pixels at the model's middle.
    wearer who grows the model or stands in it needs the 2 m voxels near
    the head alone, which is level of detail's work
 
+
+## The valley at 2 m, 2026-11-13
+
+The valley's own 23 M voxels in the headset, where the gallery showed a
+copy at 8 m.
+
+- The model, the device, and the method: as in The 5 km valley. The Quest
+  runs set `debug.voxrenderbench.model valley-5km-2m`
+- The detail: `debug.voxrenderbench.detail` on Quest and `--detail` on this
+  Mac, the fewest pixels a voxel spans before a coarser copy draws
+- The stands: the table stand, and a life-size stand 300 m up at the
+  valley's middle, set by a scratch patch the tree does not hold
+
+**What stopped the load.** Five things grew with the cells of each object's
+grid or past what one binding holds. Each fell in turn:
+
+| What grew | Its size at 2 m | What holds now |
+| --- | --- | --- |
+| The loaded document, and the scene of it | 5.7 GB, and 17.9 GB | One object's grid at a time, and each object's tiles |
+| The shadow bake's cells | 5.34 GB | A word a tile and a bit a cell of each tile with a cell: 45 MB |
+| A mirror ray's quads | 28 M quads | The quads within reach of a cell that casts a ray |
+| The tiles' words in one binding of 128 MB | 290 MB | Three pages |
+| The lit words in one binding | 186 MB | The same pages |
+
+The valley's snow and foam cast a mirror ray 3.5 and 7.8 cells long. A
+quad farther than that from each of their cells meets no ray. The valley
+holds 88,285 tiles, 92,722 boxes, and 23.2 M record cells.
+
+The bake then lost the device on Quest. It queued a dispatch for each
+65,536 cells at once, and the valley's rays run long. A fill now waits for
+each dispatch and sizes the next to take 3 ms.
+
+**The load.** Seconds to the first frame, and how the steps moved them:
+
+| Step | Quest, 2 m | This Mac, 2 m |
+| --- | ---: | ---: |
+| Tiles, pages, and a paced bake | 123 | 38 |
+| Coarser copies kept | 136 | 44 |
+| A thread a spare core, and the slab search over rows of bits | 58 | 7.3 |
+| A mirror ray's quads on those threads | 53 | 6.8 |
+
+Quest 3 gives an app three cores. Two threads build there, and the third
+draws. The slab search was over half of a build's time. Of the 53 s, the tiles take 31, the
+shadow bake 16, and the quads 3. The headset holds 90 frames a second
+through the load. Free memory falls from 3.8 GB to 2.5 GB.
+
+The 4 m copy loads on Quest in 21 s at the first step. The 8 m copy loads
+in 2.8 s at the last, from 8.4 s before the work.
+
+**The frame from the table stand, Quest.** GPU ms at p50 and p99:
+
+| Model | Detail | p50 | p99 | Frames a second |
+| --- | --- | ---: | ---: | ---: |
+| 2 m | none | 35.57 | | 25 |
+| 2 m | 1.4 pixels | 5.98 | 6.22 | 90 |
+| 4 m copy | none | 9.87 | 10.55 | 90 |
+| 8 m copy | none | 6.50 | 6.66 | 90 |
+
+The 8 m copy took 6.15 ms before the work. The 0.35 ms it gained is not
+yet traced. A quad now holds one material, which gives the snow's mirror
+rays more triangles, and the headset ran 4 C warmer.
+
+**The frame at life size, Quest.** From the stand at the valley's middle,
+where forest fills most of each eye:
+
+| Detail | p50 | p99 | Frames a second |
+| --- | ---: | ---: | ---: |
+| 1.4 pixels | 15.51 to 19.01 | | 45 |
+| 2.8 pixels | 12.25 | 13.18 | 68 and up |
+| 5.6 pixels | 8.28 | 8.39 | 85 to 90 |
+
+The three times at 1.4 pixels come from three headings. The other rows hold
+one heading, which takes 18.82 ms at 1.4.
+
+**What the detail costs the image.** `view-check` over a 256 pixel image,
+as pixels off by over 8:
+
+| Scene | No detail | 1.4 pixels |
+| --- | ---: | ---: |
+| S1 | 6 of 53,296 | 223 |
+| S5 | 99 of 31,818 | 8,122 |
+| S2 | 17 of 62,236 | 817 |
+| S4 | 72 of 31,125 | 3,912 |
+
+A 256 pixel image puts far more of a scene under 1.4 pixels a voxel than a
+headset's eye does. This Mac's life-size view of the valley at 1680 by 1760
+changes 30 pixels of 2,956,800.
+
+**Outcomes.**
+
+1. The valley's 2 m voxels load in the headset in 53 s and hold 90 Hz from
+   the table with the detail at 1.4 pixels
+2. With no detail the table draws 93,000 boxes of voxels a third of a pixel
+   wide at 25 frames a second
+3. At life size from within, the detail at 1.4 pixels draws at 45 frames a
+   second. A forest's tiles are mostly empty, and a ray crosses several
+   before it meets a cell
+4. The bake's rays still step a cell at a time through tiles with no cell.
+   A step a tile would cut most of its 16 s
