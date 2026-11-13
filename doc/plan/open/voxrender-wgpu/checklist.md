@@ -400,6 +400,10 @@ this order:
             sorts
 4. A pass over the bench's code and tests that drops what the box raster
    left without a use
+      - [x] The arms that lost go: the tree walk and its tree, the ray
+            query's marches, the first box rasters, the mesh raster, the
+            step loops and probes, B1's check of them, and B2's timer.
+            The bench keeps the view, the gallery, and their checks
 5. A perspective view by its four edges in `voxrender`. `view-check` then
    compares a headset's two eyes with the reference
 6. Level of detail. The reference's brick LOD rule comes first, with the

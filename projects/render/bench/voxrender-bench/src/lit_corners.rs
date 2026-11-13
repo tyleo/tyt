@@ -242,7 +242,7 @@ fn shared_factor(a: u32, b: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{LitCorners, TileMasks, b1_scenes, reference_hits};
+    use crate::{LitCorners, TileMasks, bench_scenes, reference_hits};
     use std::collections::HashMap;
     use ty_math::TyVector3U32;
     use voxrender::{ShadowTarget, grid_vector, quantize_direction};
@@ -251,7 +251,7 @@ mod tests {
     fn the_words_hold_the_references_corner_shadows() {
         let mut samples = 0;
 
-        for (name, scene) in b1_scenes() {
+        for (name, scene) in bench_scenes() {
             // The research's scenes and the bush take long to fill.
             if name.starts_with('S') || name == "inside a bush" {
                 continue;

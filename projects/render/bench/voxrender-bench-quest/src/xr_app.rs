@@ -1,5 +1,5 @@
 use crate::{
-    Error, EyeSwapchain, FrameTimes, GalleryInput, GpuClock, Result, RunOptions, XrGpu, XrSystem,
+    Error, EyeSwapchain, FrameTimes, GalleryInput, Result, RunOptions, XrGpu, XrSystem,
     probe_focal_lengths, probe_session, probe_visibility_mask,
 };
 use openxr::{
@@ -15,13 +15,12 @@ use std::{
 };
 use voxrender::RenderBloom;
 use voxrender_bench::{
-    Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, KernelProfile, ModelGallery,
-    PassTimer, TimedBench, bench_scene,
+    Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, ModelGallery, bench_scene,
 };
 use wgpu::{
-    Color, CommandEncoderDescriptor, Device, Extent3d, LoadOp, Operations,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp,
-    TextureDescriptor, TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
+    CommandEncoderDescriptor, Device, Extent3d, LoadOp, Operations, RenderPassColorAttachment,
+    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
+    TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 /// The views the app draws.
@@ -43,17 +42,8 @@ const TESTS: &str = "tests";
 /// between two frames is a stall.
 const STEP: f64 = 0.1;
 
-/// The color the pass clears both eyes to.
-const CLEAR: Color = Color {
-    r: 0.02,
-    g: 0.04,
-    b: 0.08,
-    a: 1.0,
-};
-
-/// An OpenXR session that runs B0's session probes. Each frame clears both
-/// eyes and times B2's kernels or runs the profile, or draws a scene's
-/// view or a gallery's model.
+/// An OpenXR session that runs B0's session probes. Each frame draws a
+/// scene's view or a gallery's model.
 pub struct XrApp {
     // Fields drop in order, so the OpenXR handles go before the Vulkan
     // device they use.
@@ -157,9 +147,9 @@ impl XrApp {
                 tour: options.tour,
                 landed: None,
             }
-        } else if let Some(scene) = &options.view {
-            let render_scene = bench_scene(scene)
-                .ok_or_else(|| Error::Bench(BenchError::NoScene(scene.clone())))?;
+        } else {
+            let render_scene = bench_scene(&options.view)
+                .ok_or_else(|| Error::Bench(BenchError::NoScene(options.view.clone())))?;
 
             let (_, view) = render_scene
                 .iter_views()
@@ -182,30 +172,6 @@ impl XrApp {
                 depth: eye_depth(&gpu.device, width, height),
                 prepared: Duration::ZERO,
                 frames: 0,
-            }
-        } else if options.profile {
-            FrameWork::Profile(
-                KernelProfile::new(
-                    &gpu.device,
-                    &gpu.queue,
-                    width,
-                    height,
-                    options.kernels.as_deref(),
-                )
-                .map_err(Error::Bench)?,
-            )
-        } else {
-            FrameWork::Timer {
-                pass_timer: PassTimer::new(
-                    &gpu.device,
-                    &gpu.queue,
-                    TimedBench::B2 { ray_queries: true },
-                    width,
-                    height,
-                    options.kernels.as_deref(),
-                )
-                .map_err(Error::Bench)?,
-                clock: GpuClock::new()?,
             }
         };
 
@@ -350,8 +316,7 @@ impl XrApp {
             }
         });
 
-        // A view and a gallery draw in passes of one draw each. Any other
-        // work clears the eyes in one pass.
+        // A view and a gallery draw in passes of one draw each.
         let passes = match &mut self.work {
             FrameWork::View {
                 view,
@@ -409,24 +374,20 @@ impl XrApp {
 
                 gallery.passes()
             }
-
-            _ => 1,
         };
 
         // A scene that blooms makes its halo before its passes.
         match &self.work {
             FrameWork::View { view, .. } => view.glow(&mut encoder),
             FrameWork::Models { gallery, .. } => gallery.glow(&mut encoder),
-            _ => {}
         }
 
         for at in 0..passes {
             let first = at == 0;
 
             let (sky, depth) = match &self.work {
-                FrameWork::View { view, depth, .. } => (view.sky(), Some(depth)),
-                FrameWork::Models { gallery, depth, .. } => (gallery.sky(), Some(depth)),
-                _ => (CLEAR, None),
+                FrameWork::View { view, depth, .. } => (view.sky(), depth),
+                FrameWork::Models { gallery, depth, .. } => (gallery.sky(), depth),
             };
 
             let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -444,7 +405,7 @@ impl XrApp {
                         store: StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: depth.map(|depth| RenderPassDepthStencilAttachment {
+                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
                     view: depth,
                     depth_ops: Some(Operations {
                         load: if first {
@@ -467,48 +428,10 @@ impl XrApp {
             match &self.work {
                 FrameWork::View { view, .. } => view.draw(&mut pass, at),
                 FrameWork::Models { gallery, .. } => gallery.draw(&mut pass, at),
-                _ => {}
             }
         }
 
-        match &mut self.work {
-            FrameWork::View { .. } | FrameWork::Models { .. } => {
-                self.gpu.queue.submit([encoder.finish()]);
-            }
-
-            FrameWork::Timer { pass_timer, clock } => {
-                clock.sample()?;
-
-                pass_timer
-                    .record(&self.gpu.device, &self.gpu.queue, &mut encoder)
-                    .map_err(Error::Bench)?;
-
-                self.gpu.queue.submit([encoder.finish()]);
-
-                if let Some(report) = pass_timer
-                    .collect(&self.gpu.device, &self.gpu.queue)
-                    .map_err(Error::Bench)?
-                {
-                    log::info!("b2 {}", clock.take());
-
-                    for line in report.lines() {
-                        log::info!("b2 {line}");
-                    }
-                }
-            }
-
-            FrameWork::Profile(profile) => {
-                if let Some(line) = profile
-                    .record(&self.gpu.device, &mut encoder)
-                    .map_err(Error::Bench)?
-                {
-                    log::info!("profile {line}");
-                }
-
-                self.gpu.queue.submit([encoder.finish()]);
-                profile.submitted(&self.gpu.queue);
-            }
-        }
+        self.gpu.queue.submit([encoder.finish()]);
 
         self.swapchain.handle.release_image().map_err(Error::Xr)?;
 
@@ -550,20 +473,8 @@ impl XrApp {
     }
 }
 
-/// What each frame records after it clears the eyes.
+/// What each frame draws.
 enum FrameWork {
-    /// B2's timer, which logs each GPU clock's share of a window and then the
-    /// window's report on `b2` lines.
-    Timer {
-        pass_timer: PassTimer,
-
-        clock: GpuClock,
-    },
-
-    /// The profile, which logs each kernel as its stretch starts on
-    /// `profile` lines.
-    Profile(KernelProfile),
-
     /// A scene's view, drawn into the eyes each frame.
     View {
         view: Box<HeadsetView>,

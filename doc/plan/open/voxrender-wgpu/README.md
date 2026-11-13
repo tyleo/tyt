@@ -64,14 +64,14 @@ open and may still change when they run. S6 depends on none of its decisions.
 3. `voxrender-wgpu` is the GPU renderer. It holds what the benchmarks have
    picked, starting with B1's walk. B3's winning front end moves into it.
    The name was free on crates.io as of 2026-09-27
-4. `voxrender-bench` is new and unpublished. It holds the benchmarks and the
-   candidates under trial. It judges the candidates and `voxrender-wgpu`
-   against `voxrender-cpu` on a GPU device its caller opens. B3's losing
-   arms are deleted
-5. `voxrender-bench-desktop` is new and unpublished. It runs the benchmarks
-   headless on desktop
-6. `voxrender-bench-quest` is new and unpublished. It runs the benchmarks as
-   an OpenXR app on Quest
+4. `voxrender-bench` is new and unpublished. It holds the box raster's view
+   and gallery and their checks against `voxrender-cpu`, on a GPU device
+   its caller opens. The arms that lost were deleted after
+   [their last commit](reference/benchmarks.md#the-arms-that-lost-2026-11-13)
+5. `voxrender-bench-desktop` is new and unpublished. It draws and checks a
+   view headless on desktop
+6. `voxrender-bench-quest` is new and unpublished. It shows a view or the
+   gallery as an OpenXR app on Quest
 
 A tier turns off the contract features it cannot afford, and the reference
 renders that tier's goldens with the same features off. `voxsurface`'s cull

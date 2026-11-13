@@ -3,11 +3,7 @@ use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 use voxcore::BVoxObject;
-use voxrender::{RenderProjection, RenderScene, RenderView, grid_point};
-
-/// The cells past a box's cells within which a ray's start counts as inside
-/// the box. The margin covers a raster's pad and the near plane.
-const MARGIN: f64 = 1.0 / 32.0;
+use voxrender::{RenderScene, grid_point};
 
 /// The meters two boxes can share along an axis and still count as apart,
 /// so boxes that only touch do.
@@ -79,45 +75,6 @@ impl PlacedBox {
         }
 
         placed
-    }
-
-    /// Whether a ray of `view` can start inside the box, and how far the
-    /// box's nearest point lies from the view: from a perspective view's
-    /// eye, or along an orthographic view's axis.
-    pub fn seen(&self, view: &RenderView) -> (bool, f64) {
-        let low = self.low.as_dvec3() - MARGIN;
-        let high = self.high.as_dvec3() + MARGIN;
-        let position = view.pose.position;
-
-        match view.projection {
-            RenderProjection::Perspective { .. } => {
-                let eye = grid_point(&self.transform, position);
-                let nearest = eye.clamp(low, high);
-
-                (
-                    nearest == eye,
-                    (self.transform.transform_point(nearest) - position).length(),
-                )
-            }
-
-            RenderProjection::Orthographic { .. } => {
-                let forward = view.pose.rotation * -TyVector3F64::Z;
-
-                let depth = (0..8)
-                    .map(|corner| {
-                        let point = TyVector3F64::new(
-                            if corner & 1 == 0 { low.x } else { high.x },
-                            if corner & 2 == 0 { low.y } else { high.y },
-                            if corner & 4 == 0 { low.z } else { high.z },
-                        );
-
-                        forward.dot(self.transform.transform_point(point) - position)
-                    })
-                    .fold(f64::INFINITY, f64::min);
-
-                (depth <= 0.0, depth)
-            }
-        }
     }
 
     /// The low and high corners of the world box around the box.

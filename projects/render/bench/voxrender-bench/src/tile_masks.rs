@@ -614,7 +614,7 @@ fn position(index: usize) -> TyVector3U32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TileMasks, b1_scenes, painted_object};
+    use crate::{TileMasks, bench_scenes, painted_object};
     use branded_id::U32Id;
     use std::collections::HashMap;
     use ty_math::TyVector3U32;
@@ -680,7 +680,7 @@ mod tests {
 
     #[test]
     fn the_solids_and_masks_hold_every_live_cell_of_each_scene() {
-        for (name, scene) in b1_scenes() {
+        for (name, scene) in bench_scenes() {
             for (object_id, object) in scene.iter_objects() {
                 for (solids, materials) in [(false, false), (true, false), (true, true)] {
                     let every = |_| true;

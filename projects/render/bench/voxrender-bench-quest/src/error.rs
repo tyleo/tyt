@@ -101,16 +101,10 @@ pub enum Error {
     /// Android gave the app no external files directory.
     NoFiles,
 
-    /// The GPU clock's file would not read.
-    ClockRead(IOError),
-
-    /// The GPU clock's file holds other than a clock in Hz.
-    ClockParse(String),
-
     /// The view's shader would not compile for the pipeline probe.
     ProbeShader(String),
 
-    /// A benchmark failed.
+    /// The view or the gallery failed.
     Bench(BenchError),
 }
 
@@ -154,8 +148,6 @@ impl Display for Error {
                 "the property {name} holds {value:?}, not a scale over 0 and at most 1"
             ),
             Error::NoFiles => write!(f, "the app has no external files directory"),
-            Error::ClockRead(error) => write!(f, "the GPU clock would not read: {error}"),
-            Error::ClockParse(text) => write!(f, "the GPU clock file holds {text:?}"),
             Error::ProbeShader(error) => {
                 write!(
                     f,
@@ -163,7 +155,7 @@ impl Display for Error {
                 )
             }
 
-            Error::Bench(error) => write!(f, "a benchmark failed: {error}"),
+            Error::Bench(error) => write!(f, "{error}"),
         }
     }
 }

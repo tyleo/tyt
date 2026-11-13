@@ -1,6 +1,6 @@
 use wgpu::{AdapterInfo, Device, Queue};
 
-/// The GPU device a benchmark runs on.
+/// The GPU device a view draws on.
 pub struct Gpu {
     /// The adapter the device runs on.
     pub info: AdapterInfo,

@@ -161,24 +161,15 @@ impl XrGpu {
             .expose_adapter(physical_device)
             .ok_or(Error::NoAdapter)?;
 
-        let required =
-            Features::MULTIVIEW | Features::TIMESTAMP_QUERY | Features::EXPERIMENTAL_RAY_QUERY;
+        let required = Features::MULTIVIEW | Features::EXPERIMENTAL_RAY_QUERY;
 
         if !exposed.features.contains(required) {
             return Err(Error::MissingFeatures(required - exposed.features));
         }
 
-        // B2 reports the subgroup sizes when the device has subgroups. It
-        // runs its MSAA raster when the device has multisampled arrays, and
-        // its depth probe's bounded layers when the device has early depth
-        // tests. A view draws its glass when the device blends two colors
-        // a fragment.
-        let features = required
-            | (exposed.features
-                & (Features::SUBGROUP
-                    | Features::MULTISAMPLE_ARRAY
-                    | Features::SHADER_EARLY_DEPTH_TEST
-                    | Features::DUAL_SOURCE_BLENDING));
+        // A view draws its glass when the device blends two colors a
+        // fragment.
+        let features = required | (exposed.features & Features::DUAL_SOURCE_BLENDING);
 
         let limits = exposed.capabilities.limits.clone();
         let device_extensions = exposed.adapter.required_device_extensions(features);

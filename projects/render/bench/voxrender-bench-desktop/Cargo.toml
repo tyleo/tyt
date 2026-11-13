@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "voxrender's GPU benchmarks as a headless desktop app."
+description = "voxrender-bench's box view as a headless desktop app."
 publish = false
 
 [dependencies]

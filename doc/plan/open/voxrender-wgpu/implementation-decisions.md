@@ -677,3 +677,20 @@ they land.
   cell it entered by did
 - A device without dual-source blending draws no glass
 
+
+## The pass that drops the arms
+
+- B1's id check went with the arm it drew through. `mask_boxes` drew ids
+  through `mask_march.wgsl`, which the view shares, under a vertex stage
+  and bindings of its own. Keeping the check meant keeping that second
+  module in step with every change to the view. `view-check` and
+  `lit-check` judge the view against the reference
+- `reference_hits` and `corner_across` stay as test support. The scenes'
+  tests and the lit corners' tests read the reference's hits through them
+- `BoxDraw::DEPTH` holds the depth format, which `HitTargets` held
+- `b1_scenes` became `bench_scenes`
+- The apps ask a device for multiview, ray queries, and dual-source
+  blending. Timestamp queries, subgroups, multisampled arrays, and early
+  depth tests served the arms alone
+- The Quest app shows S1 while `debug.voxrenderbench.view` is unset, where
+  it ran B1 and B2

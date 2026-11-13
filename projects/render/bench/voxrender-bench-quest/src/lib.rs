@@ -1,5 +1,5 @@
-//! voxrender's GPU benchmarks as a Meta Quest OpenXR app. The crate builds
-//! only for Android.
+//! voxrender-bench's headset view and model gallery as a Meta Quest OpenXR
+//! app. The crate builds only for Android.
 
 #![cfg(target_os = "android")]
 
@@ -11,8 +11,6 @@ mod error;
 mod eye_swapchain;
 mod frame_times;
 mod gallery_input;
-mod gpu_clock;
-mod log_b1;
 mod probe_focal_lengths;
 mod probe_gpu;
 mod probe_indirect;
@@ -31,8 +29,6 @@ pub(crate) use error::*;
 pub(crate) use eye_swapchain::*;
 pub(crate) use frame_times::*;
 pub(crate) use gallery_input::*;
-pub(crate) use gpu_clock::*;
-pub(crate) use log_b1::*;
 pub(crate) use probe_focal_lengths::*;
 pub(crate) use probe_gpu::*;
 pub(crate) use probe_indirect::*;

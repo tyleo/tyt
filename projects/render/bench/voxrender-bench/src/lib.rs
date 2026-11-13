@@ -1,7 +1,6 @@
-//! Benchmarks and prototypes for voxrender's GPU tiers. Each benchmark of the
-//! voxrender-wgpu plan runs on a device its caller opens, judges
-//! `voxrender-wgpu` and the candidates under trial against `voxrender-cpu`,
-//! and returns its report.
+//! The box raster the voxrender-wgpu plan's benchmarks picked, as a view of
+//! a scene and a gallery of models. A view draws on a device its caller
+//! opens. Its checks judge it against `voxrender-cpu`.
 
 // Public API
 
@@ -14,16 +13,11 @@ mod gpu;
 mod headset_eye;
 mod headset_stand;
 mod headset_view;
-mod kernel_profile;
 mod lit_check;
 mod look_from;
 mod model_gallery;
 mod model_scene;
-mod pass_timer;
 mod result;
-mod run_b1;
-mod timed_bench;
-mod tree64;
 mod view_check;
 mod view_eye;
 mod view_image;
@@ -37,16 +31,11 @@ pub use gpu::*;
 pub use headset_eye::*;
 pub use headset_stand::*;
 pub use headset_view::*;
-pub use kernel_profile::*;
 pub use lit_check::*;
 pub use look_from::*;
 pub use model_gallery::*;
 pub use model_scene::*;
-pub use pass_timer::*;
 pub use result::*;
-pub use run_b1::*;
-pub use timed_bench::*;
-pub use tree64::*;
 pub use view_check::*;
 pub use view_eye::*;
 pub use view_image::*;
@@ -54,131 +43,81 @@ pub use view_image::*;
 // Internal API
 
 mod art_room_scene;
-mod b1_kernels;
-mod b1_scenes;
-mod b2_kernels;
-mod bench_kernels;
-mod bench_summary;
+mod bench_scenes;
 mod box_bindings;
 mod box_bloom;
 mod box_crosser;
-mod box_depth;
 mod box_draw;
 mod box_faces;
-mod box_march;
 mod box_part;
-mod box_raster;
-mod brick_march;
 mod bush_interior_scene;
 mod cell_noise;
-mod chain_kernel;
 mod city_scene;
-mod corner_across;
-mod depth_probe;
-mod depth_probe_mode;
 mod eye_view;
-mod far_wall_scene;
 mod fitted_view;
 mod foliage_scene;
-mod fragment_launch;
 mod glass_tiles;
 mod grazing_floor_scene;
 mod greenhouse_scene;
-mod hit_packing;
-mod hit_targets;
-mod kernel_work;
 mod lattice_light;
 mod lit_corners;
 mod lit_fill;
 mod live_boxes;
 mod map_readback;
-mod mask_boxes;
 mod material_grid;
-mod mesh_raster;
-mod occupancy;
 mod outdoor_lights;
 mod painted_object;
 mod pass_terms;
 mod place_object;
 mod placed_box;
 mod quad_tlas;
-mod raster_arm;
-mod raster_mesh;
-mod ray_query_arm;
-mod ray_query_trace;
-mod reference_hits;
 mod retain_matte;
 mod retain_next_object;
-mod step_grid;
-mod step_kernel;
-mod step_loop;
-mod subgroup_sizes;
 mod tile_masks;
-mod tree_boxes;
-mod walk;
 mod world_to_clip;
 
 pub(crate) use art_room_scene::*;
-pub(crate) use b1_kernels::*;
-pub(crate) use b1_scenes::*;
-pub(crate) use b2_kernels::*;
-pub(crate) use bench_kernels::*;
-pub(crate) use bench_summary::*;
+pub(crate) use bench_scenes::*;
 pub(crate) use box_bindings::*;
 pub(crate) use box_bloom::*;
 pub(crate) use box_crosser::*;
-pub(crate) use box_depth::*;
 pub(crate) use box_draw::*;
 pub(crate) use box_faces::*;
-pub(crate) use box_march::*;
 pub(crate) use box_part::*;
-pub(crate) use box_raster::*;
-pub(crate) use brick_march::*;
 pub(crate) use bush_interior_scene::*;
 pub(crate) use cell_noise::*;
-pub(crate) use chain_kernel::*;
 pub(crate) use city_scene::*;
-pub(crate) use corner_across::*;
-pub(crate) use depth_probe::*;
-pub(crate) use depth_probe_mode::*;
 pub(crate) use eye_view::*;
-pub(crate) use far_wall_scene::*;
 pub(crate) use fitted_view::*;
 pub(crate) use foliage_scene::*;
-pub(crate) use fragment_launch::*;
 pub(crate) use glass_tiles::*;
 pub(crate) use grazing_floor_scene::*;
 pub(crate) use greenhouse_scene::*;
-pub(crate) use hit_packing::*;
-pub(crate) use hit_targets::*;
-pub(crate) use kernel_work::*;
 pub(crate) use lattice_light::*;
 pub(crate) use lit_corners::*;
 pub(crate) use lit_fill::*;
 pub(crate) use live_boxes::*;
 pub(crate) use map_readback::*;
-pub(crate) use mask_boxes::*;
 pub(crate) use material_grid::*;
-pub(crate) use mesh_raster::*;
-pub(crate) use occupancy::*;
 pub(crate) use outdoor_lights::*;
 pub(crate) use painted_object::*;
 pub(crate) use pass_terms::*;
 pub(crate) use place_object::*;
 pub(crate) use placed_box::*;
 pub(crate) use quad_tlas::*;
-pub(crate) use raster_arm::*;
-pub(crate) use raster_mesh::*;
-pub(crate) use ray_query_arm::*;
-pub(crate) use ray_query_trace::*;
-pub(crate) use reference_hits::*;
 pub(crate) use retain_matte::*;
 pub(crate) use retain_next_object::*;
-pub(crate) use step_grid::*;
-pub(crate) use step_kernel::*;
-pub(crate) use step_loop::*;
-pub(crate) use subgroup_sizes::*;
 pub(crate) use tile_masks::*;
-pub(crate) use tree_boxes::*;
-pub(crate) use walk::*;
 pub(crate) use world_to_clip::*;
+
+// Test support
+
+#[cfg(test)]
+mod corner_across;
+#[cfg(test)]
+mod reference_hits;
+
+#[cfg(test)]
+pub(crate) use corner_across::*;
+#[cfg(test)]
+pub(crate) use reference_hits::*;

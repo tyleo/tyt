@@ -16,10 +16,10 @@ fn hidden(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> bool {
 /// compiles it apart from the view.
 ///
 /// Its vertex entries take a vertex's bits at location 0 and a box's three
-/// `vec4<u32>`s at locations 1 to 3: `place`, `place_near`, and
-/// `place_held` for a box's back faces, and `place_front` for its faces
-/// toward the view. Its fragment entries are `front`, `crossed`, `inside`,
-/// `held`, `exact`, and `solid`. `place_sky` and `sky_halo` draw the halo
+/// `vec4<u32>`s at locations 1 to 3: `place_near` and `place_held` for a
+/// box's back faces, and `place_front` for its faces toward the view. Its
+/// fragment entries are `front`, `crossed`, `inside`, `held`, and `solid`.
+/// `place_sky` and `sky_halo` draw the halo
 /// over the sky. Group 0 binds a uniform buffer at 0, read-only storage
 /// buffers at 1 to 7, a two-layer texture of filterable floats at 8, its
 /// sampler at 9, and with `traced` an acceleration structure at 10.
