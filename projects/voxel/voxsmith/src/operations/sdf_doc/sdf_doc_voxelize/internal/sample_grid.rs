@@ -4,6 +4,7 @@ use crate::{
     operations::sdf_doc::{
         ArgumentCheck, Bounds3d, LatticeShapes, SdfCell, SdfEvaluation, SdfGrid, SdfShapes,
         SdfStepRecord, ShapeSource, exact_sin_cos, meters, pattern_material, side_direction,
+        whole_voxels,
     },
 };
 use branded_id::{IdVec, U32Id};
@@ -133,6 +134,7 @@ pub fn sample_grid<D: MapCells>(
 
     // Each `add` or `carve` shape run so far, with `true` for an `add`.
     let mut solids = Vec::new();
+    let mut set_ran = false;
 
     for (index, step_id) in object.step_ids.iter().enumerate() {
         let step = &state.steps[step_id.to_usize_id()];
@@ -143,6 +145,7 @@ pub fn sample_grid<D: MapCells>(
             grid: &mut grid,
             owners: owners.as_deref_mut(),
             solids: &solids,
+            live_is_solid: !set_ran,
             step_id: *step_id,
             step: index as u32,
             voxel_size,
@@ -160,7 +163,8 @@ pub fn sample_grid<D: MapCells>(
         match step {
             SdfStep::Add { shape_id, .. } => solids.push((*shape_id, true)),
             SdfStep::Carve { shape_id, .. } => solids.push((*shape_id, false)),
-            SdfStep::Coat { .. } | SdfStep::Paint { .. } | SdfStep::Set { .. } => {}
+            SdfStep::Set { .. } => set_ran = true,
+            SdfStep::Coat { .. } | SdfStep::Paint { .. } => {}
         }
     }
 
@@ -178,6 +182,11 @@ struct StepRun<'a, 'b> {
     owners: Option<&'a mut [Option<U32Id<BSdfStep>>]>,
 
     solids: &'a [(U32Id<BSdfShape3d>, bool)],
+
+    /// Whether a cell is live just where `solids` holds its center. The first
+    /// `set` makes this false because it writes cells regardless of the
+    /// shapes.
+    live_is_solid: bool,
 
     step_id: U32Id<BSdfStep>,
 
@@ -235,12 +244,28 @@ impl StepRun<'_, '_> {
                     &format!("at least the voxel size {}", meters(self.voxel_size)),
                 )?;
 
-                let offsets: Vec<Vec<TyVector3F64>> = sides
+                let offsets: Vec<Vec<(TyVector3F64, Option<TyVector3I32>)>> = sides
                     .as_deref()
                     .unwrap_or(&ALL_SIDES)
                     .iter()
-                    .map(|side| coat_offsets(*side, *depth, *slope))
+                    .map(|side| {
+                        coat_offsets(*side, *depth, *slope)
+                            .into_iter()
+                            .map(|offset| {
+                                let step =
+                                    whole_voxels(self.pose.rotation * offset / self.voxel_size);
+                                (offset, step)
+                            })
+                            .collect()
+                    })
                     .collect();
+                // Sides go first when the grid answers each side's first
+                // offset, because cells deep inside then settle without the
+                // shapes. Otherwise `within` goes first.
+                let within_first = !(self.live_is_solid
+                    && offsets
+                        .iter()
+                        .all(|side_offsets| side_offsets[0].1.is_some()));
                 let bounds = within_id.and_then(|within_id| self.lattice.cells(within_id));
                 let cells = self.cells_within(bounds);
 
@@ -249,12 +274,23 @@ impl StepRun<'_, '_> {
                         return Ok(None);
                     }
 
+                    let within = || -> StdResult<bool, String> {
+                        Ok(match within_id {
+                            Some(within_id) => run.evaluate(*within_id, cell)?.distance <= 0.0,
+                            None => true,
+                        })
+                    };
+
+                    if within_first && !within()? {
+                        return Ok(None);
+                    }
+
                     let center = run.center(cell);
                     let mut reaches_outside = false;
 
                     'sides: for side_offsets in &offsets {
-                        for offset in side_offsets {
-                            if run.is_solid(center + *offset)? {
+                        for (offset, step) in side_offsets {
+                            if run.is_solid_toward(cell, center + *offset, *step)? {
                                 continue 'sides;
                             }
                         }
@@ -263,15 +299,11 @@ impl StepRun<'_, '_> {
                         break;
                     }
 
-                    let within = match within_id {
-                        Some(within_id) => run.evaluate(*within_id, cell)?.distance <= 0.0,
-                        None => true,
-                    };
+                    if !reaches_outside || (!within_first && !within()?) {
+                        return Ok(None);
+                    }
 
-                    Ok(
-                        (reaches_outside && within)
-                            .then(|| Some(run.pick(*material, center, cell))),
-                    )
+                    Ok(Some(Some(run.pick(*material, center, cell))))
                 })?;
             }
 
@@ -423,6 +455,35 @@ impl StepRun<'_, '_> {
         Ok(false)
     }
 
+    /// Whether `point` lies inside the part's shapes so far.
+    ///
+    /// 1. `point` holds the center of `cell` moved by a coat's offset
+    /// 2. `step` holds the offset in whole cells, or `None` when the offset
+    ///    spans a fraction of a cell
+    ///
+    /// A `point` that lands bit for bit on a grid cell's center reads that
+    /// cell's liveness while `live_is_solid` holds.
+    fn is_solid_toward(
+        &self,
+        cell: TyVector3I32,
+        point: TyVector3F64,
+        step: Option<TyVector3I32>,
+    ) -> StdResult<bool, String> {
+        if self.live_is_solid
+            && let Some(step) = step
+        {
+            let neighbor = cell.saturating_add(step);
+
+            if same_bits(self.center(neighbor), point)
+                && let Some(neighbor) = self.grid.cell(neighbor)
+            {
+                return Ok(neighbor.material.is_some());
+            }
+        }
+
+        self.is_solid(point)
+    }
+
     /// The center of `cell` where the shapes evaluate, posed back into the
     /// shapes' frame.
     fn center(&self, cell: TyVector3I32) -> TyVector3F64 {
@@ -544,6 +605,12 @@ fn coat_offsets(side: SdfSide, depth: f64, slope: Option<f64>) -> Vec<TyVector3F
             offset
         }))
         .collect()
+}
+
+/// Whether `a` and `b` hold the same bits on each axis. A shape then
+/// evaluates the same at both.
+fn same_bits(a: TyVector3F64, b: TyVector3F64) -> bool {
+    a.to_array().map(f64::to_bits) == b.to_array().map(f64::to_bits)
 }
 
 /// The cell box of a `set` cube `size` wide around `point` posed by `pose`. A

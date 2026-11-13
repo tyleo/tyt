@@ -382,6 +382,67 @@ mod tests {
     }
 
     #[test]
+    fn a_coat_reads_a_set_cell_beside_it_as_open() {
+        let main = single_part_main(
+            vec![cuboid([0.0, 0.0, 0.0], [3.0, 1.0, 3.0])],
+            vec![
+                add("slab", 0, 0),
+                SdfStep::Set {
+                    name: "stud".to_string(),
+                    points: vec![TyVector3F64::new(1.5, 1.5, 1.5)],
+                    size: 1.0,
+                    material: material(0),
+                },
+                SdfStep::Coat {
+                    name: "moss".to_string(),
+                    material: material(1),
+                    sides: Some(vec![SdfSide::PositiveY]),
+                    depth: 1.0,
+                    slope: None,
+                    within_id: None,
+                    onto_ids: None,
+                },
+            ],
+        );
+
+        // The stud is live but no shape holds it, so the slab cell under it
+        // still faces open space.
+        let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
+        let grid = &sampling.grids[0];
+        assert_eq!(grid.steps[2].written.len(), 10);
+        assert_eq!(grid.cell(TyVector3I32::new(1, 0, 1)).unwrap().step, Some(2));
+    }
+
+    #[test]
+    fn a_coat_within_a_shape_reads_the_same_whichever_test_goes_first() {
+        // A depth of whole voxels settles the sides from the grid before
+        // `within`. A fractional depth tests `within` first.
+        for depth in [1.0, 1.5] {
+            let main = single_part_main(
+                vec![
+                    cuboid([0.0, 0.0, 0.0], [4.0, 4.0, 4.0]),
+                    cuboid([0.0, 0.0, 0.0], [2.0, 4.0, 4.0]),
+                ],
+                vec![
+                    add("block", 0, 0),
+                    SdfStep::Coat {
+                        name: "skin".to_string(),
+                        material: material(1),
+                        sides: None,
+                        depth,
+                        slope: None,
+                        within_id: Some(U32Id::from_u32(1)),
+                        onto_ids: None,
+                    },
+                ],
+            );
+
+            let sampling = sample(&DependenciesImpl, &main, &at_size(1.0)).unwrap();
+            assert_eq!(sampling.grids[0].steps[1].written.len(), 28, "{depth}");
+        }
+    }
+
+    #[test]
     fn a_coat_slope_keeps_a_flat_top_and_skips_a_steep_cone() {
         // A flat slab beside a cone whose sides face 76 degrees off up.
         let cone = SdfShape3d::Cone {
