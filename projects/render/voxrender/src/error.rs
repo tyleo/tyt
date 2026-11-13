@@ -122,8 +122,17 @@ pub enum Error {
     /// A view's rotation is not unit length.
     NonUnitViewRotation,
 
-    /// A perspective view's field of view is not within `(0, pi)`.
+    /// A field of view is not within `(0, pi)`.
     FieldOfViewOutOfRange { fov: f64 },
+
+    /// A perspective view's edges are not finite with its left under its
+    /// right and its down under its up.
+    ViewEdges {
+        left: f64,
+        right: f64,
+        up: f64,
+        down: f64,
+    },
 
     /// An orthographic view's scale is not finite and positive.
     ViewScale { scale: f64 },
@@ -281,6 +290,17 @@ impl Display for Error {
             Error::FieldOfViewOutOfRange { fov } => {
                 write!(f, "field of view {fov} is not within (0, pi) radians")
             }
+
+            Error::ViewEdges {
+                left,
+                right,
+                up,
+                down,
+            } => write!(
+                f,
+                "a view's edges are not finite with left {left} under right {right} and down \
+                 {down} under up {up}"
+            ),
 
             Error::ViewScale { scale } => {
                 write!(f, "view scale {scale} is not finite and positive")

@@ -10,7 +10,10 @@ use std::{
     process,
 };
 use voxrender::{RenderBloom, RenderScene};
-use voxrender_bench::{bench_scene, lit_check, look_from, model_scene, view_check, view_image};
+use voxrender_bench::{
+    Error as BenchError, bench_scene, lit_check, look_from, model_scene, retain_headset_views,
+    shape_view, view_check, view_image,
+};
 
 // Internal API
 
@@ -85,6 +88,11 @@ enum Command {
         )]
         size: u32,
 
+        /// Looks through a Quest 3's two eyes at the view's pose in place
+        /// of the view.
+        #[arg(value_name = "headset", long)]
+        headset: bool,
+
         #[command(flatten)]
         look: Look,
     },
@@ -137,7 +145,12 @@ fn main() {
             look,
         } => view(&scene, &look, &output, width, height).map(|()| String::new()),
 
-        Command::ViewCheck { scene, size, look } => check(&scene, &look, size),
+        Command::ViewCheck {
+            scene,
+            size,
+            headset,
+            look,
+        } => check(&scene, &look, size, headset),
 
         Command::LitCheck { scene } => check_lit(&scene),
     };
@@ -178,11 +191,23 @@ fn looked(scene: &str, look: &Look) -> Result<(RenderScene, RenderBloom)> {
     Ok((render_scene, bloom))
 }
 
-fn check(scene: &str, look: &Look, size: u32) -> Result<String> {
-    let (render_scene, bloom) = looked(scene, look)?;
+fn check(scene: &str, look: &Look, size: u32, headset: bool) -> Result<String> {
+    let (mut render_scene, bloom) = looked(scene, look)?;
+
+    let view_ids = if headset {
+        retain_headset_views(&mut render_scene).map_err(Error::Bench)?
+    } else {
+        let (view_id, _) = render_scene
+            .iter_views()
+            .next()
+            .ok_or(Error::Bench(BenchError::NoView))?;
+
+        [view_id; 2]
+    };
+
     let gpu = headless_gpu()?;
 
-    view_check(&gpu, &render_scene, bloom, size).map_err(Error::Bench)
+    view_check(&gpu, &render_scene, bloom, view_ids, size, size).map_err(Error::Bench)
 }
 
 fn check_lit(scene: &str) -> Result<String> {
@@ -193,9 +218,19 @@ fn check_lit(scene: &str) -> Result<String> {
 }
 
 fn view(scene: &str, look: &Look, output: &Path, width: u32, height: u32) -> Result<()> {
-    let (render_scene, bloom) = looked(scene, look)?;
+    let (mut render_scene, bloom) = looked(scene, look)?;
+
+    shape_view(&mut render_scene, width, height).map_err(Error::Bench)?;
+
+    let (view_id, _) = render_scene
+        .iter_views()
+        .next()
+        .ok_or(Error::Bench(BenchError::NoView))?;
+
     let gpu = headless_gpu()?;
-    let texels = view_image(&gpu, &render_scene, bloom, width, height).map_err(Error::Bench)?;
+
+    let [texels, _] = view_image(&gpu, &render_scene, bloom, [view_id; 2], width, height)
+        .map_err(Error::Bench)?;
 
     let file = File::create(output).map_err(Error::Write)?;
     let mut encoder = Encoder::new(BufWriter::new(file), width, height);

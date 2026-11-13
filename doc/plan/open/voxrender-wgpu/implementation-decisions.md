@@ -694,3 +694,24 @@ they land.
   depth tests served the arms alone
 - The Quest app shows S1 while `debug.voxrenderbench.view` is unset, where
   it ran B1 and B2
+
+## A perspective view by its four edges
+
+- `RenderProjection::Perspective` holds the slopes of its left, right, up,
+  and down edges. `RenderProjection::from_fov` maps a vertical field of
+  view and an image's shape into them. It raises the field of view's range
+  error, and a view's check judges the edges
+- A view made from a field of view yields the rays it yielded before. Half
+  the span between two edges equals the old tangent bit for bit, and the
+  image's center adds zero
+- A view belongs to an image's shape. `voxsmith`'s `resolve_view` already
+  took the image's size. The fixtures and the bench's scenes make their
+  views for a square image. `shape_view` sets a scene's first view to the
+  image `view` writes
+- `view_image` and `view_check` take two view ids and draw both in one
+  frame, so `--headset` runs the multiview passes with two eyes that
+  differ
+- `retain_headset_views` holds a Quest 3's edges. Its check draws a square
+  image, whose pixels are not square under those edges
+- `voxrender`'s version waits for the release commit that bumps the
+  changed crates

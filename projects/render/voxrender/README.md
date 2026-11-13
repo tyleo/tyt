@@ -84,13 +84,28 @@ let sun = RenderLight::Directional {
 ## Views
 
 A `RenderView` is a `TyPoseF64` looking down its -Z with +Y up, and a
-`RenderProjection`: perspective with a vertical field of view in radians,
-or orthographic with the world units across the shorter image axis.
+`RenderProjection`. A perspective projection holds the slopes of the
+image's four edges from the view's -Z. `RenderProjection::from_fov` makes
+one from a vertical field of view in radians and an image's shape. An
+orthographic projection holds the world units across the shorter image
+axis.
 
 ```rust
 let view = RenderView {
     pose: TyPoseF64::new(TyVector3F64::new(0.0, 0.0, 10.0), TyQuaternionF64::IDENTITY),
-    projection: RenderProjection::Perspective { fov: 35f64.to_radians() },
+    projection: RenderProjection::from_fov(35f64.to_radians(), 640, 480)?,
+};
+```
+
+A perspective view belongs to its image's shape, and an image of another
+shape stretches it. A headset's eye gives its four edges as they are:
+
+```rust
+let projection = RenderProjection::Perspective {
+    left: angle_left.tan(),
+    right: angle_right.tan(),
+    up: angle_up.tan(),
+    down: angle_down.tan(),
 };
 ```
 

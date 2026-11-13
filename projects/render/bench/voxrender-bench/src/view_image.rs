@@ -1,6 +1,7 @@
 use crate::{BoxView, Error, Gpu, Result, ViewEye, map_readback, world_to_clip};
+use branded_id::U32Id;
 use std::num::NonZeroU32;
-use voxrender::{RenderBloom, RenderScene};
+use voxrender::{BRenderView, Error as RenderError, RenderBloom, RenderScene};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT,
     CommandEncoderDescriptor, Extent3d, LoadOp, Operations, Origin3d, RenderPassColorAttachment,
@@ -12,18 +13,30 @@ use wgpu::{
 /// The format of the image's texels.
 const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
-/// A [`BoxView`] of `scene` under `bloom` through its first view, as the
-/// sRGB texels of a `width` by `height` image, four bytes each, row by row.
-/// Both eyes draw the view, and the image holds the first. Errors unless
-/// the scene has a view and the device has multiview.
+/// A [`BoxView`] of `scene` under `bloom` through two of its views, one an
+/// eye, as each eye's sRGB texels of a `width` by `height` image, four
+/// bytes each, row by row. Errors unless the views are the scene's and the
+/// device has multiview.
 pub fn view_image(
     gpu: &Gpu,
     scene: &RenderScene,
     bloom: RenderBloom,
+    view_ids: [U32Id<BRenderView>; 2],
     width: u32,
     height: u32,
-) -> Result<Vec<u8>> {
-    let (_, view) = scene.iter_views().next().ok_or(Error::NoView)?;
+) -> Result<[Vec<u8>; 2]> {
+    let eye = |view_id| {
+        let view = scene
+            .view(view_id)
+            .ok_or(Error::Render(RenderError::UnknownView { view_id }))?;
+
+        Ok(ViewEye {
+            world_to_clip: world_to_clip(scene, view, width, height),
+            position: view.pose.position,
+        })
+    };
+
+    let eyes = [eye(view_ids[0])?, eye(view_ids[1])?];
 
     let mut boxes = BoxView::new(
         &gpu.device,
@@ -34,12 +47,7 @@ pub fn view_image(
         [width, height],
     )?;
 
-    let eye = ViewEye {
-        world_to_clip: world_to_clip(scene, view, width, height),
-        position: view.pose.position,
-    };
-
-    boxes.prepare(&gpu.queue, &[eye, eye], 1.0);
+    boxes.prepare(&gpu.queue, &eyes, 1.0);
 
     let texture = |label, format, usage| {
         gpu.device.create_texture(&TextureDescriptor {
@@ -58,7 +66,7 @@ pub fn view_image(
         })
     };
 
-    let eyes = texture(
+    let color = texture(
         "view eyes",
         FORMAT,
         TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_SRC,
@@ -73,7 +81,7 @@ pub fn view_image(
 
     let readback = gpu.device.create_buffer(&BufferDescriptor {
         label: Some("view readback"),
-        size: BufferAddress::from(row_bytes) * BufferAddress::from(height),
+        size: BufferAddress::from(row_bytes) * BufferAddress::from(height) * 2,
         usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -84,7 +92,7 @@ pub fn view_image(
             label: Some("view"),
         });
 
-    let color = eyes.create_view(&TextureViewDescriptor::default());
+    let layers = color.create_view(&TextureViewDescriptor::default());
     let depth = depth.create_view(&TextureViewDescriptor::default());
     let passes = boxes.passes();
 
@@ -94,7 +102,7 @@ pub fn view_image(
         let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("view"),
             color_attachments: &[Some(RenderPassColorAttachment {
-                view: &color,
+                view: &layers,
                 depth_slice: None,
                 resolve_target: None,
                 ops: Operations {
@@ -132,7 +140,7 @@ pub fn view_image(
 
     encoder.copy_texture_to_buffer(
         TexelCopyTextureInfo {
-            texture: &eyes,
+            texture: &color,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: TextureAspect::All,
@@ -142,13 +150,13 @@ pub fn view_image(
             layout: TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(row_bytes),
-                rows_per_image: None,
+                rows_per_image: Some(height),
             },
         },
         Extent3d {
             width,
             height,
-            depth_or_array_layers: 1,
+            depth_or_array_layers: 2,
         },
     );
 
@@ -157,10 +165,15 @@ pub fn view_image(
     map_readback(&gpu.device, &readback)?;
 
     let rows = readback.get_mapped_range(..).map_err(Error::MapRange)?;
+    let layer_bytes = row_bytes as usize * height as usize;
 
-    Ok(rows
-        .chunks_exact(row_bytes as usize)
-        .flat_map(|row| &row[..width as usize * 4])
-        .copied()
-        .collect())
+    let texels = |layer: &[u8]| {
+        layer
+            .chunks_exact(row_bytes as usize)
+            .flat_map(|row| &row[..width as usize * 4])
+            .copied()
+            .collect()
+    };
+
+    Ok([texels(&rows[..layer_bytes]), texels(&rows[layer_bytes..])])
 }

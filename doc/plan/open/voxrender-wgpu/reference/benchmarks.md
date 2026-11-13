@@ -2625,3 +2625,40 @@ profile, as the sections above ran them.
 The view draws the same after the pass. `view-check` on this Mac counts 6
 pixels off on S1, 99 on S5, 17 on S2, 72 on S4, and none inside a bush.
 `lit-check` counts 15 of S1's 107,743 corners.
+
+## A headset's two eyes against the reference, 2026-11-13
+
+`view-check --headset` draws a Quest 3's two eyes in one frame and compares
+each with the reference's image of it. The left eye spans -54 to 40 degrees
+across and -55 to 44 down to up, and the right eye mirrors it. The eyes sit
+64 mm apart about a scene's first view.
+
+- Device: this Mac, 256 pixels square
+- Each cell counts the pixels off by over 8 of 255 among those that hit
+  something opaque
+
+| Scene | One view | Left eye | Right eye |
+| --- | ---: | ---: | ---: |
+| S1 | 6 of 53,296 | 6 of 59,967 | 12 of 46,633 |
+| S5 | 99 of 31,818 | 99 of 36,738 | 102 of 36,740 |
+| S2 | 17 of 62,236 | 21 of 63,307 | 18 of 63,306 |
+| S4 | 72 of 31,125 | 60 of 35,065 | 81 of 40,214 |
+| Inside a bush | 0 of 65,536 | 2 of 65,536 | 51,834 of 65,536 |
+| PBR chart | 2489 of 19,163 | 173 of 1444 | 162 of 1434 |
+| Chess set | 85 of 15,752 | 12 of 1181 | 13 of 1178 |
+| Pocket watch | 1437 of 5365 | 113 of 438 | 102 of 378 |
+| Fish tank | 2555 of 18,339 | 248 of 1389 | 234 of 1359 |
+
+A model fills few pixels of an eye's wide view from its hero view's
+distance. Inside the bush the right eye lands in a leaf's cell, 2 cm
+wide. One view from that eye's place is off on 45,855 pixels too.
+
+**Outcomes.**
+
+1. An eye whose edges sit off its axis draws as one view does. The two
+   eyes agree with the reference at the same rates on every scene and
+   model whose eyes sit in empty cells
+2. An eye inside an opaque cell draws apart from the reference, under one
+   view or two
+3. The one-view counts equal the counts from before the four-edge view,
+   and `voxrender-cpu`'s goldens hold

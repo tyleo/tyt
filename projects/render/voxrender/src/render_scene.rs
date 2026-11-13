@@ -5,7 +5,7 @@ use crate::{
 use branded_id::{IdVec, IteratorExt, U32Id, UsizeId, soa::IdList};
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
-    f64::consts::{FRAC_PI_2, PI},
+    f64::consts::FRAC_PI_2,
 };
 use ty_math::{
     TyBoundsF64, TyLinSrgbF64, TyLinSrgbaF64, TyQuaternionExt, TyQuaternionF64, TyTransformF64,
@@ -736,9 +736,21 @@ fn check_view(view: &RenderView) -> Result<()> {
     }
 
     match view.projection {
-        RenderProjection::Perspective { fov } => {
-            if !(fov > 0.0 && fov < PI) {
-                return Err(Error::FieldOfViewOutOfRange { fov });
+        RenderProjection::Perspective {
+            left,
+            right,
+            up,
+            down,
+        } => {
+            let finite = [left, right, up, down].into_iter().all(f64::is_finite);
+
+            if !(finite && left < right && down < up) {
+                return Err(Error::ViewEdges {
+                    left,
+                    right,
+                    up,
+                    down,
+                });
             }
         }
 
@@ -926,7 +938,7 @@ mod tests {
         RenderProjection, RenderScene, RenderShadow, RenderView,
     };
     use branded_id::{IdRange, U32Id};
-    use std::f64::consts::{FRAC_PI_2, PI};
+    use std::f64::consts::FRAC_PI_2;
     use ty_math::{
         TyLinSrgbF64, TyLinSrgbaF64, TyPoseF64, TyQuaternionF64, TyTransformF64, TyVector3F64,
         TyVector3I32, TyVector3U32,
@@ -1254,9 +1266,21 @@ mod tests {
             projection,
         };
 
+        let flipped = RenderProjection::Perspective {
+            left: 1.0,
+            right: -1.0,
+            up: 1.0,
+            down: -1.0,
+        };
+
         assert_eq!(
-            scene.retain_view(view(RenderProjection::Perspective { fov: PI })),
-            Err(Error::FieldOfViewOutOfRange { fov: PI })
+            scene.retain_view(view(flipped)),
+            Err(Error::ViewEdges {
+                left: 1.0,
+                right: -1.0,
+                up: 1.0,
+                down: -1.0
+            })
         );
         assert_eq!(
             scene.retain_view(view(RenderProjection::Orthographic { scale: -1.0 })),
@@ -1268,13 +1292,13 @@ mod tests {
                     TyVector3F64::new(f64::NAN, 0.0, 0.0),
                     TyQuaternionF64::IDENTITY
                 ),
-                projection: RenderProjection::Perspective { fov: 1.0 },
+                projection: RenderProjection::from_fov(1.0, 1, 1).unwrap(),
             }),
             Err(Error::NonFiniteView)
         );
 
         let view_id = scene
-            .retain_view(view(RenderProjection::Perspective { fov: 1.0 }))
+            .retain_view(view(RenderProjection::from_fov(1.0, 1, 1).unwrap()))
             .unwrap();
         let flat = view(RenderProjection::Orthographic { scale: 4.0 });
         scene.set_view(view_id, flat).unwrap();
@@ -1325,7 +1349,7 @@ mod tests {
 
         let view = RenderView {
             pose: TyPoseF64::IDENTITY,
-            projection: RenderProjection::Perspective { fov: 1.0 },
+            projection: RenderProjection::from_fov(1.0, 1, 1).unwrap(),
         };
 
         let view_id = scene.retain_view(view).unwrap();
@@ -1362,13 +1386,13 @@ mod tests {
             Err(Error::UnknownLight { light_id })
         );
 
-        let too_wide = RenderView {
-            projection: RenderProjection::Perspective { fov: PI },
+        let wider = RenderView {
+            projection: RenderProjection::from_fov(2.0, 1, 1).unwrap(),
             ..view
         };
 
         assert_eq!(
-            scene.set_view(view_id, too_wide),
+            scene.set_view(view_id, wider),
             Err(Error::UnknownView { view_id })
         );
 

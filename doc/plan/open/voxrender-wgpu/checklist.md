@@ -406,6 +406,14 @@ this order:
             The bench keeps the view, the gallery, and their checks
 5. A perspective view by its four edges in `voxrender`. `view-check` then
    compares a headset's two eyes with the reference
+      - [x] `RenderProjection::Perspective` holds the slopes of its four
+            edges, and `from_fov` maps a field of view and an image's shape
+            into them. Every golden holds
+      - [x] `view-check --headset` draws a Quest 3's two eyes in one frame.
+            Each eye differs from the reference as one view does on S1, S5,
+            S2, S4, and four models
+      - [ ] An eye inside an opaque cell. The reference and the box view
+            draw apart there, as inside a bush's leaf
 6. Level of detail. The reference's brick LOD rule comes first, with the
    point both eyes measure a distance from. The box view's LOD and B6
    follow

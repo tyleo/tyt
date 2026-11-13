@@ -2906,7 +2906,7 @@ mod tests {
     fn the_camera_line_pastes_back_as_flags() {
         let view = RenderView {
             pose: TyPoseF64::new(TyVector3F64::new(1.0, 2.5, -3.0), TyQuaternionF64::IDENTITY),
-            projection: RenderProjection::Perspective { fov: 1.0 },
+            projection: RenderProjection::from_fov(1.0, 1, 1).unwrap(),
         };
 
         assert_eq!(

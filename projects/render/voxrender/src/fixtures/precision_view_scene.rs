@@ -1,8 +1,8 @@
 use crate::{RenderProjection, RenderScene, RenderView, fixtures::random_scene};
 use ty_math::{TyPoseF64, TyQuaternionExt, TyQuaternionF64, TyVector3Ext, TyVector3F64};
 
-/// A sparse random grid seen through ten views, each orbit in perspective
-/// and then orthographic. The orbits include axis-aligned and straight-down
+/// A sparse random grid seen through ten views for a square image, each
+/// orbit in perspective and then orthographic. The orbits include axis-aligned and straight-down
 /// views, whose rays tie most often, and one off-center view.
 pub fn precision_view_scene() -> RenderScene {
     let mut scene = random_scene(3, 0.08, 0);
@@ -16,9 +16,8 @@ pub fn precision_view_scene() -> RenderScene {
     ];
 
     let projections = [
-        RenderProjection::Perspective {
-            fov: 30f64.to_radians(),
-        },
+        RenderProjection::from_fov(30f64.to_radians(), 1, 1)
+            .expect("the fixture's field of view is within range"),
         RenderProjection::Orthographic { scale: 16.0 },
     ];
 
