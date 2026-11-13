@@ -11,7 +11,7 @@ use std::{
 };
 use voxrender::{RenderBloom, RenderScene};
 use voxrender_bench::{
-    TimedBench, bench_scene, lit_check, model_scene, run_b1, view_check, view_image,
+    TimedBench, bench_scene, lit_check, look_from, model_scene, run_b1, view_check, view_image,
 };
 
 // Internal API
@@ -105,6 +105,9 @@ enum Command {
             value_parser = value_parser!(u32).range(1..=8192)
         )]
         height: u32,
+
+        #[command(flatten)]
+        look: Look,
     },
 
     /// Compares the shaded view of a bench scene or of a model with the
@@ -124,6 +127,9 @@ enum Command {
             value_parser = value_parser!(u32).range(1..=4096)
         )]
         size: u32,
+
+        #[command(flatten)]
+        look: Look,
     },
 
     /// Compares the GPU's fill of the corner shadows of a bench scene or of
@@ -136,6 +142,30 @@ enum Command {
         #[arg(value_name = "scene")]
         scene: String,
     },
+}
+
+/// Where a view looks from in place of the scene's first view.
+#[derive(Clone, Debug, Args)]
+struct Look {
+    /// The point the view looks from, in the scene's meters.
+    #[arg(
+        value_name = "meters",
+        long,
+        num_args = 3,
+        allow_negative_numbers = true,
+        requires = "look_at"
+    )]
+    eye: Option<Vec<f64>>,
+
+    /// The point the view looks at, with +Y up.
+    #[arg(
+        value_name = "meters",
+        long,
+        num_args = 3,
+        allow_negative_numbers = true,
+        requires = "eye"
+    )]
+    look_at: Option<Vec<f64>>,
 }
 
 #[derive(Clone, Debug, Args)]
@@ -190,9 +220,10 @@ fn main() {
             output,
             width,
             height,
-        } => view(&scene, &output, width, height).map(|()| String::new()),
+            look,
+        } => view(&scene, &look, &output, width, height).map(|()| String::new()),
 
-        Command::ViewCheck { scene, size } => check(&scene, size),
+        Command::ViewCheck { scene, size, look } => check(&scene, &look, size),
 
         Command::LitCheck { scene } => check_lit(&scene),
     };
@@ -235,8 +266,20 @@ fn scene_of(scene: &str) -> Result<(RenderScene, RenderBloom)> {
         .ok_or_else(|| Error::NoScene(scene.to_owned()))
 }
 
-fn check(scene: &str, size: u32) -> Result<String> {
-    let (render_scene, bloom) = scene_of(scene)?;
+fn looked(scene: &str, look: &Look) -> Result<(RenderScene, RenderBloom)> {
+    let (mut render_scene, bloom) = scene_of(scene)?;
+
+    if let (Some(eye), Some(look_at)) = (&look.eye, &look.look_at) {
+        let point = |values: &[f64]| [values[0], values[1], values[2]];
+
+        look_from(&mut render_scene, point(eye), point(look_at)).map_err(Error::Bench)?;
+    }
+
+    Ok((render_scene, bloom))
+}
+
+fn check(scene: &str, look: &Look, size: u32) -> Result<String> {
+    let (render_scene, bloom) = looked(scene, look)?;
     let gpu = headless_gpu()?;
 
     view_check(&gpu, &render_scene, bloom, size).map_err(Error::Bench)
@@ -249,8 +292,8 @@ fn check_lit(scene: &str) -> Result<String> {
     lit_check(&gpu, &render_scene).map_err(Error::Bench)
 }
 
-fn view(scene: &str, output: &Path, width: u32, height: u32) -> Result<()> {
-    let (render_scene, bloom) = scene_of(scene)?;
+fn view(scene: &str, look: &Look, output: &Path, width: u32, height: u32) -> Result<()> {
+    let (render_scene, bloom) = looked(scene, look)?;
     let gpu = headless_gpu()?;
     let texels = view_image(&gpu, &render_scene, bloom, width, height).map_err(Error::Bench)?;
 

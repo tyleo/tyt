@@ -26,6 +26,10 @@ pub enum Error {
     /// A directory gave no gallery of models.
     Models { directory: PathBuf, error: String },
 
+    /// A view cannot look from `eye` at `look_at`: the points coincide, or
+    /// one lies straight above the other.
+    Look { eye: [f64; 3], look_at: [f64; 3] },
+
     /// The scene has no view to draw.
     NoView,
 
@@ -83,6 +87,11 @@ impl Display for Error {
                 f,
                 "the models under {} gave no gallery: {error}",
                 directory.display()
+            ),
+            Error::Look { eye, look_at } => write!(
+                f,
+                "a view cannot look from {eye:?} at {look_at:?}: the points coincide or one lies \
+                 straight above the other"
             ),
             Error::NoView => write!(f, "the scene has no view"),
             Error::NoSun => write!(f, "the scene has no directional light"),
