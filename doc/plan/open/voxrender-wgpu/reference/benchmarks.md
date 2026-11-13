@@ -2540,6 +2540,26 @@ buffer, with one copy of the shade in a loop of a surface a turn, took
 surfaces share, worked out once in a loop over the two, took 5.32 against
 5.07.
 
+**Fewer glass fragments.** A trial dropped three of every four glass
+fragments at the fragment's start, by its pixel, to see what a quarter of
+the fragments would cost. App GPU p50 in ms, after the sun on a glass
+surface below:
+
+| The glass fragments | fish tank | potion |
+| --- | ---: | ---: |
+| All shade | 5.01 | 2.56 |
+| One pixel of each 2 by 2 shades | 4.59 | 2.41 |
+| One 2 by 2 of each 4 by 4 shades | 4.36 | 2.30 |
+| One 16 by 16 of each 32 by 32 shades | 3.87 | 1.88 |
+| All drop out, known when the shader compiles | 2.18 | |
+
+A fragment that drops out by a test still costs most of what one that
+shades does, the more so the finer the pattern. The count that sets the
+time is the count the rasterizer starts. A return after the drop changed
+nothing. What a pass at half the eyes' size would save stays unmeasured:
+it starts a quarter of the fragments and needs the opaque depth at that
+size and a pass to lay it over the eyes.
+
 **The sun on a glass surface.** A glass surface took the sun whole: a
 potion's liquid lit up inside its bottle. The shadow fill now lights each
 glass cell's surfaces. A surface scales the sun's term by its cell's
