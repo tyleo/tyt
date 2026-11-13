@@ -2540,6 +2540,21 @@ A model with glass loads 0.1 s later. With no sun on glass at all the
 potion read 3956 and the lantern 1022, and the fish tank 7941: the water's
 diffuse color needs the sun.
 
+**An eye inside a material.** `view-check` on the glass chart from other
+eyes, through `--eye` and `--look-at`:
+
+| Eye | Opaque pixels | Off by over 8 | Mean difference of 255 |
+| --- | ---: | ---: | ---: |
+| The model's hero view | 14,488 | 3178 | 3.76 |
+| Low before the chart | 30,584 | 6730 | 3.86 |
+| In the tank's water | 29,099 | 12,917 | 25.1 |
+| In the block of glass | 45,288 | 32,436 | 22.1 |
+
+The contract lets a ray leave the material it starts in for nothing. A
+walk here starts over in each tile, so the tank's far wall charges the
+water's exit and the room beyond an eye in the water draws blue. Each view
+draws whole, with no torn tile.
+
 **Outcomes.**
 
 1. Glass, water, and what sits inside them draw as the contract draws

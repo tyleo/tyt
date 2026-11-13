@@ -34,3 +34,11 @@ the bloom vxl's review renders take:
 ```sh
 cargo run --release -p voxrender-bench-desktop -- view chair.voxjz chair.png
 ```
+
+`view` and `view-check` look from another point with `--eye` and
+`--look-at`. Each flag takes three coordinates in the scene's meters. The
+lights stay where the first view put them:
+
+```sh
+cargo run --release -p voxrender-bench-desktop -- view-check tank.voxjz --eye 0.1 0.08 0.7 --look-at 0 0.05 0
+```
