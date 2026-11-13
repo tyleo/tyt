@@ -2662,3 +2662,44 @@ wide. One view from that eye's place is off on 45,855 pixels too.
    view or two
 3. The one-view counts equal the counts from before the four-edge view,
    and `voxrender-cpu`'s goldens hold
+
+## Level of detail, a study, 2026-11-13
+
+What the research's footprint rule would buy the box raster, before a rule
+joins the contract.
+
+**The estimate.** Each tile takes the level whose cells span 1.4 pixels
+from a scene's first view, at Quest 3's 758 pixels a unit of tangent. This
+Mac counts each scene's tiles by level:
+
+| Scene | A voxel | Tiles | Level 0 | Level 1 | Level 2 | Level 3 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| S1 | 1 to 2 cm | 388 | 388 | 0 | 0 | 0 |
+| S4 | 2 cm | 2297 | 2297 | 0 | 0 | 0 |
+| S5 | 2 cm | 4096 | 3662 | 434 | 0 | 0 |
+| S2 | 5 to 50 cm | 25,301 | 11,457 | 10,626 | 3178 | 40 |
+
+At cells of 1 pixel S5 keeps every tile at level 0.
+
+**The trial.** A scratch scene swapped each of S2's 1025 placements for a
+coarser object by its distance. A coarse cell is live where a child is and
+takes its children's commonest material. App GPU p50 on Quest 3 at 545 MHz
+over two runs each. The last column counts a still of the first view at
+840 by 880 on this Mac against the full scene's, off by over 8 of 255:
+
+| S2 | Placements at levels 0, 1, 2, and past | Boxes | ms | Pixels off |
+| --- | --- | ---: | ---: | ---: |
+| Full | 1025, 0, 0, 0 | 26,325 | 6.50 to 6.63 | |
+| Cells at 1.4 pixels | 517, 360, 147, 1 | 16,572 | 6.18 | 47 of 739,200 |
+| Cells at 2.8 pixels | 242, 275, 360, 148 | 8660 | 5.66 to 5.70 | 389 of 739,200 |
+
+**Outcomes.**
+
+1. The rule reaches S2 and the far end of S5. S1, S4, and a model on its
+   table sit too near for a level past 0
+2. A box the rule removes saves 41 to 51 ns, as the frame's split says.
+   Cells at 1.4 pixels save S2 0.4 ms of 6.6, and cells at 2.8 save 0.9
+3. S2 misses B3's 3.5 ms line by its pixels, which take 5.0 ms. The rule
+   leaves them
+4. A still changes on few pixels. What a level's switch looks like as the
+   head moves stays unseen

@@ -417,6 +417,12 @@ this order:
 6. Level of detail. The reference's brick LOD rule comes first, with the
    point both eyes measure a distance from. The box view's LOD and B6
    follow
+      - [x] A study of what the research's rule would buy. Cells at 1.4
+            pixels take S2 from 6.6 ms to 6.2 on Quest and leave S1, S4,
+            and the models as they are. S2's pixels hold its time
+      - [ ] The project lead rules on what follows: the reference's brick
+            LOD, boxes that span several tiles with their cells whole, or
+            S2's pixels first
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
    first. Glass at half size follows as a property that is off by default
 8. S6, the moving scene, joins the bench scenes. Its motion is a scripted
