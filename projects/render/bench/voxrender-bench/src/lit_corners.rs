@@ -242,7 +242,7 @@ fn shared_factor(a: u32, b: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{LitCorners, TileMasks, bench_scenes, reference_hits};
+    use crate::{CellGrid, LitCorners, TileMasks, bench_scenes, reference_hits};
     use std::collections::HashMap;
     use ty_math::TyVector3U32;
     use voxrender::{ShadowTarget, grid_vector, quantize_direction};
@@ -279,7 +279,8 @@ mod tests {
             let tiles: HashMap<_, _> = scene
                 .iter_objects()
                 .map(|(object_id, object)| {
-                    let masks = TileMasks::new(object, true, Some(&every)).unwrap();
+                    let grid = CellGrid::new(object, &|id| id);
+                    let masks = TileMasks::new(&grid, true, Some(&every)).unwrap();
 
                     (
                         object_id,

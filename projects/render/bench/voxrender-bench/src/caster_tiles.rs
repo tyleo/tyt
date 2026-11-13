@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{CellGrid, Error, Result};
 use ty_math::TyVector3U32;
 
 /// The cells along each side of a tile.
@@ -36,15 +36,12 @@ impl CasterTiles {
     /// The words of a tile's bits.
     pub const BIT_WORDS: usize = CELLS / 32;
 
-    /// The tiles of a grid of `bounds`. Errors if a material that passes
-    /// light has an id over 65534.
-    ///
-    /// # Arguments
-    ///
-    /// 1. `cells`: the grid's cells in raster order, 0 when empty, else the
-    ///    material id plus one
-    /// 2. `opaque`: whether a material id passes no light
-    pub fn new(bounds: TyVector3U32, cells: &[u32], opaque: &dyn Fn(u32) -> bool) -> Result<Self> {
+    /// The tiles of `grid`, where `opaque` says whether a material passes
+    /// no light. Errors if a material that passes light has a place over
+    /// 65534.
+    pub fn new(grid: &CellGrid, opaque: &dyn Fn(u32) -> bool) -> Result<Self> {
+        let bounds = grid.bounds;
+        let cells = &grid.cells;
         let counts = (bounds + TILE - 1) / TILE;
         let mut words = vec![0; (counts.x * counts.y * counts.z) as usize];
         let mut bits = [0u32; Self::BIT_WORDS];
@@ -121,7 +118,7 @@ impl CasterTiles {
 
 #[cfg(test)]
 mod tests {
-    use crate::CasterTiles;
+    use crate::{CasterTiles, CellGrid};
     use ty_math::TyVector3U32;
 
     #[test]
@@ -136,7 +133,7 @@ mod tests {
         cells[(33 * 16 + 5) * 16 + 7] = 5;
         cells[(33 * 16 + 5) * 16 + 8] = 1;
 
-        let tiles = CasterTiles::new(bounds, &cells, &|id| id == 0).unwrap();
+        let tiles = CasterTiles::new(&CellGrid { bounds, cells }, &|id| id == 0).unwrap();
         let words = &tiles.words;
 
         assert_eq!(words[..3], [3, 0, (3 + 128) | CasterTiles::KEYED]);
@@ -155,9 +152,12 @@ mod tests {
 
     #[test]
     fn a_passing_material_past_the_keys_bits_errors() {
-        let cells = [0x1_0000];
+        let grid = CellGrid {
+            bounds: TyVector3U32::splat(1),
+            cells: vec![0x1_0000],
+        };
 
-        assert!(CasterTiles::new(TyVector3U32::splat(1), &cells, &|_| false).is_err());
-        assert!(CasterTiles::new(TyVector3U32::splat(1), &cells, &|_| true).is_ok());
+        assert!(CasterTiles::new(&grid, &|_| false).is_err());
+        assert!(CasterTiles::new(&grid, &|_| true).is_ok());
     }
 }

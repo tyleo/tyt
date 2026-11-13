@@ -1,4 +1,6 @@
-use crate::{Error, GalleryControls, HeadsetEye, HeadsetStand, HeadsetView, Result, model_scene};
+use crate::{
+    BoxView, Error, GalleryControls, HeadsetEye, HeadsetStand, HeadsetView, ModelTiles, Result,
+};
 use std::{
     f64::consts::FRAC_PI_6,
     fs,
@@ -266,25 +268,18 @@ impl ModelGallery {
         thread::spawn(move || {
             let start = Instant::now();
 
-            let loaded = model_scene(&path).and_then(|(scene, bloom)| {
-                let placement_ids: Vec<_> = scene.iter_placements().map(|(id, _)| id).collect();
-
-                let bounds = scene
-                    .subject_bounds(&placement_ids)
-                    .expect("the placements are the scene's")
-                    .expect("a model's scene has a live voxel");
-
+            let loaded = ModelTiles::load(&path, BoxView::draws_glass(&device)).map(|model| {
                 let view = HeadsetView::new(
                     &device,
                     &queue,
-                    &scene,
-                    bloom,
-                    HeadsetStand::table(&bounds),
+                    &model.tiles,
+                    model.bloom,
+                    HeadsetStand::table(&model.bounds),
                     format,
                     size,
-                )?;
+                );
 
-                Ok((view, bounds, start.elapsed().as_secs_f64()))
+                (view, model.bounds, start.elapsed().as_secs_f64())
             });
 
             // The gallery may have gone, and then nobody waits.

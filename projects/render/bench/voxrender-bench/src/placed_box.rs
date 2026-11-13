@@ -1,9 +1,6 @@
 use crate::BoxCrosser;
-use branded_id::U32Id;
-use std::collections::HashMap;
 use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
-use voxcore::BVoxObject;
-use voxrender::{RenderScene, grid_point};
+use voxrender::grid_point;
 
 /// The meters two boxes can share along an axis and still count as apart,
 /// so boxes that only touch do.
@@ -32,23 +29,28 @@ pub struct PlacedBox {
 }
 
 impl PlacedBox {
-    /// Each placement's boxes in `scene`, in placement order. `boxes` holds
-    /// each object's boxes as low cells and the corners past their high
-    /// cells.
+    /// Each placement's boxes, in the order of `placements`.
+    ///
+    /// # Arguments
+    ///
+    /// 1. `placements`: each placement's object and its transform from the
+    ///    object's cells to the world
+    /// 2. `boxes`: each object's boxes as low cells and the corners past
+    ///    their high cells
     pub fn list(
-        scene: &RenderScene,
-        boxes: &HashMap<U32Id<BVoxObject>, Vec<(TyVector3U32, TyVector3U32)>>,
+        placements: &[(usize, TyTransformF64)],
+        boxes: &[&[(TyVector3U32, TyVector3U32)]],
     ) -> Vec<Self> {
         let mut placed = Vec::new();
 
-        for (index, (_, placement)) in (0u32..).zip(scene.iter_placements()) {
-            for (brick, &(low, high)) in boxes[&placement.object_id].iter().enumerate() {
+        for (index, (object, transform)) in (0u32..).zip(placements) {
+            for (brick, &(low, high)) in boxes[*object].iter().enumerate() {
                 let corners = (0..8).map(|corner| {
                     let pick = |bit: u32, low: u32, high: u32| {
                         f64::from(if corner & bit == 0 { low } else { high })
                     };
 
-                    placement.transform.transform_point(TyVector3F64::new(
+                    transform.transform_point(TyVector3F64::new(
                         pick(1, low.x, high.x),
                         pick(2, low.y, high.y),
                         pick(4, low.z, high.z),
@@ -68,7 +70,7 @@ impl PlacedBox {
                     brick,
                     low,
                     high,
-                    transform: placement.transform,
+                    transform: *transform,
                     world,
                 });
             }
@@ -238,36 +240,22 @@ impl PlacedBox {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        BoxCrosser, PlacedBox, painted_object, place_object, retain_matte, retain_next_object,
-    };
-    use std::collections::HashMap;
-    use ty_math::{TyQuaternionF64, TyVector3F32, TyVector3F64, TyVector3U32};
-    use voxrender::RenderScene;
+    use crate::{BoxCrosser, PlacedBox};
+    use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 
     #[test]
     fn only_boxes_of_two_placements_that_share_space_cross() {
-        let mut scene = RenderScene::default();
-        let material = retain_matte(&mut scene, [0.5, 0.5, 0.5]);
+        // Three placements of a cube. The second touches the first. The
+        // third cuts into the second.
+        let placements = [0.0, 16.0, 24.0].map(|x| {
+            (
+                0,
+                TyTransformF64::from_translation(TyVector3F64::new(x, 0.0, 0.0)),
+            )
+        });
 
-        let cube = retain_next_object(
-            &mut scene,
-            painted_object("cube", TyVector3U32::splat(16), |_| Some(material)),
-        );
-
-        // The second cube touches the first. The third cuts into the second.
-        for x in [0.0, 16.0, 24.0] {
-            place_object(
-                &mut scene,
-                cube,
-                TyVector3F64::new(x, 0.0, 0.0),
-                TyQuaternionF64::IDENTITY,
-                1.0,
-            );
-        }
-
-        let boxes = HashMap::from([(cube, vec![(TyVector3U32::ZERO, TyVector3U32::splat(16))])]);
-        let placed = PlacedBox::list(&scene, &boxes);
+        let cube = [(TyVector3U32::ZERO, TyVector3U32::splat(16))];
+        let placed = PlacedBox::list(&placements, &[&cube]);
 
         // The second and third cubes share the cells from x = 24 to 32:
         // the second's 8 to 16, and the third's 0 to 8.
