@@ -4,8 +4,7 @@ use voxcore::BVoxVoxel;
 use voxrender::RenderObject;
 use voxsurface::SurfaceGrid;
 
-/// An object's opaque cells, each read with its material. A greedy run
-/// merges cells of one material alone, so each of its quads holds one.
+/// An object's opaque cells, each read with its material.
 pub struct MaterialGrid<'a> {
     pub object: &'a RenderObject,
 
