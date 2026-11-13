@@ -28,7 +28,7 @@ const BIT_WORDS: u32 = 128u;
 const LIT: u32 = 0xffffffu;
 
 struct Fill {
-    // The scene's record cells, then the first of them a dispatch fills.
+    // The cell a dispatch's fill ends before, then the first it fills.
     cells: u32,
     first: u32,
 

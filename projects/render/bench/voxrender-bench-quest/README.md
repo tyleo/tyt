@@ -147,7 +147,7 @@ controllers steer:
 At life size the wearer stands on the model's floor 1.5 m before its
 front. While a model loads on a thread of its own, the model before it
 stays in view under a dimmed sky. The app logs each model on a `models`
-line with the time its load took.
+line with the time its load took and how much of that built its tiles.
 
 Two more properties steer a run:
 

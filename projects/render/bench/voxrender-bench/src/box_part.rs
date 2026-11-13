@@ -1,6 +1,7 @@
 use crate::BoxFaces;
 
-/// One run of a [`BoxDraw`](crate::BoxDraw)'s boxes and what draws them.
+/// One part of a [`BoxDraw`](crate::BoxDraw): what draws the boxes of its
+/// runs.
 pub struct BoxPart<'a> {
     /// The fragment entry that shades the run's faces.
     pub fragment: &'a str,
@@ -10,8 +11,8 @@ pub struct BoxPart<'a> {
     /// Which of the draw's shader modules holds the run's entries.
     pub module: usize,
 
-    /// Each box's three `vec4<u32>`s, in draw order.
-    pub boxes: Vec<[u32; 12]>,
+    /// The boxes the part adds to the draw's room.
+    pub room: usize,
 
     /// Whether the run draws glass. Its fragments write no depth. They
     /// write a light and the share of the target's color to keep under it

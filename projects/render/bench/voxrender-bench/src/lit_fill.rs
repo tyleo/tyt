@@ -1,21 +1,16 @@
-use crate::{PassTerms, TileMasks, TileScene};
-use ty_math::{TyVector3F64, TyVector3U32};
+use crate::{LitPage, PassTerms, TileMasks, TileScene};
+use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 use voxrender::{grid_vector, quantize_direction};
 use voxrender_wgpu::GRID_WALK_WGSL;
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor,
-    Device, PipelineCompilationOptions, Queue, ShaderModuleDescriptor, ShaderRuntimeChecks,
-    ShaderSource,
+    BindGroupDescriptor, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages, ComputePipeline,
+    ComputePipelineDescriptor, Device, PipelineCompilationOptions, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
 /// The cells along each side of a tile.
 const TILE: u32 = 16;
-
-/// The record cells one dispatch fills. A dispatch then ends well within a
-/// frame's time on a phone's GPU.
-const BATCH: u32 = 1 << 16;
 
 /// The bytes of the two `Steps` that end `grid_walk.wgsl`'s `Placement`.
 const STEP_BYTES: usize = 192;
@@ -24,8 +19,9 @@ const STEP_BYTES: usize = 192;
 /// The margin covers the rounding of the boxes and of each grid's light.
 const MARGIN: f64 = 0.01;
 
-/// A scene's corner shadows under one directional light, filled on the
-/// GPU: [`LitCorners`](crate::LitCorners)' words in a buffer.
+/// What fills a scene's corner shadows under one directional light on the
+/// GPU: [`LitCorners`](crate::LitCorners)' words, a [`LitPage`] of the
+/// scene's placements at a time.
 ///
 /// A compute pass casts the contract's ray from each corner of each face
 /// the light can reach, through voxrender's integer walk. A ray walks
@@ -42,49 +38,46 @@ const MARGIN: f64 = 0.01;
 /// holds the mean of what reaches the corners of its surfaces, from the
 /// side of each that the light falls on.
 pub struct LitFill {
-    /// The first word of each placement's tiles' words.
-    pub places: Vec<u32>,
-
-    /// The first word of each placement's glass tiles' words, which
-    /// follow every placement's tiles' words.
-    pub glass_places: Vec<u32>,
-
-    /// A word for each record cell, a word for each glass cell, then
-    /// [`TileMasks::SPARE`] spare words. The fill writes a word's low 24
-    /// bits and keeps the rest, which a caller can write beforehand. A
-    /// glass cell's 24 bits hold the sun's light on its surfaces, 8 bits a
-    /// channel from the low bits up. With [`tints`](Self::tints), as many
-    /// words follow. The fill writes each of them whole with a record cell's
-    /// tint in the same bits.
-    pub lit: Buffer,
-
-    /// How far past a record cell's word in [`lit`](Self::lit) its tint
-    /// lies, in a scene with a material that passes light.
-    pub tints: Option<u32>,
-
     pipeline: ComputePipeline,
 
-    bind_group: BindGroup,
+    /// `grid_walk.wgsl`'s `Placement` for each placement.
+    placements: Buffer,
 
-    /// The scene's record cells and the first of them a dispatch fills.
-    frame: Buffer,
+    /// Each object's [`CasterTiles`](crate::CasterTiles)' words.
+    casters: Buffer,
 
-    cells: u32,
+    /// `lit_fill.wgsl`'s `Light` for each placement.
+    lights: Buffer,
+
+    /// `lit_fill.wgsl`'s `passes`.
+    passes: Buffer,
+
+    /// The light's axis after two axes across it.
+    axes: [TyVector3F64; 3],
+
+    /// The low and high corners of the box around each placement's grid
+    /// along [`axes`](Self::axes).
+    spans: Vec<Span>,
 }
 
-impl LitFill {
-    /// Uploads what the fill of `tiles` reads, for a light along the unit
-    /// `toward`. With `glass`, each object's cells with a surface between
-    /// materials that pass light take a word too.
-    pub fn new(device: &Device, tiles: &TileScene, toward: TyVector3F64, glass: bool) -> Self {
-        let count = |value: usize| u32::try_from(value).expect("a scene's words number under 2^32");
+/// The low and high corners of a box along a light's axes.
+type Span = ([f64; 3], [f64; 3]);
 
+impl LitFill {
+    /// Uploads what every page's fill of `tiles` reads, for a light along
+    /// the unit `toward`.
+    pub fn new(device: &Device, tiles: &TileScene, toward: TyVector3F64) -> Self {
         let mut caster_words = Vec::new();
         let mut offsets = Vec::new();
 
         for object in &tiles.objects {
             offsets.push(count(caster_words.len()));
             caster_words.extend(&object.casters.words);
+        }
+
+        // A binding cannot be empty.
+        if caster_words.is_empty() {
+            caster_words.resize(8, 0);
         }
 
         // `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each key, a
@@ -118,13 +111,8 @@ impl LitFill {
             .map(|value| value as f32)
             .collect();
 
-        let tinted = tiles.opaque.contains(&false);
-
-        // `grid_walk.wgsl`'s `Placement` for each placement. The fill
-        // leaves a view's steps unread.
+        // The fill leaves a view's steps in a `Placement` unread.
         let mut placement_bytes = Vec::new();
-
-        // `lit_fill.wgsl`'s `Light` for each placement.
         let mut lights = Vec::new();
 
         for (object, transform) in &tiles.placements {
@@ -157,7 +145,13 @@ impl LitFill {
             lights.extend(fades.into_iter().chain([0.0]).flat_map(f32::to_le_bytes));
         }
 
-        // Each box below spans the light's axis and two axes across it.
+        // A binding cannot be empty.
+        if placement_bytes.is_empty() {
+            placement_bytes.resize(80 + STEP_BYTES, 0);
+            lights.resize(32, 0);
+        }
+
+        // Each span reaches along the light's axis and two axes across it.
         let across = toward.cross(if toward.x.abs() < 0.5 {
             TyVector3F64::X
         } else {
@@ -166,38 +160,88 @@ impl LitFill {
         let across = across.normalize();
         let axes = [across, toward.cross(across), toward];
 
-        // The box around the grid box from `low` to `high` of a placement.
-        let boxed = |index: usize, low: TyVector3U32, high: TyVector3U32| {
-            let (_, transform) = &tiles.placements[index];
-            let mut least = [f64::INFINITY; 3];
-            let mut most = [f64::NEG_INFINITY; 3];
+        let spans = (tiles.placements.iter())
+            .map(|(object, transform)| {
+                span(
+                    &axes,
+                    transform,
+                    TyVector3U32::ZERO,
+                    tiles.objects[*object].bounds,
+                )
+            })
+            .collect();
 
-            for corner in 0..8u32 {
-                let far = TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
-                let cell = low + (high - low) * far;
-                let point = transform.transform_point(cell.as_dvec3());
-
-                for (axis, direction) in axes.iter().enumerate() {
-                    let along = direction.dot(point);
-
-                    least[axis] = least[axis].min(along);
-                    most[axis] = most[axis].max(along);
-                }
-            }
-
-            (least, most)
+        let init = |label, contents: &[u8]| {
+            device.create_buffer_init(&BufferInitDescriptor {
+                label: Some(label),
+                contents,
+                usage: BufferUsages::STORAGE,
+            })
         };
 
-        let bounds: Vec<_> = tiles
-            .placements
-            .iter()
-            .map(|(object, _)| tiles.objects[*object].bounds)
-            .collect();
+        // SAFETY: an invocation past a page's cells returns. A cell
+        // indexes its placed tile, which indexes its placement and its
+        // casters. The walk reads a cell only inside its placement's grid,
+        // and each of its loops ends within a grid's extent. A cell inside
+        // a grid lies in one of its tiles, whose word leads to the tile's
+        // words. A cell's key indexes `passes`, which holds each key up to
+        // the greatest.
+        let module = unsafe {
+            device.create_shader_module_trusted(
+                ShaderModuleDescriptor {
+                    label: Some("lit fill"),
+                    source: ShaderSource::Wgsl(
+                        format!("{GRID_WALK_WGSL}\n{}", include_str!("lit_fill.wgsl")).into(),
+                    ),
+                },
+                ShaderRuntimeChecks::unchecked(),
+            )
+        };
 
-        let casters_of: Vec<_> = (0..bounds.len())
-            .map(|index| boxed(index, TyVector3U32::ZERO, bounds[index]))
-            .collect();
+        LitFill {
+            pipeline: device.create_compute_pipeline(&ComputePipelineDescriptor {
+                label: Some("lit fill"),
+                layout: None,
+                module: &module,
+                entry_point: Some("main"),
+                compilation_options: PipelineCompilationOptions::default(),
+                cache: None,
+            }),
+            placements: init("lit fill placements", &placement_bytes),
+            casters: init("lit fill cells", &bytes(&caster_words)),
+            lights: init("lit fill lights", &lights),
+            passes: init(
+                "lit fill passes",
+                &passes
+                    .iter()
+                    .flat_map(|value| value.to_le_bytes())
+                    .collect::<Vec<_>>(),
+            ),
+            axes,
+            spans,
+        }
+    }
 
+    /// Uploads what the fill of some of `tiles`' placements reads, and
+    /// makes the buffer their words fill.
+    ///
+    /// # Arguments
+    ///
+    /// 1. `tiles`: the scene the fill was built for
+    /// 2. `placements`: the placements, as their places among the scene's
+    /// 3. `glass`: whether each object's cells with a surface between
+    ///    materials that pass light take a word too
+    /// 4. `tints`: for a scene with a material that passes light, how far
+    ///    past a record cell's word its tint lies, no less than the page's
+    ///    cells plus [`TileMasks::SPARE`]
+    pub fn page(
+        &self,
+        device: &Device,
+        tiles: &TileScene,
+        placements: &[usize],
+        glass: bool,
+        tints: Option<u32>,
+    ) -> LitPage {
         let mut places = Vec::new();
         let mut glass_places = Vec::new();
         let mut tile_words: Vec<u32> = Vec::new();
@@ -207,7 +251,8 @@ impl LitFill {
         // The opaque tiles' cells of every placement come first, then the
         // glass tiles'.
         for glassy in [false, true] {
-            for (index, (object, _)) in tiles.placements.iter().enumerate() {
+            for &index in placements {
+                let (object, transform) = &tiles.placements[index];
                 let object = &tiles.objects[*object];
 
                 if glassy {
@@ -236,14 +281,19 @@ impl LitFill {
                     let tile = u32::try_from(tile_words.len() / 8)
                         .ok()
                         .filter(|&tile| tile < 1 << 20)
-                        .expect("a scene's placed tiles number under 2^20");
+                        .expect("a page's placed tiles number under 2^20");
 
-                    let (least, most) = boxed(index, corner, (corner + TILE).min(bounds[index]));
+                    let (least, most) = span(
+                        &self.axes,
+                        transform,
+                        corner,
+                        (corner + TILE).min(object.bounds),
+                    );
                     let first = casters.len();
 
                     // A caster's box covers some of the tile's across the light
                     // and reaches as far toward it.
-                    casters.extend((0u32..).zip(&casters_of).filter_map(
+                    casters.extend((0u32..).zip(&self.spans).filter_map(
                         |(caster, (low, high))| {
                             let covers = (0..2).all(|axis| {
                                 low[axis] - MARGIN <= most[axis]
@@ -271,14 +321,15 @@ impl LitFill {
         }
 
         let cells = count(recorded.len());
+        let words = cells + TileMasks::SPARE;
+
+        assert!(
+            tints.is_none_or(|tints| tints >= words),
+            "a tint lies past the page's words"
+        );
 
         // A binding cannot be empty.
-        for words in [
-            &mut tile_words,
-            &mut casters,
-            &mut recorded,
-            &mut caster_words,
-        ] {
+        for words in [&mut tile_words, &mut casters, &mut recorded] {
             if words.is_empty() {
                 words.resize(8, 0);
             }
@@ -292,35 +343,10 @@ impl LitFill {
             })
         };
 
-        let bytes = |words: &[u32]| -> Vec<u8> {
-            words.iter().flat_map(|word| word.to_le_bytes()).collect()
-        };
-
-        let tints = tinted.then_some(cells + TileMasks::SPARE);
-
         let frame = init(
             "lit fill frame",
             &bytes(&[cells, 0, tints.unwrap_or(0), 0]),
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        );
-        let placements = init(
-            "lit fill placements",
-            &placement_bytes,
-            BufferUsages::STORAGE,
-        );
-        let caster_words = init(
-            "lit fill cells",
-            &bytes(&caster_words),
-            BufferUsages::STORAGE,
-        );
-        let lights = init("lit fill lights", &lights, BufferUsages::STORAGE);
-        let passes = init(
-            "lit fill passes",
-            &passes
-                .iter()
-                .flat_map(|value| value.to_le_bytes())
-                .collect::<Vec<_>>(),
-            BufferUsages::STORAGE,
         );
         let tile_words = init("lit fill tiles", &bytes(&tile_words), BufferUsages::STORAGE);
         let casters = init("lit fill casters", &bytes(&casters), BufferUsages::STORAGE);
@@ -332,52 +358,24 @@ impl LitFill {
 
         let lit = device.create_buffer(&BufferDescriptor {
             label: Some("lit corners"),
-            size: u64::from(cells + TileMasks::SPARE) * if tinted { 8 } else { 4 },
+            size: u64::from(tints.unwrap_or(0) + words) * 4,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        // SAFETY: an invocation past the scene's record cells returns. A
-        // record cell indexes its placed tile, which indexes its placement
-        // and its casters. The walk reads a cell only inside its
-        // placement's grid, and each of its loops ends within a grid's
-        // extent. A cell inside a grid lies in one of its tiles, whose word
-        // leads to the tile's words. A cell's key indexes `passes`, which
-        // holds each key up to the greatest.
-        let module = unsafe {
-            device.create_shader_module_trusted(
-                ShaderModuleDescriptor {
-                    label: Some("lit fill"),
-                    source: ShaderSource::Wgsl(
-                        format!("{GRID_WALK_WGSL}\n{}", include_str!("lit_fill.wgsl")).into(),
-                    ),
-                },
-                ShaderRuntimeChecks::unchecked(),
-            )
-        };
-
-        let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some("lit fill"),
-            layout: None,
-            module: &module,
-            entry_point: Some("main"),
-            compilation_options: PipelineCompilationOptions::default(),
-            cache: None,
-        });
-
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("lit fill"),
-            layout: &pipeline.get_bind_group_layout(0),
+            layout: &self.pipeline.get_bind_group_layout(0),
             entries: &[
                 &frame,
-                &placements,
-                &caster_words,
-                &lights,
+                &self.placements,
+                &self.casters,
+                &self.lights,
                 &tile_words,
                 &casters,
                 &recorded,
                 &lit,
-                &passes,
+                &self.passes,
             ]
             .iter()
             .zip(0u32..)
@@ -388,48 +386,51 @@ impl LitFill {
             .collect::<Vec<_>>(),
         });
 
-        LitFill {
+        LitPage {
             places,
             glass_places,
             lit,
-            tints,
-            pipeline,
+            pipeline: self.pipeline.clone(),
             bind_group,
             frame,
             cells,
         }
     }
+}
 
-    /// Submits the fill of every record cell with a dispatch for each batch
-    /// of them.
-    pub fn fill(&self, device: &Device, queue: &Queue) {
-        for first in (0..self.cells).step_by(BATCH as usize) {
-            // A write lands before the commands of the submit after it.
-            queue.write_buffer(
-                &self.frame,
-                0,
-                &[self.cells, first]
-                    .iter()
-                    .flat_map(|word| word.to_le_bytes())
-                    .collect::<Vec<_>>(),
-            );
+/// `value` as a word.
+fn count(value: usize) -> u32 {
+    u32::try_from(value).expect("a scene's words number under 2^32")
+}
 
-            let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("lit fill"),
-            });
+/// The bytes of `words`.
+fn bytes(words: &[u32]) -> Vec<u8> {
+    words.iter().flat_map(|word| word.to_le_bytes()).collect()
+}
 
-            {
-                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("lit fill"),
-                    timestamp_writes: None,
-                });
+/// The low and high corners, along `axes`, of the box around the cells
+/// from `low` to before `high` of a grid that `transform` places.
+fn span(
+    axes: &[TyVector3F64; 3],
+    transform: &TyTransformF64,
+    low: TyVector3U32,
+    high: TyVector3U32,
+) -> Span {
+    let mut least = [f64::INFINITY; 3];
+    let mut most = [f64::NEG_INFINITY; 3];
 
-                pass.set_pipeline(&self.pipeline);
-                pass.set_bind_group(0, &self.bind_group, &[]);
-                pass.dispatch_workgroups((self.cells - first).min(BATCH).div_ceil(64), 1, 1);
-            }
+    for corner in 0..8u32 {
+        let far = TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
+        let cell = low + (high - low) * far;
+        let point = transform.transform_point(cell.as_dvec3());
 
-            queue.submit([encoder.finish()]);
+        for (axis, direction) in axes.iter().enumerate() {
+            let along = direction.dot(point);
+
+            least[axis] = least[axis].min(along);
+            most[axis] = most[axis].max(along);
         }
     }
+
+    (least, most)
 }

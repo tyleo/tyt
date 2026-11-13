@@ -46,6 +46,11 @@ pub enum Error {
     /// A material that passes light has an id over what a shadow ray's
     /// tile holds for a cell.
     PassingMaterial { id: u32 },
+
+    /// An object takes one page of a view, with every object whose boxes
+    /// share space with its boxes. One such set would take `bytes` bytes
+    /// where a page holds `most`.
+    Page { bytes: u64, most: u64 },
 }
 
 impl Display for Error {
@@ -77,6 +82,11 @@ impl Display for Error {
             Error::PassingMaterial { id } => {
                 write!(f, "material {id} passes light and its id is over 65534")
             }
+            Error::Page { bytes, most } => write!(
+                f,
+                "an object and those that share its space take {bytes} bytes of one page, over the \
+                 {most} it holds"
+            ),
         }
     }
 }

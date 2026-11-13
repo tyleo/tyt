@@ -170,15 +170,18 @@ impl XrApp {
                 .map_err(Error::Bench)?;
 
             FrameWork::View {
-                view: Box::new(HeadsetView::new(
-                    &gpu.device,
-                    &gpu.queue,
-                    &tiles,
-                    RenderBloom::default(),
-                    stand,
-                    swapchain.format,
-                    [width, height],
-                )),
+                view: Box::new(
+                    HeadsetView::new(
+                        &gpu.device,
+                        &gpu.queue,
+                        &tiles,
+                        RenderBloom::default(),
+                        stand,
+                        swapchain.format,
+                        [width, height],
+                    )
+                    .map_err(Error::Bench)?,
+                ),
                 depth: eye_depth(&gpu.device, width, height),
                 walk: options.walk.map(|speed| (speed, stand)),
                 frames: 0,

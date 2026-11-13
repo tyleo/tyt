@@ -68,6 +68,9 @@ enum Command {
 
         #[command(flatten)]
         look: Look,
+
+        #[command(flatten)]
+        pages: Pages,
     },
 
     /// Compares the shaded view of a bench scene or of a model with the
@@ -95,6 +98,9 @@ enum Command {
 
         #[command(flatten)]
         look: Look,
+
+        #[command(flatten)]
+        pages: Pages,
     },
 
     /// Compares the GPU's fill of the corner shadows of a bench scene or of
@@ -133,6 +139,16 @@ struct Look {
     look_at: Option<Vec<f64>>,
 }
 
+/// How a view pages a scene's tiles.
+#[derive(Clone, Debug, Args)]
+struct Pages {
+    /// The most bytes of a scene's tiles one page holds, in place of what
+    /// one of the device's storage bindings holds. A small page draws a
+    /// small scene in several.
+    #[arg(value_name = "bytes", long, value_parser = value_parser!(u64).range(1024..))]
+    page_bytes: Option<u64>,
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -143,14 +159,16 @@ fn main() {
             width,
             height,
             look,
-        } => view(&scene, &look, &output, width, height).map(|()| String::new()),
+            pages,
+        } => view(&scene, &look, &pages, &output, width, height).map(|()| String::new()),
 
         Command::ViewCheck {
             scene,
             size,
             headset,
             look,
-        } => check(&scene, &look, size, headset),
+            pages,
+        } => check(&scene, &look, &pages, size, headset),
 
         Command::LitCheck { scene } => check_lit(&scene),
     };
@@ -199,7 +217,7 @@ fn looked(scene: &str, look: &Look) -> Result<(RenderScene, RenderBloom)> {
     Ok((render_scene, bloom))
 }
 
-fn check(scene: &str, look: &Look, size: u32, headset: bool) -> Result<String> {
+fn check(scene: &str, look: &Look, pages: &Pages, size: u32, headset: bool) -> Result<String> {
     let (mut render_scene, bloom) = looked(scene, look)?;
 
     let view_ids = if headset {
@@ -215,7 +233,16 @@ fn check(scene: &str, look: &Look, size: u32, headset: bool) -> Result<String> {
 
     let gpu = headless_gpu()?;
 
-    view_check(&gpu, &render_scene, bloom, view_ids, size, size).map_err(Error::Bench)
+    view_check(
+        &gpu,
+        &render_scene,
+        bloom,
+        view_ids,
+        size,
+        size,
+        pages.page_bytes,
+    )
+    .map_err(Error::Bench)
 }
 
 fn check_lit(scene: &str) -> Result<String> {
@@ -225,7 +252,14 @@ fn check_lit(scene: &str) -> Result<String> {
     lit_check(&gpu, &render_scene).map_err(Error::Bench)
 }
 
-fn view(scene: &str, look: &Look, output: &Path, width: u32, height: u32) -> Result<()> {
+fn view(
+    scene: &str,
+    look: &Look,
+    pages: &Pages,
+    output: &Path,
+    width: u32,
+    height: u32,
+) -> Result<()> {
     let gpu = headless_gpu()?;
     let glass = BoxView::draws_glass(&gpu.device);
     let path = Path::new(scene);
@@ -256,8 +290,16 @@ fn view(scene: &str, look: &Look, output: &Path, width: u32, height: u32) -> Res
         .next()
         .ok_or(Error::Bench(BenchError::NoView))?;
 
-    let [texels, _] = view_image(&gpu, &tiles, &frame, bloom, [view_id; 2], width, height)
-        .map_err(Error::Bench)?;
+    let [texels, _] = view_image(
+        &gpu,
+        &tiles,
+        &frame,
+        bloom,
+        [view_id; 2],
+        [width, height],
+        pages.page_bytes,
+    )
+    .map_err(Error::Bench)?;
 
     let file = File::create(output).map_err(Error::Write)?;
     let mut encoder = Encoder::new(BufWriter::new(file), width, height);
