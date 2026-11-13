@@ -1066,12 +1066,10 @@ impl BoxView {
             .then(|| {
                 // The corners of each placement's slabs in the world. Bit
                 // `a` of a corner's index picks the slab's far side on axis
-                // `a`. An object's slabs hide what lies behind them at
-                // any level, where a coarser copy's reach past its cells.
+                // `a`. An object's coarser copy keeps none.
                 tiles
                     .placements
                     .iter()
-                    .filter(|(object, _)| tiles.spans[*object] == 1)
                     .flat_map(|(object, transform)| {
                         objects[*object].slabs.iter().map(|&(low, high)| {
                             [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {

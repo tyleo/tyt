@@ -17,7 +17,9 @@ pub struct ObjectTiles {
     /// for a scene that keeps no glass.
     pub glass: GlassTiles,
 
-    /// The boxes of opaque cells alone that hide what lies behind them.
+    /// The boxes of opaque cells alone that hide what lies behind them, or
+    /// none for a coarser copy of an object, whose cells reach past the
+    /// object's.
     pub slabs: Vec<(TyVector3U32, TyVector3U32)>,
 
     /// The object's cells as a shadow ray walks them.
@@ -44,10 +46,12 @@ impl ObjectTiles {
     /// 2. `glass`: with it, the tiles keep the surfaces between materials
     ///    that pass light, and it gives what a glass cell's word holds for
     ///    a material, under 2^12
+    /// 3. `slabs`: whether the tiles keep the grid's slabs
     pub fn new(
         grid: &CellGrid,
         opaque: &dyn Fn(u32) -> bool,
         glass: Option<&mut dyn FnMut(u32) -> u32>,
+        slabs: bool,
     ) -> Result<Self> {
         let masks = TileMasks::new(grid, true, Some(opaque))?;
         let counts = (grid.bounds + TILE - 1) / TILE;
@@ -86,7 +90,11 @@ impl ObjectTiles {
             bounds: grid.bounds,
             masks,
             glass,
-            slabs: solid_slabs(grid, opaque),
+            slabs: if slabs {
+                solid_slabs(grid, opaque)
+            } else {
+                Vec::new()
+            },
             casters: CasterTiles::new(grid, opaque)?,
             places,
             glass_places,
@@ -170,7 +178,7 @@ mod tests {
         cells[(17 * 3 + 1) * 4 + 2] = 6;
 
         let grid = CellGrid { bounds, cells };
-        let tiles = ObjectTiles::new(&grid, &|material| material == 2, None).unwrap();
+        let tiles = ObjectTiles::new(&grid, &|material| material == 2, None, true).unwrap();
 
         let (tile, index) = tiles.opaque_at([17, 0, 2]).unwrap();
 

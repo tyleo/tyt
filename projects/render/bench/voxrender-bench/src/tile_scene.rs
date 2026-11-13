@@ -1,11 +1,9 @@
-use crate::{CellGrid, ObjectTiles, Result};
+use crate::{CellGrid, ObjectTiles, Result, object_copies};
+use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyTransformF64, TyVector3U32};
-use voxcore::material;
+use voxcore::{BVoxObject, material};
 use voxrender::{RenderLight, RenderMaterial, RenderScene};
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
 
 /// A scene as a [`BoxView`](crate::BoxView) reads it: its materials, its
 /// lights, and its placements, with each object's cells by tile. A scene
@@ -46,15 +44,15 @@ pub struct TileScene {
     pub(crate) placements: Vec<(usize, TyTransformF64)>,
 
     /// The materials that pass light, in the order a glass cell's word
-    /// counts them.
+    /// counts them, for a scene that keeps glass.
     pub(crate) glass_materials: Vec<u32>,
 
     /// Whether an object keeps its surfaces between materials that pass
     /// light.
-    glass: bool,
+    pub(crate) glass: bool,
 
     /// Whether an object keeps coarser copies.
-    coarser: bool,
+    pub(crate) coarser: bool,
 
     /// Whether every material counts as opaque.
     pub(crate) solid: bool,
@@ -117,25 +115,9 @@ impl TileScene {
         for (object_id, object) in scene.iter_objects() {
             let grid = CellGrid::new(object, &|id| places[&id]);
 
-            // Where the object's first placement sets its first cell, in
-            // cells, when the placement keeps the cells whole and square to
-            // the world's axes.
-            let first = scene
-                .iter_placements()
-                .find(|(_, placement)| placement.object_id == object_id)
-                .and_then(|(_, placement)| {
-                    let transform = &placement.transform;
-                    let cells = transform.position / transform.scale;
+            let first = Self::first_cell(scene, object_id);
 
-                    let whole = transform
-                        .rotation
-                        .abs_diff_eq(TyQuaternionF64::IDENTITY, 1.0e-9)
-                        && cells.abs_diff_eq(cells.round(), 1.0e-6);
-
-                    whole.then(|| cells.round().to_array().map(|cell| cell as i64))
-                });
-
-            objects.insert(object_id, self.push_object(&grid, first.unwrap_or([0; 3]))?);
+            objects.insert(object_id, self.push_object(&grid, first)?);
         }
 
         for (_, placement) in scene.iter_placements() {
@@ -143,6 +125,28 @@ impl TileScene {
         }
 
         Ok(())
+    }
+
+    /// Where the first placement of `scene`'s object `object_id` sets the
+    /// object's first cell, in cells, for a placement that keeps the cells
+    /// whole and square to the world's axes. Zeros for any other, and for
+    /// an object with no placement.
+    pub(crate) fn first_cell(scene: &RenderScene, object_id: U32Id<BVoxObject>) -> [i64; 3] {
+        scene
+            .iter_placements()
+            .find(|(_, placement)| placement.object_id == object_id)
+            .and_then(|(_, placement)| {
+                let transform = &placement.transform;
+                let cells = transform.position / transform.scale;
+
+                let whole = transform
+                    .rotation
+                    .abs_diff_eq(TyQuaternionF64::IDENTITY, 1.0e-9)
+                    && cells.abs_diff_eq(cells.round(), 1.0e-6);
+
+                whole.then(|| cells.round().to_array().map(|cell| cell as i64))
+            })
+            .unwrap_or([0; 3])
     }
 
     /// The place among the scene's materials of one equal to `material`,
@@ -160,11 +164,24 @@ impl TileScene {
                     material.ior,
                 );
 
-                self.materials.push(*material);
-                self.opaque
-                    .push(self.solid || passed == TyLinSrgbF64::new(0.0, 0.0, 0.0));
+                let opaque = self.solid || passed == TyLinSrgbF64::new(0.0, 0.0, 0.0);
+                let place = self.materials.len();
 
-                self.materials.len() - 1
+                self.materials.push(*material);
+                self.opaque.push(opaque);
+
+                // A glass cell's word reaches its material in 12 bits,
+                // seven values a material.
+                if self.glass && !opaque {
+                    assert!(
+                        self.glass_materials.len() < 585,
+                        "a scene's glass materials number under 586"
+                    );
+
+                    self.glass_materials.push(place as u32);
+                }
+
+                place
             });
 
         u32::try_from(place).expect("a scene's materials number under 2^32")
@@ -178,77 +195,26 @@ impl TileScene {
     /// if a tile holds over 256 materials, or if a material that passes
     /// light has a place over 65534.
     pub fn push_object(&mut self, grid: &CellGrid, first: [i64; 3]) -> Result<usize> {
-        // An object's copies halve its cells until one fits a tile.
-        let copies = if self.coarser {
-            (0..)
-                .find(|&copies| grid.bounds.max_element() >> copies <= TILE)
-                .unwrap_or(0)
-        } else {
-            0
-        };
+        let glass = self.glass.then_some(self.glass_materials.as_slice());
+        let (copies, shift) = object_copies(grid, first, self.coarser, &self.opaque, glass)?;
 
-        // A copy's cells sit on the lattice of its size where the grid
-        // starts on the coarsest copy's.
-        let shift = TyVector3U32::from_array(first.map(|cell| cell.rem_euclid(1 << copies) as u32));
-        let padded;
+        Ok(self.push_copies(copies, shift))
+    }
 
-        let mut level = if shift == TyVector3U32::ZERO {
-            grid
-        } else {
-            padded = grid.padded(shift);
-
-            &padded
-        };
-
+    /// Adds an object as [`object_copies`] gives its tiles and the empty
+    /// cells ahead of its first, built for this scene's materials. Returns
+    /// the object's place among the scene's objects.
+    pub(crate) fn push_copies(&mut self, copies: Vec<ObjectTiles>, shift: TyVector3U32) -> usize {
         let place = self.objects.len();
-        let mut halved;
 
-        for copy in 0..=copies {
-            self.push_tiles(level)?;
+        for (copy, tiles) in copies.into_iter().enumerate() {
+            self.objects.push(tiles);
             self.spans.push(1 << copy);
             self.shifts
                 .push(if copy == 0 { shift } else { TyVector3U32::ZERO });
-
-            if copy < copies {
-                halved = level.halved();
-                level = &halved;
-            }
         }
 
-        Ok(place)
-    }
-
-    /// Adds the tiles of `grid` to the scene's objects.
-    fn push_tiles(&mut self, grid: &CellGrid) -> Result<()> {
-        let opaque = &self.opaque;
-        let glass_materials = &mut self.glass_materials;
-
-        // A glass cell's word holds where its material's seven values
-        // start among a view's.
-        let mut place = |material: u32| {
-            let place = glass_materials
-                .iter()
-                .position(|&placed| placed == material)
-                .unwrap_or_else(|| {
-                    glass_materials.push(material);
-
-                    glass_materials.len() - 1
-                });
-
-            u32::try_from(place * 7)
-                .ok()
-                .filter(|&place| place < 1 << 12)
-                .expect("a scene's glass materials number under 586")
-        };
-
-        let glass: Option<&mut dyn FnMut(u32) -> u32> =
-            if self.glass { Some(&mut place) } else { None };
-
-        let object = ObjectTiles::new(grid, &|material| opaque[material as usize], glass)?;
-
-        self.objects.push(object);
-
-        Ok(())
+        place
     }
 
     /// Places the object [`push_object`](Self::push_object) gave `object`
