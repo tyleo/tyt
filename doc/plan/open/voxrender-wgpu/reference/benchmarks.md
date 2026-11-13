@@ -2985,3 +2985,91 @@ cells. No trial model has 4096 boxes.
 5. No other bench scene and no trial model gains
 6. The headset rests through each run. The test's time under a moving
    head is unmeasured
+
+## A moving head, 2026-11-13
+
+The test of hidden boxes under a head that walks, and three cuts to what
+a walk costs a frame's CPU.
+
+- Device and method: as in Boxes behind slabs, in one sitting.
+  `debug.voxrenderbench.walk` walks the wearer 60 m down S2's street and
+  back, with a step's bob and a look of 60 degrees to each side. Builds
+  draw the same views because the walk steps by frames drawn. A scratch
+  build times each part of a frame's work and takes a property that turns
+  the test off
+- CPU: the app's time to ready a view's frame, as a mean and a p99 over
+  600 frames. A range spans a run's windows
+- Stale: the stale frames a second in VrApi's log, past a run's start
+- Exact: this Mac draws six views of the bench scenes before and after
+  the cuts, and the images' bytes match
+
+**Before the cuts.** S2 at 1.4 m a second:
+
+| Build | GPU p50 | GPU p99 | CPU mean | CPU p99 | Stale |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| No test | 5.7 to 6.2 | 6.6 to 7.9 | 0.45 to 0.50 | 3.1 to 3.3 | 0 to 1 |
+| The test | 4.5 to 5.3 | 5.1 to 6.2 | 2.2 to 2.7 | 5.4 to 6.2 | 1 to 5 |
+
+The test spares the GPU what it does at rest. At this speed the boxes
+sort each 16 frames, and some box's answer changes each frame.
+
+**Three cuts.**
+
+1. A sort lists each run's boxes in the order they draw. A deal copies
+   the listed boxes the test leaves in. Before, a deal filtered the
+   sorted keys once a run, eight times over
+2. An aim ranks a slab from its center, axes, and face areas, which the
+   build keeps, and picks the 64 widest with no sort of the rest. Before,
+   an aim built the shadow of each of S2's 4027 slabs to read one number
+3. The keys sort in three radix passes of 11 bits
+
+A frame's parts on S2 under the walk:
+
+| Part | Comes | ms before | ms after |
+| --- | --- | ---: | ---: |
+| Each placement's matrices | each frame | 0.27 | 0.27 |
+| The test | each frame | 0.69 to 0.82 | 0.72 to 0.84 |
+| A deal with the test | each frame | 1.0 to 1.5 | 0.29 to 0.43 |
+| A deal with no test | each sort | 1.6 to 1.7 | 0.75 to 0.89 |
+| A sort | each sort | 0.94 to 1.07 | 0.87 to 1.03 |
+| An aim | each sort | 2.1 to 2.4 | 0.40 to 0.54 |
+
+The sort after the cuts makes the runs' lists too. With the lists and
+`sort_unstable` a sort took 1.27 to 1.52 ms.
+
+**After the cuts.** S2:
+
+| Run | GPU p50 | GPU p99 | CPU mean | CPU p99 | Stale |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| At rest | 5.17 | 5.2 | 1.11 to 1.30 | 2.0 to 2.1 | 0 |
+| 1.4 m a second | 4.5 to 5.1 | 5.0 to 6.0 | 1.38 to 1.70 | 2.7 to 3.2 | 0 |
+| 5 m a second | 4.6 to 4.9 | 5.2 to 7.1 | 1.60 to 1.83 | 3.2 to 3.5 | 0 |
+| 1.4 m a second, no test | 5.8 to 6.3 | 6.6 to 7.8 | 0.39 to 0.45 | 2.1 to 2.5 | 0 |
+| 5 m a second, no test | 5.9 to 6.0 | 6.5 to 6.8 | 0.61 to 0.65 | 2.2 to 2.6 | 0 |
+
+At 5 m a second the boxes sort each 5 frames. S5 under the walk takes
+0.17 to 0.21 ms of CPU with its test and 0.16 to 0.19 without, 1.4 to 1.7
+at p99 either way. Its test takes 0.014 ms a frame.
+
+The scenes at rest, with the view's code from before the cuts and after
+in turn:
+
+| Scene | GPU p50 before | GPU p50 after |
+| --- | ---: | ---: |
+| S1 | 1.96 to 1.98 | 1.85 to 1.98 |
+| S4 | 3.03 to 3.12 | 3.08 to 3.17 |
+
+The headset's battery read 42 C by then. Both builds run S4 0.1 ms over
+its time in Boxes behind slabs.
+
+**Outcomes.**
+
+1. Under a walk the test spares S2's GPU 1.1 to 1.4 ms a frame and costs
+   its CPU 1.0 to 1.3 ms, against 0.9 at rest
+2. A frame that sorts takes 2.7 to 3.2 ms of CPU, from 5.4 to 6.2, and
+   the stale frames are gone
+3. A view with no test gains too. Its frame that sorts takes 2.1 to
+   2.5 ms, from 3.1 to 3.3
+4. Each frame of a walk still pays the test's 0.8 ms and a deal's 0.3 to
+   0.4
+5. The walk is a script. A worn headset's motion is unmeasured

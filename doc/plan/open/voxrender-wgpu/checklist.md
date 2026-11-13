@@ -437,7 +437,11 @@ this order:
       - [x] Two trials lost. A pyramid of the frame's depth costs the
             1.0 ms its test saves. A compute pass over the slabs' shadows
             costs 0.56 ms of the 1.06 it saves
-      - [ ] The test's time under a moving head
+      - [x] The test under a moving head. The app walks its wearer down
+            S2 by a property. The walk took 2.2 to 2.7 ms of CPU a frame
+            on Quest and 5.4 to 6.2 at p99, with stale frames. A deal
+            from lists a sort keeps, a cheaper aim, and a radix sort
+            bring it to 1.4 to 1.7 and 2.7 to 3.2 with none
       - [ ] The project lead rules on the reference's brick LOD and boxes
             that span several tiles with their cells whole
 7. Glass's cost. A cheaper way to close the holes in a tank's tint comes
