@@ -359,9 +359,10 @@ in this order:
             where that share runs out
       - [x] A face casts no ray that would end within two cells. Every
             trial model then draws in its old time or less on Quest
-      - [ ] Shadows and occlusion at what a mirror ray meets. The box view
-            shades it flat, and a quad within two cells takes its face's
-            occlusion
+      - [x] A shadow at what a mirror ray meets. A second ray toward the
+            sun took the chess set from 2.01 ms to 2.87 on Quest for 207
+            pixels of the trial models'. It drops. The box view shades the
+            quad flat. A quad within two cells takes its face's occlusion
       - [ ] Placements that move, a model's load time, and a line in the
             frame budget
 2. Emission
