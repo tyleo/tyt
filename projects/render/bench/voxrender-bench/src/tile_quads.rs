@@ -1,4 +1,4 @@
-use crate::{ObjectQuads, ObjectTiles, TileScene};
+use crate::{ObjectQuads, ObjectTiles, TileMasks, TileScene, map_threads};
 use std::collections::BTreeMap;
 use ty_math::{TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
@@ -26,28 +26,27 @@ type CellBox = (TyVector3U32, TyVector3U32);
 /// run merges within a tile there. An object whose every cell lies in one
 /// box merges across its tiles, as it does with no `reach`.
 pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<ObjectQuads> {
-    let copies = || tiles.spans.iter().map(|&span| span > 1);
-
     let Some(reach) = reach else {
-        return (tiles.objects.iter().zip(copies()))
-            .map(|(object, copy)| {
-                let mut quads = ObjectQuads::default();
+        return map_threads(tiles.objects.len(), |index| {
+            let object = &tiles.objects[index];
+            let mut quads = ObjectQuads::default();
 
-                if !copy {
-                    push_region(&mut quads, object, (TyVector3U32::ZERO, object.bounds));
-                }
+            if tiles.spans[index] == 1 {
+                push_region(&mut quads, object, (TyVector3U32::ZERO, object.bounds));
+            }
 
-                quads
-            })
-            .collect();
+            quads
+        });
     };
 
-    let casts: Vec<_> = (tiles.objects.iter().zip(copies()))
-        .map(|(object, copy)| {
-            if copy {
+    let reaches: Vec<f64> = (0..tiles.materials.len() as u32).map(reach).collect();
+
+    let casts: Vec<_> = (tiles.objects.iter().zip(&tiles.spans))
+        .map(|(object, &span)| {
+            if span > 1 {
                 Vec::new()
             } else {
-                cast_boxes(object, reach)
+                cast_boxes(object, &reaches)
             }
         })
         .collect();
@@ -127,56 +126,52 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
         }
     }
 
-    tiles
-        .objects
-        .iter()
-        .zip(kept)
-        .map(|(object, kept)| {
-            let mut quads = ObjectQuads::default();
-            let whole = (TyVector3U32::ZERO, object.bounds);
+    map_threads(tiles.objects.len(), |index| {
+        let (object, kept) = (&tiles.objects[index], &kept[index]);
+        let mut quads = ObjectQuads::default();
+        let whole = (TyVector3U32::ZERO, object.bounds);
 
-            if kept.contains(&whole) {
-                push_region(&mut quads, object, whole);
+        if kept.contains(&whole) {
+            push_region(&mut quads, object, whole);
 
-                return quads;
-            }
+            return quads;
+        }
 
-            // The box around what each tile keeps, in the tiles' order.
-            let mut regions: BTreeMap<usize, CellBox> = BTreeMap::new();
+        // The box around what each tile keeps, in the tiles' order.
+        let mut regions: BTreeMap<usize, CellBox> = BTreeMap::new();
 
-            for (low, high) in kept {
-                let (first, last) = (low / TILE, (high - 1) / TILE);
+        for &(low, high) in kept {
+            let (first, last) = (low / TILE, (high - 1) / TILE);
 
-                for x in first.x..=last.x {
-                    for y in first.y..=last.y {
-                        for z in first.z..=last.z {
-                            let tile = TyVector3U32::new(x, y, z);
+            for x in first.x..=last.x {
+                for y in first.y..=last.y {
+                    for z in first.z..=last.z {
+                        let tile = TyVector3U32::new(x, y, z);
 
-                            let Some(place) = object.tile_at(tile) else {
-                                continue;
-                            };
+                        let Some(place) = object.tile_at(tile) else {
+                            continue;
+                        };
 
-                            let part = ((tile * TILE).max(low), ((tile + 1) * TILE).min(high));
+                        let part = ((tile * TILE).max(low), ((tile + 1) * TILE).min(high));
 
-                            regions
-                                .entry(place)
-                                .and_modify(|(least, most)| {
-                                    *least = least.min(part.0);
-                                    *most = most.max(part.1);
-                                })
-                                .or_insert(part);
-                        }
+                        regions
+                            .entry(place)
+                            .and_modify(|(least, most)| {
+                                *least = least.min(part.0);
+                                *most = most.max(part.1);
+                            })
+                            .or_insert(part);
                     }
                 }
             }
+        }
 
-            for region in regions.into_values() {
-                push_region(&mut quads, object, region);
-            }
+        for region in regions.into_values() {
+            push_region(&mut quads, object, region);
+        }
 
-            quads
-        })
-        .collect()
+        quads
+    })
 }
 
 /// The eight corners of the box from `low` to `high`.
@@ -195,22 +190,29 @@ fn corners(low: TyVector3F64, high: TyVector3F64) -> impl Iterator<Item = TyVect
 }
 
 /// The box around each tile's cells whose material casts a mirror ray,
-/// with the longest of those materials' reaches in cells. `reach` gives a
-/// material's, or zero where it casts none.
-fn cast_boxes(object: &ObjectTiles, reach: &dyn Fn(u32) -> f64) -> Vec<(CellBox, f64)> {
+/// with the longest of those materials' reaches in cells. `reaches` holds
+/// each of the scene's materials', or zero where it casts none.
+fn cast_boxes(object: &ObjectTiles, reaches: &[f64]) -> Vec<(CellBox, f64)> {
     let masks = &object.masks;
     let mut boxes = Vec::new();
 
     for (tile, &corner) in masks.corners.iter().enumerate() {
+        // The reach of each of the tile's materials, in the order a record
+        // cell's entry counts them.
+        let offset = masks.offsets[tile];
+        let palette = masks.words[(offset + TileMasks::PALETTE) as usize];
+        let ids = (offset + (palette & 0xffff)) as usize;
+        let ids = &masks.words[ids..ids + (palette >> 16) as usize];
+
+        if ids.iter().all(|&id| reaches[id as usize] == 0.0) {
+            continue;
+        }
+
         let (mut low, mut high) = (TyVector3U32::MAX, TyVector3U32::ZERO);
         let mut longest: f64 = 0.0;
 
-        for &index in &masks.recorded[tile] {
-            let material = object
-                .material_of(tile, index)
-                .expect("a record cell holds a material");
-
-            let cells = reach(material);
+        for (&index, &entry) in masks.recorded[tile].iter().zip(&masks.entries[tile]) {
+            let cells = reaches[ids[usize::from(entry)] as usize];
 
             if cells > 0.0 {
                 let index = u32::from(index);
@@ -234,19 +236,8 @@ fn cast_boxes(object: &ObjectTiles, reach: &dyn Fn(u32) -> f64) -> Vec<(CellBox,
 /// Appends the quads of `object`'s opaque cells from `low` to before
 /// `high`. A face against an opaque cell outside the box stays hidden.
 fn push_region(quads: &mut ObjectQuads, object: &ObjectTiles, (low, high): CellBox) {
-    let region = Region {
-        object,
-        low,
-        bounds: high - low,
-    };
-
-    let material = |(tile, index): (usize, u16)| {
-        object
-            .material_of(tile, index)
-            .expect("a cell with a face has a record")
-    };
-
-    let mesh = mesh_grid_keyed(&region, SurfaceMethod::Greedy, &material, &|_| true);
+    let region = Region::new(object, low, high - low);
+    let mesh = mesh_grid_keyed(&region, SurfaceMethod::Greedy, &|cell| cell - 1, &|_| true);
 
     let count = |value: usize| u32::try_from(value).expect("an object's quads number under 2^30");
     let first = count(quads.positions.len());
@@ -266,29 +257,65 @@ fn push_region(quads: &mut ObjectQuads, object: &ObjectTiles, (low, high): CellB
     );
     quads
         .materials
-        .extend(mesh.face_cells.iter().map(|covered| material(covered[0])));
+        .extend(mesh.face_cells.iter().map(|covered| covered[0] - 1));
 }
 
-/// A box of an object's cells as a mesher reads it. A cell's handle holds
-/// its tile's place among the object's and its index in the tile.
-struct Region<'a> {
-    object: &'a ObjectTiles,
-
-    low: TyVector3U32,
-
+/// A box of an object's cells as a mesher reads it, with the cells one
+/// past each of its sides. A cell's handle holds its material plus one.
+/// A mesher reads each cell many times, so the box keeps its cells where
+/// reading one through its object's tiles takes several loads.
+struct Region {
     bounds: TyVector3U32,
+
+    /// Each cell of the box and of the layer around it in raster order:
+    /// zero where it is not opaque, else its material plus one. An opaque
+    /// cell with no record has no face and holds [`BURIED`].
+    cells: Vec<u32>,
 }
 
-impl SurfaceGrid for Region<'_> {
-    type Cell = (usize, u16);
+/// What a region holds for an opaque cell with no record.
+const BURIED: u32 = u32::MAX;
+
+impl Region {
+    fn new(object: &ObjectTiles, low: TyVector3U32, bounds: TyVector3U32) -> Self {
+        let [x, y, z] = low.to_array().map(i64::from);
+        let [wide, high, deep] = bounds.to_array().map(i64::from);
+        let mut cells = Vec::with_capacity(((wide + 2) * (high + 2) * (deep + 2)) as usize);
+
+        for at_x in -1..=wide {
+            for at_y in -1..=high {
+                for at_z in -1..=deep {
+                    let opaque = object.opaque_at([x + at_x, y + at_y, z + at_z]);
+
+                    cells.push(opaque.map_or(0, |(tile, index)| {
+                        (object.material_of(tile, index)).map_or(BURIED, |material| material + 1)
+                    }));
+                }
+            }
+        }
+
+        Region { bounds, cells }
+    }
+
+    /// What the cell at `position` holds, where each coordinate lies from
+    /// one before the box to one past it.
+    fn at(&self, position: [i64; 3]) -> u32 {
+        let [_, high, deep] = self.bounds.to_array().map(|side| side as usize + 2);
+        let [x, y, z] = position.map(|coordinate| (coordinate + 1) as usize);
+
+        self.cells[(x * high + y) * deep + z]
+    }
+}
+
+impl SurfaceGrid for Region {
+    type Cell = u32;
 
     fn bounds(&self) -> TyVector3U32 {
         self.bounds
     }
 
     fn cell(&self, position: TyVector3U32) -> Option<Self::Cell> {
-        self.object
-            .opaque_at((self.low + position).to_array().map(i64::from))
+        self.cell_at(position.to_array().map(i64::from))
     }
 
     fn is_opaque(&self, _cell: Self::Cell) -> bool {
@@ -296,15 +323,16 @@ impl SurfaceGrid for Region<'_> {
     }
 
     fn shares_material(&self, cell: Self::Cell, other: Self::Cell) -> bool {
-        self.object.material_of(cell.0, cell.1) == self.object.material_of(other.0, other.1)
+        cell == other
     }
 
     // A cell past the box's edge still hides the face against it.
     fn cell_at(&self, position: [i64; 3]) -> Option<Self::Cell> {
-        let low = self.low.to_array();
+        let bounds = self.bounds.to_array();
 
-        self.object
-            .opaque_at([0, 1, 2].map(|axis| position[axis] + i64::from(low[axis])))
+        let near = (0..3).all(|axis| (-1..=i64::from(bounds[axis])).contains(&position[axis]));
+
+        near.then(|| self.at(position)).filter(|&cell| cell != 0)
     }
 }
 
