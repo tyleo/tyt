@@ -1,5 +1,5 @@
-//! voxrender-bench's box view as a headless desktop app. Each subcommand
-//! draws or checks one view of a scene.
+//! voxrender-bench's box view as a desktop app. A subcommand draws or checks
+//! one view of a scene with no window, or shows a gallery of models in one.
 
 use clap::{Args, Parser, Subcommand, value_parser};
 use png::{BitDepth, ColorType, Encoder, SrgbRenderingIntent};
@@ -11,19 +11,26 @@ use std::{
 };
 use voxrender::{RenderBloom, RenderScene};
 use voxrender_bench::{
-    BoxView, Error as BenchError, ModelTiles, TileScene, ViewOptions, bench_scene, lit_check,
+    BoxView, Error as BenchError, Gpu, ModelTiles, TileScene, ViewOptions, bench_scene, lit_check,
     look_from, model_scene, retain_headset_views, shape_view, view_check, view_image,
 };
+use wgpu::Instance;
 
 // Internal API
 
 mod error;
-mod headless_gpu;
+mod gallery_keys;
+mod gallery_window;
+mod open_gpu;
 mod result;
+mod window_blit;
 
 pub(crate) use error::*;
-pub(crate) use headless_gpu::*;
+pub(crate) use gallery_keys::*;
+pub(crate) use gallery_window::*;
+pub(crate) use open_gpu::*;
 pub(crate) use result::*;
+pub(crate) use window_blit::*;
 
 /// Draws and checks voxrender-bench's box view.
 #[derive(Clone, Debug, Parser)]
@@ -113,6 +120,48 @@ enum Command {
         #[arg(value_name = "scene")]
         scene: String,
     },
+
+    /// Shows the Voxel Json models under a directory in a window, one at a
+    /// time, as the shaded box raster draws them.
+    #[command(name = "gallery")]
+    Gallery {
+        /// The directory that holds the models.
+        #[arg(value_name = "models-dir")]
+        directory: PathBuf,
+
+        /// Text from the path of the model the gallery opens with, in place
+        /// of the first.
+        #[arg(value_name = "text", long)]
+        model: Option<String>,
+
+        /// The width the window opens at, in the display's points.
+        #[arg(
+            value_name = "points",
+            long,
+            default_value_t = 1280,
+            value_parser = value_parser!(u32).range(1..=4096)
+        )]
+        width: u32,
+
+        /// The height the window opens at, in the display's points.
+        #[arg(
+            value_name = "points",
+            long,
+            default_value_t = 800,
+            value_parser = value_parser!(u32).range(1..=4096)
+        )]
+        height: u32,
+
+        /// The fewest pixels a voxel spans before a coarser copy of its
+        /// object draws in its place. Without it, every voxel draws.
+        #[arg(value_name = "pixels", long)]
+        detail: Option<f64>,
+
+        /// The seconds the window stays open. Without it, the window stays
+        /// open until someone closes it.
+        #[arg(value_name = "seconds", long)]
+        seconds: Option<f64>,
+    },
 }
 
 /// Where a view looks from in place of the scene's first view.
@@ -185,6 +234,21 @@ fn main() {
         } => check(&scene, &look, &draw, size, headset),
 
         Command::LitCheck { scene } => check_lit(&scene),
+
+        Command::Gallery {
+            directory,
+            model,
+            width,
+            height,
+            detail,
+            seconds,
+        } => GalleryWindow::run(
+            &directory,
+            model.as_deref(),
+            [width, height],
+            detail.unwrap_or(0.0),
+            seconds,
+        ),
     };
 
     match result {
@@ -195,6 +259,11 @@ fn main() {
             process::exit(1);
         }
     }
+}
+
+/// The high-performance adapter's device, for a draw with no window.
+fn headless_gpu() -> Result<Gpu> {
+    open_gpu(&Instance::default(), None).map(|(_, gpu)| gpu)
 }
 
 /// The model at the path `scene` under its bloom, or else the bench scene

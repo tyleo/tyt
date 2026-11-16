@@ -69,7 +69,7 @@ open and may still change when they run. S6 depends on none of its decisions.
    its caller opens. The arms that lost were deleted after
    [their last commit](reference/benchmarks.md#the-arms-that-lost-2026-11-13)
 5. `voxrender-bench-desktop` is new and unpublished. It draws and checks a
-   view headless on desktop
+   view with no window on desktop and shows the gallery in one
 6. `voxrender-bench-quest` is new and unpublished. It shows a view or the
    gallery as an OpenXR app on Quest
 

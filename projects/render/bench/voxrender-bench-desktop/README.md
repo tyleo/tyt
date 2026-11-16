@@ -1,7 +1,8 @@
 # voxrender-bench-desktop
 
-voxrender-bench's box view as a headless desktop app. Each subcommand draws
-or checks one view of a scene on the high-performance adapter.
+voxrender-bench's box view as a desktop app on the high-performance adapter.
+`view`, `view-check`, and `lit-check` each draw or check one view of a scene
+with no window. `gallery` shows the models under a directory in a window.
 
 ## Run
 
@@ -59,3 +60,41 @@ place at the coarsest copy whose voxels span that many pixels or fewer:
 ```sh
 cargo run --release -p voxrender-bench-desktop -- view-check S5 --detail 1.4
 ```
+
+## Gallery
+
+`gallery` opens a window on the Voxel Json models under a directory and
+shows them one at a time, as the Quest app's gallery does:
+
+```sh
+cargo run --release -p voxrender-bench-desktop -- gallery <models-dir>
+```
+
+A model lands on a table before the head and spans a meter. A keyboard and
+a mouse steer:
+
+| Control | Effect |
+| --- | --- |
+| Right arrow | Shows the next model |
+| Left arrow | Shows the model before |
+| W, A, S, and D | Walk the way the head faces |
+| E and Q | Rise and sink |
+| A drag | Turns the head |
+| Up arrow | Grows the model around the point a meter ahead |
+| Down arrow | Shrinks the model |
+| Tab | Switches between the table and life size |
+| Escape | Closes the window |
+
+The window's title holds the frames it draws a second and the slowest of
+them. The app prints each model as it loads, and the frames it drew once
+the window closes. The image keeps the pixels the window opens with and
+stretches when the window's size changes.
+
+These flags steer a run:
+
+1. `--model` starts the gallery at the first model whose path holds the
+   flag's text
+2. `--detail` takes the fewest pixels a voxel spans, as `view` takes it
+3. `--width` and `--height` set the size the window opens at, in the
+   display's points
+4. `--seconds` closes the window after that many seconds
