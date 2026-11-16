@@ -21,13 +21,15 @@ const TIP: f64 = FRAC_PI_2 * 89.0 / 90.0;
 ///
 /// 1. W, A, S, and D walk, E rises, and Q sinks
 /// 2. A drag turns the head
-/// 3. The up arrow grows the model, and the down arrow shrinks it
+/// 3. The up arrow grows the model around what the window's middle
+///    shows, which brings the head toward it, and the down arrow shrinks
+///    the model
 /// 4. The right arrow steps to the next model, and the left arrow to the
 ///    one before
 /// 5. Tab switches the model between the table and life size
 pub struct GalleryKeys {
     /// The keys held down.
-    held: HashSet<KeyCode>,
+    down: HashSet<KeyCode>,
 
     /// The models the presses since the last read step by.
     step: i32,
@@ -40,6 +42,10 @@ pub struct GalleryKeys {
 
     /// The radians the head has tipped up.
     tip: f64,
+
+    /// The meters ahead of the head to what the window's middle last
+    /// showed.
+    held: f64,
 }
 
 impl GalleryKeys {
@@ -47,27 +53,35 @@ impl GalleryKeys {
     /// on its table.
     pub fn new() -> Self {
         let bounds = TyBoundsF64::new(TyVector3F64::ZERO, TyVector3F64::ONE);
-        let center = bounds.center - HeadsetStand::table(&bounds).origin;
+        let stand = HeadsetStand::table(&bounds);
+        let center = (bounds.center - stand.origin) / stand.scale;
 
         GalleryKeys {
-            held: HashSet::new(),
+            down: HashSet::new(),
             step: 0,
             resize: false,
             turn: 0.0,
             tip: center.y.atan2(-center.z),
+            held: center.length(),
         }
+    }
+
+    /// Takes the meters ahead of the head to what the window's middle
+    /// shows.
+    pub fn hold(&mut self, meters: f64) {
+        self.held = meters;
     }
 
     /// Takes the key `code` going down or coming up. `repeat` marks a press
     /// the keyboard sends while the key stays down.
     pub fn key(&mut self, code: KeyCode, down: bool, repeat: bool) {
         if !down {
-            self.held.remove(&code);
+            self.down.remove(&code);
 
             return;
         }
 
-        self.held.insert(code);
+        self.down.insert(code);
 
         if repeat {
             return;
@@ -83,7 +97,7 @@ impl GalleryKeys {
 
     /// Lets go of every key, as a window does when it loses the keyboard.
     pub fn release(&mut self) {
-        self.held.clear();
+        self.down.clear();
     }
 
     /// Turns the head as a drag does that moves the pointer `across` to
@@ -97,8 +111,8 @@ impl GalleryKeys {
     /// start over.
     pub fn read(&mut self) -> GalleryControls {
         let axis = |up, down| {
-            f32::from(u8::from(self.held.contains(&up)))
-                - f32::from(u8::from(self.held.contains(&down)))
+            f32::from(u8::from(self.down.contains(&up)))
+                - f32::from(u8::from(self.down.contains(&down)))
         };
 
         let controls = GalleryControls {
@@ -111,6 +125,7 @@ impl GalleryKeys {
             turn: 0.0,
             rise: axis(KeyCode::KeyE, KeyCode::KeyQ),
             grow: axis(KeyCode::ArrowUp, KeyCode::ArrowDown),
+            held: self.held as f32,
         };
 
         self.step = 0;
@@ -175,6 +190,17 @@ mod tests {
         keys.release();
 
         assert_eq!(keys.read().walk, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_growing_model_holds_what_the_windows_middle_shows() {
+        let mut keys = GalleryKeys::new();
+
+        // A table model's center sits 1.1 m ahead and 0.25 m down.
+        assert!((keys.read().held - 1.128).abs() < 1e-3);
+
+        keys.hold(40.0);
+        assert_eq!(keys.read().held, 40.0);
     }
 
     #[test]

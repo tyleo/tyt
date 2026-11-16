@@ -46,6 +46,12 @@ impl ViewEye {
             position,
         }
     }
+
+    /// The world units along an eye's axis to what a view drew at `depth`,
+    /// or `None` for zero, the depth a pass clears to.
+    pub fn distance(depth: f32) -> Option<f64> {
+        (depth > 0.0).then(|| NEAR / f64::from(depth))
+    }
 }
 
 #[cfg(test)]
@@ -80,5 +86,13 @@ mod tests {
         ));
         assert!(close(at(1.5, 1.0, 0.5), [1.0, 1.0, 2.0 / 1024.0 / 1024.0]));
         assert!(close(at(0.5, -0.5, 1.0), [0.0, 0.0, 1.0 / 1024.0 / 1024.0]));
+    }
+
+    #[test]
+    fn a_depth_gives_back_its_distance() {
+        let depth = (0.25 / 1024.0 / 1024.0) as f32;
+
+        assert!((ViewEye::distance(depth).unwrap() - 4.0).abs() < 1e-6);
+        assert_eq!(ViewEye::distance(0.0), None);
     }
 }

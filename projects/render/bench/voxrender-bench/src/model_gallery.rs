@@ -30,10 +30,6 @@ const DEAD: f32 = 0.15;
 /// The times a model grows in a second under a full trigger.
 const GROWTH: f64 = 4.0;
 
-/// The meters ahead of the head to the point a growing model holds still
-/// around.
-const HELD: f64 = 1.0;
-
 /// The color the eyes clear to before the first model lands.
 const EMPTY: Color = Color {
     r: 0.5,
@@ -190,6 +186,12 @@ impl ModelGallery {
             b: sky.b * DIM,
             a: sky.a,
         }
+    }
+
+    /// Where the tracking space sits in the scene of the model in view, or
+    /// `None` before the first model lands.
+    pub fn stand(&self) -> Option<HeadsetStand> {
+        self.shown.as_ref().map(|shown| shown.view.stand)
     }
 
     /// Readies the next draw for `eyes`, the headset's left eye and then
@@ -434,7 +436,7 @@ fn steered(
 
     let growth = GROWTH.powf(push(controls.grow) * seconds);
 
-    stand.grown(head + ahead * HELD, growth)
+    stand.grown(head + ahead * f64::from(controls.held), growth)
 }
 
 #[cfg(test)]
@@ -595,6 +597,7 @@ mod tests {
         let grown = after(
             GalleryControls {
                 grow: 1.0,
+                held: 1.0,
                 ..GalleryControls::default()
             },
             [0.0, 0.2, 0.0],
@@ -608,6 +611,7 @@ mod tests {
         let shrunk = after(
             GalleryControls {
                 grow: -1.0,
+                held: 1.0,
                 ..GalleryControls::default()
             },
             [0.0, 0.2, 0.0],

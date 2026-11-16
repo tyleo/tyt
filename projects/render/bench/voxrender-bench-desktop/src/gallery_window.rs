@@ -1,16 +1,16 @@
-use crate::{Error, GalleryKeys, Result, WindowBlit, open_gpu};
+use crate::{CenterDepth, Error, GalleryKeys, Result, WindowBlit, open_gpu};
 use std::{
     num::NonZeroU32,
     path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
 };
-use voxrender_bench::{Gpu, ModelGallery};
+use voxrender_bench::{Gpu, ModelGallery, ViewEye};
 use wgpu::{
     CommandEncoderDescriptor, CurrentSurfaceTexture, Extent3d, Instance, LoadOp, Operations,
     PresentMode, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    StoreOp, Surface, SurfaceConfiguration, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
+    StoreOp, Surface, SurfaceConfiguration, TextureAspect, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
 };
 use winit::{
     application::ApplicationHandler,
@@ -75,6 +75,8 @@ struct Open {
     eyes: TextureView,
 
     depth: TextureView,
+
+    center: CenterDepth,
 
     blit: WindowBlit,
 
@@ -309,10 +311,10 @@ impl Open {
             FORMAT,
             TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         );
-        let depth = texture(
+        let depths = texture(
             "gallery depth",
             ModelGallery::DEPTH,
-            TextureUsages::RENDER_ATTACHMENT,
+            TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
         );
 
         let first = color.create_view(&TextureViewDescriptor {
@@ -343,7 +345,16 @@ impl Open {
         Ok(Open {
             blit: WindowBlit::new(&gpu.device, &first, shown),
             eyes: color.create_view(&TextureViewDescriptor::default()),
-            depth: depth.create_view(&TextureViewDescriptor::default()),
+            depth: depths.create_view(&TextureViewDescriptor::default()),
+            center: CenterDepth::new(
+                &gpu.device,
+                &depths.create_view(&TextureViewDescriptor {
+                    dimension: Some(TextureViewDimension::D2),
+                    aspect: TextureAspect::DepthOnly,
+                    array_layer_count: Some(1),
+                    ..TextureViewDescriptor::default()
+                }),
+            ),
             window: shown_in,
             surface,
             config,
@@ -370,6 +381,15 @@ impl Open {
             .last
             .replace(now)
             .map_or(0.0, |last| (now - last).as_secs_f64());
+
+        // A zoom heads for what the window's middle showed a frame or two
+        // ago.
+        if let Some(depth) = self.center.read(&self.gpu.device)?
+            && let Some(meters) = ViewEye::distance(depth)
+            && let Some(stand) = self.gallery.stand()
+        {
+            self.keys.hold(meters / stand.scale);
+        }
 
         let controls = self.keys.read();
 
@@ -438,11 +458,7 @@ impl Open {
                         } else {
                             LoadOp::Load
                         },
-                        store: if at + 1 == passes {
-                            StoreOp::Discard
-                        } else {
-                            StoreOp::Store
-                        },
+                        store: StoreOp::Store,
                     }),
                     stencil_ops: None,
                 }),
@@ -459,8 +475,10 @@ impl Open {
         });
 
         self.blit.draw(&mut encoder, &surface);
+        self.center.copy(&mut encoder);
 
         self.gpu.queue.submit([encoder.finish()]);
+        self.center.sent();
         self.gpu.queue.present(frame);
 
         self.frames += 1;
