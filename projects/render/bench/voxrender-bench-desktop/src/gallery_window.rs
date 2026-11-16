@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use voxrender_bench::{Gpu, ModelGallery, ViewEye};
+use voxrender_bench::{GalleryControls, Gpu, ModelGallery, ViewEye};
 use wgpu::{
     CommandEncoderDescriptor, CurrentSurfaceTexture, Extent3d, Instance, LoadOp, Operations,
     PresentMode, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
@@ -21,7 +21,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
-/// The window's title, ahead of its frame rate.
+/// The window's title, ahead of its model and its frame rate.
 const TITLE: &str = "voxrender-bench";
 
 /// The format of the image a gallery draws.
@@ -34,7 +34,8 @@ const STEP: f64 = 0.1;
 /// A window on a [`ModelGallery`] that [`GalleryKeys`] steer. The gallery
 /// draws a headset's two eyes from one head, and the window shows the
 /// first. The image keeps the size the window opens at and stretches as
-/// the window's size changes. The window's title holds its frame rate.
+/// the window's size changes. The window's title holds the model in view
+/// and the frame rate.
 pub struct GalleryWindow {
     directory: PathBuf,
 
@@ -81,6 +82,9 @@ struct Open {
     blit: WindowBlit,
 
     keys: GalleryKeys,
+
+    /// The path of the model in view, as the gallery gives it.
+    model: Option<String>,
 
     /// Where the pointer last was.
     pointer: Option<PhysicalPosition<f64>>,
@@ -362,6 +366,7 @@ impl Open {
             gpu,
             gallery,
             keys: GalleryKeys::new(),
+            model: None,
             pointer: None,
             dragging: false,
             hidden: false,
@@ -395,12 +400,24 @@ impl Open {
 
         // The eyes take the window's shape, which keeps a stretched image
         // true.
-        let eyes = self
-            .keys
-            .eyes(f64::from(self.config.width) / f64::from(self.config.height));
+        let aspect = f64::from(self.config.width) / f64::from(self.config.height);
+        let eyes = self.keys.eyes(aspect);
 
         if let Some(line) = self.gallery.prepare(&controls, &eyes, seconds.min(STEP)) {
             println!("models {line}");
+        }
+
+        // A model that lands draws from the head's start.
+        let model = self.gallery.shown();
+
+        if model != self.model {
+            self.model = model;
+            self.keys.restart();
+
+            let eyes = self.keys.eyes(aspect);
+
+            self.gallery
+                .prepare(&GalleryControls::default(), &eyes, 0.0);
         }
 
         let frame = match self.surface.get_current_texture() {
@@ -492,7 +509,10 @@ impl Open {
 
         if rated >= 1.0 {
             self.window.set_title(&format!(
-                "{TITLE}: {:.0} frames a second, slowest {:.1} ms",
+                "{TITLE}: {}{:.0} frames a second, slowest {:.1} ms",
+                self.model
+                    .as_ref()
+                    .map_or_else(String::new, |model| format!("{model}, ")),
                 f64::from(*frames) / rated,
                 *slowest * 1e3
             ));
