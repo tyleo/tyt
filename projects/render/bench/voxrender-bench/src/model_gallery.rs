@@ -88,6 +88,9 @@ struct Shown {
 
     /// Whether the last switch set the model on the table.
     table: bool,
+
+    /// The model's index among the gallery's.
+    index: usize,
 }
 
 /// What a loading thread sends back: the model's view on its table, its
@@ -186,6 +189,12 @@ impl ModelGallery {
             b: sky.b * DIM,
             a: sky.a,
         }
+    }
+
+    /// The path under the gallery's directory of the model in view, or
+    /// `None` before the first model lands.
+    pub fn shown(&self) -> Option<String> {
+        self.shown.as_ref().map(|shown| self.name(shown.index))
     }
 
     /// Where the tracking space sits in the scene of the model in view, or
@@ -340,6 +349,7 @@ impl ModelGallery {
                         view,
                         bounds,
                         table: true,
+                        index,
                     });
                 }
 

@@ -75,9 +75,10 @@ a mouse steer:
 
 | Control | Effect |
 | --- | --- |
-| Right arrow | Shows the next model |
-| Left arrow | Shows the model before |
+| N | Shows the next model |
+| P | Shows the model before |
 | W, A, S, and D | Walk the way the head faces |
+| Left and right arrows | Walk to each side, as A and D do |
 | E and Q | Rise and sink |
 | A drag | Turns the head |
 | Up arrow | Grows the model, which brings the head toward what it faces |
@@ -88,8 +89,9 @@ a mouse steer:
 A model grows around what the middle of the window shows. The head walks
 1.5 m a second in its space, which crosses a grown model more slowly.
 
-The window's title holds the frames it draws a second and the slowest of
-them. The app prints each model as it loads, and the frames it drew once
+The head turns back to where it started when a model lands. The window's
+title holds the model in view, the frames it draws a second, and the
+slowest of them. The app prints each model as it loads, and the frames it drew once
 the window closes. The image keeps the pixels the window opens with and
 stretches when the window's size changes.
 

@@ -19,13 +19,13 @@ const TIP: f64 = FRAC_PI_2 * 89.0 / 90.0;
 /// A keyboard and a mouse as a gallery's controls and as the head its view
 /// looks from:
 ///
-/// 1. W, A, S, and D walk, E rises, and Q sinks
+/// 1. W, A, S, and D walk, as the left and right arrows do to each side. E
+///    rises, and Q sinks
 /// 2. A drag turns the head
 /// 3. The up arrow grows the model around what the window's middle
 ///    shows, which brings the head toward it, and the down arrow shrinks
 ///    the model
-/// 4. The right arrow steps to the next model, and the left arrow to the
-///    one before
+/// 4. N steps to the next model, and P to the one before
 /// 5. Tab switches the model between the table and life size
 pub struct GalleryKeys {
     /// The keys held down.
@@ -66,6 +66,16 @@ impl GalleryKeys {
         }
     }
 
+    /// Turns the head back to where it started, as a window does when a
+    /// model lands on its table.
+    pub fn restart(&mut self) {
+        let start = Self::new();
+
+        self.turn = start.turn;
+        self.tip = start.tip;
+        self.held = start.held;
+    }
+
     /// Takes the meters ahead of the head to what the window's middle
     /// shows.
     pub fn hold(&mut self, meters: f64) {
@@ -88,8 +98,8 @@ impl GalleryKeys {
         }
 
         match code {
-            KeyCode::ArrowRight => self.step += 1,
-            KeyCode::ArrowLeft => self.step -= 1,
+            KeyCode::KeyN => self.step += 1,
+            KeyCode::KeyP => self.step -= 1,
             KeyCode::Tab => self.resize = true,
             _ => {}
         }
@@ -110,21 +120,24 @@ impl GalleryKeys {
     /// What the keys ask of the next frame. The steps and the switch then
     /// start over.
     pub fn read(&mut self) -> GalleryControls {
-        let axis = |up, down| {
-            f32::from(u8::from(self.down.contains(&up)))
-                - f32::from(u8::from(self.down.contains(&down)))
+        let any = |codes: &[KeyCode]| codes.iter().any(|code| self.down.contains(code));
+        let axis = |up: &[KeyCode], down: &[KeyCode]| {
+            f32::from(u8::from(any(up))) - f32::from(u8::from(any(down)))
         };
 
         let controls = GalleryControls {
             step: self.step,
             resize: self.resize,
             walk: [
-                axis(KeyCode::KeyD, KeyCode::KeyA),
-                axis(KeyCode::KeyW, KeyCode::KeyS),
+                axis(
+                    &[KeyCode::KeyD, KeyCode::ArrowRight],
+                    &[KeyCode::KeyA, KeyCode::ArrowLeft],
+                ),
+                axis(&[KeyCode::KeyW], &[KeyCode::KeyS]),
             ],
             turn: 0.0,
-            rise: axis(KeyCode::KeyE, KeyCode::KeyQ),
-            grow: axis(KeyCode::ArrowUp, KeyCode::ArrowDown),
+            rise: axis(&[KeyCode::KeyE], &[KeyCode::KeyQ]),
+            grow: axis(&[KeyCode::ArrowUp], &[KeyCode::ArrowDown]),
             held: self.held as f32,
         };
 
@@ -167,8 +180,8 @@ mod tests {
     fn a_press_steps_once_and_a_held_key_walks() {
         let mut keys = GalleryKeys::new();
 
-        keys.key(KeyCode::ArrowRight, true, false);
-        keys.key(KeyCode::ArrowRight, true, true);
+        keys.key(KeyCode::KeyN, true, false);
+        keys.key(KeyCode::KeyN, true, true);
         keys.key(KeyCode::Tab, true, false);
         keys.key(KeyCode::KeyW, true, false);
         keys.key(KeyCode::KeyA, true, false);
@@ -190,6 +203,14 @@ mod tests {
         keys.release();
 
         assert_eq!(keys.read().walk, [0.0, 0.0]);
+
+        // An arrow walks to its side as A and D do.
+        keys.key(KeyCode::ArrowRight, true, false);
+
+        let third = keys.read();
+
+        assert_eq!(third.walk, [1.0, 0.0]);
+        assert_eq!(third.step, 0);
     }
 
     #[test]
@@ -221,6 +242,9 @@ mod tests {
         // The head tips no further than straight up.
         keys.drag(0.0, -10.0);
         assert!(ahead(&keys).y < 1.0);
+
+        keys.restart();
+        assert!((ahead(&keys) - start).length() < 1e-12);
     }
 
     #[test]
