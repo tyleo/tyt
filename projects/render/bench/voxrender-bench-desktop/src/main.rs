@@ -18,6 +18,7 @@ use wgpu::Instance;
 
 // Internal API
 
+mod center_depth;
 mod error;
 mod gallery_keys;
 mod gallery_window;
@@ -25,6 +26,7 @@ mod open_gpu;
 mod result;
 mod window_blit;
 
+pub(crate) use center_depth::*;
 pub(crate) use error::*;
 pub(crate) use gallery_keys::*;
 pub(crate) use gallery_window::*;

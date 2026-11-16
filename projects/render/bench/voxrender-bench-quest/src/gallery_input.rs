@@ -8,6 +8,10 @@ use voxrender_bench::GalleryControls;
 /// it onto the controllers a headset has.
 const PROFILE: &str = "/interaction_profiles/oculus/touch_controller";
 
+/// The meters ahead of the head to the point a growing model holds still
+/// around.
+const HELD: f32 = 1.0;
+
 /// The Touch controllers as a gallery's controls:
 ///
 /// 1. A or X steps to the next model, and B or Y to the one before
@@ -137,6 +141,7 @@ impl GalleryInput {
             turn: steer.x,
             rise: steer.y,
             grow: pulled(&self.grow)? - pulled(&self.shrink)?,
+            held: HELD,
         })
     }
 }

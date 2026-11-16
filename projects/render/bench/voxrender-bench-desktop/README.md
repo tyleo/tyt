@@ -80,10 +80,13 @@ a mouse steer:
 | W, A, S, and D | Walk the way the head faces |
 | E and Q | Rise and sink |
 | A drag | Turns the head |
-| Up arrow | Grows the model around the point a meter ahead |
+| Up arrow | Grows the model, which brings the head toward what it faces |
 | Down arrow | Shrinks the model |
 | Tab | Switches between the table and life size |
 | Escape | Closes the window |
+
+A model grows around what the middle of the window shows. The head walks
+1.5 m a second in its space, which crosses a grown model more slowly.
 
 The window's title holds the frames it draws a second and the slowest of
 them. The app prints each model as it loads, and the frames it drew once

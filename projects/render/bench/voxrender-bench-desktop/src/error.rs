@@ -43,6 +43,9 @@ pub enum Error {
 
     /// The window's surface gave no image to draw a frame into.
     NoFrame,
+
+    /// A frame's depth would not read back.
+    Depth(String),
 }
 
 impl Display for Error {
@@ -59,6 +62,7 @@ impl Display for Error {
             Error::Surface(error) => write!(f, "the window gave no surface: {error}"),
             Error::NoSurface => write!(f, "the adapter cannot draw to the window's surface"),
             Error::NoFrame => write!(f, "the window's surface gave no image to draw into"),
+            Error::Depth(error) => write!(f, "a frame's depth would not read back: {error}"),
         }
     }
 }

@@ -20,4 +20,8 @@ pub struct GalleryControls {
 
     /// How fast the model grows. A negative value shrinks it.
     pub grow: f32,
+
+    /// The meters ahead of the head to the point a growing model holds
+    /// still around.
+    pub held: f32,
 }
