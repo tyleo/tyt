@@ -1,17 +1,18 @@
 use crate::{Error, Result};
 use voxrender_bench::Gpu;
 use wgpu::{
-    DeviceDescriptor, ExperimentalFeatures, Features, Instance, Limits, PowerPreference,
-    RequestAdapterOptions,
+    Adapter, DeviceDescriptor, ExperimentalFeatures, Features, Instance, Limits, PowerPreference,
+    RequestAdapterOptions, Surface,
 };
 
-/// The high-performance adapter's device with default limits, and with ray
-/// queries, multiview, and dual-source blending when the adapter has them.
-pub fn headless_gpu() -> Result<Gpu> {
-    let instance = Instance::default();
-
+/// `instance`'s high-performance adapter and the adapter's device. The
+/// adapter draws to `surface` when there is one. The device has default
+/// limits, and ray queries, multiview, and dual-source blending when the
+/// adapter has them.
+pub fn open_gpu(instance: &Instance, surface: Option<&Surface<'_>>) -> Result<(Adapter, Gpu)> {
     let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
         power_preference: PowerPreference::HighPerformance,
+        compatible_surface: surface,
         ..RequestAdapterOptions::default()
     }))
     .map_err(Error::Adapter)?;
@@ -41,9 +42,11 @@ pub fn headless_gpu() -> Result<Gpu> {
     }))
     .map_err(Error::Device)?;
 
-    Ok(Gpu {
+    let gpu = Gpu {
         info: adapter.get_info(),
         device,
         queue,
-    })
+    };
+
+    Ok((adapter, gpu))
 }

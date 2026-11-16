@@ -455,6 +455,10 @@ this order:
             side, and a sort draws each tile at the coarsest copy whose
             voxels span the count or fewer. At 1.4 pixels the valley
             draws from the table in 5.98 ms, from 35.6
+      - [x] The gallery in a window on desktop, which a keyboard and a
+            mouse steer. The valley at 2 m loads on an M4 Max in 4.9 s.
+            At 2560 by 1600 it holds the display's 60 frames a second at
+            1.4 pixels and draws 52 a second with every voxel
       - [ ] The valley at life size from within. At 1.4 pixels it takes
             15.5 to 19.0 ms on Quest, and 8.3 at 5.6 pixels
       - [ ] The shadow bake's rays step a tile at a time through tiles
