@@ -1,4 +1,6 @@
-use crate::{PlacedBox, TILE, TileBox, TileScene, bounds_around, box_corners, to_word};
+use crate::{
+    PlacedBox, TILE, TileBox, TileScene, bounds_around, box_corners, squared_distance, to_word,
+};
 use std::ops::Range;
 use ty_math::TyVector3U32;
 
@@ -185,16 +187,9 @@ impl DetailTree {
         while let Some(at) = open.pop() {
             let tile = &self.tiles[at as usize];
 
-            let square: f32 = (0..3)
-                .map(|axis| {
-                    let off =
-                        head[axis].clamp(tile.bounds[axis], tile.bounds[axis + 3]) - head[axis];
+            let far = squared_distance(&tile.bounds, head).sqrt();
 
-                    off * off
-                })
-                .sum();
-
-            if tile.under.is_empty() || tile.cell <= finest * square.sqrt() {
+            if tile.under.is_empty() || tile.cell <= finest * far {
                 for (list, boxes) in shown.iter_mut().zip(&tile.boxes) {
                     list.extend(boxes.start as usize..boxes.end as usize);
                 }

@@ -28,7 +28,7 @@ impl HeadsetView {
         size: [u32; 2],
     ) -> Result<Self> {
         Ok(HeadsetView {
-            boxes: BoxView::new(device, queue, tiles, bloom, format, size)?,
+            boxes: BoxView::new(device, queue, tiles, bloom, format, size, None)?,
             stand,
         })
     }

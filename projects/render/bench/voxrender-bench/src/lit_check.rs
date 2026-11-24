@@ -33,7 +33,6 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         &gpu.device,
         &scene_tiles,
         &placements,
-        false,
         None,
     );
 

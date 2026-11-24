@@ -43,10 +43,15 @@ pub fn view_image(
 
     let eyes = [eye(view_ids[0])?, eye(view_ids[1])?];
 
-    let mut boxes = match options.page_bytes {
-        Some(bytes) => BoxView::paged(&gpu.device, &gpu.queue, tiles, bloom, FORMAT, size, bytes),
-        None => BoxView::new(&gpu.device, &gpu.queue, tiles, bloom, FORMAT, size),
-    }?;
+    let mut boxes = BoxView::new(
+        &gpu.device,
+        &gpu.queue,
+        tiles,
+        bloom,
+        FORMAT,
+        size,
+        options.page_bytes,
+    )?;
 
     boxes.set_detail(options.detail);
 

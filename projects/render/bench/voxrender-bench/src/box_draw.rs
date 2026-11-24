@@ -1,4 +1,4 @@
-use crate::{BoxBindings, BoxFaces, BoxPart, ViewTarget, to_word};
+use crate::{BoxBindings, BoxFaces, BoxPart, BoxRun, ViewTarget, to_word};
 use std::{num::NonZeroU64, ops::Range};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
@@ -455,32 +455,26 @@ impl BoxDraw {
         }
     }
 
-    /// Replaces the boxes with `boxes`, [`BOX_BYTES`](Self::BOX_BYTES) each,
-    /// which the runs of `runs` take in draw order. A run holds its part
-    /// among the draw's, its page, and its count of boxes. Panics unless
-    /// `boxes` holds the runs' boxes and no more than the draw has room
-    /// for.
-    pub fn rewrite(&mut self, queue: &Queue, boxes: &[u8], runs: &[(usize, usize, u32)]) {
-        assert_eq!(
-            boxes.len() as u64,
-            runs.iter()
-                .map(|&(_, _, count)| u64::from(count))
-                .sum::<u64>()
-                * Self::BOX_BYTES as u64,
-            "the runs cover the boxes"
-        );
+    /// Replaces the boxes with `boxes`, three `vec4<u32>`s each, which the
+    /// runs of `runs` take in draw order. Panics unless `boxes` holds the
+    /// runs' boxes and no more than the draw has room for.
+    pub fn rewrite(&mut self, queue: &Queue, boxes: &[[u32; 12]], runs: &[BoxRun]) {
+        let held: u64 = runs.iter().map(|run| u64::from(run.count)).sum();
+        let bytes: &[u8] = bytemuck::cast_slice(boxes);
+
+        assert_eq!(boxes.len() as u64, held, "the runs cover the boxes");
         assert!(
-            boxes.len() as u64 <= self.boxes.size(),
+            bytes.len() as u64 <= self.boxes.size(),
             "the runs hold no more boxes than the draw has room for"
         );
 
-        queue.write_buffer(&self.boxes, 0, boxes);
+        queue.write_buffer(&self.boxes, 0, bytes);
 
         let mut first = 0;
 
         self.runs.clear();
 
-        for &(part, page, count) in runs {
+        for &BoxRun { part, page, count } in runs {
             assert!(
                 part < self.parts.len() && page < self.bind_groups.len(),
                 "a run draws one of the draw's parts over one of its pages"

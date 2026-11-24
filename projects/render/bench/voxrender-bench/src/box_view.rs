@@ -1,13 +1,11 @@
 use crate::{
     BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, DetailTree, Error,
-    GlassTiles, LISTS, LitFill, PassTerms, PlacedBox, Result, TileMasks, TilePlacement, TileScene,
-    ViewEye, ViewTarget, box_corners, box_view_shader, quad_tlas, storage_words, tile_quads,
-    to_word,
+    LISTS, MaskTile, PlacedBox, Result, TileMasks, TilePlacement, TileScene, ViewBoxes, ViewEye,
+    ViewLights, ViewLit, ViewMaterials, ViewPages, ViewTarget, box_corners, box_view_shader,
+    quad_tlas, storage_words, tile_quads, to_word,
 };
-use std::{collections::HashMap, mem};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
-use voxcore::material;
-use voxrender::{RenderBloom, RenderLight, grid_point, tonemap};
+use voxrender::{RenderBloom, grid_point, tonemap};
 use wgpu::{
     AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
     Device, Extent3d, Features, FilterMode, Queue, SamplerDescriptor, ShaderModuleDescriptor,
@@ -156,7 +154,7 @@ pub struct BoxView {
     order: [Vec<usize>; RUNS],
 
     /// The last sort's boxes and keys, kept for their room.
-    sorted: Vec<u8>,
+    sorted: Vec<[u32; 12]>,
     solid_keys: Vec<u64>,
     marched_keys: Vec<u64>,
     glass_keys: Vec<u64>,
@@ -183,178 +181,6 @@ struct Glow {
     reach: f64,
 }
 
-/// Boxes as a sort reads them.
-#[derive(Default)]
-struct ViewBoxes {
-    /// The low and then the high corner of the world box around each box.
-    bounds: Vec<[f32; 6]>,
-
-    /// Each box's three `vec4<u32>`s.
-    words: Vec<[u8; BoxDraw::BOX_BYTES]>,
-
-    /// The page that holds each box's tile.
-    page: Vec<usize>,
-
-    /// Whether each box's fragments can cast a mirror ray.
-    mirror: Vec<bool>,
-
-    /// Whether each box's fragments can meet an emission that blooms.
-    glow: Vec<bool>,
-}
-
-impl ViewBoxes {
-    fn push(
-        &mut self,
-        placed: &PlacedBox,
-        words: [u32; 12],
-        page: usize,
-        mirror: bool,
-        glow: bool,
-    ) {
-        let (low, high) = placed.world();
-        let [low_x, low_y, low_z] = low.as_vec3().to_array();
-        let [high_x, high_y, high_z] = high.as_vec3().to_array();
-        let mut bytes = [0; BoxDraw::BOX_BYTES];
-
-        for (bytes, word) in bytes.chunks_exact_mut(4).zip(words) {
-            bytes.copy_from_slice(&word.to_le_bytes());
-        }
-
-        self.bounds
-            .push([low_x, low_y, low_z, high_x, high_y, high_z]);
-        self.words.push(bytes);
-        self.page.push(page);
-        self.mirror.push(mirror);
-        self.glow.push(glow);
-    }
-
-    /// Fills `keys` with a key per box, nearest to `point` first, and
-    /// returns how many of the boxes lie within `reach` of `point`. A key
-    /// holds the bits of its box's squared distance above the box's index.
-    /// With `shown`, only the boxes at those indices take a key.
-    fn nearest_first(
-        &self,
-        shown: Option<&[usize]>,
-        point: [f32; 3],
-        reach: f32,
-        keys: &mut Vec<u64>,
-        spare: &mut Vec<u64>,
-    ) -> usize {
-        keys.clear();
-
-        // A square is no less than zero, so its bits order as it does.
-        let key = |index: usize| {
-            let bounds = &self.bounds[index];
-
-            let square: f32 = (0..3)
-                .map(|axis| {
-                    let off = point[axis].clamp(bounds[axis], bounds[axis + 3]) - point[axis];
-
-                    off * off
-                })
-                .sum();
-
-            u64::from(square.to_bits()) << 32 | index as u64
-        };
-
-        match shown {
-            Some(shown) => keys.extend(shown.iter().map(|&index| key(index))),
-            None => keys.extend((0..self.bounds.len()).map(key)),
-        }
-
-        sort_keys(keys, spare);
-        keys.partition_point(|&key| f32::from_bits((key >> 32) as u32) <= reach * reach)
-    }
-
-    /// Appends the boxes at `indices` to `sorted` a page at a time, and a
-    /// run of `part` to `runs` for each of the `pages` that holds one of
-    /// them. The boxes keep their order within a page.
-    fn deal(
-        &self,
-        indices: impl Iterator<Item = usize> + Clone,
-        part: usize,
-        pages: usize,
-        sorted: &mut Vec<u8>,
-        runs: &mut Vec<(usize, usize, u32)>,
-    ) {
-        for page in 0..pages {
-            let before = sorted.len();
-
-            for index in indices.clone().filter(|&index| self.page[index] == page) {
-                sorted.extend_from_slice(&self.words[index]);
-            }
-
-            let count = (sorted.len() - before) / BoxDraw::BOX_BYTES;
-
-            if count > 0 {
-                runs.push((part, page, to_word(count)));
-            }
-        }
-    }
-
-    /// Appends the boxes at `indices` to `sorted` in order, and a run of
-    /// `part` to `runs` for each stretch of them that one page holds.
-    fn deal_in_order(
-        &self,
-        indices: impl Iterator<Item = usize>,
-        part: usize,
-        sorted: &mut Vec<u8>,
-        runs: &mut Vec<(usize, usize, u32)>,
-    ) {
-        let mut last = None;
-
-        for index in indices {
-            let page = self.page[index];
-
-            sorted.extend_from_slice(&self.words[index]);
-
-            match runs.last_mut().filter(|_| last == Some(page)) {
-                Some((_, _, count)) => *count += 1,
-                None => runs.push((part, page, 1)),
-            }
-
-            last = Some(page);
-        }
-    }
-}
-
-/// Sorts `keys` by their upper halves, least first, with `spare`'s room.
-/// Keys whose upper halves match keep their order. A moving head sorts a
-/// city's 26,000 keys each few frames, and on Quest these passes take
-/// 0.4 ms less of such a frame than `sort_unstable` does.
-fn sort_keys(keys: &mut Vec<u64>, spare: &mut Vec<u64>) {
-    spare.clear();
-    spare.resize(keys.len(), 0);
-
-    // Three passes of 11 bits cover an upper half.
-    for shift in [32, 43, 54] {
-        let digit = |key: u64| (key >> shift) as usize & 0x7ff;
-        let mut starts = [0; 0x800];
-
-        for &key in keys.iter() {
-            starts[digit(key)] += 1;
-        }
-
-        let mut next = 0;
-
-        for start in &mut starts {
-            next += mem::replace(start, next);
-        }
-
-        for &key in keys.iter() {
-            spare[starts[digit(key)]] = key;
-            starts[digit(key)] += 1;
-        }
-
-        mem::swap(keys, spare);
-    }
-}
-
-/// The index of the box a sort's `key` holds.
-fn index_of(key: u64) -> usize {
-    (key & 0xffff_ffff) as usize
-}
-
 impl BoxView {
     /// A mirror ray runs to where what it meets would show by this share
     /// of its face's light. A face that reflects less casts none.
@@ -375,10 +201,13 @@ impl BoxView {
     }
 
     /// Builds the view of `tiles` under `bloom` and fills the sun's corner
-    /// shadows. The view draws to a two-layer target of
-    /// `format` whose width and height are `size`. A page of the scene's
-    /// tiles takes as many bytes as one of the device's storage bindings
-    /// holds. Errors as [`paged`](Self::paged) does.
+    /// shadows. The view draws to a two-layer target of `format` whose
+    /// width and height are `size`.
+    ///
+    /// The scene's objects fill pages of `page_bytes` bytes, or of what one
+    /// of the device's storage bindings holds. Errors as [`ViewPages::new`]
+    /// and [`ViewLit::new`] do, and if the scene keeps glass the device
+    /// cannot draw.
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -386,32 +215,46 @@ impl BoxView {
         bloom: RenderBloom,
         format: TextureFormat,
         size: [u32; 2],
+        page_bytes: Option<u64>,
     ) -> Result<Self> {
-        let page_bytes = device.limits().max_storage_buffer_binding_size;
+        if tiles.glass && !Self::draws_glass(device) {
+            return Err(Error::Glass);
+        }
 
-        Self::paged(device, queue, tiles, bloom, format, size, page_bytes)
-    }
+        let page_bytes = page_bytes.unwrap_or(device.limits().max_storage_buffer_binding_size);
+        let objects = &tiles.objects;
+        let object_of = |placed: &PlacedBox| tiles.placements[placed.placement as usize].object;
 
-    /// Builds the view as [`new`](Self::new) does, with pages of
-    /// `page_bytes` bytes, no more than one of the device's storage
-    /// bindings holds.
-    ///
-    /// The scene's objects fill one page after another. A page holds its
-    /// objects' tiles in one buffer and its placements' lit words in
-    /// another. Objects whose boxes share space take one page, because a
-    /// fragment that marches a box of another placement reads that box's
-    /// tile. Errors if the tiles of such objects, or what their placements'
-    /// cells take in lit words, pass a page, or if waiting on the sun's
-    /// fill fails.
-    pub fn paged(
-        device: &Device,
-        queue: &Queue,
-        tiles: &TileScene,
-        bloom: RenderBloom,
-        format: TextureFormat,
-        size: [u32; 2],
-        page_bytes: u64,
-    ) -> Result<Self> {
+        let marched = PlacedBox::list(tiles, |object| &object.masks.boxes);
+        let solid = PlacedBox::list(tiles, |object| &object.masks.solids);
+        let glass = PlacedBox::list(tiles, |object| &object.glass.boxes);
+        let crossers = PlacedBox::crossers(&marched, &solid);
+
+        // The box a crosser's entry holds.
+        let crossed = |crosser: &BoxCrosser| {
+            let entry = (crosser.entry & !BoxCrosser::SOLID) as usize;
+
+            match entry.checked_sub(marched.len()) {
+                Some(entry) => &solid[entry],
+                None => &marched[entry],
+            }
+        };
+
+        let lights = ViewLights::new(&tiles.lights);
+        let toward = lights.sun.map(|(toward, _)| toward);
+
+        // Where a material passes light, the sun's fill adds each record
+        // cell's tint in a second word.
+        let tinted = toward.is_some() && tiles.opaque.contains(&false);
+
+        let crossing = (marched.iter().zip(&crossers)).flat_map(|(placed, entries)| {
+            (entries.iter()).map(|entry| [object_of(placed), object_of(crossed(entry))])
+        });
+
+        let pages = ViewPages::new(tiles, crossing, page_bytes, tinted)?;
+        let (bits, starts) = pages.bits(device, tiles);
+        let lit = ViewLit::new(device, queue, tiles, &pages, toward, tinted)?;
+
         // The scene blooms where an emission's brightest channel passes
         // the threshold.
         let glows = bloom.strength > 0.0
@@ -421,663 +264,127 @@ impl BoxView {
                 emission.red.max(emission.green).max(emission.blue) > bloom.threshold
             });
 
-        let radius = bloom.radius;
-        let bloom = glows.then(|| (BoxBloom::new(device, size, bloom), bloom.threshold as f32));
-
-        let objects = &tiles.objects;
-
-        // The surfaces between materials that pass light draw as glass
-        // where the device blends a tint a channel.
-        let blends = Self::draws_glass(device);
-        let no_glass = GlassTiles::default();
-
-        let glass_of = |object: usize| {
-            if blends {
-                &objects[object].glass
-            } else {
-                &no_glass
-            }
-        };
-
-        let object_of: Vec<_> = (tiles.placements.iter())
-            .map(|placed| placed.object)
-            .collect();
-
-        let placements: Vec<_> = tiles
-            .placements
-            .iter()
-            .map(|&TilePlacement { transform, .. }| {
-                (
-                    transform,
-                    TyMatrix4x4F64::from_scale_rotation_translation(
-                        transform.scale,
-                        transform.rotation,
-                        transform.position,
-                    ),
-                )
-            })
-            .collect();
-
-        let marched = PlacedBox::list(tiles, |object| &object.masks.boxes);
-        let solid = PlacedBox::list(tiles, |object| &object.masks.solids);
-
-        // Each marched box's entries in `crosser_words`, as their first and
-        // their count.
-        let crossers = PlacedBox::crossers(&marched, &solid);
-
-        let mut sun = (TyVector3F64::Y, TyLinSrgbF64::new(0.0, 0.0, 0.0));
-        let mut sky = TyLinSrgbF64::new(0.0, 0.0, 0.0);
-        let mut ground = sky;
-        let mut suns = 0;
-
-        for light in &tiles.lights {
-            match *light {
-                RenderLight::Directional {
-                    rotation,
-                    color,
-                    strength,
-                    ..
-                } => {
-                    if suns == 0 {
-                        sun = (rotation * TyVector3F64::Z, color * strength);
-                    }
-
-                    suns += 1;
-                }
-
-                RenderLight::Hemisphere {
-                    sky: above,
-                    ground: below,
-                    strength,
-                } => {
-                    sky += above * strength;
-                    ground += below * strength;
-                }
-
-                _ => {}
-            }
-        }
-
-        // Where a material passes light, the sun's fill adds each record
-        // cell's tint in a second word.
-        let tinted = suns > 0 && tiles.opaque.contains(&false);
-
-        // The words of each object's tiles, and of what its placements'
-        // cells take in `lit`.
-        let sizes: Vec<_> = (0..objects.len())
-            .map(|object| {
-                let masks = &objects[object].masks;
-                let records: usize = masks.tiles.iter().map(|tile| tile.recorded.len()).sum();
-                let glass: usize = (glass_of(object).tiles.iter())
-                    .map(|tile| tile.cells.len())
-                    .sum();
-                let placed = object_of.iter().filter(|&&placed| placed == object).count();
-
-                (
-                    masks.words.len() + glass_of(object).words.len(),
-                    (records + glass) * placed,
-                )
-            })
-            .collect();
-
-        // A fragment that marches a box of another placement reads that
-        // box's tile, so objects whose boxes share space share a page.
-        let mut group: Vec<_> = (0..objects.len()).collect();
-
-        for (placed, entries) in marched.iter().zip(&crossers) {
-            for entry in entries {
-                let other = (entry.entry & !BoxCrosser::SOLID) as usize;
-
-                let other = match other.checked_sub(marched.len()) {
-                    Some(other) => &solid[other],
-                    None => &marched[other],
-                };
-
-                let (a, b) = (
-                    group[object_of[placed.placement as usize]],
-                    group[object_of[other.placement as usize]],
-                );
-
-                if a != b {
-                    for joined in &mut group {
-                        if *joined == a.max(b) {
-                            *joined = a.min(b);
-                        }
-                    }
-                }
-            }
-        }
-
-        // The pages: each takes the groups in order that fit what one
-        // binding holds of tiles' words and of lit words. A tinted scene's
-        // lit words take a binding's first half, and its tints the second.
-        // The objects come before their coarser copies, finest first, so a
-        // view of copies alone draws from the pages that hold them.
-        let most = (page_bytes / 4) as usize;
-        let most_lit = (if tinted { most / 2 } else { most }) - TileMasks::SPARE as usize;
-        let mut page_of = vec![0; objects.len()];
-        let mut filled = (0, 0);
-        let mut pages = 1;
-
-        let mut firsts: Vec<_> = (0..objects.len())
-            .filter(|&object| group[object] == object)
-            .collect();
-
-        firsts.sort_by_key(|&first| objects[first].span);
-
-        for first in firsts {
-            let members = || (first..objects.len()).filter(|&object| group[object] == first);
-
-            let (bits, lit) = members().fold((0, 0), |(bits, lit), object| {
-                (bits + sizes[object].0, lit + sizes[object].1)
-            });
-
-            if bits > most || lit > most_lit {
-                return Err(Error::Page {
-                    bytes: 4 * bits.max(lit * if tinted { 2 } else { 1 }) as u64,
-                    most: page_bytes,
-                });
-            }
-
-            if filled.0 + bits > most || filled.1 + lit > most_lit {
-                pages += 1;
-                filled = (0, 0);
-            }
-
-            filled = (filled.0 + bits, filled.1 + lit);
-
-            for object in members() {
-                page_of[object] = pages - 1;
-            }
-        }
-
-        // `box_view.wgsl`'s `bits` for each page: each of its objects' mask
-        // words, then the object's glass tiles' words. An object keeps
-        // where each starts in its page.
-        let mut offsets = vec![(0, 0); objects.len()];
-
-        let bits: Vec<Buffer> = (0..pages)
-            .map(|page| {
-                let held: Vec<_> = (0..objects.len())
-                    .filter(|&object| page_of[object] == page)
-                    .collect();
-
-                let mut words = 0;
-
-                for &object in &held {
-                    let glass = words + objects[object].masks.words.len();
-
-                    offsets[object] = (to_word(words), to_word(glass));
-                    words = glass + glass_of(object).words.len();
-                }
-
-                // A binding cannot be empty.
-                let buffer = device.create_buffer(&BufferDescriptor {
-                    label: Some("view bits"),
-                    size: 4 * words.max(1) as u64,
-                    usage: BufferUsages::STORAGE,
-                    mapped_at_creation: true,
-                });
-
-                let held = held.iter().flat_map(|&object| {
-                    (objects[object].masks.words.iter()).chain(&glass_of(object).words)
-                });
-
-                let spare = if words == 0 { Some(&0) } else { None };
-
-                buffer
-                    .get_mapped_range_mut(..)
-                    .expect("a buffer mapped at creation gives its bytes")
-                    .slice(..)
-                    .write_iter(held.chain(spare).flat_map(|word| word.to_le_bytes()));
-
-                buffer.unmap();
-
-                buffer
-            })
-            .collect();
-
-        // A box's object and its tile's offset among the object's mask
-        // words.
-        let tile_of = |placed: &PlacedBox| {
-            let object = object_of[placed.placement as usize];
-
-            (object, objects[object].masks.tiles[placed.tile].offset)
-        };
-
-        // `box_view.wgsl`'s `lit` for each page: a word for each record
-        // cell of each of its placements' tiles, with the cell's material
-        // in its high 8 bits. A hit the depth test drops can read the spare
-        // words past its tile's last record cell's.
-        let mut lit_places = vec![0; object_of.len()];
-        let mut glass_lit: Vec<Vec<u32>> = vec![Vec::new(); object_of.len()];
-
-        let page_lit: Vec<(Vec<usize>, Vec<u32>)> = (0..pages)
-            .map(|page| {
-                let placed: Vec<_> = (0..object_of.len())
-                    .filter(|&placement| page_of[object_of[placement]] == page)
-                    .collect();
-
-                let mut lit_words: Vec<u32> = Vec::new();
-
-                for &placement in &placed {
-                    lit_places[placement] = to_word(lit_words.len());
-
-                    lit_words.extend(
-                        (objects[object_of[placement]].masks.tiles.iter())
-                            .flat_map(|tile| &tile.entries)
-                            .map(|&entry| u32::from(entry) << 24),
-                    );
-                }
-
-                // A word for each glass cell follows: the first of each
-                // glass tile's, for each placement.
-                for &placement in &placed {
-                    glass_lit[placement] = (glass_of(object_of[placement]).tiles.iter())
-                        .map(|tile| {
-                            let first = to_word(lit_words.len());
-
-                            lit_words.resize(lit_words.len() + tile.cells.len(), 0);
-
-                            first
-                        })
-                        .collect();
-                }
-
-                lit_words.extend([0; TileMasks::SPARE as usize]);
-
-                (placed, lit_words)
-            })
-            .collect();
-
-        // How far past a record cell's word its tint lies, in every page.
-        let tints = tinted.then(|| {
-            let most = page_lit.iter().map(|(_, words)| words.len()).max();
-
-            to_word(most.expect("a view has a page"))
-        });
-
-        // The sun's corner shadows, which the GPU fills into the words' low
-        // bits before the view's first draw. A scene with no sun leaves them
-        // zero, and its faces skip the sun's term.
-        let fill = (suns > 0).then(|| LitFill::new(device, tiles, sun.0));
-
-        let lit_corners: Vec<Buffer> = page_lit
-            .iter()
-            .map(|(placed, lit_words)| {
-                let Some(fill) = &fill else {
-                    return Ok(device.create_buffer_init(&BufferInitDescriptor {
-                        label: Some("view lit corners"),
-                        contents: bytemuck::cast_slice(lit_words),
-                        usage: BufferUsages::STORAGE,
-                    }));
-                };
-
-                let page = fill.page(device, tiles, placed, blends, tints);
-
-                let glass_places: Vec<_> = (placed.iter())
-                    .zip(&page.glass_places)
-                    .map(|(&placement, &place)| {
-                        glass_lit[placement].first().copied().unwrap_or(place)
-                    })
-                    .collect();
-
-                let places: Vec<_> = placed
-                    .iter()
-                    .map(|&placement| lit_places[placement])
-                    .collect();
-
-                assert_eq!(
-                    (&page.places, &page.glass_places),
-                    (&places, &glass_places),
-                    "the fill lays out the view's words"
-                );
-
-                queue.write_buffer(&page.lit, 0, bytemuck::cast_slice(lit_words));
-                page.fill(device, queue)?;
-
-                Ok(page.lit)
-            })
-            .collect::<Result<_>>()?;
-
-        drop(page_lit);
-
-        let tints = tints.unwrap_or(0);
-
-        // A material's three `vec4<f32>`s: its base color and metalness, its
-        // emission and roughness, and its reflectance at normal incidence
-        // and occlusion strength.
-        let material_values = |id: u32| {
-            let material = &tiles.materials[id as usize];
-            let base = material.base_color.color;
-            let emission = material.emissive_color * material.emissive_strength;
-            let reflectance = material::normal_reflectance(base, material.metallic, material.ior);
-
-            [
-                base.red,
-                base.green,
-                base.blue,
-                material.metallic,
-                emission.red,
-                emission.green,
-                emission.blue,
-                material.roughness,
-                reflectance.red,
-                reflectance.green,
-                reflectance.blue,
-                material.occlusion_strength,
-            ]
-            .map(|value| value as f32)
-        };
-
-        // Each tile's first material in `materials`. The tile's materials
-        // follow one another there, so a cell's place among them leads to
-        // its material's values in one read. Tiles that hold the same
-        // materials in the same order share them.
-        // A glass material holds the seven `vec4<f32>`s `box_glass.wgsl`'s
-        // `past` lists.
-        let glass_values = |id: u32| {
-            let material = &tiles.materials[id as usize];
-            let terms = PassTerms::new(material);
-            let white = TyLinSrgbF64::new(1.0, 1.0, 1.0);
-            let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
-            let alpha = (material.roughness * material.roughness).max(1.0e-3);
-            let emission = material.emissive_color * material.emissive_strength;
-            let transmitted = material.transmission * (1.0 - material.metallic);
-            let diffuse = material.base_color.color
-                * ((1.0 - material.metallic) * (1.0 - material.transmission));
-            let rise = terms.rise * transmitted;
-
-            // A reflectance with no hue fits one channel.
-            let gloss = terms.reflectance;
-            let plain = gloss.red == gloss.green && gloss.red == gloss.blue;
-
-            let follows = if !plain || emission != black {
-                2.0
-            } else if diffuse != black {
-                1.0
-            } else {
-                0.0
-            };
-
-            let colors = [
-                (
-                    white * terms.uncovered + terms.most * (white - gloss),
-                    material.base_color.alpha,
-                ),
-                (terms.most * terms.rise, 0.5 / alpha),
-                (
-                    TyLinSrgbF64::new(gloss.red, rise.red, alpha * alpha),
-                    follows,
-                ),
-                (diffuse, 0.0),
-                (gloss, 0.0),
-                (rise, 0.0),
-                (emission, 0.0),
-            ];
-
-            let mut values = [0.0; 28];
-
-            for (values, (color, last)) in values.chunks_exact_mut(4).zip(colors) {
-                values.copy_from_slice(
-                    &[color.red, color.green, color.blue, last].map(|value| value as f32),
-                );
-            }
-
-            values
-        };
-
-        // The glass materials come first, where a cell's word reaches them
-        // in 12 bits. A tile's first material counts in threes after them.
-        let mut materials: Vec<f32> = tiles
-            .glass_materials
-            .iter()
-            .flat_map(|&id| glass_values(id))
-            .collect();
-
-        materials.resize(materials.len().next_multiple_of(12), 0.0);
-
-        // The material ids of an object's tile, whose words start at
-        // `tile` among the object's mask words.
-        let ids_of = |(object, tile): (usize, u32)| {
-            let words = &objects[object].masks.words;
-            let palette = words[(tile + TileMasks::PALETTE) as usize];
-            let ids = (tile + (palette & 0xffff)) as usize;
-
-            &words[ids..ids + (palette >> 16) as usize]
-        };
-
-        let mut firsts: HashMap<Vec<u32>, u32> = HashMap::new();
-        let mut tile_firsts: HashMap<(usize, u32), u32> = HashMap::new();
-
-        let mut first_material = |tile: (usize, u32)| {
-            *tile_firsts.entry(tile).or_insert_with(|| {
-                let ids = ids_of(tile).to_vec();
-
-                *firsts.entry(ids).or_insert_with_key(|ids| {
-                    let first = materials.len() / 12;
-
-                    materials.extend(ids.iter().flat_map(|&id| material_values(id)));
-
-                    to_word(first)
-                })
-            })
-        };
-
-        // A mirror ray needs a device with ray queries. A tile's fragments
-        // can cast one where one of its materials' rays would reach past
-        // `MIRROR_REACH`.
+        let threshold = glows.then_some(bloom.threshold as f32);
+        let reach = REACH_SIGMAS * bloom.radius * f64::from(size[0].min(size[1]));
+        let bloom = glows.then(|| BoxBloom::new(device, size, bloom));
+
+        // A mirror ray needs a device with ray queries.
         let traced = device.features().contains(Features::EXPERIMENTAL_RAY_QUERY);
-        let mut tile_mirrors: HashMap<(usize, u32), bool> = HashMap::new();
+        let mut materials = ViewMaterials::new(tiles);
 
-        // The cells a mirror ray from a face of a material runs, or zero
-        // for a material whose faces cast none.
-        let mirror_reach = |id: u32| {
-            let values = material_values(id);
-            let alpha = (values[7] * values[7]).max(1.0e-3);
-            let reflectance = values[8].max(values[9]).max(values[10]);
-            let far = (reflectance / Self::MIRROR_CUT - 1.0).max(0.0).sqrt() / alpha;
+        let traits: Vec<Vec<TileTraits>> = (objects.iter())
+            .map(|object| {
+                let of = |tile: &MaskTile| {
+                    let ids = object.masks.palette(tile.offset);
+                    let reaches = |&id: &u32| materials.mirror_reach(id, traced) > 0.0;
 
-            if traced && values[7] < 1.0 && far > Self::MIRROR_REACH {
-                far
-            } else {
-                0.0
-            }
-        };
+                    // A ray traces an object's quads, so its coarser copies
+                    // cast none.
+                    let mirror = object.span == 1 && ids.iter().any(reaches);
 
-        // A ray traces an object's quads, so its coarser copies cast none.
-        let mut mirror_tile = |tile: (usize, u32)| {
-            *tile_mirrors.entry(tile).or_insert_with(|| {
-                objects[tile.0].span == 1 && ids_of(tile).iter().any(|&id| mirror_reach(id) > 0.0)
+                    let glow = threshold.is_some_and(|threshold| {
+                        (ids.iter()).any(|&id| materials.emits_over(id, threshold))
+                    });
+
+                    TileTraits {
+                        material: materials.run(ids),
+                        mirror,
+                        glow,
+                    }
+                };
+
+                object.masks.tiles.iter().map(of).collect()
             })
-        };
+            .collect();
 
-        // A tile glows where one of its materials' emission blooms.
-        let mut tile_glows: HashMap<(usize, u32), bool> = HashMap::new();
-
-        let mut glow_tile = |tile: (usize, u32)| {
-            *tile_glows.entry(tile).or_insert_with(|| {
-                bloom.as_ref().is_some_and(|&(_, threshold)| {
-                    ids_of(tile).iter().any(|&id| {
-                        let values = material_values(id);
-
-                        values[4].max(values[5]).max(values[6]) > threshold
-                    })
-                })
-            })
-        };
+        let traits_of = |placed: &PlacedBox| traits[object_of(placed)][placed.tile];
+        let page_of = |placed: &PlacedBox| pages.of[object_of(placed)];
 
         // A box's three `vec4<u32>`s. Its tile's words start past its
         // object's first word in its page. The last two words hold what
         // its fragments read of the tile with no load: the tile's first
         // material and the first of its lit words.
-        let mut words_of = |placed: &PlacedBox, more: [u32; 2]| {
-            let (object, tile) = tile_of(placed);
-            let mut words = placed.words(placed.placement, offsets[object].0 + tile, more);
-            let before = objects[object].masks.words[(tile + TileMasks::FIRST) as usize];
+        let words_of = |placed: &PlacedBox, more: [u32; 2]| {
+            let object = object_of(placed);
+            let masks = &objects[object].masks;
+            let tile = masks.tiles[placed.tile].offset;
+            let before = masks.words[(tile + TileMasks::FIRST) as usize];
+            let mut words = placed.words(placed.placement, starts[object] + tile, more);
 
-            words[10] = first_material((object, tile));
-            words[11] = lit_places[placed.placement as usize] + before;
+            words[10] = traits_of(placed).material;
+            words[11] = lit.places[placed.placement as usize] + before;
 
             words
         };
 
         let mut crosser_words: Vec<u32> = Vec::new();
-
-        let march_words: Vec<_> = marched
-            .iter()
-            .zip(&crossers)
-            .map(|(placed, entries)| {
-                let span = [to_word(crosser_words.len() / 8), to_word(entries.len())];
-
-                crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
-
-                words_of(placed, span)
-            })
-            .collect();
-
-        let solid_words: Vec<_> = solid
-            .iter()
-            .map(|placed| words_of(placed, [0, 0]))
-            .collect();
-
-        // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
-        let box_words: Vec<u32> = march_words
-            .iter()
-            .chain(&solid_words)
-            .flatten()
-            .copied()
-            .collect();
-
-        let solid_mirrors: Vec<_> = solid
-            .iter()
-            .map(|placed| mirror_tile(tile_of(placed)))
-            .collect();
-
-        // A marched box's fragment can also shade a hit in a box it
-        // crosses.
-        let march_mirrors: Vec<_> = marched
-            .iter()
-            .zip(&crossers)
-            .map(|(placed, entries)| {
-                mirror_tile(tile_of(placed))
-                    || entries.iter().any(|entry| {
-                        let other = (entry.entry & !BoxCrosser::SOLID) as usize;
-
-                        match other.checked_sub(marched.len()) {
-                            Some(other) => solid_mirrors[other],
-                            None => mirror_tile(tile_of(&marched[other])),
-                        }
-                    })
-            })
-            .collect();
-
-        // The boxes an eye can stand in take the mirror's module wherever
-        // the scene holds a mirror.
-        let mirrors = solid_mirrors
-            .iter()
-            .chain(&march_mirrors)
-            .any(|&mirror| mirror);
-
-        let solid_glows: Vec<_> = solid
-            .iter()
-            .map(|placed| glow_tile(tile_of(placed)))
-            .collect();
-
-        let march_glows: Vec<_> = marched
-            .iter()
-            .zip(&crossers)
-            .map(|(placed, entries)| {
-                glow_tile(tile_of(placed))
-                    || entries.iter().any(|entry| {
-                        let other = (entry.entry & !BoxCrosser::SOLID) as usize;
-
-                        match other.checked_sub(marched.len()) {
-                            Some(other) => solid_glows[other],
-                            None => glow_tile(tile_of(&marched[other])),
-                        }
-                    })
-            })
-            .collect();
-
-        let mut solid_boxes = ViewBoxes::default();
         let mut marched_boxes = ViewBoxes::default();
+        let mut solid_boxes = ViewBoxes::default();
+        let mut glass_boxes = ViewBoxes::default();
 
-        let page = |placed: &PlacedBox| page_of[object_of[placed.placement as usize]];
+        for (placed, entries) in marched.iter().zip(&crossers) {
+            let span = [to_word(crosser_words.len() / 8), to_word(entries.len())];
 
-        for (index, (placed, &words)) in solid.iter().zip(&solid_words).enumerate() {
-            let (mirror, glow) = (solid_mirrors[index], solid_glows[index]);
+            crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
 
-            solid_boxes.push(placed, words, page(placed), mirror, glow);
+            // A marched box's fragment can also shade a hit in a box it
+            // crosses.
+            let shaded = || (entries.iter().map(crossed)).chain([placed]).map(traits_of);
+
+            let mirror = shaded().any(|traits| traits.mirror);
+            let glow = shaded().any(|traits| traits.glow);
+
+            marched_boxes.push(
+                placed,
+                words_of(placed, span),
+                page_of(placed),
+                mirror,
+                glow,
+            );
         }
 
-        for (index, (placed, &words)) in marched.iter().zip(&march_words).enumerate() {
-            let (mirror, glow) = (march_mirrors[index], march_glows[index]);
+        for placed in &solid {
+            let TileTraits { mirror, glow, .. } = traits_of(placed);
 
-            marched_boxes.push(placed, words, page(placed), mirror, glow);
+            solid_boxes.push(
+                placed,
+                words_of(placed, [0, 0]),
+                page_of(placed),
+                mirror,
+                glow,
+            );
+        }
+
+        for placed in &glass {
+            let object = object_of(placed);
+            let tile = &objects[object].glass.tiles[placed.tile];
+
+            // An object's glass words follow its mask words.
+            let first = starts[object] + to_word(objects[object].masks.words.len());
+
+            // The box around the tile's surfaces, 4 bits a side: its low
+            // cell in the tile, then its high cell.
+            let (low, high) = tile.surfaces;
+            let [x, y, z] = (low % 16).to_array();
+            let [far_x, far_y, far_z] = ((high - 1) % 16).to_array();
+            let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
+            let mut words = placed.words(placed.placement, first + tile.offset, [surfaces, 0]);
+
+            // The first of the tile's words in `lit`.
+            words[11] = lit.glass[placed.placement as usize][placed.tile];
+
+            glass_boxes.push(placed, words, page_of(placed), false, false);
         }
 
         let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
+        let hide = hide_of(tiles, [(&marched, &marched_boxes), (&solid, &solid_boxes)]);
+        let detail = DetailTree::new(tiles, [&marched, &solid, &glass]);
 
-        let hide = (marched.len() + solid.len() >= TESTED)
-            .then(|| {
-                // The corners of each placement's slabs in the world. Bit
-                // `a` of a corner's index picks the slab's far side on axis
-                // `a`. An object's coarser copy keeps none.
-                tiles
-                    .placements
-                    .iter()
-                    .flat_map(|TilePlacement { object, transform }| {
-                        objects[*object].slabs.iter().map(|&(low, high)| {
-                            box_corners(low.as_dvec3(), high.as_dvec3())
-                                .map(|corner| transform.transform_point(corner))
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .filter(|slabs| !slabs.is_empty())
-            .map(|slabs| {
-                // A list's boxes come a placement at a time.
-                let runs = |placed: &[PlacedBox]| {
-                    placed
-                        .chunk_by(|a, b| a.placement == b.placement)
-                        .map(<[PlacedBox]>::len)
-                        .collect()
-                };
-
-                BoxHide::new(
-                    slabs,
-                    vec![
-                        (marched_boxes.bounds.clone(), runs(&marched)),
-                        (solid_boxes.bounds.clone(), runs(&solid)),
-                    ],
-                )
-            });
-
-        let mut frame = Vec::new();
-
-        let lights = [
-            sun.0.to_array(),
-            [sun.1.red, sun.1.green, sun.1.blue],
-            [sky.red, sky.green, sky.blue],
-            [ground.red, ground.green, ground.blue],
-        ];
-
-        for value in lights.iter().flat_map(|light| light.iter().chain([&0.0])) {
-            frame.extend((*value as f32).to_le_bytes());
-        }
-
-        // The placements' count, then what a pixel spans of the target.
-        for value in [to_word(placements.len()), 0] {
-            frame.extend(value.to_le_bytes());
-        }
-
-        for side in size {
-            frame.extend((1.0 / side as f32).to_le_bytes());
-        }
-
-        // Each eye in the world, which a frame writes.
-        frame.resize(FRAME_BYTES, 0);
+        // The boxes an eye can stand in take the mirror's module wherever
+        // the scene holds a mirror.
+        let mirrors = (solid_boxes.mirror.iter())
+            .chain(&marched_boxes.mirror)
+            .any(|&mirror| mirror);
 
         // What a mirror ray traces, on a device with ray queries: the
         // scene's opaque quads, each of one material, and each quad's
@@ -1088,70 +395,17 @@ impl BoxView {
         // which any quad can hide. A mirror ray alone meets only the quads
         // within its reach.
         let tlas = (mirrors || traced && bloom.is_some()).then(|| {
-            let reach = |id: u32| f64::from(mirror_reach(id));
-
+            let reach = |id: u32| f64::from(materials.mirror_reach(id, traced));
             let quads = tile_quads(tiles, if bloom.is_some() { None } else { Some(&reach) });
-
-            let mut places: HashMap<u32, u32> = HashMap::new();
 
             for object in &quads {
                 for (&id, &face) in object.materials.iter().zip(&object.faces) {
-                    let place = *places.entry(id).or_insert_with(|| {
-                        let place = materials.len() / 12;
-
-                        materials.extend(material_values(id));
-
-                        u32::try_from(place)
-                            .ok()
-                            .filter(|&place| place < 1 << 29)
-                            .expect("a scene's materials number under 2^29")
-                    });
-
-                    quad_words.push(place << 3 | face);
+                    quad_words.push(materials.single(id) << 3 | face);
                 }
             }
 
             quad_tlas(device, queue, &quads, &tiles.placements)
         });
-
-        let glass = PlacedBox::list(
-            tiles,
-            |object| {
-                if blends { &object.glass.boxes } else { &[] }
-            },
-        );
-
-        let detail = DetailTree::new(tiles, [&marched, &solid, &glass]);
-        let mut glass_boxes = ViewBoxes::default();
-
-        let glass_words: Vec<_> = glass
-            .iter()
-            .map(|placed| {
-                let object = object_of[placed.placement as usize];
-                let first = offsets[object].1;
-                let tile = &glass_of(object).tiles[placed.tile];
-
-                // The box around the tile's surfaces, 4 bits a side: its
-                // low cell in the tile, then its high cell.
-                let (low, high) = tile.surfaces;
-                let [x, y, z] = (low % 16).to_array();
-                let [far_x, far_y, far_z] = ((high - 1) % 16).to_array();
-                let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
-
-                let mut words = placed.words(placed.placement, first + tile.offset, [surfaces, 0]);
-
-                // The first of the tile's words in `lit`.
-                words[11] = glass_lit[placed.placement as usize][placed.tile];
-
-                glass_boxes.push(placed, words, page(placed), false, false);
-
-                words
-            })
-            .collect();
-
-        // A hit in a row with no record cell can read another tile's word
-        // in `lit`, whose material lies up to 255 past the hit tile's first.
-        materials.resize(materials.len() + 255 * 12, 0.0);
 
         let init = |label, contents: &[u8], usage| {
             device.create_buffer_init(&BufferInitDescriptor {
@@ -1163,51 +417,43 @@ impl BoxView {
 
         let frame = init(
             "view frame",
-            &frame,
+            &frame_bytes(&lights, tiles.placements.len(), size),
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         );
-        let materials = init(
+        let material_list = init(
             "view materials",
-            bytemuck::cast_slice(&materials),
+            bytemuck::cast_slice(&materials.finish()),
             BufferUsages::STORAGE,
         );
 
+        // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
+        let box_words = [marched_boxes.words.as_slice(), &solid_boxes.words].concat();
+
         // A shader's array has room for one element at the least.
         let quad_list = storage_words(device, "view quads", &quad_words, 1);
-        let box_list = storage_words(device, "view boxes", &box_words, 12);
+        let box_list = storage_words(device, "view boxes", box_words.as_flattened(), 12);
         let crosser_list = storage_words(device, "view crossers", &crosser_words, 8);
+
+        let placements: Vec<_> = (tiles.placements.iter())
+            .map(|&TilePlacement { transform, .. }| {
+                let grid_to_world = TyMatrix4x4F64::from_scale_rotation_translation(
+                    transform.scale,
+                    transform.rotation,
+                    transform.position,
+                );
+
+                (transform, grid_to_world)
+            })
+            .collect();
+
+        let place_bytes = place_bytes(&placements);
 
         let places = device.create_buffer(&BufferDescriptor {
             label: Some("view places"),
-            size: (placements.len().max(1) * 2 * PLACE_BYTES) as u64,
+            size: place_bytes.len().max(2 * PLACE_BYTES) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-
-        // A `Place` ends with what holds from frame to frame: the world
-        // direction of each of its grid's axes with the meters a cell spans
-        // along it.
-        let mut place_bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
-        let each = (0..placements.len()).chain(0..placements.len());
-
-        for (place, index) in place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
-            let (transform, _) = &placements[index];
-            let [x, y, z] = transform.scale.to_array();
-
-            let axes = [
-                (TyVector3F64::X, x),
-                (TyVector3F64::Y, y),
-                (TyVector3F64::Z, z),
-            ]
-            .map(|(axis, meters)| (transform.rotation * axis).extend(meters).to_array());
-
-            for (bytes, value) in place[EYE_BYTES..]
-                .chunks_exact_mut(4)
-                .zip(axes.as_flattened())
-            {
-                bytes.copy_from_slice(&(*value as f32).to_le_bytes());
-            }
-        }
 
         // SAFETY: a fragment reads only within a tile's words because each
         // step keeps its cell inside the tile's box. Its loop ends within the
@@ -1218,8 +464,6 @@ impl BoxView {
         // `materials` within the spare values that buffer ends with. A box's
         // entries in `crossers` index `boxes`. The stages index `places` by
         // an eye and a box's placement.
-        let threshold = bloom.as_ref().map(|&(_, threshold)| threshold);
-
         let module = |traced, source, glass| unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
@@ -1229,7 +473,7 @@ impl BoxView {
                         "box view"
                     }),
                     source: ShaderSource::Wgsl(
-                        box_view_shader(traced, threshold, source, glass, tints).into(),
+                        box_view_shader(traced, threshold, source, glass, lit.tints).into(),
                     ),
                 },
                 ShaderRuntimeChecks::unchecked(),
@@ -1242,15 +486,12 @@ impl BoxView {
         // to take.
         let plain = module(false, None, false);
         let mirror = mirrors.then(|| module(true, None, false));
-        let glassy = (!glass_words.is_empty()).then(|| module(false, None, true));
+        let glassy = (!glass.is_empty()).then(|| module(false, None, true));
         let near = usize::from(mirror.is_some());
         let modules: Vec<_> = [Some(&plain), mirror.as_ref(), glassy.as_ref()]
             .into_iter()
             .flatten()
             .collect();
-
-        let storage = BufferBindingType::Storage { read_only: true };
-        let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
 
         let texture = |label, size: [u32; 2], format, usage| {
             device
@@ -1281,10 +522,7 @@ impl BoxView {
             TextureUsages::TEXTURE_BINDING,
         );
 
-        let halo = bloom
-            .as_ref()
-            .map_or(&no_halo, |(bloom, _)| bloom.halo())
-            .clone();
+        let halo = bloom.as_ref().map_or(&no_halo, BoxBloom::halo).clone();
 
         let bloom_sampler = device.create_sampler(&SamplerDescriptor {
             label: Some("view bloom"),
@@ -1295,18 +533,7 @@ impl BoxView {
             ..SamplerDescriptor::default()
         });
 
-        // A box that crosses another draws in two parts when it lies near
-        // the head, so the draw has room for each such box twice.
-        let crossed = crossers
-            .iter()
-            .filter(|entries| !entries.is_empty())
-            .count();
-
-        let glowing = |glows: &[bool]| glows.iter().filter(|&&glows| glows).count();
-
-        let glow_crossed = (crossers.iter().zip(&march_glows))
-            .filter(|&(entries, &glows)| glows && !entries.is_empty())
-            .count();
+        let count = |flags: &[bool]| flags.iter().filter(|&&flag| flag).count();
 
         let part = |fragment, faces, module, room| BoxPart {
             fragment,
@@ -1316,12 +543,14 @@ impl BoxView {
             glass: false,
         };
 
+        // A box that crosses another draws in two parts when it lies near
+        // the head, so the draw has room for each such box twice.
         let mut parts = vec![
-            part("held", BoxFaces::Held, near, crossed),
+            part("held", BoxFaces::Held, near, count(&crossing)),
             part("inside", BoxFaces::NearBack, near, 0),
-            part("solid", BoxFaces::Front, 0, solid_words.len()),
+            part("solid", BoxFaces::Front, 0, solid.len()),
             part("solid", BoxFaces::Front, near, 0),
-            part("front", BoxFaces::Front, 0, march_words.len()),
+            part("front", BoxFaces::Front, 0, marched.len()),
             part("front", BoxFaces::Front, near, 0),
             part("crossed", BoxFaces::Front, 0, 0),
             part("crossed", BoxFaces::Front, near, 0),
@@ -1336,24 +565,27 @@ impl BoxView {
                         fragment,
                         faces,
                         module: modules.len() - 1,
-                        room: glass_words.len(),
+                        room: glass.len(),
                         glass: true,
                     },
                 ),
             );
         }
 
+        let storage = BufferBindingType::Storage { read_only: true };
+        let both = ShaderStages::VERTEX | ShaderStages::FRAGMENT;
+
         // Each page binds its tiles' words and its lit words.
-        let buffers: Vec<_> = (bits.iter().zip(&lit_corners))
-            .map(|(bits, lit_corners)| {
+        let buffers: Vec<_> = (bits.iter().zip(&lit.buffers))
+            .map(|(bits, lit)| {
                 [
                     (both, BufferBindingType::Uniform, &frame),
                     (both, storage, &places),
                     (ShaderStages::FRAGMENT, storage, bits),
-                    (ShaderStages::FRAGMENT, storage, &materials),
+                    (ShaderStages::FRAGMENT, storage, &material_list),
                     (ShaderStages::FRAGMENT, storage, &box_list),
                     (ShaderStages::FRAGMENT, storage, &crosser_list),
-                    (ShaderStages::FRAGMENT, storage, lit_corners),
+                    (ShaderStages::FRAGMENT, storage, lit),
                     (ShaderStages::FRAGMENT, storage, &quad_list),
                 ]
             })
@@ -1371,25 +603,31 @@ impl BoxView {
 
         let mut boxes = BoxDraw::new(device, &modules, format, &parts, &bindings(&halo));
 
-        let glow = bloom.map(|(bloom, _)| {
+        let glow = bloom.map(|bloom| {
             boxes.cover(device, &plain, "place_sky", "sky_halo", format);
 
             // The source's ray needs the ray queries the TLAS came with.
             let source = module(tlas.is_some(), Some(bloom.scale() as f32), false);
             let half = size.map(|side| side.div_ceil(2));
 
+            let glow_crossed = (crossing.iter().zip(&marched_boxes.glow))
+                .filter(|&(&crosses, &glows)| crosses && glows)
+                .count();
+
+            let parts = [
+                part("held", BoxFaces::Held, 0, glow_crossed),
+                part("inside", BoxFaces::NearBack, 0, 0),
+                part("solid", BoxFaces::Front, 0, count(&solid_boxes.glow)),
+                part("front", BoxFaces::Front, 0, count(&marched_boxes.glow)),
+                part("crossed", BoxFaces::Front, 0, 0),
+            ];
+
             Glow {
                 boxes: BoxDraw::new(
                     device,
                     &[&source],
                     BoxBloom::FORMAT,
-                    &[
-                        part("held", BoxFaces::Held, 0, glow_crossed),
-                        part("inside", BoxFaces::NearBack, 0, 0),
-                        part("solid", BoxFaces::Front, 0, glowing(&solid_glows)),
-                        part("front", BoxFaces::Front, 0, glowing(&march_glows)),
-                        part("crossed", BoxFaces::Front, 0, 0),
-                    ],
+                    &parts,
                     &bindings(&no_halo),
                 ),
                 depth: texture(
@@ -1398,21 +636,18 @@ impl BoxView {
                     Self::DEPTH,
                     TextureUsages::RENDER_ATTACHMENT,
                 ),
-                reach: REACH_SIGMAS * radius * f64::from(size[0].min(size[1])),
+                reach,
                 bloom,
             }
         });
 
-        let above = tonemap(TyLinSrgbF32::new(
-            sky.red as f32,
-            sky.green as f32,
-            sky.blue as f32,
-        ));
+        let [red, green, blue] = [lights.sky.red, lights.sky.green, lights.sky.blue];
+        let above = tonemap(TyLinSrgbF32::new(red as f32, green as f32, blue as f32));
 
         Ok(BoxView {
             boxes,
             glow,
-            pages,
+            pages: pages.count,
             detail,
             finest: 0.0,
             shown: Default::default(),
@@ -1606,7 +841,7 @@ impl BoxView {
         }
 
         for (at, &key) in self.marched_keys.iter().enumerate() {
-            let index = index_of(key);
+            let index = ViewBoxes::index_of(key);
             let near = at < self.near;
             let mirror = usize::from(self.marched.mirror[index]);
 
@@ -1624,7 +859,7 @@ impl BoxView {
         }
 
         for &key in &self.solid_keys {
-            let index = index_of(key);
+            let index = ViewBoxes::index_of(key);
             let mirror = usize::from(self.solid.mirror[index]);
 
             self.order[SOLID_RUN + mirror].push(index);
@@ -1637,14 +872,14 @@ impl BoxView {
             let solid = &self.solid;
             let marched = &self.marched;
             let glowing = |boxes: &'_ ViewBoxes, keys: &[u64]| -> Vec<usize> {
-                (keys.iter().map(|&key| index_of(key)))
+                (keys.iter().map(|&key| ViewBoxes::index_of(key)))
                     .filter(|&index| boxes.glow[index])
                     .collect()
             };
 
             let crossed = |keys: &[u64], crosses: bool| -> Vec<u64> {
                 (keys.iter().copied())
-                    .filter(|&key| crossing[index_of(key)] == crosses)
+                    .filter(|&key| crossing[ViewBoxes::index_of(key)] == crosses)
                     .collect()
             };
 
@@ -1710,7 +945,7 @@ impl BoxView {
                 (RUNS, &self.glass_keys[..]),
                 (RUNS + 1, &self.glass_keys[..self.glass_near]),
             ] {
-                let farthest_first = keys.iter().rev().map(|&key| index_of(key));
+                let farthest_first = keys.iter().rev().map(|&key| ViewBoxes::index_of(key));
 
                 (self.glass).deal_in_order(farthest_first, part, &mut self.sorted, &mut runs);
             }
@@ -1793,26 +1028,115 @@ impl BoxView {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::box_view::sort_keys;
+/// What a view's boxes hold of one of an object's tiles.
+#[derive(Clone, Copy)]
+struct TileTraits {
+    /// The place of the tile's first material among the view's.
+    material: u32,
 
-    #[test]
-    fn keys_sort_by_their_upper_halves_and_ties_keep_their_order() {
-        // Upper halves that differ within each pass's bits.
-        let uppers = [0x7f80_0000, 3, 0x0040_0001, 3, 0, 0x0000_0801, 0x0040_0000];
+    /// Whether a fragment of the tile can cast a mirror ray.
+    mirror: bool,
 
-        let mut keys: Vec<u64> = uppers
-            .iter()
-            .zip(0..)
-            .map(|(upper, index)| upper << 32 | index)
+    /// Whether a fragment of the tile can meet an emission that blooms.
+    glow: bool,
+}
+
+/// The test that keeps hidden boxes from drawing, for a scene of
+/// [`TESTED`] boxes or more with a slab to hide one. `lists` holds a view's
+/// marched boxes and then its solid ones, each as placed and as sorted.
+fn hide_of(tiles: &TileScene, lists: [(&Vec<PlacedBox>, &ViewBoxes); 2]) -> Option<BoxHide> {
+    let boxes: usize = lists.iter().map(|(placed, _)| placed.len()).sum();
+
+    if boxes < TESTED {
+        return None;
+    }
+
+    // Each placement's slabs in the world. An object's coarser copy keeps
+    // none.
+    let slabs: Vec<_> = (tiles.placements.iter())
+        .flat_map(|TilePlacement { object, transform }| {
+            tiles.objects[*object].slabs.iter().map(|&(low, high)| {
+                box_corners(low.as_dvec3(), high.as_dvec3())
+                    .map(|corner| transform.transform_point(corner))
+            })
+        })
+        .collect();
+
+    if slabs.is_empty() {
+        return None;
+    }
+
+    // A list's boxes come a placement at a time.
+    let lists = lists.map(|(placed, boxes)| {
+        let runs = placed
+            .chunk_by(|a, b| a.placement == b.placement)
+            .map(<[PlacedBox]>::len)
             .collect();
 
-        let mut sorted = keys.clone();
+        (boxes.bounds.clone(), runs)
+    });
 
-        sorted.sort_unstable();
-        sort_keys(&mut keys, &mut Vec::new());
+    Some(BoxHide::new(slabs, lists.into()))
+}
 
-        assert_eq!(keys, sorted);
+/// `box_view.wgsl`'s `Frame` for a target whose width and height are
+/// `size`, with zeros where a frame writes its eyes.
+fn frame_bytes(lights: &ViewLights, placements: usize, size: [u32; 2]) -> Vec<u8> {
+    let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
+    let (toward, sun) = lights.sun.unwrap_or((TyVector3F64::Y, black));
+    let rgb = |light: TyLinSrgbF64| [light.red, light.green, light.blue];
+    let mut frame = Vec::new();
+
+    for light in [
+        toward.to_array(),
+        rgb(sun),
+        rgb(lights.sky),
+        rgb(lights.ground),
+    ] {
+        for value in light.into_iter().chain([0.0]) {
+            frame.extend((value as f32).to_le_bytes());
+        }
     }
+
+    // The placements' count, then what a pixel spans of the target.
+    for value in [to_word(placements), 0] {
+        frame.extend(value.to_le_bytes());
+    }
+
+    for side in size {
+        frame.extend((1.0 / side as f32).to_le_bytes());
+    }
+
+    frame.resize(FRAME_BYTES, 0);
+
+    frame
+}
+
+/// `box_view.wgsl`'s `Place` for each of `placements`, once an eye. A
+/// `Place` ends with what holds from frame to frame: the world direction of
+/// each of its grid's axes with the meters a cell spans along it. Zeros
+/// stand where a frame writes its matrix and its ray.
+fn place_bytes(placements: &[(TyTransformF64, TyMatrix4x4F64)]) -> Vec<u8> {
+    let mut bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
+    let each = placements.iter().chain(placements);
+
+    for (place, (transform, _)) in bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
+        let [x, y, z] = transform.scale.to_array();
+
+        let axes = [
+            (TyVector3F64::X, x),
+            (TyVector3F64::Y, y),
+            (TyVector3F64::Z, z),
+        ]
+        .map(|(axis, meters)| (transform.rotation * axis).extend(meters).to_array());
+
+        for (bytes, value) in place[EYE_BYTES..]
+            .chunks_exact_mut(4)
+            .zip(axes.as_flattened())
+        {
+            bytes.copy_from_slice(&(*value as f32).to_le_bytes());
+        }
+    }
+
+    bytes
 }

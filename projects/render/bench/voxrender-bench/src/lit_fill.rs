@@ -225,9 +225,7 @@ impl LitFill {
     ///
     /// 1. `tiles`: the scene the fill was built for
     /// 2. `placements`: the placements, as their places among the scene's
-    /// 3. `glass`: whether each object's cells with a surface between
-    ///    materials that pass light take a word too
-    /// 4. `tints`: for a scene with a material that passes light, how far
+    /// 3. `tints`: for a scene with a material that passes light, how far
     ///    past a record cell's word its tint lies, no less than the page's
     ///    cells plus [`TileMasks::SPARE`]
     pub fn page(
@@ -235,7 +233,6 @@ impl LitFill {
         device: &Device,
         tiles: &TileScene,
         placements: &[usize],
-        glass: bool,
         tints: Option<u32>,
     ) -> LitPage {
         let mut places = Vec::new();
@@ -259,16 +256,14 @@ impl LitFill {
 
                 // Each tile's low corner and the indices of its cells that
                 // take a word.
-                let cells: Vec<(TyVector3U32, &Vec<u16>)> = if !glassy {
-                    (object.masks.tiles.iter())
-                        .map(|tile| (tile.corner, &tile.recorded))
-                        .collect()
-                } else if glass {
+                let cells: Vec<(TyVector3U32, &Vec<u16>)> = if glassy {
                     (object.glass.boxes.iter().zip(&object.glass.tiles))
                         .map(|(drawn, tile)| (drawn.cells.0 / TILE * TILE, &tile.cells))
                         .collect()
                 } else {
-                    Vec::new()
+                    (object.masks.tiles.iter())
+                        .map(|tile| (tile.corner, &tile.recorded))
+                        .collect()
                 };
 
                 for (corner, cells) in cells {
