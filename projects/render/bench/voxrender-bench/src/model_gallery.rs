@@ -1,5 +1,6 @@
 use crate::{
     BoxView, Error, GalleryControls, HeadsetEye, HeadsetStand, HeadsetView, ModelTiles, Result,
+    ViewTarget,
 };
 use std::{
     f64::consts::FRAC_PI_6,
@@ -11,7 +12,7 @@ use std::{
     time::Instant,
 };
 use ty_math::{TyBoundsF64, TyQuaternionF64, TyVector3F64};
-use wgpu::{Color, CommandEncoder, Device, Queue, RenderPass, TextureFormat};
+use wgpu::{Color, CommandEncoder, Device, Queue, TextureFormat};
 
 /// The meters a second a full stick moves the wearer, in the headset's
 /// meters.
@@ -170,27 +171,6 @@ impl ModelGallery {
         self.paths.len()
     }
 
-    /// The color a pass that draws the gallery clears its target to: the
-    /// sky of the model in view, dimmed while the next model loads.
-    pub fn sky(&self) -> Color {
-        let Some(shown) = &self.shown else {
-            return EMPTY;
-        };
-
-        let sky = shown.view.sky();
-
-        if self.loading.is_none() {
-            return sky;
-        }
-
-        Color {
-            r: sky.r * DIM,
-            g: sky.g * DIM,
-            b: sky.b * DIM,
-            a: sky.a,
-        }
-    }
-
     /// The path under the gallery's directory of the model in view, or
     /// `None` before the first model lands.
     pub fn shown(&self) -> Option<String> {
@@ -244,26 +224,27 @@ impl ModelGallery {
         line
     }
 
-    /// How many passes draw the gallery, as [`HeadsetView::passes`] counts
-    /// them.
-    pub fn passes(&self) -> u32 {
-        self.shown.as_ref().map_or(1, |shown| shown.view.passes())
-    }
+    /// Encodes a frame of the model in view over `target`, under a sky
+    /// dimmed while the next model loads. Before the first model lands, the
+    /// frame clears the target to [`EMPTY`].
+    pub fn encode(&self, encoder: &mut CommandEncoder, target: &ViewTarget<'_>) {
+        let Some(shown) = &self.shown else {
+            target.begin(encoder, "eyes", Some(EMPTY), true);
 
-    /// Draws the `at`th of the gallery's [`passes`](Self::passes) into
-    /// `pass`.
-    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
-        if let Some(shown) = &self.shown {
-            shown.view.draw(pass, at);
-        }
-    }
+            return;
+        };
 
-    /// Encodes the passes that come before the first of a frame's
-    /// [`passes`](Self::passes), as [`HeadsetView::glow`] does.
-    pub fn glow(&self, encoder: &mut CommandEncoder) {
-        if let Some(shown) = &self.shown {
-            shown.view.glow(encoder);
-        }
+        let sky = shown.view.sky();
+        let lit = if self.loading.is_some() { DIM } else { 1.0 };
+
+        let clear = Color {
+            r: sky.r * lit,
+            g: sky.g * lit,
+            b: sky.b * lit,
+            a: sky.a,
+        };
+
+        shown.view.encode(encoder, target, clear);
     }
 
     /// The path of model `index` under the gallery's directory.

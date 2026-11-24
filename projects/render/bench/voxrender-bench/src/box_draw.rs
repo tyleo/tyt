@@ -1,15 +1,12 @@
-use crate::{BoxBindings, BoxFaces, BoxPart, to_word};
-use std::{
-    num::{NonZeroU32, NonZeroU64},
-    ops::Range,
-};
+use crate::{BoxBindings, BoxFaces, BoxPart, ViewTarget, to_word};
+use std::{num::NonZeroU64, ops::Range};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor,
-    BlendOperation, BlendState, Buffer, BufferDescriptor, BufferUsages, ColorTargetState,
-    ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState,
-    FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions, PipelineLayout,
-    PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPass, RenderPipeline,
+    BlendOperation, BlendState, Buffer, BufferDescriptor, BufferUsages, Color, ColorTargetState,
+    ColorWrites, CommandEncoder, CompareFunction, DepthBiasState, DepthStencilState, Device, Face,
+    FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions,
+    PipelineLayout, PipelineLayoutDescriptor, PrimitiveState, Queue, RenderPass, RenderPipeline,
     RenderPipelineDescriptor, SamplerBindingType, ShaderModule, ShaderStages, StencilState,
     TextureFormat, TextureSampleType, TextureViewDimension, VertexAttribute, VertexBufferLayout,
     VertexFormat, VertexState, VertexStepMode,
@@ -118,14 +115,12 @@ impl BoxDraw {
     /// 2. `parts`: what draws the boxes
     /// 3. `pages`: what the shaders bind in group 0 for each page of the
     ///    boxes, at least one. The pages bind alike but for their buffers
-    /// 4. `multiview_mask`: the mask of the passes the boxes draw in
     pub fn new(
         device: &Device,
         modules: &[&ShaderModule],
         format: TextureFormat,
         parts: &[BoxPart<'_>],
         pages: &[BoxBindings<'_>],
-        multiview_mask: Option<NonZeroU32>,
     ) -> Self {
         let BoxBindings {
             buffers: bindings,
@@ -301,7 +296,7 @@ impl BoxDraw {
                         write_mask: ColorWrites::ALL,
                     })],
                 }),
-                multiview_mask,
+                multiview_mask: ViewTarget::EYES,
                 cache: None,
             })
         };
@@ -406,7 +401,6 @@ impl BoxDraw {
         vertex: &str,
         fragment: &str,
         format: TextureFormat,
-        multiview_mask: Option<NonZeroU32>,
     ) {
         let added = BlendComponent {
             src_factor: BlendFactor::One,
@@ -445,7 +439,7 @@ impl BoxDraw {
                     write_mask: ColorWrites::ALL,
                 })],
             }),
-            multiview_mask,
+            multiview_mask: ViewTarget::EYES,
             cache: None,
         });
 
@@ -504,16 +498,28 @@ impl BoxDraw {
         }
     }
 
-    /// How many passes draw the boxes: one for each run that holds boxes,
-    /// or one for a draw that holds none, then one for a
-    /// [`cover`](Self::cover).
-    pub fn passes(&self) -> u32 {
-        self.runs() + u32::from(self.cover.is_some())
+    /// Encodes the draw's passes over `target`: one for each run that holds
+    /// boxes, or one for a draw that holds none, then one for a
+    /// [`cover`](Self::cover). The first clears the color to `clear`.
+    pub fn encode(
+        &self,
+        encoder: &mut CommandEncoder,
+        label: &str,
+        target: &ViewTarget<'_>,
+        clear: Color,
+    ) {
+        let passes = self.runs() + u32::from(self.cover.is_some());
+
+        for at in 0..passes {
+            let clear = (at == 0).then_some(clear);
+            let mut pass = target.begin(encoder, label, clear, at + 1 == passes);
+
+            self.draw(&mut pass, at);
+        }
     }
 
-    /// Draws the `at`th of the draw's [`passes`](Self::passes) into `pass`.
-    /// Draws nothing past the last.
-    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
+    /// Draws the `at`th of the draw's passes into `pass`.
+    fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
         if let Some((cover, [left, top, width, height])) =
             self.cover.as_ref().filter(|_| at == self.runs())
         {

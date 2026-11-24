@@ -8,16 +8,15 @@ use openxr::{
     Rect2Di, ReferenceSpaceType, Session, SessionState, Space, SwapchainSubImage,
     ViewConfigurationType, ViewStateFlags, Vulkan as XrVulkan,
 };
-use std::{num::NonZeroU32, path::Path, time::Instant};
+use std::{path::Path, time::Instant};
 use voxrender::RenderBloom;
 use voxrender_bench::{
     BoxView, Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, ModelGallery, TileScene,
-    bench_scene,
+    ViewTarget, bench_scene,
 };
 use wgpu::{
-    CommandEncoderDescriptor, Device, Extent3d, LoadOp, Operations, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TextureDescriptor,
-    TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
+    CommandEncoderDescriptor, Device, Extent3d, TextureDescriptor, TextureDimension, TextureUsages,
+    TextureView, TextureViewDescriptor,
 };
 
 /// The views the app draws.
@@ -335,8 +334,7 @@ impl XrApp {
             }
         });
 
-        // A view and a gallery draw in passes of one draw each.
-        let passes = match &mut self.work {
+        match &mut self.work {
             FrameWork::View {
                 view,
                 walk,
@@ -370,8 +368,6 @@ impl XrApp {
 
                     prepared.clear();
                 }
-
-                view.passes()
             }
 
             FrameWork::Models {
@@ -402,64 +398,20 @@ impl XrApp {
 
                     *landed = Some(now);
                 }
-
-                gallery.passes()
             }
-        };
-
-        // A scene that blooms makes its halo before its passes.
-        match &self.work {
-            FrameWork::View { view, .. } => view.glow(&mut encoder),
-            FrameWork::Models { gallery, .. } => gallery.glow(&mut encoder),
         }
 
-        for at in 0..passes {
-            let first = at == 0;
+        let (FrameWork::View { depth, .. } | FrameWork::Models { depth, .. }) = &self.work;
 
-            let (sky, depth) = match &self.work {
-                FrameWork::View { view, depth, .. } => (view.sky(), depth),
-                FrameWork::Models { gallery, depth, .. } => (gallery.sky(), depth),
-            };
+        let target = ViewTarget {
+            color: &self.swapchain.views[image],
+            depth,
+            keep_depth: false,
+        };
 
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("eyes"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.swapchain.views[image],
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: if first {
-                            LoadOp::Clear(sky)
-                        } else {
-                            LoadOp::Load
-                        },
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: depth,
-                    depth_ops: Some(Operations {
-                        load: if first {
-                            LoadOp::Clear(0.0)
-                        } else {
-                            LoadOp::Load
-                        },
-                        store: if at + 1 == passes {
-                            StoreOp::Discard
-                        } else {
-                            StoreOp::Store
-                        },
-                    }),
-                    stencil_ops: None,
-                }),
-                multiview_mask: NonZeroU32::new(0b11),
-                ..RenderPassDescriptor::default()
-            });
-
-            match &self.work {
-                FrameWork::View { view, .. } => view.draw(&mut pass, at),
-                FrameWork::Models { gallery, .. } => gallery.draw(&mut pass, at),
-            }
+        match &self.work {
+            FrameWork::View { view, .. } => view.encode(&mut encoder, &target, view.sky()),
+            FrameWork::Models { gallery, .. } => gallery.encode(&mut encoder, &target),
         }
 
         self.gpu.queue.submit([encoder.finish()]);

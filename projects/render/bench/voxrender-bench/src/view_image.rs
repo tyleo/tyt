@@ -1,15 +1,14 @@
 use crate::{
-    BoxView, Error, Gpu, Result, TileScene, ViewEye, ViewOptions, map_readback, world_to_clip,
+    BoxView, Error, Gpu, Result, TileScene, ViewEye, ViewOptions, ViewTarget, map_readback,
+    world_to_clip,
 };
 use branded_id::U32Id;
-use std::num::NonZeroU32;
 use voxrender::{BRenderView, Error as RenderError, RenderBloom, RenderScene};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT,
-    CommandEncoderDescriptor, Extent3d, LoadOp, Operations, Origin3d, RenderPassColorAttachment,
-    RenderPassDepthStencilAttachment, RenderPassDescriptor, StoreOp, TexelCopyBufferInfo,
-    TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
+    CommandEncoderDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo, TexelCopyBufferLayout,
+    TexelCopyTextureInfo, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureViewDescriptor,
 };
 
 /// The format of the image's texels.
@@ -96,51 +95,13 @@ pub fn view_image(
             label: Some("view"),
         });
 
-    let layers = color.create_view(&TextureViewDescriptor::default());
-    let depth = depth.create_view(&TextureViewDescriptor::default());
-    let passes = boxes.passes();
+    let target = ViewTarget {
+        color: &color.create_view(&TextureViewDescriptor::default()),
+        depth: &depth.create_view(&TextureViewDescriptor::default()),
+        keep_depth: false,
+    };
 
-    boxes.glow(&mut encoder);
-
-    for at in 0..passes {
-        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-            label: Some("view"),
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: &layers,
-                depth_slice: None,
-                resolve_target: None,
-                ops: Operations {
-                    load: if at == 0 {
-                        LoadOp::Clear(boxes.sky())
-                    } else {
-                        LoadOp::Load
-                    },
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                view: &depth,
-                depth_ops: Some(Operations {
-                    load: if at == 0 {
-                        LoadOp::Clear(0.0)
-                    } else {
-                        LoadOp::Load
-                    },
-                    store: if at + 1 == passes {
-                        StoreOp::Discard
-                    } else {
-                        StoreOp::Store
-                    },
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: NonZeroU32::new(0b11),
-        });
-
-        boxes.draw(&mut pass, at);
-    }
+    boxes.encode(&mut encoder, &target, boxes.sky());
 
     encoder.copy_texture_to_buffer(
         TexelCopyTextureInfo {

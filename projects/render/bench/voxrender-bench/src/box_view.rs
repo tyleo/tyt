@@ -1,19 +1,17 @@
 use crate::{
     BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, DetailTree, Error,
     GlassTiles, LISTS, LitFill, PassTerms, PlacedBox, Result, TileMasks, TileScene, ViewEye,
-    box_corners, box_view_shader, quad_tlas, storage_words, tile_quads, to_word,
+    ViewTarget, box_corners, box_view_shader, quad_tlas, storage_words, tile_quads, to_word,
 };
-use std::{collections::HashMap, mem, num::NonZeroU32};
+use std::{collections::HashMap, mem};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxcore::material;
 use voxrender::{RenderBloom, RenderLight, grid_point, tonemap};
 use wgpu::{
     AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
-    Device, Extent3d, Features, FilterMode, LoadOp, Operations, Queue, RenderPass,
-    RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    SamplerDescriptor, ShaderModuleDescriptor, ShaderRuntimeChecks, ShaderSource, ShaderStages,
-    StoreOp, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
-    TextureViewDescriptor,
+    Device, Extent3d, Features, FilterMode, Queue, SamplerDescriptor, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -1401,24 +1399,10 @@ impl BoxView {
                 .collect()
         };
 
-        let mut boxes = BoxDraw::new(
-            device,
-            &modules,
-            format,
-            &parts,
-            &bindings(&halo),
-            NonZeroU32::new(0b11),
-        );
+        let mut boxes = BoxDraw::new(device, &modules, format, &parts, &bindings(&halo));
 
         let glow = bloom.map(|(bloom, _)| {
-            boxes.cover(
-                device,
-                &plain,
-                "place_sky",
-                "sky_halo",
-                format,
-                NonZeroU32::new(0b11),
-            );
+            boxes.cover(device, &plain, "place_sky", "sky_halo", format);
 
             // The source's ray needs the ray queries the TLAS came with.
             let source = module(tlas.is_some(), Some(bloom.scale() as f32), false);
@@ -1437,7 +1421,6 @@ impl BoxView {
                         part("crossed", BoxFaces::Front, 0, 0),
                     ],
                     &bindings(&no_halo),
-                    NonZeroU32::new(0b11),
                 ),
                 depth: texture(
                     "glow depth",
@@ -1766,72 +1749,22 @@ impl BoxView {
         self.boxes.rewrite(queue, &self.sorted, &runs);
     }
 
-    /// How many passes draw the boxes [`prepare`](Self::prepare) sorted, at
-    /// least one. Each is a multiview pass over both eyes. The first clears
-    /// its target to [`sky`](Self::sky) and its depth to zero, and each
-    /// later one loads what the pass before it stored.
-    pub fn passes(&self) -> u32 {
-        self.boxes.passes()
-    }
+    /// Encodes a frame of the boxes [`prepare`](Self::prepare) sorted over
+    /// `target`, whose color the first pass clears to `clear`. A scene that
+    /// blooms draws its halo's source first.
+    pub fn encode(&self, encoder: &mut CommandEncoder, target: &ViewTarget<'_>, clear: Color) {
+        if let Some(glow) = &self.glow {
+            let source = ViewTarget {
+                color: glow.bloom.source(),
+                depth: &glow.depth,
+                keep_depth: false,
+            };
 
-    /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
-    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
-        self.boxes.draw(pass, at);
-    }
-
-    /// Encodes the passes that make a frame's halo, which come before the
-    /// first of its [`passes`](Self::passes): the glowing boxes drawn into
-    /// the bloom's source, then the bloom's. Encodes nothing for a scene
-    /// with no bloom.
-    pub fn glow(&self, encoder: &mut CommandEncoder) {
-        let Some(glow) = &self.glow else {
-            return;
-        };
-
-        let passes = glow.boxes.passes();
-
-        for at in 0..passes {
-            let first = at == 0;
-
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("glow"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: glow.bloom.source(),
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: if first {
-                            LoadOp::Clear(Color::BLACK)
-                        } else {
-                            LoadOp::Load
-                        },
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &glow.depth,
-                    depth_ops: Some(Operations {
-                        load: if first {
-                            LoadOp::Clear(0.0)
-                        } else {
-                            LoadOp::Load
-                        },
-                        store: if at + 1 == passes {
-                            StoreOp::Discard
-                        } else {
-                            StoreOp::Store
-                        },
-                    }),
-                    stencil_ops: None,
-                }),
-                multiview_mask: NonZeroU32::new(0b11),
-                ..RenderPassDescriptor::default()
-            });
-
-            glow.boxes.draw(&mut pass, at);
+            glow.boxes.encode(encoder, "glow", &source, Color::BLACK);
+            glow.bloom.run(encoder);
         }
 
-        glow.bloom.run(encoder);
+        self.boxes.encode(encoder, "eyes", target, clear);
     }
 
     /// The pixels of the target the halo can reach for `eyes`, as a

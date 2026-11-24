@@ -26,6 +26,7 @@ mod view_check;
 mod view_eye;
 mod view_image;
 mod view_options;
+mod view_target;
 
 pub use bench_scene::*;
 pub use box_view::*;
@@ -49,6 +50,7 @@ pub use view_check::*;
 pub use view_eye::*;
 pub use view_image::*;
 pub use view_options::*;
+pub use view_target::*;
 
 // Internal API
 

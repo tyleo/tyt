@@ -1,7 +1,7 @@
-use crate::{BoxView, HeadsetEye, HeadsetStand, Result, TileScene, ViewEye};
+use crate::{BoxView, HeadsetEye, HeadsetStand, Result, TileScene, ViewEye, ViewTarget};
 use ty_math::{TyQuaternionF64, TyVector3F64};
 use voxrender::RenderBloom;
-use wgpu::{Color, CommandEncoder, Device, Queue, RenderPass, TextureFormat};
+use wgpu::{Color, CommandEncoder, Device, Queue, TextureFormat};
 
 /// A [`BoxView`] of a scene around a headset's wearer.
 pub struct HeadsetView {
@@ -67,19 +67,8 @@ impl HeadsetView {
         self.boxes.prepare(queue, &eyes, self.stand.scale);
     }
 
-    /// How many passes draw the view, as [`BoxView::passes`] counts them.
-    pub fn passes(&self) -> u32 {
-        self.boxes.passes()
-    }
-
-    /// Draws the `at`th of the view's [`passes`](Self::passes) into `pass`.
-    pub fn draw(&self, pass: &mut RenderPass<'_>, at: u32) {
-        self.boxes.draw(pass, at);
-    }
-
-    /// Encodes the passes that come before the first of a frame's
-    /// [`passes`](Self::passes), as [`BoxView::glow`] does.
-    pub fn glow(&self, encoder: &mut CommandEncoder) {
-        self.boxes.glow(encoder);
+    /// Encodes a frame over `target`, as [`BoxView::encode`] does.
+    pub fn encode(&self, encoder: &mut CommandEncoder, target: &ViewTarget<'_>, clear: Color) {
+        self.boxes.encode(encoder, target, clear);
     }
 }

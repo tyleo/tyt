@@ -1,16 +1,14 @@
 use crate::{CenterDepth, Error, GalleryKeys, Result, WindowBlit, open_gpu};
 use std::{
-    num::NonZeroU32,
     path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
 };
-use voxrender_bench::{GalleryControls, Gpu, ModelGallery, ViewEye};
+use voxrender_bench::{GalleryControls, Gpu, ModelGallery, ViewEye, ViewTarget};
 use wgpu::{
-    CommandEncoderDescriptor, CurrentSurfaceTexture, Extent3d, Instance, LoadOp, Operations,
-    PresentMode, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor,
-    StoreOp, Surface, SurfaceConfiguration, TextureAspect, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
+    CommandEncoderDescriptor, CurrentSurfaceTexture, Extent3d, Instance, PresentMode, Surface,
+    SurfaceConfiguration, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
 };
 use winit::{
     application::ApplicationHandler,
@@ -445,46 +443,14 @@ impl Open {
                 label: Some("frame"),
             });
 
-        let passes = self.gallery.passes();
+        // The depth outlasts the frame for the read of its middle.
+        let target = ViewTarget {
+            color: &self.eyes,
+            depth: &self.depth,
+            keep_depth: true,
+        };
 
-        self.gallery.glow(&mut encoder);
-
-        for at in 0..passes {
-            let first = at == 0;
-
-            let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("eyes"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &self.eyes,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: if first {
-                            LoadOp::Clear(self.gallery.sky())
-                        } else {
-                            LoadOp::Load
-                        },
-                        store: StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: Some(RenderPassDepthStencilAttachment {
-                    view: &self.depth,
-                    depth_ops: Some(Operations {
-                        load: if first {
-                            LoadOp::Clear(0.0)
-                        } else {
-                            LoadOp::Load
-                        },
-                        store: StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                multiview_mask: NonZeroU32::new(0b11),
-                ..RenderPassDescriptor::default()
-            });
-
-            self.gallery.draw(&mut pass, at);
-        }
+        self.gallery.encode(&mut encoder, &target);
 
         let surface = frame.texture.create_view(&TextureViewDescriptor {
             format: Some(self.shown),
