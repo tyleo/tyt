@@ -2,16 +2,17 @@ use crate::{
     BObjectTile, BTileObject, BViewBox, BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces,
     BoxHide, BoxPart, DetailTree, Error, LISTS, MaskTile, PlacedBox, Result, TileMasks,
     TilePlacement, TileScene, ViewBoxes, ViewEye, ViewLights, ViewLit, ViewMaterials, ViewPages,
-    ViewTarget, box_corners, box_view_shader, quad_tlas, storage_words, tile_quads, to_word,
+    ViewTarget, box_corners, box_view_shader, eye_texture, quad_tlas, storage_words, tile_quads,
+    to_word,
 };
 use branded_id::{IdVec, UsizeId};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxrender::{RenderBloom, grid_point, tonemap};
 use wgpu::{
     AddressMode, Buffer, BufferBindingType, BufferDescriptor, BufferUsages, Color, CommandEncoder,
-    Device, Extent3d, Features, FilterMode, Queue, SamplerDescriptor, ShaderModuleDescriptor,
-    ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    Device, Features, FilterMode, Queue, SamplerDescriptor, ShaderModuleDescriptor,
+    ShaderRuntimeChecks, ShaderSource, ShaderStages, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -467,22 +468,8 @@ impl BoxView {
             .flatten()
             .collect();
 
-        let texture = |label, size: [u32; 2], format, usage| {
-            device
-                .create_texture(&TextureDescriptor {
-                    label: Some(label),
-                    size: Extent3d {
-                        width: size[0],
-                        height: size[1],
-                        depth_or_array_layers: 2,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
+        let texture = |label, size, format, usage| {
+            eye_texture(device, label, size, format, usage)
                 .create_view(&TextureViewDescriptor::default())
         };
 

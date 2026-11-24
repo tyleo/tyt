@@ -1,14 +1,13 @@
 use crate::{
-    BoxView, Error, Gpu, Result, TileScene, ViewEye, ViewOptions, ViewTarget, map_readback,
-    world_to_clip,
+    BoxView, Error, Gpu, Result, TileScene, ViewEye, ViewOptions, ViewTarget, eye_texture,
+    map_readback, world_to_clip,
 };
 use branded_id::U32Id;
 use voxrender::{BRenderView, Error as RenderError, RenderBloom, RenderScene};
 use wgpu::{
     BufferAddress, BufferDescriptor, BufferUsages, COPY_BYTES_PER_ROW_ALIGNMENT,
     CommandEncoderDescriptor, Extent3d, Origin3d, TexelCopyBufferInfo, TexelCopyBufferLayout,
-    TexelCopyTextureInfo, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor,
+    TexelCopyTextureInfo, TextureAspect, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 
 /// The format of the image's texels.
@@ -56,22 +55,7 @@ pub fn view_image(
 
     boxes.prepare(&gpu.queue, &eyes, 1.0);
 
-    let texture = |label, format, usage| {
-        gpu.device.create_texture(&TextureDescriptor {
-            label: Some(label),
-            size: Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 2,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format,
-            usage,
-            view_formats: &[],
-        })
-    };
+    let texture = |label, format, usage| eye_texture(&gpu.device, label, size, format, usage);
 
     let color = texture(
         "view eyes",

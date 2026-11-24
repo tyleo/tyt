@@ -1,16 +1,15 @@
-use std::num::NonZeroU32;
+use crate::{ViewTarget, eye_texture};
 use voxrender::RenderBloom;
 use wgpu::{
     AddressMode, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor,
     BlendOperation, BlendState, Buffer, BufferBindingType, BufferUsages, Color, ColorTargetState,
-    ColorWrites, CommandEncoder, Device, Extent3d, FilterMode, FragmentState, LoadOp,
-    MultisampleState, Operations, PipelineCompilationOptions, PipelineLayoutDescriptor,
-    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, SamplerBindingType, SamplerDescriptor, ShaderModuleDescriptor,
-    ShaderSource, ShaderStages, StoreOp, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
-    VertexState,
+    ColorWrites, CommandEncoder, Device, FilterMode, FragmentState, LoadOp, MultisampleState,
+    Operations, PipelineCompilationOptions, PipelineLayoutDescriptor, PrimitiveState,
+    RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
+    SamplerBindingType, SamplerDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages,
+    StoreOp, TextureFormat, TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureViewDimension, VertexState,
     util::{BufferInitDescriptor, DeviceExt},
 };
 
@@ -59,21 +58,9 @@ impl BoxBloom {
             .map(|level| {
                 let side = |side: u32| (side.div_ceil(2) >> level).max(1);
 
-                device
-                    .create_texture(&TextureDescriptor {
-                        label: Some("bloom level"),
-                        size: Extent3d {
-                            width: side(size[0]),
-                            height: side(size[1]),
-                            depth_or_array_layers: 2,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: TextureDimension::D2,
-                        format: Self::FORMAT,
-                        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
-                        view_formats: &[],
-                    })
+                let usage = TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT;
+
+                eye_texture(device, "bloom level", size.map(side), Self::FORMAT, usage)
                     .create_view(&TextureViewDescriptor::default())
             })
             .collect();
@@ -214,7 +201,7 @@ impl BoxBloom {
                         write_mask: ColorWrites::ALL,
                     })],
                 }),
-                multiview_mask: NonZeroU32::new(0b11),
+                multiview_mask: ViewTarget::EYES,
                 cache: None,
             })
         };
@@ -273,7 +260,7 @@ impl BoxBloom {
                         store: StoreOp::Store,
                     },
                 })],
-                multiview_mask: NonZeroU32::new(0b11),
+                multiview_mask: ViewTarget::EYES,
                 ..RenderPassDescriptor::default()
             });
 

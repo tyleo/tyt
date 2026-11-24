@@ -12,12 +12,9 @@ use std::{path::Path, time::Instant};
 use voxrender::RenderBloom;
 use voxrender_bench::{
     BoxView, Error as BenchError, HeadsetEye, HeadsetStand, HeadsetView, ModelGallery, TileScene,
-    ViewTarget, bench_scene,
+    ViewTarget, bench_scene, eye_texture,
 };
-use wgpu::{
-    CommandEncoderDescriptor, Device, Extent3d, TextureDescriptor, TextureDimension, TextureUsages,
-    TextureView, TextureViewDescriptor,
-};
+use wgpu::{CommandEncoderDescriptor, Device, TextureUsages, TextureView, TextureViewDescriptor};
 
 /// The views the app draws.
 const VIEW_TYPE: ViewConfigurationType = ViewConfigurationType::PRIMARY_STEREO;
@@ -37,10 +34,6 @@ const TESTS: &str = "tests";
 /// The model the gallery opens with when its directory holds it and no
 /// property picks another, as a path within the directory.
 const FIRST: &str = "valley-5km/valley-5km.voxjz";
-
-/// The most seconds one frame moves a gallery's wearer by. A longer gap
-/// between two frames is a stall.
-const STEP: f64 = 0.1;
 
 /// An OpenXR session that runs B0's session probes. Each frame draws a
 /// scene's view or a gallery's model.
@@ -383,7 +376,7 @@ impl XrApp {
 
                 let seconds = last
                     .replace(now)
-                    .map_or(0.0, |last| (now - last).as_secs_f64().min(STEP));
+                    .map_or(0.0, |last| (now - last).as_secs_f64());
 
                 // A tour steps on once its model has shown for its time.
                 if let (Some(tour), Some(since)) = (*tour, *landed)
@@ -500,20 +493,14 @@ enum FrameWork {
 /// A view of both eyes' depth for a `width` by `height` swapchain, one
 /// layer an eye.
 fn eye_depth(device: &Device, width: u32, height: u32) -> TextureView {
-    device
-        .create_texture(&TextureDescriptor {
-            label: Some("eye depth"),
-            size: Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 2,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: HeadsetView::DEPTH,
-            usage: TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        })
-        .create_view(&TextureViewDescriptor::default())
+    let usage = TextureUsages::RENDER_ATTACHMENT;
+
+    eye_texture(
+        device,
+        "eye depth",
+        [width, height],
+        HeadsetView::DEPTH,
+        usage,
+    )
+    .create_view(&TextureViewDescriptor::default())
 }

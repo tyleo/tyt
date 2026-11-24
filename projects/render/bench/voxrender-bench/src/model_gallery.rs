@@ -31,6 +31,10 @@ const DEAD: f32 = 0.15;
 /// The times a model grows in a second under a full trigger.
 const GROWTH: f64 = 4.0;
 
+/// The most seconds one frame moves the wearer by. A longer gap between
+/// two frames is a stall.
+const STEP: f64 = 0.1;
+
 /// The color the eyes clear to before the first model lands.
 const EMPTY: Color = Color {
     r: 0.5,
@@ -213,7 +217,7 @@ impl ModelGallery {
                 leaning,
                 controls,
                 eyes,
-                seconds,
+                seconds.min(STEP),
             );
 
             shown.view.prepare(&self.queue, eyes);

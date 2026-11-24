@@ -4,11 +4,11 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use voxrender_bench::{GalleryControls, Gpu, ModelGallery, ViewEye, ViewTarget};
+use voxrender_bench::{GalleryControls, Gpu, ModelGallery, ViewEye, ViewTarget, eye_texture};
 use wgpu::{
-    CommandEncoderDescriptor, CurrentSurfaceTexture, Extent3d, Instance, PresentMode, Surface,
-    SurfaceConfiguration, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
+    CommandEncoderDescriptor, CurrentSurfaceTexture, Instance, PresentMode, Surface,
+    SurfaceConfiguration, TextureAspect, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor, TextureViewDimension,
 };
 use winit::{
     application::ApplicationHandler,
@@ -24,10 +24,6 @@ const TITLE: &str = "voxrender-bench";
 
 /// The format of the image a gallery draws.
 const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
-
-/// The most seconds one frame moves a gallery's wearer by. A longer gap
-/// between two frames is a stall.
-const STEP: f64 = 0.1;
 
 /// A window on a [`ModelGallery`] that [`GalleryKeys`] steer. The window
 /// shows the first of the two eyes the gallery draws. The image keeps the
@@ -284,32 +280,15 @@ impl Open {
 
         surface.configure(&gpu.device, &config);
 
-        let texture = |label, format, usage| {
-            gpu.device.create_texture(&TextureDescriptor {
-                label: Some(label),
-                size: Extent3d {
-                    width: pixels.width,
-                    height: pixels.height,
-                    depth_or_array_layers: 2,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format,
-                usage,
-                view_formats: &[],
-            })
-        };
-
-        let color = texture(
-            "gallery eyes",
-            FORMAT,
-            TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-        );
-        let depths = texture(
+        let size = [pixels.width, pixels.height];
+        let usage = TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING;
+        let color = eye_texture(&gpu.device, "gallery eyes", size, FORMAT, usage);
+        let depths = eye_texture(
+            &gpu.device,
             "gallery depth",
+            size,
             ModelGallery::DEPTH,
-            TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            usage,
         );
 
         let first = color.create_view(&TextureViewDescriptor {
@@ -324,7 +303,7 @@ impl Open {
             &window.directory,
             window.first.as_deref(),
             FORMAT,
-            [pixels.width, pixels.height],
+            size,
             window.detail,
         )
         .map_err(Error::Bench)?;
@@ -392,7 +371,7 @@ impl Open {
         let aspect = f64::from(self.config.width) / f64::from(self.config.height);
         let eyes = self.keys.eyes(aspect);
 
-        if let Some(line) = self.gallery.prepare(&controls, &eyes, seconds.min(STEP)) {
+        if let Some(line) = self.gallery.prepare(&controls, &eyes, seconds) {
             println!("models {line}");
         }
 
