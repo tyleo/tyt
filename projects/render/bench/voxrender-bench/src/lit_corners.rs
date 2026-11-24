@@ -273,7 +273,7 @@ mod tests {
                 .iter_objects()
                 .map(|(object_id, object)| {
                     let grid = CellGrid::new(object, &|id| id);
-                    let masks = TileMasks::new(&grid, true, Some(&every)).unwrap();
+                    let masks = TileMasks::new(&grid, &every).unwrap();
 
                     (
                         object_id,

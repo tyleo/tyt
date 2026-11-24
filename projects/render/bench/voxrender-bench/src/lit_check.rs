@@ -68,7 +68,7 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
     let mut tiles = HashMap::new();
 
     for (object_id, object) in scene.iter_objects() {
-        let masks = TileMasks::new(&CellGrid::new(object, &|id| id), true, Some(&every))?;
+        let masks = TileMasks::new(&CellGrid::new(object, &|id| id), &every)?;
 
         tiles.insert(
             object_id,

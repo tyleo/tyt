@@ -52,7 +52,7 @@ impl ObjectTiles {
         glass: Option<&mut dyn FnMut(u32) -> u32>,
         slabs: bool,
     ) -> Result<Self> {
-        let masks = TileMasks::new(grid, true, Some(opaque))?;
+        let masks = TileMasks::new(grid, opaque)?;
         let counts = (grid.bounds + TILE - 1) / TILE;
 
         // Each tile's place plus one among the tiles whose low corners
