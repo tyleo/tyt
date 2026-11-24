@@ -5,9 +5,9 @@ use crate::{
 use branded_id::UsizeId;
 use ty_math::TyVector3U32;
 
-/// One object's cells by tile, as a view and its shadow bake keep them. An
-/// object's grid can hold far more cells than a device has room for, and
-/// these grow with the tiles that hold a cell.
+/// One object's cells by tile, as a view and its shadow bake keep them.
+/// They grow with the tiles that hold a cell, because an object's grid can
+/// hold far more cells than a device has room for.
 pub struct ObjectTiles {
     pub bounds: TyVector3U32,
 
@@ -18,9 +18,8 @@ pub struct ObjectTiles {
     /// for a scene that keeps no glass.
     pub glass: GlassTiles,
 
-    /// The boxes of opaque cells alone that hide what lies behind them, or
-    /// none for a coarser copy of an object, whose cells reach past the
-    /// object's.
+    /// The object's [`solid_slabs`](solid_slabs()), or none for a coarser
+    /// copy, whose cells reach past the object's.
     pub slabs: Vec<CellBox>,
 
     /// How many of its object's cells one of the cells spans along an axis:
@@ -54,12 +53,10 @@ impl ObjectTiles {
     /// # Arguments
     ///
     /// 1. `opaque`: whether a material passes no light
-    /// 2. `glass`: with it, the tiles keep the surfaces between materials
-    ///    that pass light, and it gives what a glass cell's word holds for
-    ///    a material, under 2^12
-    /// 3. `span`: how many of its object's cells one of the grid's spans
-    /// 4. `shift`: the empty cells the grid holds ahead of its object's
-    ///    first
+    /// 2. `glass`: the `place` that [`GlassTiles::new`] takes, or `None` to
+    ///    keep no glass
+    /// 3. `span` and `shift`: the tiles' [`span`](Self::span) and
+    ///    [`shift`](Self::shift)
     pub fn new(
         grid: &CellGrid,
         opaque: &dyn Fn(u32) -> bool,

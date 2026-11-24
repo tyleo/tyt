@@ -49,10 +49,9 @@ pub struct ModelTiles {
 }
 
 impl ModelTiles {
-    /// Loads the document at `path` an object at a time on several
-    /// threads. A thread holds one object's grid, and the scene keeps the
-    /// tiles of the rest, so a document can hold more cells than the device
-    /// has room for. The scene takes `glass` and `coarser` as
+    /// Loads the document at `path` on several threads. A thread holds one
+    /// object's grid at a time, because a document can hold more cells than
+    /// the device has room for. The scene takes `glass` and `coarser` as
     /// [`TileScene::new`] does. Errors if the document does not load, holds
     /// no live voxel, or holds a material the contract cannot shade, and as
     /// [`TileScene::push_object`] does.
@@ -69,11 +68,9 @@ impl ModelTiles {
 
         drop(bytes);
 
-        // Each object's cells leave the document. One object's at a time
-        // come back to a thread's copy of it for the document's
-        // conversion, where an object without them converts to an empty
-        // grid. An object's build volume sizes its grid where the document
-        // holds one.
+        // Each object's cells and build volume leave the document. A
+        // thread's copy of the document takes one object's back to convert
+        // it, while the rest convert to empty grids.
         let mut volumes: Vec<_> = (file.main.edit_state.iter_mut())
             .flat_map(|edit| &mut edit.objects)
             .map(|object| mem::take(&mut object.bounds))
@@ -103,9 +100,9 @@ impl ModelTiles {
         let count = held.len();
         let held = Mutex::new(held);
 
-        // The scene with the object whose materials it takes next. The
-        // objects place their materials in the document's order, so a
-        // material keeps its place however the threads run.
+        // The scene, and the object whose materials it takes next. Objects
+        // place their materials in the document's order, so a material
+        // keeps its place however the threads run.
         let scene = Mutex::new((TileScene::new(glass, coarser), 0));
         let turn = Condvar::new();
 

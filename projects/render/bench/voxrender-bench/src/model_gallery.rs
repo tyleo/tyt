@@ -43,10 +43,9 @@ const EMPTY: Color = Color {
 const DIM: f64 = 0.7;
 
 /// The Voxel Json models under a directory, shown one at a time around a
-/// headset's wearer through a [`HeadsetView`].
-///
-/// A model lands on a table before the wearer. A model loads on a thread of
-/// its own while the one before it stays in view under a dimmed sky.
+/// headset's wearer through a [`HeadsetView`]. A model lands on a table
+/// before the wearer. It loads on a separate thread while the model before
+/// it stays in view under a dimmed sky.
 pub struct ModelGallery {
     device: Device,
 
@@ -56,8 +55,7 @@ pub struct ModelGallery {
 
     size: [u32; 2],
 
-    /// The fewest pixels a cell spans before a coarser copy draws in its
-    /// place, or zero for a gallery whose models keep no copies.
+    /// The `detail` [`new`](Self::new) took.
     detail: f64,
 
     directory: PathBuf,
@@ -106,12 +104,12 @@ impl ModelGallery {
 
     /// Lists the `.voxj` and `.voxjz` documents under `directory` and
     /// starts loading the first for a two-layer target of `format` whose
-    /// width and height are `size`. With `first`, the gallery starts at
-    /// the first document whose path under `directory` holds that text.
-    /// With a `detail` over zero, each model keeps coarser copies of its
-    /// objects, and its view takes `detail` as [`HeadsetView::set_detail`]
-    /// does. Errors if the directory does not list, holds no document, or
-    /// holds none with `first` in its path.
+    /// width and height are `size`. With `first`, the gallery starts at the
+    /// first document whose path under `directory` holds that text. With a
+    /// `detail` over zero, each model keeps coarser copies and takes
+    /// `detail` as [`HeadsetView::set_detail`] does. Errors if the directory
+    /// does not list, holds no document, or holds none with `first` in its
+    /// path.
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -183,10 +181,10 @@ impl ModelGallery {
         self.shown.as_ref().map(|shown| shown.view.stand)
     }
 
-    /// Readies the next draw for `eyes`, the headset's left eye and then
-    /// its right, `seconds` after the last. The gallery first does what
-    /// `controls` ask and takes a model that finished loading. Returns the
-    /// line that reports such a model, or why it failed to load.
+    /// Does what `controls` ask, takes a model that finished loading, and
+    /// readies the next draw for `eyes`, left then right, `seconds` after
+    /// the last. Returns the line that reports such a model, or why it
+    /// failed to load.
     pub fn prepare(
         &mut self,
         controls: &GalleryControls,
@@ -226,7 +224,7 @@ impl ModelGallery {
 
     /// Encodes a frame of the model in view over `target`, under a sky
     /// dimmed while the next model loads. Before the first model lands, the
-    /// frame clears the target to [`EMPTY`].
+    /// frame clears the target to gray.
     pub fn encode(&self, encoder: &mut CommandEncoder, target: &ViewTarget<'_>) {
         let Some(shown) = &self.shown else {
             target.begin(encoder, "eyes", Some(EMPTY), true);

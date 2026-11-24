@@ -10,8 +10,8 @@ use wgpu::{
 
 /// A view's lit words: a word for each record cell of each placement's
 /// tiles, then one for each of its glass cells. A record cell's word holds
-/// its material in its high 8 bits, as its place among its tile's. The low
-/// bits take the sun's corner shadows.
+/// its material's place among its tile's in the high 8 bits. The low bits
+/// take the sun's corner shadows.
 pub struct ViewLit {
     /// `box_view.wgsl`'s `lit` for each page. Each ends with
     /// [`TileMasks::SPARE`] words, which a hit the depth test drops can
@@ -21,8 +21,7 @@ pub struct ViewLit {
     /// The first of each placement's words in its page's.
     pub places: IdVec<BTilePlacement, u32>,
 
-    /// The first word of each of each placement's glass tiles in its
-    /// page's.
+    /// The first word of each glass tile of each placement in its page's.
     pub glass: IdVec<BTilePlacement, IdVec<BObjectTile, u32>>,
 
     /// How far past a record cell's word its tint lies, or zero for a
@@ -31,11 +30,10 @@ pub struct ViewLit {
 }
 
 impl ViewLit {
-    /// Lays out the lit words of `tiles`' placements, a page of `pages` in
-    /// a buffer, and has the GPU fill the shadows of a sun along the unit
-    /// `toward`. A scene with no sun leaves them zero, and its faces skip
-    /// the sun's term. In a `tinted` scene, the fill adds each record
-    /// cell's tint in a second word. Errors if waiting on the fill fails.
+    /// Lays out the lit words of `tiles`' placements, a buffer a page of
+    /// `pages`, and has the GPU fill the shadows of a sun along the unit
+    /// `toward`. A `tinted` fill adds each record cell's tint in a second
+    /// word. Errors if waiting on the fill fails.
     pub fn new(
         device: &Device,
         queue: &Queue,

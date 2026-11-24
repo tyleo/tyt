@@ -15,10 +15,9 @@ use wgpu::{
 const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
 /// A [`BoxView`] of `tiles` under `bloom` through two of `scene`'s views,
-/// one an eye, as each eye's sRGB texels of an image whose width and
-/// height are `size`, four bytes each, row by row. The view draws as
-/// `options` have it. Errors unless the views are the scene's and the
-/// device has multiview, and as the view does.
+/// one an eye, as each eye's sRGB texels of a `size` image, four bytes
+/// each, row by row. Errors unless the views are the scene's and the device
+/// has multiview, and as [`BoxView::new`] does.
 pub fn view_image(
     gpu: &Gpu,
     tiles: &TileScene,

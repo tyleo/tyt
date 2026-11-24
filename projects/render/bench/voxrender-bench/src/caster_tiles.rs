@@ -2,8 +2,6 @@ use crate::{CellGrid, Error, Result, TILE, TILE_CELLS};
 use ty_math::TyVector3U32;
 
 /// An object's cells by tile, as `lit_fill.wgsl`'s shadow rays read them.
-/// The words grow with the object's tiles that hold a cell, where a word
-/// for each cell of its grid grows with the grid.
 ///
 /// The words start with a word for each tile of the grid. The tile at
 /// `(x, y, z)` among the tiles takes word `(x * counts.y + y) * counts.z +

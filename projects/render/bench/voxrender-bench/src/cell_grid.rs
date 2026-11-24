@@ -3,13 +3,12 @@ use ty_math::TyVector3U32;
 use voxrender::RenderObject;
 use voxrender_wgpu::dense_cells;
 
-/// One object's cells, a word for each cell of its grid. A loader holds
-/// one object's grid at a time and keeps the object's tiles in its place.
+/// One object's cells, a word for each cell of its grid.
 pub struct CellGrid {
     pub bounds: TyVector3U32,
 
-    /// Each cell in raster order, `(x * bounds.y + y) * bounds.z + z`: 0
-    /// when empty, else the place of its material among a scene's plus one.
+    /// Each cell in [`raster_index`](raster_index()) order: 0 when empty,
+    /// else the place of its material among a scene's plus one.
     pub cells: Vec<u32>,
 }
 

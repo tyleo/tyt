@@ -30,8 +30,7 @@ impl ViewPages {
         page_bytes: u64,
         tinted: bool,
     ) -> Result<Self> {
-        // The objects by their places, which a group's members follow one
-        // another in.
+        // How many times each object is placed.
         let objects = tiles.objects.as_slice();
         let mut placed = vec![0; objects.len()];
 
@@ -39,8 +38,7 @@ impl ViewPages {
             placed[placement.object.to_usize()] += 1;
         }
 
-        // The words of each object's tiles, and of what its placements'
-        // cells take in lit words.
+        // Each object's words of tiles, and its placements' lit words.
         let sizes: Vec<(usize, usize)> = (objects.iter().zip(&placed))
             .map(|(object, placed)| {
                 let masks = &object.masks;

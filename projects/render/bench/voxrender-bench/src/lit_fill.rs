@@ -20,24 +20,19 @@ const STEP_BYTES: usize = 192;
 /// The margin covers the rounding of the boxes and of each grid's light.
 const MARGIN: f64 = 0.01;
 
-/// What fills a scene's corner shadows under one directional light on the
-/// GPU: [`LitCorners`](crate::LitCorners)' words, a [`LitPage`] of the
-/// scene's placements at a time.
+/// The GPU fill of a scene's corner shadows under one directional light:
+/// [`LitCorners`](crate::LitCorners)' words, a [`LitPage`] of the scene's
+/// placements at a time.
 ///
-/// A compute pass casts the contract's ray from each corner of each face
-/// the light can reach, through voxrender's integer walk. A ray walks
-/// only the placements that can shadow its tile: those whose box, seen
-/// along the light, covers some of the tile's and reaches as far toward
-/// the light.
+/// A ray walks only the placements whose box, seen along the light, covers
+/// some of its tile's and reaches as far toward the light.
 ///
 /// A material that passes light tints the light a ray carries through it,
 /// as the contract's shadow ray pays each surface. A corner is lit where
 /// some light reaches it. A record cell's tint holds the mean of what
-/// reaches its lit corners in each channel.
-///
-/// A glass cell is a cell of such a material with a surface. Its word
-/// holds the mean of what reaches the corners of its surfaces, from the
-/// side of each that the light falls on.
+/// reaches its lit corners in each channel. A cell of such a material with a
+/// surface fills as a glass cell. Its word holds the mean of what reaches
+/// the corners of its surfaces from the side the light falls on.
 pub struct LitFill {
     pipeline: ComputePipeline,
 
@@ -50,18 +45,17 @@ pub struct LitFill {
     /// `lit_fill.wgsl`'s `Light` for each placement.
     lights: Buffer,
 
-    /// `lit_fill.wgsl`'s `passes`.
+    /// `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each key, a
+    /// material's place plus one. Key zero passes the light whole.
     passes: Buffer,
 
-    /// The light's axis after two axes across it.
+    /// Two axes across the light, then the light's axis.
     axes: [TyVector3F64; 3],
 
-    /// The low and high corners of the box around each placement's grid
-    /// along [`axes`](Self::axes).
+    /// The box around each placement's grid along [`axes`](Self::axes).
     spans: Vec<Span>,
 
-    /// How many cells of the object it copies one of each placement's
-    /// cells spans.
+    /// Each placement's object's [`span`](crate::ObjectTiles::span).
     sizes: Vec<u32>,
 }
 
@@ -80,8 +74,6 @@ impl LitFill {
             caster_words.extend(&object.casters.words);
         }
 
-        // `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each key, a
-        // material's place plus one. Key zero passes the light whole.
         let passes: Vec<f32> = [[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
             .into_iter()
             .chain(tiles.materials.iter().map(|material| {
@@ -151,7 +143,6 @@ impl LitFill {
             lights.resize(32, 0);
         }
 
-        // Each span reaches along the light's axis and two axes across it.
         let across = toward.cross(if toward.x.abs() < 0.5 {
             TyVector3F64::X
         } else {
@@ -225,8 +216,7 @@ impl LitFill {
     /// # Arguments
     ///
     /// 1. `tiles`: the scene the fill was built for
-    /// 2. `placements`: the placements, as their places among the scene's
-    /// 3. `tints`: for a scene with a material that passes light, how far
+    /// 2. `tints`: for a scene with a material that passes light, how far
     ///    past a record cell's word its tint lies, no less than the page's
     ///    cells plus [`TileMasks::SPARE`]
     pub fn page(
@@ -242,8 +232,6 @@ impl LitFill {
         let mut casters: Vec<u32> = Vec::new();
         let mut recorded: Vec<u32> = Vec::new();
 
-        // The opaque tiles' cells of every placement come first, then the
-        // glass tiles'.
         for glassy in [false, true] {
             for &index in placements {
                 let TilePlacement { object, transform } = &tiles.placements[index];
@@ -281,10 +269,9 @@ impl LitFill {
                     );
                     let first = casters.len();
 
-                    // A caster's box covers some of the tile's across the light
-                    // and reaches as far toward it. Its cells span as many
-                    // of its object's as the tile's do: an object's coarser
-                    // copy shadows that copy's cells alone.
+                    // A caster's cells span as many of its object's as the
+                    // tile's do. A coarser copy shadows that copy's cells
+                    // alone.
                     let size = self.sizes[index.to_usize()];
 
                     casters.extend((0u32..).zip(&self.spans).zip(&self.sizes).filter_map(
@@ -375,8 +362,8 @@ impl LitFill {
     }
 }
 
-/// The low and high corners, along `axes`, of the box around the cells
-/// from `low` to before `high` of a grid that `transform` places.
+/// The box along `axes` around the cells from `low` to before `high` of a
+/// grid that `transform` places.
 fn span(
     axes: &[TyVector3F64; 3],
     transform: &TyTransformF64,

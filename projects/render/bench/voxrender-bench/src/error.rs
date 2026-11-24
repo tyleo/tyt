@@ -51,9 +51,8 @@ pub enum Error {
     /// the device cannot blend the two colors a fragment of one writes.
     Glass,
 
-    /// An object takes one page of a view, with every object whose boxes
-    /// share space with its boxes. One such set would take `bytes` bytes
-    /// where a page holds `most`.
+    /// An object and every object whose boxes share space with its boxes
+    /// would take `bytes` bytes of one page, which holds `most`.
     Page { bytes: u64, most: u64 },
 }
 

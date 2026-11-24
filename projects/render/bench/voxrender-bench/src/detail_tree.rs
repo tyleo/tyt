@@ -12,9 +12,7 @@ pub const LISTS: usize = 3;
 
 /// A scene's tiles and those of its objects' coarser copies, as a view
 /// picks which of them to draw. A tile of a copy stands over the eight
-/// tiles of the copy a level finer that fill its space. A view draws a tile
-/// whose cells span few enough pixels, and the tiles under it otherwise.
-/// Every place then draws at one level.
+/// tiles of the copy a level finer that fill its space.
 pub struct DetailTree {
     /// Each tile, the tiles under one following one another. The scene's
     /// coarsest tiles come first.

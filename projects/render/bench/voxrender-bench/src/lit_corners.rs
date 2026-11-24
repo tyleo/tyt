@@ -22,11 +22,10 @@ const INSET: i32 = ONE >> SHADOW_INSET_BITS;
 /// the occlusion words' order, set where the light reaches the corner. A
 /// face the light cannot reach holds zero.
 ///
-/// The contract casts a corner's ray from a point just inside the face's
-/// edges. Where a placement's rays can cross two lattice planes at once
-/// inside its grid, that inset decides which cell a ray crosses first. Each
-/// corner there casts a ray. Elsewhere the fill casts fewer rays than
-/// corners:
+/// Where a placement's rays can cross two lattice planes at once inside its
+/// grid, each corner casts a ray, because the contract's inset from the
+/// face's edges decides which cell a ray crosses first. Elsewhere the fill
+/// casts fewer rays than corners:
 ///
 /// 1. Along an axis the ray moves along, every face that shares the
 ///    corner's lattice point casts the same cells' ray, so the point casts
@@ -97,8 +96,8 @@ impl LitCorners {
             let sides = still.map(|still| if still { 2 * TILE } else { TILE + 1 });
             let rows = (sides[0] * sides[1]) as usize;
 
-            // The value of the cell at `cell`: 0 when empty or outside the
-            // object, else its material id plus one.
+            // A cell's value: 0 when empty or outside the object, else its
+            // material id plus one.
             let value = |cell: [i32; 3]| {
                 let inside = (0..3).all(|axis| cell[axis] >= 0 && cell[axis] < bounds[axis] as i32);
 
@@ -143,8 +142,6 @@ impl LitCorners {
                             continue;
                         }
 
-                        // The ray moves faster along one of the face's
-                        // axes. A tie goes to the earlier axis.
                         let faster = if direction[u].abs() > direction[v].abs()
                             || (direction[u].abs() == direction[v].abs() && u < v)
                         {
@@ -190,8 +187,7 @@ impl LitCorners {
                                 }
 
                                 // Whether the ray leaves the face's cell
-                                // past the corner on each of the face's
-                                // axes.
+                                // past the corner on each face axis.
                                 let outward = [0, 1].map(|side| {
                                     let along = direction[[u, v][side]];
 

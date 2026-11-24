@@ -1,12 +1,10 @@
 use crate::{Error, Result};
 use std::process::Command;
 
-/// The system property that holds the start of the name of the scene to
-/// view.
+/// The system property that holds the start of the viewed scene's name.
 const VIEW: &str = "debug.voxrenderbench.view";
 
-/// The system property that turns on the log of the view's pipeline
-/// statistics.
+/// The system property that turns on the log of pipeline statistics.
 const STATISTICS: &str = "debug.voxrenderbench.statistics";
 
 /// The system property that turns off the gallery of models.
@@ -15,16 +13,13 @@ const MODELS: &str = "debug.voxrenderbench.models";
 /// The system property that turns on the gallery of test models.
 const TESTS: &str = "debug.voxrenderbench.tests";
 
-/// The system property that holds text from the path of the gallery's first
-/// model.
+/// The system property that holds text from the first model's path.
 const MODEL: &str = "debug.voxrenderbench.model";
 
-/// The system property that holds the seconds the gallery shows a model
-/// before it steps to the next.
+/// The system property that holds the seconds the gallery shows a model.
 const TOUR: &str = "debug.voxrenderbench.tour";
 
-/// The system property that holds the meters a second the view's wearer
-/// walks.
+/// The system property that holds the meters a second the view's wearer walks.
 const WALK: &str = "debug.voxrenderbench.walk";
 
 /// The system property that holds the part of the eyes' recommended size
@@ -44,12 +39,11 @@ pub struct RunOptions {
     /// gallery is on.
     pub view: String,
 
-    /// Whether the app logs the driver's statistics for the view's
-    /// pipelines.
+    /// Whether the app logs the driver's statistics for the view's pipelines.
     pub statistics: bool,
 
     /// Whether the app shows the gallery of the models in its files in
-    /// place of a scene, true when the property is unset.
+    /// place of a scene. Defaults to true.
     pub models: bool,
 
     /// Whether the gallery shows the test models in the app's files in
@@ -68,7 +62,7 @@ pub struct RunOptions {
     pub walk: Option<f64>,
 
     /// The part of the eyes' recommended size the swapchain takes along
-    /// each side, 1 when the property is unset.
+    /// each side. Defaults to 1.
     pub scale: f64,
 
     /// The fewest pixels a voxel spans before a coarser copy of its object
@@ -78,9 +72,11 @@ pub struct RunOptions {
 }
 
 impl RunOptions {
-    /// Reads the properties. Errors unless each flag is unset, `true`, or
-    /// `false`, the tour, the walk, and the detail are each unset or a
-    /// number over 0, and the scale is unset or over 0 and at most 1.
+    /// Reads the properties. Errors unless:
+    ///
+    /// 1. Each flag is unset, `true`, or `false`
+    /// 2. The tour, the walk, and the detail are each unset or a number over 0
+    /// 3. The scale is unset or over 0 and at most 1
     pub fn read() -> Result<Self> {
         let text = |name| getprop(name).map(|value| (!value.is_empty()).then_some(value));
 

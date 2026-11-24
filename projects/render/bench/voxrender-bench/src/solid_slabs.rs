@@ -13,16 +13,12 @@ const NEAR: usize = 2;
 /// The most rectangles one layer offers.
 const OFFERS: usize = 4;
 
-/// A box of cells as its low cell and the corner past its high cell.
+/// A [`CellBox`] in `usize` coordinates.
 type Slab = ([usize; 3], [usize; 3]);
 
 /// Up to [`MOST`] boxes of `grid`'s opaque cells alone, widest face first.
-/// `opaque` says whether a material passes no light. What lies behind such
-/// a box cannot show, which lets a view leave it out.
-///
-/// Each layer of cells across an axis offers its largest rectangles of
-/// opaque cells. The widest offers win. One grows along its axis for as
-/// long as the layers beside it fill its rectangle.
+/// `opaque` says whether a material passes no light. A view leaves out what
+/// lies behind such a box.
 pub fn solid_slabs(grid: &CellGrid, opaque: &dyn Fn(u32) -> bool) -> Vec<CellBox> {
     let bounds = grid.bounds.to_array().map(|side| side as usize);
 
@@ -50,10 +46,9 @@ pub fn solid_slabs(grid: &CellGrid, opaque: &dyn Fn(u32) -> bool) -> Vec<CellBox
 
     let mut offers: Vec<(usize, usize, Slab)> = Vec::new();
 
-    // Each axis's layers as rows of bits, 64 cells a word. A layer's rows
-    // run along the axis after its own, and follow one another along the
-    // axis after that. A search then reads a layer's opaque cells alone,
-    // where most of a landscape's are empty.
+    // Each axis's layers as rows of bits, 64 cells a word, which lets a
+    // search skip empty cells. A layer's rows run along the axis after its
+    // own and follow one another along the axis after that.
     let words = [0, 1, 2].map(|axis| bounds[(axis + 1) % 3].div_ceil(64));
 
     let mut layers =
@@ -181,10 +176,8 @@ pub fn solid_slabs(grid: &CellGrid, opaque: &dyn Fn(u32) -> bool) -> Vec<CellBox
 /// The largest rectangle of filled cells in a layer `size` cells wide and
 /// high: its cells, its low cell, and the corner past its high cell. `rows`
 /// holds the layer row by row, a bit a cell from each word's low bit, and
-/// each row starts a word. An empty layer gives no cells.
-///
-/// The search reads each stretch of filled cells along a row and passes
-/// over the empty cells between, so it takes time with the filled cells.
+/// each row starts a word. An empty layer gives no cells. The search skips
+/// empty cells, so its time grows with the filled cells alone.
 fn largest_rectangle(size: [usize; 2], rows: &[u64]) -> (usize, [usize; 2], [usize; 2]) {
     let [width, height] = size;
     let words = width.div_ceil(64);

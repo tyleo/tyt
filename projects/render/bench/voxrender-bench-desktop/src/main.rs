@@ -44,7 +44,7 @@ struct Cli {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
-    /// Draws the first view of a bench scene or of a model as a shaded box
+    /// Draws the first view of a bench scene or a model as a shaded box
     /// raster and writes the image as a PNG.
     #[command(name = "view")]
     View {
@@ -82,8 +82,8 @@ enum Command {
         draw: Draw,
     },
 
-    /// Compares the shaded view of a bench scene or of a model with the
-    /// reference's image of it and prints how far they differ.
+    /// Compares the shaded view of a bench scene or a model with the
+    /// reference's image and prints how far they differ.
     #[command(name = "view-check")]
     ViewCheck {
         /// The start of a bench scene's name, such as `S1`, or the path of
@@ -100,8 +100,7 @@ enum Command {
         )]
         size: u32,
 
-        /// Looks through a Quest 3's two eyes at the view's pose in place
-        /// of the view.
+        /// Looks through a Quest 3's two eyes at the view's pose.
         #[arg(value_name = "headset", long)]
         headset: bool,
 
@@ -112,9 +111,8 @@ enum Command {
         draw: Draw,
     },
 
-    /// Compares the GPU's fill of the corner shadows of a bench scene or of
-    /// a model with the fill through the reference's walk and prints how far
-    /// they differ.
+    /// Compares the GPU's corner shadow fill of a bench scene or a model with
+    /// the reference walk's fill and prints how far they differ.
     #[command(name = "lit-check")]
     LitCheck {
         /// The start of a bench scene's name, such as `S1`, or the path of
@@ -193,9 +191,8 @@ struct Look {
 /// How a view draws a scene.
 #[derive(Clone, Debug, Args)]
 struct Draw {
-    /// The most bytes of a scene's tiles one page holds, in place of what
-    /// one of the device's storage bindings holds. A small page draws a
-    /// small scene in several.
+    /// The most bytes of a scene's tiles one page holds. Without it, a page
+    /// holds what one storage binding does. A small page splits a small scene.
     #[arg(value_name = "bytes", long, value_parser = value_parser!(u64).range(1024..))]
     page_bytes: Option<u64>,
 
@@ -351,8 +348,8 @@ fn view(
     let coarser = options.detail > 0.0;
     let path = Path::new(scene);
 
-    // A model loads an object at a time, and a scene with its view alone
-    // frames it.
+    // A model's frame holds the model's view alone because the model loads
+    // an object at a time.
     let (tiles, mut frame, bloom) = if path.is_file() {
         let model = ModelTiles::load(path, glass, coarser).map_err(Error::Bench)?;
         let mut frame = RenderScene::default();

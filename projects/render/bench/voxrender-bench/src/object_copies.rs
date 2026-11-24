@@ -2,23 +2,20 @@ use crate::{CellGrid, ObjectTiles, Result, TILE, to_word};
 use ty_math::TyVector3U32;
 
 /// The tiles of `grid` and then of each of its coarser copies, finest
-/// first. A [`TileScene`](crate::TileScene) keeps them as one object. They
-/// read nothing a scene changes as it takes other objects, so a loader can
-/// build several objects' at once. Errors as [`ObjectTiles::new`] does.
+/// first, as a [`TileScene`](crate::TileScene) keeps one object. They read
+/// nothing a scene changes as it takes other objects, so a loader can build
+/// several objects' at once. Errors as [`ObjectTiles::new`] does.
 ///
-/// With `coarser`, each copy halves the one before, as
-/// [`CellGrid::halved`] does, down to a copy that fits one tile. A copy's
-/// cells sit on the lattice of its size, which the grid's first cell
-/// reaches by the empty cells ahead of it.
+/// With `coarser`, each copy halves the one before by [`CellGrid::halved`].
+/// Empty cells ahead of the grid's first cell set the copies on the lattice.
 ///
 /// # Arguments
 ///
-/// 1. `first`: where the grid's first cell sits on the lattice its scene's
-///    objects share, in cells, or zeros for an object off any lattice
+/// 1. `first`: as [`TileScene::push_object`](crate::TileScene::push_object)
+///    takes it
 /// 2. `opaque`: whether each of the scene's materials passes no light
-/// 3. `glass`: for a scene that keeps the surfaces between materials that
-///    pass light, those materials in the order a glass cell's word counts
-///    them
+/// 3. `glass`: for a scene that keeps glass, the materials that pass light
+///    in the order a glass cell's word counts them
 pub fn object_copies(
     grid: &CellGrid,
     first: [i64; 3],

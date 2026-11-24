@@ -30,7 +30,6 @@ pub struct PlacedBox {
     /// The placement's transform.
     transform: TyTransformF64,
 
-    /// The low and high corners of the world box around the box.
     world: (TyVector3F64, TyVector3F64),
 }
 
@@ -83,10 +82,9 @@ impl PlacedBox {
         ]
     }
 
-    /// Whether some axis parts the box from `other`: an axis along which
-    /// their spans share at most [`TOUCH`]. Two boxes share space unless
-    /// one of 15 axes parts them: either box's three, and the cross of each
-    /// pair of them.
+    /// Whether some axis parts the box from `other`. Their spans along a
+    /// parting axis share at most [`TOUCH`]. The test tries 15 axes: each
+    /// box's three and the cross of each pair.
     fn parted_from(&self, other: &Self) -> bool {
         let (center, axes, halves) = self.oriented();
         let (other_center, other_axes, other_halves) = other.oriented();
@@ -130,10 +128,9 @@ impl PlacedBox {
     }
 
     /// For each of `marched`, the boxes of other placements that share
-    /// space with it and span as many cells of their objects. A view draws
-    /// an object or one of its coarser copies in a place, never both, so
-    /// boxes that span unlike counts never draw over one another's cells. A
-    /// crosser's entry holds a box's index in `marched` followed by `solid`.
+    /// space with it and span as many cells of their objects. Boxes of
+    /// unlike spans never draw over one another's cells because a view draws
+    /// an object or one of its coarser copies in a place, never both.
     pub fn crossers(marched: &[Self], solid: &[Self]) -> Vec<Vec<BoxCrosser>> {
         // Every box with its index. A sweep along x then compares only
         // boxes whose spans meet.

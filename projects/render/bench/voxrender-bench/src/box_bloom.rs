@@ -21,28 +21,23 @@ const FIRST_SIGMA: f64 = 3.0;
 /// The most levels a halo keeps.
 const MOST_LEVELS: usize = 6;
 
-/// The contract's bloom over a [`BoxView`](crate::BoxView)'s eyes.
-///
-/// The view draws its emission over the threshold into the
-/// [`source`](Self::source), at half the eyes' size and scaled by
-/// [`scale`](Self::scale). [`run`](Self::run) then halves that into the
-/// levels and adds the levels back up into the first. The first level spans
-/// a quarter of the eyes' size. A level stands in for the contract's octaves
-/// nearest its blur. The frame's fragments add the first level, which is the
-/// halo.
+/// The contract's bloom over a [`BoxView`](crate::BoxView)'s eyes. The view
+/// draws its emission over the threshold into the [`source`](Self::source).
+/// [`run`](Self::run) halves the source down through the levels and adds
+/// them back up into the [`halo`](Self::halo). Each level stands in for the
+/// contract's octaves nearest its blur.
 pub struct BoxBloom {
     /// The source's view, then the levels', the halo first.
     levels: Vec<TextureView>,
 
-    /// What the view scales the emission it draws by: the strength over
-    /// the octaves.
+    /// The bloom's strength over the octaves.
     scale: f64,
 
     /// For each level: what the pass that halves into it binds.
     halves: Vec<BindGroup>,
 
     /// For each level but the last: what the pass that adds the next level
-    /// binds, then the share of its own light it keeps.
+    /// binds, then the share of its light it keeps.
     adds: Vec<(BindGroup, f64)>,
 
     down: RenderPipeline,

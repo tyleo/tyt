@@ -20,14 +20,13 @@ impl MapRows for SerialRows {
     }
 }
 
-/// Compares the shaded [`BoxView`](crate::BoxView) of `scene` through two of
-/// its views, the left eye's first, with the reference's image of each under
-/// `bloom` over a `width` by `height` image. Returns a line an eye, or one
-/// line when both eyes take one view. A line counts the pixels the
-/// reference hits something opaque in, how many of them have a channel off
-/// by more than `TOLERANCE`, and the mean difference of a channel. The
-/// view draws as `options` have it. Errors unless the views are the
-/// scene's and the device has multiview.
+/// Compares the shaded [`BoxView`] of `scene` through two of its views, the
+/// left eye's first, with the reference's image of each under `bloom` at
+/// `width` by `height`. Returns a line an eye, or one line when both eyes
+/// take one view. A line counts the reference's opaque pixels, those with a
+/// channel off by more than `TOLERANCE`, and the mean difference of a
+/// channel. Errors unless the views are the scene's and the device has
+/// multiview.
 pub fn view_check(
     gpu: &Gpu,
     scene: &RenderScene,

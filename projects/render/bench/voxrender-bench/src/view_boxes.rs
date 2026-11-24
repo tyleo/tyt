@@ -1,9 +1,8 @@
 use crate::{BViewBox, BViewPage, BoxRun, PlacedBox, sort_keys, squared_distance, to_word};
 use branded_id::{IdRange, IdVec, UsizeId};
 
-/// One list of a view's boxes as a sort reads them. A sort reads every
-/// box's bounds and little else, so each of a box's parts lies with the
-/// other boxes' like part.
+/// One list of a view's boxes, laid out by part because a sort reads every
+/// box's bounds and little else.
 #[derive(Default)]
 pub struct ViewBoxes {
     /// The low and then the high corner of the world box around each box.
@@ -49,9 +48,9 @@ impl ViewBoxes {
     }
 
     /// Fills `keys` with a key per box, nearest to `point` first, and
-    /// returns how many of the boxes lie within `reach` of `point`. A key
-    /// holds the bits of its box's squared distance above the box's index.
-    /// With `shown`, only those boxes take a key.
+    /// returns how many boxes lie within `reach` of `point`. A key holds the
+    /// bits of its box's squared distance above the box's index. With
+    /// `shown`, only those boxes take a key.
     pub fn nearest_first(
         &self,
         shown: Option<&[UsizeId<BViewBox>]>,

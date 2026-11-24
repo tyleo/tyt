@@ -29,11 +29,9 @@ const FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 /// between two frames is a stall.
 const STEP: f64 = 0.1;
 
-/// A window on a [`ModelGallery`] that [`GalleryKeys`] steer. The gallery
-/// draws a headset's two eyes from one head, and the window shows the
-/// first. The image keeps the size the window opens at and stretches as
-/// the window's size changes. The window's title holds the model in view
-/// and the frame rate.
+/// A window on a [`ModelGallery`] that [`GalleryKeys`] steer. The window
+/// shows the first of the two eyes the gallery draws. The image keeps the
+/// size the window opens at and stretches as the window resizes.
 pub struct GalleryWindow {
     directory: PathBuf,
 
@@ -44,8 +42,6 @@ pub struct GalleryWindow {
 
     detail: f64,
 
-    /// The seconds the window stays open, for a window that closes by
-    /// itself.
     seconds: Option<f64>,
 
     open: Option<Open>,
@@ -62,8 +58,7 @@ struct Open {
 
     config: SurfaceConfiguration,
 
-    /// The format the surface's images show in: the surface's, with sRGB
-    /// encoding.
+    /// The surface's format with sRGB encoding.
     shown: TextureFormat,
 
     gpu: Gpu,
@@ -107,19 +102,17 @@ struct Open {
 }
 
 impl GalleryWindow {
-    /// Opens a window on the gallery of the models under `directory` and
-    /// returns once the window closes, with a line that reports the frames
-    /// it drew. Errors if the window, its device, or the gallery fails.
+    /// Opens a window on the gallery of the models under `directory`. Once
+    /// the window closes, returns a line that reports the frames drawn.
+    /// Errors if the window, its device, or the gallery fails.
     ///
     /// # Arguments
     ///
     /// 1. `first`: text from the path of the model the gallery opens with
     /// 2. `size`: the width and height the window opens at, in the
     ///    display's points
-    /// 3. `detail`: what the gallery's views take as their detail, or zero
-    ///    for views that draw every voxel
-    /// 4. `seconds`: the seconds the window stays open, for a window that
-    ///    closes by itself
+    /// 3. `detail`: the gallery views' detail, or zero to draw every voxel
+    /// 4. `seconds`: the seconds before the window closes by itself
     pub fn run(
         directory: &Path,
         first: Option<&str>,
@@ -375,7 +368,7 @@ impl Open {
         })
     }
 
-    /// Steers the gallery by the keys and draws its next frame, when the
+    /// Steers the gallery by the keys and draws the next frame when the
     /// surface has an image to draw into.
     fn frame(&mut self) -> Result<()> {
         let now = Instant::now();
@@ -385,8 +378,7 @@ impl Open {
             .replace(now)
             .map_or(0.0, |last| (now - last).as_secs_f64());
 
-        // A zoom heads for what the window's middle showed a frame or two
-        // ago.
+        // A zoom heads for what the window's middle showed a frame or two ago.
         if let Some(depth) = self.center.read(&self.gpu.device)?
             && let Some(meters) = ViewEye::distance(depth)
             && let Some(stand) = self.gallery.stand()
@@ -396,8 +388,7 @@ impl Open {
 
         let controls = self.keys.read();
 
-        // The eyes take the window's shape, which keeps a stretched image
-        // true.
+        // The eyes take the window's shape so a stretched image stays true.
         let aspect = f64::from(self.config.width) / f64::from(self.config.height);
         let eyes = self.keys.eyes(aspect);
 

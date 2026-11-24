@@ -22,9 +22,8 @@ const TIP: f64 = FRAC_PI_2 * 89.0 / 90.0;
 /// 1. W, A, S, and D walk, as the left and right arrows do to each side. E
 ///    rises, and Q sinks
 /// 2. A drag turns the head
-/// 3. The up arrow grows the model around what the window's middle
-///    shows, which brings the head toward it, and the down arrow shrinks
-///    the model
+/// 3. The up arrow grows the model around what the window's middle shows.
+///    The down arrow shrinks the model
 /// 4. N steps to the next model, and P to the one before
 /// 5. Tab switches the model between the table and life size
 pub struct GalleryKeys {
@@ -66,8 +65,7 @@ impl GalleryKeys {
         }
     }
 
-    /// Turns the head back to where it started, as a window does when a
-    /// model lands on its table.
+    /// Turns the head back to where it started.
     pub fn restart(&mut self) {
         let start = Self::new();
 
@@ -76,8 +74,7 @@ impl GalleryKeys {
         self.held = start.held;
     }
 
-    /// Takes the meters ahead of the head to what the window's middle
-    /// shows.
+    /// Takes the meters ahead of the head to what the window's middle shows.
     pub fn hold(&mut self, meters: f64) {
         self.held = meters;
     }
@@ -105,13 +102,13 @@ impl GalleryKeys {
         }
     }
 
-    /// Lets go of every key, as a window does when it loses the keyboard.
+    /// Lets go of every key.
     pub fn release(&mut self) {
         self.down.clear();
     }
 
-    /// Turns the head as a drag does that moves the pointer `across` to
-    /// the right and `down`, each as a part of the window's height.
+    /// Turns the head for a pointer drag `across` to the right and `down`,
+    /// each as a part of the window's height.
     pub fn drag(&mut self, across: f64, down: f64) {
         self.turn -= across * TURN;
         self.tip = (self.tip - down * TURN).clamp(-TIP, TIP);

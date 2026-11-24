@@ -16,8 +16,8 @@ use wgpu::{
     TextureViewDescriptor, TextureViewDimension, VertexState,
 };
 
-/// The format of the texel the depth passes through. A copy takes all of a
-/// depth texture or none, so a pass draws the one texel a frame reads.
+/// The format of the texel the depth passes through. A pass draws the one
+/// texel a frame reads because a copy takes all of a depth texture or none.
 const FORMAT: TextureFormat = TextureFormat::R32Float;
 
 /// The depth a window's frames draw at the middle of their first eye, read
@@ -177,8 +177,8 @@ impl CenterDepth {
         Ok(Some(depth))
     }
 
-    /// Encodes the pass that takes the depth a frame's passes have drawn
-    /// and its copy, unless a frame before still reads back.
+    /// Encodes the pass and the copy that take the depth a frame drew. Does
+    /// nothing while an earlier frame reads back.
     pub fn copy(&mut self, encoder: &mut CommandEncoder) {
         if !matches!(self.step, Step::Free) {
             return;
@@ -225,8 +225,7 @@ impl CenterDepth {
         self.step = Step::Copied;
     }
 
-    /// Starts the read back of a copy, once its encoder has gone to the
-    /// queue.
+    /// Starts the read back of a copy once its encoder has gone to the queue.
     pub fn sent(&mut self) {
         if !matches!(self.step, Step::Copied) {
             return;
@@ -235,7 +234,7 @@ impl CenterDepth {
         let (sender, receiver) = mpsc::channel();
 
         self.buffer.map_async(MapMode::Read, .., move |result| {
-            // The window may have gone, and then nobody waits.
+            // The send fails harmlessly once the window has gone.
             let _ = sender.send(result);
         });
 

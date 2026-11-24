@@ -22,26 +22,21 @@ const PAST: f64 = 1.0 / 4096.0;
 /// position.
 const LOST: f64 = 1.0 / 1024.0 / 1024.0;
 
-/// A test that keeps a view's hidden boxes from drawing. A box that lies
-/// whole in the shadow one of the scene's solid slabs casts from an eye
-/// shows that eye no pixel, because each ray to it meets the slab's opaque
-/// cells first. The box that draws those cells is nearer and is never
-/// hidden in turn, so a frame without the hidden boxes draws the same image.
+/// A test that keeps a view's hidden boxes from drawing. A box is hidden
+/// when, for each eye, it lies whole in the shadow one of the scene's solid
+/// slabs casts from that eye. Each ray from the eye to the box meets the
+/// slab's opaque cells first. The box that draws those cells is nearer and
+/// never hidden in turn, so a frame without the hidden boxes draws the same
+/// image. The test reads the world box around a box.
 ///
-/// A box is hidden when one shadow of each eye holds it whole. The test
-/// reads the world box around a box, which holds a turned box with room to
-/// spare.
+/// Each run of a list's boxes makes a tree of [`FAN`] nodes a group. A
+/// shadow that holds a group whole hides each box in it.
 ///
-/// Each run of a list's boxes makes a tree: the boxes that follow one
-/// another make groups of [`FAN`], and those groups make groups in turn. A
-/// shadow that holds a group whole hides each box in it, and one that holds
-/// none of a group is left out for each box in it.
-///
-/// A tree's search tries every shadow, and comes once in [`SEARCH`] tests.
-/// The tests between keep a box hidden only while the shadow that last
-/// held it still does. A tree whose search hides no box waits twice as long
-/// for its next, up to [`LONGEST`] tests. A box that comes to hide can then
-/// draw for some frames more, which costs time and no pixel.
+/// A tree's search tries every shadow, once in [`SEARCH`] tests. The tests
+/// between keep a box hidden only while the shadow that last held it still
+/// does. A tree whose search hides no box doubles its wait, up to
+/// [`LONGEST`] tests. A box that comes to hide can then draw for some
+/// frames more, which costs time and no pixel.
 pub struct BoxHide {
     slabs: Vec<Slab>,
 
@@ -114,8 +109,8 @@ impl Slab {
 /// One of the lists of boxes a test covers.
 struct List {
     /// The trees' nodes: each tree's root, then the nodes a step from each
-    /// root, and on down. A test reads the roots and little else, and they
-    /// lie together.
+    /// root, and on down. The roots lie together because a test reads
+    /// little else.
     nodes: Vec<Node>,
 
     /// The tests left before each tree's next search, and the tests from
@@ -197,7 +192,6 @@ impl Among {
 
 /// One eye of a test.
 struct Eye<'a> {
-    /// The eye's index.
     index: usize,
 
     position: TyVector3F64,
@@ -299,11 +293,8 @@ impl List {
     /// Tests the node `at` and what it holds for `eyes`, under each eye's
     /// answer `above` for the group that holds the node: whether a shadow
     /// holds that group whole, and else the shadows that hold part of it.
-    /// Returns whether a box's answer changed.
-    ///
-    /// A test that `searches` tries each shadow. Any other asks only
-    /// whether the shadow that last held a node still does, and passes
-    /// over a node that hid no box.
+    /// Returns whether a box's answer changed. A test that `searches` tries
+    /// each shadow. Any other passes over a node that hid no box.
     fn test(
         &mut self,
         eyes: &[Eye<'_>; 2],
@@ -383,8 +374,8 @@ impl BoxHide {
     ///    [`FaceShadow::new`] takes them
     /// 2. `lists`: for each list, the low and then the high corner of the
     ///    world box around each of its boxes, and how many boxes each of
-    ///    its runs holds. The boxes of a run lie near one another, as one
-    ///    placement's do, and a shadow can hold a run whole
+    ///    its runs holds. A run's boxes lie near one another, as one
+    ///    placement's do, so a shadow can hold the run whole
     pub fn new(slabs: Vec<[TyVector3F64; 8]>, lists: Vec<(Vec<[f32; 6]>, Vec<usize>)>) -> Self {
         let reach = lists
             .iter()
@@ -510,8 +501,6 @@ impl BoxHide {
             wide.truncate(places);
         }
 
-        // A slab among the widest keeps its place, and the rest take the
-        // places left.
         let mut widest: Vec<_> = wide.into_iter().map(|(_, slab)| slab).collect();
 
         for place in &mut self.aimed {

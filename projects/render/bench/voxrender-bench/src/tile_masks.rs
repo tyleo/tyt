@@ -87,18 +87,8 @@ impl TileMasks {
     /// The masks of `grid`'s tiles, where `opaque` says whether a material
     /// passes no light. Errors if a tile holds over 256 materials.
     ///
-    /// Each tile first gives up solid boxes of two kinds, as long as it has
-    /// one to give:
-    ///
-    /// 1. Stray cells, up to [`STRAYS`] a tile. A face of the box around
-    ///    the tile's other live cells gives up its layer's cells when they
-    ///    fill one part in [`STRAY_SHARE`] of the layer or less and the
-    ///    layer behind it is at least half full. Each run of them along a
-    ///    row makes a box
-    /// 2. Slabs, up to [`SOLIDS`] a tile. A slab is the largest box of live
-    ///    cells alone off a face of the box around the rest, of
-    ///    [`SOLID_CELLS`] cells or more. A slab stays in the march when the
-    ///    cells left would cover over half of the face it shows them
+    /// Each tile gives up stray cells, up to [`STRAYS`], and slabs, up to
+    /// [`SOLIDS`], as solid boxes.
     pub fn new(grid: &CellGrid, opaque: &dyn Fn(u32) -> bool) -> Result<Self> {
         let mut masks = TileMasks::default();
 
@@ -108,8 +98,6 @@ impl TileMasks {
         for (low, _) in live_boxes(grid) {
             let corner = low / TILE * TILE;
 
-            // Each cell's value: 0 when empty, else its material id plus
-            // one.
             let values: Vec<u32> = (0..TILE_CELLS)
                 .map(|index| grid.at((corner + tile_cell(index)).to_array().map(i64::from)))
                 .collect();
@@ -142,7 +130,6 @@ impl TileMasks {
             let surface =
                 |index: usize| live[index] && (0..6).any(|face| !blocks(index, toward(face, 0, 0)));
 
-            // Each row's word, and the record cells its rows give the tile.
             let mut recorded: Vec<u16> = Vec::new();
 
             for row in 0..Self::ROWS {
@@ -270,10 +257,10 @@ impl TileMasks {
     }
 }
 
-/// A tile's material ids in the order its cells first hold them, from each
-/// cell's `values`: 0 when empty, else its material id plus one. Returns
-/// each cell's place among the ids, 0 for an empty cell, and then the ids.
-/// Errors if the tile holds over 256 materials.
+/// Each cell's place among a tile's material ids, 0 for an empty cell, and
+/// then the ids in the order the cells first hold them. `values` holds each
+/// cell as [`CellGrid::cells`] does. Errors if the tile holds over 256
+/// materials.
 fn palette_of(values: &[u32]) -> Result<(Vec<u8>, Vec<u32>)> {
     let mut palette: Vec<u32> = Vec::new();
 
@@ -316,8 +303,8 @@ fn toward(face: usize, u: i64, v: i64) -> [i64; 3] {
     step
 }
 
-/// One tile's cells while its solid boxes come off. A cell's index is
-/// `(y * 16 + x) * 16 + z`.
+/// One tile's cells by [`tile_cell`](tile_cell()) index while its solid
+/// boxes come off.
 struct Tile {
     /// Whether each cell is live.
     live: Vec<bool>,

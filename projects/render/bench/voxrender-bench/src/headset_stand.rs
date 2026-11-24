@@ -63,7 +63,7 @@ impl HeadsetStand {
     }
 
     /// The stand that shows the model within `bounds` as on a table: shrunk
-    /// or grown to [`TABLE`] meters across, ahead of the wearer and below
+    /// or grown to `TABLE` meters across, ahead of the wearer and below
     /// their eyes, with its +Z side facing them.
     pub fn table(bounds: &TyBoundsF64) -> Self {
         let scale = fit_scale(bounds) / TABLE;
@@ -90,7 +90,7 @@ impl HeadsetStand {
     }
 
     /// The stand `seconds` into a walk from this one at `speed` meters of
-    /// the tracking space a second. The walk goes [`WALK`] meters ahead and
+    /// the tracking space a second. The walk goes `WALK` meters ahead and
     /// back. The head between `eyes` rises and sways with each step and
     /// looks from side to side.
     pub fn walked(self, eyes: &[HeadsetEye; 2], seconds: f64, speed: f64) -> Self {
@@ -134,7 +134,7 @@ impl HeadsetStand {
 
     /// The stand with the scene `factor` times as large around `pivot`, a
     /// point of the tracking space that keeps its place in the scene. The
-    /// scale stays within [`SCALES`].
+    /// scale stays within `SCALES`.
     pub fn grown(self, pivot: TyVector3F64, factor: f64) -> Self {
         let scale = (self.scale / factor).clamp(SCALES[0], SCALES[1]);
 

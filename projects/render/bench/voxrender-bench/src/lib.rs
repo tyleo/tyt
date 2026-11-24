@@ -1,6 +1,6 @@
-//! The box raster the voxrender-wgpu plan's benchmarks picked, as a view of
-//! a scene and a gallery of models. A view draws on a device its caller
-//! opens. Its checks judge it against `voxrender-cpu`.
+//! A voxel box raster on wgpu, as a view of a scene and a gallery of
+//! models. A view draws on a device its caller opens. Its checks judge it
+//! against `voxrender-cpu`.
 
 // Public API
 

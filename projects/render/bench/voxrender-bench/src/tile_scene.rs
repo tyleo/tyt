@@ -8,17 +8,15 @@ use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyTransformF64};
 use voxcore::{BVoxObject, material};
 use voxrender::{RenderLight, RenderMaterial, RenderScene};
 
-/// A scene as a [`BoxView`](crate::BoxView) reads it: its materials, its
-/// lights, and its placements, with each object's cells by tile. A scene
-/// takes its objects one at a time, so a caller holds one object's grid
-/// while the scene keeps the tiles of the rest.
+/// A scene as a [`BoxView`](crate::BoxView) reads it, with each object's
+/// cells by tile. A scene takes its objects one at a time, so a caller
+/// holds one object's grid while the scene keeps the tiles of the rest.
 ///
 /// A scene can keep coarser copies of each object for a view to draw where
 /// the object's cells would span under a pixel. Each copy halves the cells
-/// of the one before along each axis, as [`CellGrid::halved`] does, down to
-/// a copy that fits one tile. A copy's cells sit on the lattice of its
-/// size that the scene's objects share, so two objects that meet on that
-/// lattice meet at every copy.
+/// of the one before along each axis, down to a copy that fits one tile. A
+/// copy's cells sit on the lattice of its size that the scene's objects
+/// share, so two objects that meet on that lattice meet at every copy.
 pub struct TileScene {
     pub(crate) materials: Vec<RenderMaterial>,
 
@@ -74,8 +72,7 @@ impl TileScene {
         }
     }
 
-    /// The scene of `scene`'s materials, lights, objects, and placements,
-    /// each in `scene`'s order, with `glass` and `coarser` as
+    /// `scene` as a tile scene, with `glass` and `coarser` as
     /// [`new`](Self::new) takes them. Errors as
     /// [`push_object`](Self::push_object) does.
     pub fn of(scene: &RenderScene, glass: bool, coarser: bool) -> Result<Self> {
@@ -177,13 +174,12 @@ impl TileScene {
         to_word(place)
     }
 
-    /// Adds the object of `grid`, whose cells hold places among the
-    /// scene's materials, with its coarser copies if the scene keeps them.
-    /// Returns the object's id. `first` says
-    /// where the object's first cell sits on the lattice the scene's objects
-    /// share, in cells, or holds zeros for an object off any lattice. Errors
-    /// if a tile holds over 256 materials, or if a material that passes
-    /// light has a place over 65534.
+    /// Adds the object of `grid`, whose cells hold places among the scene's
+    /// materials, with its coarser copies if the scene keeps them. Returns
+    /// the object's id. `first` says where the object's first cell sits on
+    /// the lattice the scene's objects share, in cells, or holds zeros for
+    /// an object off any lattice. Errors if a tile holds over 256 materials,
+    /// or if a material that passes light has a place over 65534.
     pub fn push_object(
         &mut self,
         grid: &CellGrid,
@@ -195,8 +191,8 @@ impl TileScene {
         Ok(self.push_copies(copies))
     }
 
-    /// Adds an object as [`object_copies`] gives its tiles, built for this
-    /// scene's materials. Returns the object's id.
+    /// Adds an object as [`object_copies`](object_copies()) gives its tiles,
+    /// built for this scene's materials. Returns the object's id.
     pub(crate) fn push_copies(&mut self, copies: Vec<ObjectTiles>) -> UsizeId<BTileObject> {
         let object = self.objects.end();
 

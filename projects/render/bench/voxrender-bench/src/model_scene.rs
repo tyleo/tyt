@@ -3,12 +3,11 @@ use std::path::Path;
 use voxconv::{DependenciesImpl, ReadFormat, load};
 use voxrender::{RenderBloom, RenderScene};
 
-/// The scene of the Voxel Json document at `path`: every object at its
-/// nodes' placements, in meters. The scene's first view is vxl's hero view
-/// of the model for a square image. Its lights are vxl's studio rig as that
-/// view places the rig. The bloom is the one vxl's review renders take.
-/// Errors if the document does not load, holds no live voxel, or holds a
-/// material the contract cannot shade.
+/// The scene of the Voxel Json document at `path`, every object at its
+/// nodes' placements in meters, under vxl's hero view for a square image
+/// and vxl's studio rig, with the bloom of vxl's review renders. Errors if
+/// the document does not load, holds no live voxel, or holds a material the
+/// contract cannot shade.
 pub fn model_scene(path: &Path) -> Result<(RenderScene, RenderBloom)> {
     let model = |error: String| Error::Model {
         path: path.to_owned(),

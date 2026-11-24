@@ -12,7 +12,7 @@ pub struct HeadsetView {
 }
 
 impl HeadsetView {
-    /// The format of the depth a pass that draws the view clears to zero.
+    /// The depth format, as [`BoxView::DEPTH`] has it.
     pub const DEPTH: TextureFormat = BoxView::DEPTH;
 
     /// Builds the view of `tiles` under `bloom` from `stand` for a two-layer
@@ -33,13 +33,12 @@ impl HeadsetView {
         })
     }
 
-    /// Sets the fewest pixels a cell spans before a coarser copy draws in
-    /// its place, as [`BoxView::set_detail`] takes them.
+    /// Sets the detail, as [`BoxView::set_detail`] does.
     pub fn set_detail(&mut self, pixels: f64) {
         self.boxes.set_detail(pixels);
     }
 
-    /// The color a pass that draws the view clears its target to.
+    /// The clear color, as [`BoxView::sky`] gives it.
     pub fn sky(&self) -> Color {
         self.boxes.sky()
     }

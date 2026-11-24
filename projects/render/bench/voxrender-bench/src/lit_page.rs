@@ -9,8 +9,8 @@ use wgpu::{
 const FIRST: u32 = 1 << 10;
 const MOST: u32 = 1 << 16;
 
-/// The time a dispatch aims to take. A frame a headset draws meanwhile
-/// then still ends within its own time.
+/// The time a dispatch aims to take. A frame the headset draws meanwhile
+/// still ends in time.
 const AIM: Duration = Duration::from_millis(3);
 
 /// The lit words of some of a scene's placements, as a
@@ -24,14 +24,17 @@ pub struct LitPage {
     /// follow every placement's tiles' words.
     pub glass_places: Vec<u32>,
 
-    /// A word for each record cell, a word for each glass cell, then
-    /// [`TileMasks::SPARE`](crate::TileMasks::SPARE) spare words. The fill
-    /// writes a word's low 24 bits and keeps the rest, which a caller can
-    /// write beforehand. A glass cell's 24 bits hold the sun's light on its
-    /// surfaces, 8 bits a channel from the low bits up. In a scene with a
-    /// material that passes light, the fill writes a record cell's tint in
-    /// the same bits of a second word, which lies the page's tints past the
-    /// cell's first.
+    /// The words a fill writes:
+    ///
+    /// 1. A word for each record cell, as [`LitCorners`](crate::LitCorners)
+    ///    lays it out. The fill writes its low 24 bits and keeps the rest,
+    ///    which a caller can write beforehand
+    /// 2. A word for each glass cell: the sun's light on its surfaces, 8 bits
+    ///    a channel from the low bits up, under 8 zero bits
+    /// 3. [`TileMasks::SPARE`](crate::TileMasks::SPARE) spare words
+    /// 4. With a material that passes light, each record cell's tint in a
+    ///    glass cell's layout, [`LitFill::page`](crate::LitFill::page)'s
+    ///    `tints` words past the cell's word
     pub lit: Buffer,
 
     pub pipeline: ComputePipeline,
@@ -45,11 +48,10 @@ pub struct LitPage {
 }
 
 impl LitPage {
-    /// Fills every cell, a dispatch of some of them at a time, and returns
-    /// once the GPU has. Each dispatch takes as many cells as would have
-    /// filled within [`AIM`] at the pace of the one before. A scene's rays
-    /// can run long, and a device drops a queue of dispatches that keeps it
-    /// from its frames. Errors if waiting on the GPU fails.
+    /// Fills every cell and returns once the GPU has. Each dispatch takes as
+    /// many cells as would fill within [`AIM`] at the pace of the one before,
+    /// because a device drops a queue of dispatches that keeps it from its
+    /// frames. Errors if waiting on the GPU fails.
     pub fn fill(&self, device: &Device, queue: &Queue) -> Result<()> {
         let mut first = 0;
         let mut batch = FIRST;

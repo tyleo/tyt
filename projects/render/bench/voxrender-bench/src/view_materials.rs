@@ -64,9 +64,8 @@ impl<'a> ViewMaterials<'a> {
     }
 
     /// The place of the first of a tile's materials `ids`, which follow one
-    /// another. A cell's place among them then leads to its material's
-    /// values in one read. Tiles that hold the same materials in the same
-    /// order share them.
+    /// another so a cell's place among them reaches its values in one read.
+    /// Tiles with the same `ids` share a run.
     pub fn run(&mut self, ids: &[u32]) -> u32 {
         if let Some(&first) = self.runs.get(ids) {
             return first;
@@ -101,8 +100,8 @@ impl<'a> ViewMaterials<'a> {
     }
 
     /// The cells a mirror ray from a face of material `id` runs, or zero
-    /// for a material whose faces cast none. A ray needs a device that
-    /// has `traced` rays, and a reach past [`BoxView::MIRROR_REACH`].
+    /// for a material whose faces cast none. A ray needs `traced` and a
+    /// reach past [`BoxView::MIRROR_REACH`].
     pub fn mirror_reach(&self, id: u32, traced: bool) -> f32 {
         let values = self.values(id);
         let roughness = values[7];

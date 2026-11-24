@@ -53,7 +53,6 @@ impl EyeSwapchain {
             return Err(Error::UnequalViews);
         }
 
-        // A side keeps at least a pixel.
         let scaled = |side: u32| ((f64::from(side) * scale).round() as u32).max(1);
         let width = scaled(left.recommended_image_rect_width);
         let height = scaled(left.recommended_image_rect_height);
@@ -159,8 +158,8 @@ impl EyeSwapchain {
     }
 }
 
-/// The wgpu format of an sRGB swapchain format, the formats a compositor
-/// expects.
+/// The wgpu format of `xr_format` when it is one of the sRGB formats a
+/// compositor expects.
 fn to_texture_format(xr_format: u32) -> Option<TextureFormat> {
     let format = VkFormat::from_raw(i32::try_from(xr_format).ok()?);
 

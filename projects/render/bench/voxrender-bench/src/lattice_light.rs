@@ -150,7 +150,8 @@ mod tests {
                             front[d] += sign;
 
                             // The lattice point on the axes the ray moves
-                            // along, and the face's cell on the others.
+                            // along. On the others, the ray keeps its inset
+                            // inside the face's cell.
                             let mut origin = [0; 3];
 
                             origin[d] = (cell[d] + i32::from(sign > 0)) * ONE;
@@ -160,10 +161,6 @@ mod tests {
                             let mut outward = [false; 2];
 
                             for (at, axis) in [u, v].into_iter().enumerate() {
-                                // On an axis the ray stays still along,
-                                // the corner's ray keeps its inset from
-                                // the lattice plane, inside the face's
-                                // cell.
                                 origin[axis] = if direction[axis] != 0 {
                                     (cell[axis] + i32::from(far[at])) * ONE
                                 } else if far[at] {

@@ -15,18 +15,17 @@ use wgpu::{
 };
 
 /// A box's three faces toward the view, two triangles each over the 7
-/// corners the faces hold. Bit `b` of a corner picks the far side on the
-/// axis the bit stands for. A face's triangles start at its corner that no
-/// other face holds.
+/// corners the faces hold. Bit `a` of a corner picks the far side on axis
+/// `a`. A face's triangles start at its corner that no other face holds.
 const FRONTS: [u16; 18] = [6, 0, 4, 6, 2, 0, 5, 0, 1, 5, 4, 0, 3, 0, 2, 3, 1, 0];
 
 /// A box's 12 triangles over its 8 corners, wound counterclockwise from
 /// outside. Bit `a` of a corner picks the box's high face on axis `a`.
 ///
-/// Both triangles of a face start at one corner, and no other face's
-/// triangles start there. A flat output of that corner then reaches the
-/// face's fragments alone. The low face on axis `a` starts at corner `a`,
-/// and the high face at corner `7 - a`.
+/// Both triangles of a face start at a corner where no other face's
+/// triangles start, so a flat output of that corner reaches the face's
+/// fragments alone. The low face on axis `a` starts at corner `a`, and the
+/// high face at corner `7 - a`.
 const TRIANGLES: [u16; 36] = [
     0, 4, 6, 0, 6, 2, 7, 5, 1, 7, 1, 3, 1, 5, 4, 1, 4, 0, 6, 7, 3, 6, 3, 2, 2, 3, 1, 2, 1, 0, 5, 7,
     6, 5, 6, 4,
@@ -41,18 +40,9 @@ const GLASS_BIAS: i32 = 1024;
 type PipelineKey<'a> = (usize, &'a str, &'a str, bool, bool);
 
 /// A view's boxes and the pipelines that draw their faces, with depth in
-/// [`DEPTH`](Self::DEPTH).
-///
-/// The boxes draw in runs: a count of boxes through one part's pipeline
-/// over one page's bindings. Each run draws in a pass of its own, which
-/// loads what the pass before it stored. On Quest a second draw in a pass costs every box and pixel of
-/// the pass: over the plain ids it cost S5 0.65 ms for 4096 boxes and S2
-/// 2.8 ms for 25,301, and a shaded model of 800 boxes drew a third slower
-/// in one pass than in a pass a run. The passes between cost under 0.02 ms
-/// each.
-///
-/// A run of front faces draws each box's three faces toward the view: 6
-/// triangles over 7 corners, where the box makes 12 over 8.
+/// [`DEPTH`](Self::DEPTH). Each [`BoxRun`] draws in a pass of its own,
+/// which loads what the pass before it stored. A pass a run is deliberate
+/// because on Quest a second draw in a pass slows the whole pass.
 pub struct BoxDraw {
     parts: Vec<Part>,
 
@@ -73,7 +63,7 @@ pub struct BoxDraw {
     layout: PipelineLayout,
 
     /// What [`cover`](Self::cover) draws after the runs, and the pixels
-    /// it draws within: a rectangle's left, top, width, and height.
+    /// [`cover_within`](Self::cover_within) set.
     cover: Option<(RenderPipeline, [u32; 4])>,
 }
 
@@ -104,17 +94,14 @@ impl BoxDraw {
     /// The depth format. Depth runs reversed in f32.
     pub const DEPTH: TextureFormat = TextureFormat::Depth32Float;
 
-    /// Builds the pipelines over `modules`, whose vertex entries take a
-    /// vertex's bits and a box's three `vec4<u32>`s: `place_near` and
-    /// `place_held` a corner of the box, and `place_front` a vertex of one
-    /// of its three faces toward the view. A module needs the entries
-    /// its parts' faces draw through.
+    /// Builds the pipelines over `modules`, whose vertex entries take what
+    /// [`box_view_shader`](fn@crate::box_view_shader) lists. A module needs
+    /// the entries its parts' faces draw through.
     ///
     /// # Arguments
     ///
     /// 1. `format`: the format of the target the fragments write
-    /// 2. `parts`: what draws the boxes
-    /// 3. `pages`: what the shaders bind in group 0 for each page of the
+    /// 2. `pages`: what the shaders bind in group 0 for each page of the
     ///    boxes, at least one. The pages bind alike but for their buffers
     pub fn new(
         device: &Device,
@@ -217,8 +204,6 @@ impl BoxDraw {
             immediate_size: 0,
         });
 
-        // Glass keeps the target's color by the second color its fragment
-        // writes, and adds the first.
         let tinted = |dst_factor| BlendComponent {
             src_factor: BlendFactor::One,
             dst_factor,
@@ -304,8 +289,7 @@ impl BoxDraw {
 
         let mut drawn = Vec::new();
 
-        // Each pipeline built so far with its module, entries, and faces, for
-        // a later run to share.
+        // The pipelines built so far, for a later part to share.
         let mut built: Vec<(PipelineKey<'_>, RenderPipeline)> = Vec::new();
 
         let mut shared = |module, vertex: &'static str, fragment, backs, glass| {
@@ -389,12 +373,11 @@ impl BoxDraw {
         }
     }
 
-    /// Adds a last pass that draws one triangle where no box drew: three
-    /// vertices through `module`'s `vertex` entry, which places them at
-    /// the depth a pass clears to, and its `fragment` entry, whose color
-    /// the target's blend adds. The entries bind what the boxes' do. The
-    /// pass draws nothing until [`cover_within`](Self::cover_within) gives
-    /// it pixels.
+    /// Adds a last pass that draws one triangle where no box drew. `module`'s
+    /// `vertex` entry places its three vertices at the depth a pass clears
+    /// to. The target adds the color of its `fragment` entry. Both entries
+    /// bind what the boxes' do. The pass draws nothing until
+    /// [`cover_within`](Self::cover_within) gives it pixels.
     pub fn cover(
         &mut self,
         device: &Device,
@@ -447,9 +430,8 @@ impl BoxDraw {
         self.cover = Some((pipeline, [0; 4]));
     }
 
-    /// Sets the pixels of the target the [`cover`](Self::cover) draws
-    /// within: a rectangle's left, top, width, and height, inside the
-    /// target.
+    /// Sets the rectangle of the target the [`cover`](Self::cover) draws
+    /// within, as its left, top, width, and height inside the target.
     pub fn cover_within(&mut self, pixels: [u32; 4]) {
         if let Some((_, within)) = &mut self.cover {
             *within = pixels;
@@ -551,7 +533,7 @@ impl BoxDraw {
         );
     }
 
-    /// The passes the runs draw in.
+    /// The passes the runs draw in, at least one.
     fn runs(&self) -> u32 {
         to_word(self.runs.len()).max(1)
     }

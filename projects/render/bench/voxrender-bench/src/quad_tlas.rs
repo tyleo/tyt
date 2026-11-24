@@ -12,14 +12,10 @@ use wgpu::{
 
 /// A scene's placements as a TLAS for a hardware ray query, whose build
 /// goes to `queue`. Each object's BLAS holds its quads as two triangles
-/// each. The ray tracing unit then finds a ray's first hit with no march.
-/// A hit's primitive halves to its quad among its object's. An instance
-/// holds its object's first quad among the scene's as its custom data. An
-/// object with no quad has no instance. The device must have ray queries,
-/// and the scene's quads number under 2^24.
-///
-/// `quads` holds each object's quads, and `placements` each placement of
-/// one.
+/// each, so a hit's primitive halves to its quad among its object's. An
+/// instance holds its object's first quad among the scene's as its custom
+/// data. An object with no quad has no instance. The device must have ray
+/// queries. Panics unless the scene's quads number under 2^24.
 pub fn quad_tlas(
     device: &Device,
     queue: &Queue,

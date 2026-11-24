@@ -8,21 +8,14 @@ use ty_math::{TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
 use voxsurface::{SurfaceGrid, SurfaceMethod, mesh_grid_keyed};
 
-/// Each object's opaque quads, in the order of `tiles`' objects. A greedy
-/// run merges the cells of one material alone, so a quad holds one. An
-/// object's coarser copies keep none, because a ray traces the object.
+/// Each object's opaque quads, in the order of `tiles`' objects. A quad
+/// holds one material. An object's coarser copies keep none, because a ray
+/// traces the object.
 ///
 /// With `reach`, an object keeps only the quads a mirror ray can meet.
 /// `reach` gives the cells a ray from a face of a material runs, or zero
-/// for a material that casts none. A ray starts on a cell of such a
-/// material and ends within its reach, so a quad farther from every such
-/// cell meets no ray. A scene the size of a landscape then keeps the quads
-/// beside its glossy cells, where every quad would not fit a headset.
-///
-/// A box around each tile's cells that cast a ray grows by their longest
-/// reach. An object keeps its cells inside such a box of any placement. A
-/// run merges within a tile there. An object whose every cell lies in one
-/// box merges across its tiles, as it does with no `reach`.
+/// for a material that casts none. A quad then lies within one tile,
+/// unless one tile's reach takes in the whole object.
 pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<ObjectQuads> {
     let Some(reach) = reach else {
         return map_threads(tiles.objects.len(), |index| {
@@ -163,8 +156,6 @@ fn cast_boxes(object: &ObjectTiles, reaches: &[f64]) -> Vec<(CellBox, f64)> {
     let mut boxes = Vec::new();
 
     for tile in &masks.tiles {
-        // The reach of each of the tile's materials, in the order a record
-        // cell's entry counts them.
         let ids = masks.palette(tile.offset);
 
         if ids.iter().all(|&id| reaches[id as usize] == 0.0) {
@@ -221,9 +212,8 @@ fn push_region(quads: &mut ObjectQuads, object: &ObjectTiles, (low, high): CellB
 }
 
 /// A box of an object's cells as a mesher reads it, with the cells one
-/// past each of its sides. A cell's handle holds its material plus one.
-/// A mesher reads each cell many times, so the box keeps its cells where
-/// reading one through its object's tiles takes several loads.
+/// past each of its sides. The box copies its cells because a mesher reads
+/// each one many times.
 struct Region {
     bounds: TyVector3U32,
 

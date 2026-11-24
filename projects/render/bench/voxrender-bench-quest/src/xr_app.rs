@@ -22,7 +22,7 @@ use wgpu::{
 /// The views the app draws.
 const VIEW_TYPE: ViewConfigurationType = ViewConfigurationType::PRIMARY_STEREO;
 
-/// The display rate the app asks for, the rate the frame budget assumes.
+/// The display rate the app asks for and the frame budget assumes.
 const REFRESH_RATE: f32 = 90.0;
 
 /// The frames between two logs of the view's time on the CPU.
@@ -73,9 +73,9 @@ pub struct XrApp {
 }
 
 impl XrApp {
-    /// Opens a session on the GPU and the eyes' swapchain. The frames run
-    /// what `options` picks. A gallery shows the models under `files`, the
-    /// app's files directory.
+    /// Opens a session on `gpu` and the eyes' swapchain. The frames run what
+    /// `options` picks. A gallery shows the models under `files`, the app's
+    /// files directory.
     pub fn new(xr: XrSystem, gpu: XrGpu, options: &RunOptions, files: &Path) -> Result<Self> {
         let blend_modes = xr
             .instance
@@ -489,8 +489,7 @@ enum FrameWork {
         /// When the last frame ran.
         last: Option<Instant>,
 
-        /// The seconds a model shows before the gallery steps on by
-        /// itself.
+        /// The seconds a model shows before the gallery steps on by itself.
         tour: Option<f64>,
 
         /// When the model in view landed, until a tour steps on from it.

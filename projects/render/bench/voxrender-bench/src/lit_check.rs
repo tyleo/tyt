@@ -8,11 +8,10 @@ use voxrender::{RenderLight, RenderScene};
 use wgpu::{BufferDescriptor, BufferUsages, CommandEncoderDescriptor};
 
 /// Compares the GPU's fill of `scene`'s lit corners under its first sun
-/// with [`LitCorners`]' fill through the reference's walk, and returns a
-/// line of the result. The line counts the scene's record cells, the
-/// corners the two fills light, and the corners they differ on. Every live
-/// cell counts as opaque. Errors unless the scene has a sun and a view, or
-/// if a ray lies out of a grid's range.
+/// with a fill through the reference's walk, and returns a line that counts
+/// the record cells, the corners either fill lights, and the corners they
+/// differ on. Every live cell counts as opaque. Errors unless the scene has
+/// a sun and a view, or if a ray lies out of a grid's range.
 pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
     let toward = scene
         .iter_lights()
@@ -22,7 +21,6 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
         })
         .ok_or(Error::NoSun)?;
 
-    // Every material counts as opaque.
     let mut scene_tiles = TileScene::new(false, false);
 
     scene_tiles.solid = true;

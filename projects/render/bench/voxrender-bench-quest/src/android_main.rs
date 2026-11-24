@@ -20,8 +20,7 @@ fn android_main(app: AndroidApp) {
             .with_tag("voxrender-bench"),
     );
 
-    // android-activity catches a panic on this thread, and the default hook's
-    // message reaches no log.
+    // Without this hook, a panic that android-activity catches reaches no log.
     panic::set_hook(Box::new(|info| log::error!("{info}")));
 
     if let Err(error) = run(&app) {

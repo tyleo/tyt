@@ -10,19 +10,18 @@ use ty_math::TyVector3U32;
 /// A ray meets such a surface where it crosses a face of a cell that passes
 /// light into a cell that is neither opaque nor of the same material. A
 /// tile's busy cells are the cells with such a face and the opaque cells,
-/// which end a walk. A ray crosses any other cell with nothing to do, so a
-/// body of water draws its skin alone.
+/// which end a walk. A walk crosses any other cell with nothing to do.
 ///
 /// A tile's words start with a word for each row of 16 cells along z, 256
 /// in the order of a cell's index, `(y * 16 + x) * 16 + z`. A row's low 16
-/// bits hold its busy cells, and the bits above them the tile's busy cells
-/// before the row, as a shaded [`TileMasks`](crate::TileMasks)' rows do. A
-/// word for each busy cell follows in index order. An opaque cell's word is
-/// [`OPAQUE`](Self::OPAQUE). In any other cell's word, the low 6 bits hold a
-/// bit for each face with a surface, under the cell's place among the tile's
-/// [`cells`](Self::cells) in the 12 bits from bit 8, under the cell's
-/// material from bit 20. Face `2 * axis` looks down its axis and face
-/// `2 * axis + 1` up it.
+/// bits hold its busy cells, and the bits above them count the tile's busy
+/// cells before the row. A word for each busy cell follows in index order.
+/// An opaque cell's word is [`OPAQUE`](Self::OPAQUE). In any other cell's
+/// word, the low 6 bits hold a bit for each face with a surface, the 12
+/// bits from bit 8 the cell's place among the tile's
+/// [`cells`](crate::GlassTile::cells), and the bits from bit 20 the cell's
+/// material. Face `2 * axis` looks down its axis and face `2 * axis + 1`
+/// up it.
 #[derive(Default)]
 pub struct GlassTiles {
     /// Each tile that holds a surface, in raster order.

@@ -50,12 +50,8 @@ const BUFFERS: u32 = 8;
 
 /// Logs the driver's statistics for each pipeline of the headset view's
 /// shader: on Adreno, a stage's instructions, its registers, and the share
-/// of its fibers the driver lets run at once.
-///
-/// The probe compiles each stage as wgpu compiles a trusted module and
-/// builds its pipelines beside wgpu's, over a pass of the view's shape: two
-/// eyes of color and 32-bit float depth. The vertex buffers follow
-/// `BoxDraw`'s.
+/// of its fibers the driver lets run at once. The pipelines mirror wgpu's,
+/// with vertex buffers that follow `BoxDraw`'s.
 pub fn probe_pipelines(gpu: &XrGpu) -> Result<()> {
     if !gpu.statistics {
         log::info!("b0 pipeline statistics: the device reports none");

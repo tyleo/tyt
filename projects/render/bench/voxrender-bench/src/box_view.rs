@@ -18,8 +18,7 @@ use wgpu::{
 /// The bytes of one of `box_view.wgsl`'s `Place`s.
 const PLACE_BYTES: usize = 128;
 
-/// The bytes at the start of a `Place` that follow the eye: its matrix and
-/// its ray.
+/// The bytes a frame rewrites at the start of a `Place`: its matrix and ray.
 const EYE_BYTES: usize = 80;
 
 /// The bytes of `box_view.wgsl`'s `Frame`, and where its eyes start.
@@ -30,16 +29,16 @@ const EYES_AT: u64 = 80;
 /// past what glows.
 const REACH_SIGMAS: f64 = 3.0;
 
-/// The meters past the eyes within which a box counts as holding an eye,
-/// in a headset's meters. The reach covers the near plane.
+/// The headset meters past the eyes within which a box counts as holding an
+/// eye. The reach covers the near plane.
 const REACH: f64 = 0.02;
 
-/// The meters a head moves from where the boxes last sorted before they
-/// sort again, in a headset's meters.
+/// The headset meters a head moves from the last sort before the boxes sort
+/// again.
 const SLACK: f64 = 0.25;
 
-/// The part of a pixel that a hidden box keeps inside a shadow's sides,
-/// which covers where the rasterizer rounds a corner to.
+/// The share of a pixel a hidden box keeps inside a shadow's sides, which
+/// covers the rasterizer's rounding of a corner.
 const KEPT: f64 = 0.25;
 
 /// The lists of a view's boxes, as a [`DetailTree`] counts them. A
@@ -49,9 +48,8 @@ const SOLID: usize = 1;
 const GLASS: usize = 2;
 
 /// Where each kind of opaque box starts among a view's runs, and how many
-/// runs the kinds take. The held boxes and the inside ones take a run each.
-/// Each other kind takes two: its boxes with no mirror, then those with
-/// one.
+/// runs there are. Held and inside boxes take a run each. Each other kind
+/// takes two: its boxes with no mirror, then those with one.
 const HELD_RUN: usize = 0;
 const INSIDE_RUN: usize = 1;
 const SOLID_RUN: usize = 2;
@@ -59,54 +57,43 @@ const FRONT_RUN: usize = 4;
 const CROSSED_RUN: usize = 6;
 const RUNS: usize = 8;
 
-/// The fewest boxes a scene has for its view to test them. On Quest a
-/// hidden box saves 66 ns of a frame, so a scene with fewer can hide too
-/// few to pay for the test.
+/// The fewest boxes a scene needs for its view to test them. A smaller
+/// scene hides too few boxes to pay for the test.
 const TESTED: usize = 4096;
 
-/// A shaded view of a scene's boxes for both eyes of a headset: the box
-/// raster with solid boxes, a mask march, and face depth. Each frame takes
-/// its eyes and draws in multiview passes over a two-layer target with
-/// depth in [`BoxView::DEPTH`]. The boxes draw nearest first. They sort
-/// again once the head has moved [`SLACK`] from where they last sorted. A
-/// frame leaves out the boxes its [`BoxHide`] hides from both eyes.
+/// A shaded view of a scene's boxes for both eyes of a headset. A frame
+/// draws in multiview passes over a two-layer target with depth in
+/// [`BoxView::DEPTH`]. The opaque boxes draw nearest first. They sort again
+/// once the head moves far enough from the last sort. A frame leaves out
+/// the boxes hidden from both eyes.
 ///
 /// A hit shades as the contract's opaque surface under the scene's first
 /// sun and its hemispheres, with corner occlusion and the sun's corner
-/// shadows. On a device with ray queries a face's mirror ray traces the
-/// scene's opaque quads. The quad it meets shades flat with no shadow.
-/// Elsewhere a face reflects the sky alone.
+/// shadows. On a device with ray queries, a face's mirror ray traces the
+/// scene's opaque quads. The quad a mirror ray meets shades flat with no
+/// shadow. Elsewhere a face reflects the sky alone. Where the scene blooms,
+/// a fragment adds the halo before the tonemap.
 ///
-/// Where the scene blooms, a fragment adds the halo at its pixel before the
-/// tonemap. [`glow`](Self::glow) makes the halo before a frame's passes, and
-/// a last pass adds it over the sky.
-///
-/// The cells that pass light draw after the opaque ones where the device
-/// blends two colors a fragment. A fragment walks its box through the
-/// surfaces between such materials. The blend tints what the target holds
-/// by what those surfaces pass and adds their light. The boxes draw farthest
-/// first as of the last sort. Elsewhere those cells do not draw. The cells
-/// tint the sun's light on the faces behind them and on their surfaces.
+/// On a device with dual-source blending, the cells that pass light draw
+/// after the opaque ones, farthest first. They tint the sun's light on the
+/// faces behind them. Elsewhere those cells do not draw.
 pub struct BoxView {
     boxes: BoxDraw,
 
-    /// What makes the halo, where an emission passes the bloom's
-    /// threshold.
+    /// What makes the halo, for a scene that blooms.
     glow: Option<Glow>,
 
-    /// How many pages hold the scene's tiles. A page's words fit one
-    /// binding, and a box's fragments read its page's.
+    /// How many pages hold the scene's tiles.
     pages: usize,
 
     /// The scene's tiles at each level, where its objects keep coarser
     /// copies.
     detail: Option<DetailTree>,
 
-    /// The fewest pixels a cell spans before a coarser copy's cells draw
-    /// in its place, or zero where no copy draws.
+    /// The pixels [`set_detail`](Self::set_detail) last set.
     finest: f64,
 
-    /// The boxes the last sort drew, each list's as their places in it.
+    /// Each list's boxes that the last sort showed.
     shown: [Vec<UsizeId<BViewBox>>; LISTS],
 
     /// The target's width and height.
@@ -118,8 +105,7 @@ pub struct BoxView {
     /// Each eye's `Place` for each placement.
     places: Buffer,
 
-    /// The bytes of `places`. A frame rewrites each `Place`'s matrix and
-    /// ray.
+    /// The bytes of `places`.
     place_bytes: Vec<u8>,
 
     /// Each placement's transform and its grid-to-world matrix.
@@ -129,20 +115,18 @@ pub struct BoxView {
     marched: ViewBoxes,
 
     /// The boxes around each tile's surfaces between materials that pass
-    /// light. They draw after the rest, farthest first, where the device
-    /// blends a tint a channel.
+    /// light.
     glass: ViewBoxes,
 
     /// Whether each marched box shares space with another placement's box.
     crossing: IdVec<BViewBox, bool>,
 
-    /// The test that keeps hidden boxes from drawing, for a scene of
-    /// [`TESTED`] boxes or more with a slab to hide one.
+    /// The test that keeps hidden boxes from drawing, as [`hide_of`] builds
+    /// it.
     hide: Option<BoxHide>,
 
-    /// How many of the last sort's marched boxes lie where an eye can come
-    /// to stand inside one before the next sort, and how many of its glass
-    /// boxes.
+    /// How many of the last sort's marched boxes and glass boxes an eye can
+    /// enter before the next sort.
     near: usize,
     glass_near: usize,
 
@@ -150,8 +134,7 @@ pub struct BoxView {
     /// there a box drew its back faces.
     sorted_for: Option<([f32; 3], f32)>,
 
-    /// Each run's opaque boxes as of the last sort, in the order they
-    /// draw.
+    /// Each run's opaque boxes as of the last sort, in draw order.
     order: [Vec<UsizeId<BViewBox>>; RUNS],
 
     /// The last sort's boxes and keys, kept for their room.
@@ -171,8 +154,7 @@ struct Glow {
     bloom: BoxBloom,
 
     /// The boxes whose fragments can meet an emission over the threshold,
-    /// in the view's runs, drawn through the module that draws the bloom's
-    /// source.
+    /// drawn through the bloom source's module.
     boxes: BoxDraw,
 
     /// The depth the boxes draw with, at the source's size.
@@ -188,27 +170,26 @@ impl BoxView {
     pub const MIRROR_CUT: f32 = 1.0 / 64.0;
 
     /// The least cells a mirror ray reaches. A face whose ray would end
-    /// sooner casts none: what touches it shows too faintly to earn a ray.
+    /// sooner casts none because what the ray meets shows too faintly.
     pub const MIRROR_REACH: f32 = 2.0;
 
     /// The format of the depth a pass that draws the view clears to zero.
     pub const DEPTH: TextureFormat = BoxDraw::DEPTH;
 
     /// Whether a view on `device` draws the surfaces between materials that
-    /// pass light, which takes a device that blends two colors a fragment.
-    /// A [`TileScene`] keeps those surfaces for such a view.
+    /// pass light. A [`TileScene`] keeps those surfaces for such a view.
     pub fn draws_glass(device: &Device) -> bool {
         device.features().contains(Features::DUAL_SOURCE_BLENDING)
     }
 
     /// Builds the view of `tiles` under `bloom` and fills the sun's corner
     /// shadows. The view draws to a two-layer target of `format` whose
-    /// width and height are `size`.
+    /// width and height are `size`. The scene's objects fill pages of
+    /// `page_bytes` bytes, or of what one of the device's storage bindings
+    /// holds.
     ///
-    /// The scene's objects fill pages of `page_bytes` bytes, or of what one
-    /// of the device's storage bindings holds. Errors as [`ViewPages::new`]
-    /// and [`ViewLit::new`] do, and if the scene keeps glass the device
-    /// cannot draw.
+    /// Errors if the scene keeps glass the device cannot draw, and as
+    /// `ViewPages::new` and `ViewLit::new` do.
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -245,8 +226,7 @@ impl BoxView {
         let lights = ViewLights::new(&tiles.lights);
         let toward = lights.sun.map(|(toward, _)| toward);
 
-        // Where a material passes light, the sun's fill adds each record
-        // cell's tint in a second word.
+        // The sun's light takes a tint where a material passes light.
         let tinted = toward.is_some() && tiles.opaque.contains(&false);
 
         let crossing = (marched.iter().zip(&crossers)).flat_map(|(placed, entries)| {
@@ -257,8 +237,6 @@ impl BoxView {
         let (bits, starts) = pages.bits(device, tiles);
         let lit = ViewLit::new(device, queue, tiles, &pages, toward, tinted)?;
 
-        // The scene blooms where an emission's brightest channel passes
-        // the threshold.
         let glows = bloom.strength > 0.0
             && tiles.materials.iter().any(|material| {
                 let emission = material.emissive_color * material.emissive_strength;
@@ -270,7 +248,6 @@ impl BoxView {
         let reach = REACH_SIGMAS * bloom.radius * f64::from(size[0].min(size[1]));
         let bloom = glows.then(|| BoxBloom::new(device, size, bloom));
 
-        // A mirror ray needs a device with ray queries.
         let traced = device.features().contains(Features::EXPERIMENTAL_RAY_QUERY);
         let mut materials = ViewMaterials::new(tiles);
 
@@ -280,8 +257,8 @@ impl BoxView {
                     let ids = object.masks.palette(tile.offset);
                     let reaches = |&id: &u32| materials.mirror_reach(id, traced) > 0.0;
 
-                    // A ray traces an object's quads, so its coarser copies
-                    // cast none.
+                    // Coarser copies cast no mirror ray because a ray
+                    // traces the object's quads.
                     let mirror = object.span == 1 && ids.iter().any(reaches);
 
                     let glow = threshold.is_some_and(|threshold| {
@@ -304,10 +281,8 @@ impl BoxView {
         let traits_of = |placed: &PlacedBox| traits[object_of(placed)][placed.tile];
         let page_of = |placed: &PlacedBox| pages.of[object_of(placed)];
 
-        // A box's three `vec4<u32>`s. Its tile's words start past its
-        // object's first word in its page. The last two words hold what
-        // its fragments read of the tile with no load: the tile's first
-        // material and the first of its lit words.
+        // A box's words. Words 10 and 11 hold the tile's first material and
+        // its first lit word, which the fragments then read with no load.
         let words_of = |placed: &PlacedBox, more: [u32; 2]| {
             let object = object_of(placed);
             let masks = &objects[object].masks;
@@ -366,7 +341,7 @@ impl BoxView {
             // An object's glass words follow its mask words.
             let first = starts[object] + to_word(objects[object].masks.words.len());
 
-            // The box around the tile's surfaces, 4 bits a side: its low
+            // The box around the tile's surfaces, 4 bits an axis: its low
             // cell in the tile, then its high cell.
             let (low, high) = tile.surfaces;
             let [x, y, z] = (low % 16).to_array();
@@ -374,7 +349,7 @@ impl BoxView {
             let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
             let mut words = placed.words(first + tile.offset, [surfaces, 0]);
 
-            // The first of the tile's words in `lit`.
+            // Word 11 holds the first of the tile's words in `lit`.
             words[11] = lit.glass[placed.placement.to_usize_id()][placed.tile];
 
             glass_boxes.push(placed, words, page_of(placed), false, false);
@@ -391,14 +366,12 @@ impl BoxView {
             .chain(&marched_boxes.mirror)
             .any(|&mirror| mirror);
 
-        // What a mirror ray traces, on a device with ray queries: the
-        // scene's opaque quads, each of one material, and each quad's
-        // face under its material's place in `materials`.
+        // A word for each traced quad: its material's place in `materials`
+        // above its face in the low 3 bits.
         let mut quad_words: Vec<u32> = Vec::new();
 
-        // The bloom's source casts a ray from each glowing hit to the eye,
-        // which any quad can hide. A mirror ray alone meets only the quads
-        // within its reach.
+        // Any quad can hide a glowing hit from the bloom source's ray to the
+        // eye. A mirror ray alone meets only the quads within its reach.
         let tlas = (mirrors || traced && bloom.is_some()).then(|| {
             let reach = |id: u32| f64::from(materials.mirror_reach(id, traced));
             let quads = tile_quads(tiles, if bloom.is_some() { None } else { Some(&reach) });
@@ -434,7 +407,6 @@ impl BoxView {
         // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
         let box_words = [marched_boxes.words.as_slice(), solid_boxes.words.as_slice()].concat();
 
-        // A shader's array has room for one element at the least.
         let quad_list = storage_words(device, "view quads", &quad_words, 1);
         let box_list = storage_words(device, "view boxes", box_words.as_flattened(), 12);
         let crosser_list = storage_words(device, "view crossers", &crosser_words, 8);
@@ -464,11 +436,10 @@ impl BoxView {
         // step keeps its cell inside the tile's box. Its loop ends within the
         // box's extent. A cell's place among its tile's record cells ends
         // within the tile's spare records. Its record then lies in the tile's
-        // words, and its word in `lit` lies within the spare words that
-        // buffer ends with. That word's material is under 256 and indexes
-        // `materials` within the spare values that buffer ends with. A box's
-        // entries in `crossers` index `boxes`. The stages index `places` by
-        // an eye and a box's placement.
+        // words, and its word in `lit` lies within that buffer's spare words.
+        // That word's material is under 256 and indexes `materials` within
+        // that buffer's spare values. A box's entries in `crossers` index
+        // `boxes`. The stages index `places` by an eye and a box's placement.
         let module = |traced, source, glass| unsafe {
             device.create_shader_module_trusted(
                 ShaderModuleDescriptor {
@@ -485,10 +456,8 @@ impl BoxView {
             )
         };
 
-        // A mirror ray's query costs each fragment of its module, so only
-        // the boxes that can cast one draw through it. Glass draws through
-        // a module of its own, which a device needs dual-source blending
-        // to take.
+        // A mirror ray's query costs every fragment of its module, so only
+        // the boxes that can cast one draw through it.
         let plain = module(false, None, false);
         let mirror = mirrors.then(|| module(true, None, false));
         let glassy = (!glass.is_empty()).then(|| module(false, None, true));
@@ -517,9 +486,8 @@ impl BoxView {
                 .create_view(&TextureViewDescriptor::default())
         };
 
-        // A texel no fragment reads, bound where a draw has no halo to
-        // add: by a scene with no bloom, and by the draw that makes the
-        // halo.
+        // A texel no fragment reads, bound where a draw adds no halo: in a
+        // scene with no bloom, and in the draw that makes the halo.
         let no_halo = texture(
             "no halo",
             [1, 1],
@@ -695,10 +663,8 @@ impl BoxView {
     }
 
     /// Sets the fewest pixels one of an object's cells spans before a
-    /// coarser copy's cells draw in its place. The view draws a place at
-    /// the coarsest copy whose cells span that many pixels or fewer, in a
-    /// scene whose objects keep copies. Zero draws every object's cells,
-    /// as a view starts.
+    /// coarser copy's cells draw in its place. Zero, where a view starts,
+    /// draws every object's cells.
     pub fn set_detail(&mut self, pixels: f64) {
         self.finest = pixels;
         self.sorted_for = None;
@@ -710,10 +676,8 @@ impl BoxView {
         self.sky
     }
 
-    /// Readies the next draw for `eyes`. The boxes sort again when the head
-    /// has left the last sort's reach, and deal out again when the test of
-    /// hidden boxes changes its answer for one. A meter of the headset's
-    /// spans `scale` of the scene's meters.
+    /// Readies the next draw for `eyes`. A headset meter spans `scale` scene
+    /// meters.
     pub fn prepare(&mut self, queue: &Queue, eyes: &[ViewEye; 2], scale: f64) {
         let each = eyes.iter().flat_map(|eye| {
             self.placements
@@ -762,9 +726,8 @@ impl BoxView {
             moved.sqrt() + reach <= covered
         });
 
-        // The widest angle a pixel spans: the one on an eye's axis. A
-        // clip matrix's first two rows scale by two over the tangents the
-        // target spans.
+        // The widest angle a pixel spans, on an eye's axis. A clip matrix's
+        // first two rows scale by two over the tangents the target spans.
         let pixel = eyes
             .iter()
             .flat_map(|eye| {
@@ -782,8 +745,6 @@ impl BoxView {
             self.sort(queue, head, reach + slack, pixel);
         }
 
-        // The boxes deal out again when a sort moved them or the test
-        // changed its answer for one.
         let mut deals = !holds;
 
         if let Some(hide) = &mut self.hide {
@@ -810,11 +771,10 @@ impl BoxView {
 
     /// Sorts the boxes nearest to `head` first and lists each run's opaque
     /// boxes in that order. A marched box within `covered` of `head` counts
-    /// as near, because an eye can come to stand inside it before the next
-    /// sort. A near marched box draws its back faces. Such a box that
-    /// crosses another placement's box draws its back faces at the nearest
-    /// depth for an eye it holds, and its front faces for one it does not.
-    /// Every solid box draws its front faces because a ray that starts
+    /// as near because an eye can enter it before the next sort. A near box
+    /// draws its back faces. A near box that crosses another placement's box
+    /// draws back faces for an eye it holds and front faces for one it does
+    /// not. A solid box draws its front faces because a ray that starts
     /// inside one sees none of it.
     fn sort(&mut self, queue: &Queue, head: [f32; 3], covered: f32, pixel: f64) {
         let spare = &mut self.spare_keys;
@@ -952,9 +912,7 @@ impl BoxView {
         }
 
         // Glass draws farthest first: every box through its front faces,
-        // then the boxes an eye can stand in through their back faces. A
-        // run ends where the next box's page differs, which keeps the
-        // order across pages.
+        // then the boxes an eye can stand in through their back faces.
         if !self.glass.words.is_empty() {
             for (part, keys) in [
                 (RUNS, &self.glass_keys[..]),
@@ -987,10 +945,10 @@ impl BoxView {
         self.boxes.encode(encoder, "eyes", target, clear);
     }
 
-    /// The pixels of the target the halo can reach for `eyes`, as a
-    /// rectangle's left, top, width, and height: what glows in either eye,
-    /// grown by `reach` pixels. The rectangle covers the whole target where a
-    /// glowing box reaches behind an eye.
+    /// The rectangle of the target the halo can reach for `eyes`, as its
+    /// left, top, width, and height: what glows in either eye, grown by
+    /// `reach` pixels. The rectangle covers the whole target where a glowing
+    /// box reaches behind an eye.
     fn halo_pixels(&self, eyes: &[ViewEye; 2], reach: f64) -> [u32; 4] {
         let [width, height] = self.size.map(f64::from);
         let mut low = [f64::INFINITY; 2];
@@ -1128,9 +1086,8 @@ fn frame_bytes(lights: &ViewLights, placements: usize, size: [u32; 2]) -> Vec<u8
 }
 
 /// `box_view.wgsl`'s `Place` for each of `placements`, once an eye. A
-/// `Place` ends with what holds from frame to frame: the world direction of
-/// each of its grid's axes with the meters a cell spans along it. Zeros
-/// stand where a frame writes its matrix and its ray.
+/// `Place` ends with each grid axis's world direction and the meters a cell
+/// spans along it. Zeros stand where a frame writes its matrix and ray.
 fn place_bytes(placements: &[(TyTransformF64, TyMatrix4x4F64)]) -> Vec<u8> {
     let mut bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
     let each = placements.iter().chain(placements);

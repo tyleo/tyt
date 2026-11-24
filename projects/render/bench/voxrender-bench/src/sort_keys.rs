@@ -1,9 +1,8 @@
 use std::mem;
 
 /// Sorts `keys` by their upper halves, least first, with `spare`'s room.
-/// Keys whose upper halves match keep their order. A moving head sorts a
-/// city's 26,000 keys each few frames, and on Quest these passes take
-/// 0.4 ms less of such a frame than `sort_unstable` does.
+/// Keys whose upper halves match keep their order. This radix sort beats
+/// `sort_unstable` on the keys a moving head sorts.
 pub fn sort_keys(keys: &mut Vec<u64>, spare: &mut Vec<u64>) {
     spare.clear();
     spare.resize(keys.len(), 0);
