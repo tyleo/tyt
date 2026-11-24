@@ -290,6 +290,97 @@ impl Eye<'_> {
 }
 
 impl List {
+    /// The list of the boxes of `bounds`, a tree for each of `runs`, as
+    /// [`BoxHide::new`] takes them.
+    fn new(bounds: Vec<[f32; 6]>, runs: Vec<usize>) -> Self {
+        let hidden = vec![false; bounds.len()];
+
+        // Each tree's levels from its root down.
+        let mut trees: Vec<Vec<Vec<Sprout>>> = Vec::new();
+        let mut first = 0;
+
+        for run in runs.into_iter().filter(|&run| run > 0) {
+            let boxes = first..first + run;
+
+            first += run;
+
+            let mut levels: Vec<Vec<Sprout>> = vec![
+                boxes
+                    .map(|index| (bounds[index], 0..0, index..index + 1))
+                    .collect(),
+            ];
+
+            while let Some(below) = levels.last().filter(|below| below.len() > 1) {
+                let level = (0..)
+                    .step_by(FAN)
+                    .zip(below.chunks(FAN))
+                    .map(|(first, group)| {
+                        let mut around = group[0].0;
+
+                        for (bounds, ..) in group {
+                            for axis in 0..3 {
+                                around[axis] = around[axis].min(bounds[axis]);
+                                around[axis + 3] = around[axis + 3].max(bounds[axis + 3]);
+                            }
+                        }
+
+                        let boxes = group[0].2.start..group[group.len() - 1].2.end;
+
+                        (around, first..first + group.len(), boxes)
+                    })
+                    .collect();
+
+                levels.push(level);
+            }
+
+            levels.reverse();
+            trees.push(levels);
+        }
+
+        // Where each tree's levels start among the nodes.
+        let depth = trees.iter().map(Vec::len).max().unwrap_or(0);
+        let mut starts: Vec<Vec<usize>> = vec![Vec::new(); trees.len()];
+        let mut count = 0;
+
+        for level in 0..depth {
+            for (tree, starts) in trees.iter().zip(&mut starts) {
+                if let Some(level) = tree.get(level) {
+                    starts.push(count);
+                    count += level.len();
+                }
+            }
+        }
+
+        let mut nodes = Vec::with_capacity(count);
+
+        for level in 0..depth {
+            for (tree, starts) in trees.iter().zip(&starts) {
+                for (bounds, parts, boxes) in tree.get(level).into_iter().flatten() {
+                    let half = [0, 1, 2].map(|axis| (bounds[axis + 3] - bounds[axis]) / 2.0);
+                    let below = starts.get(level + 1).copied().unwrap_or(0);
+
+                    nodes.push(Node {
+                        center: [0, 1, 2].map(|axis| (bounds[axis + 3] + bounds[axis]) / 2.0),
+                        half,
+                        radius: half.iter().map(|side| side * side).sum::<f32>().sqrt(),
+                        first_part: to_word(below + parts.start),
+                        first_box: to_word(boxes.start),
+                        box_count: to_word(boxes.len()),
+                        part_count: parts.len() as u8,
+                        last: [u8::MAX; 2],
+                        hides: false,
+                    });
+                }
+            }
+        }
+
+        List {
+            nodes,
+            searches: vec![[0; 2]; trees.len()],
+            hidden,
+        }
+    }
+
     /// Tests the node `at` and what it holds for `eyes`, under each eye's
     /// answer `above` for the group that holds the node: whether a shadow
     /// holds that group whole, and else the shadows that hold part of it.
@@ -384,96 +475,7 @@ impl BoxHide {
 
         let lists = lists
             .into_iter()
-            .map(|(bounds, runs)| {
-                let hidden = vec![false; bounds.len()];
-
-                // Each tree's levels from its root down.
-                let mut trees: Vec<Vec<Vec<Sprout>>> = Vec::new();
-                let mut first = 0;
-
-                for run in runs.into_iter().filter(|&run| run > 0) {
-                    let boxes = first..first + run;
-
-                    first += run;
-
-                    let mut levels: Vec<Vec<Sprout>> = vec![
-                        boxes
-                            .map(|index| (bounds[index], 0..0, index..index + 1))
-                            .collect(),
-                    ];
-
-                    while let Some(below) = levels.last().filter(|below| below.len() > 1) {
-                        let level = (0..)
-                            .step_by(FAN)
-                            .zip(below.chunks(FAN))
-                            .map(|(first, group)| {
-                                let mut around = group[0].0;
-
-                                for (bounds, ..) in group {
-                                    for axis in 0..3 {
-                                        around[axis] = around[axis].min(bounds[axis]);
-                                        around[axis + 3] = around[axis + 3].max(bounds[axis + 3]);
-                                    }
-                                }
-
-                                let boxes = group[0].2.start..group[group.len() - 1].2.end;
-
-                                (around, first..first + group.len(), boxes)
-                            })
-                            .collect();
-
-                        levels.push(level);
-                    }
-
-                    levels.reverse();
-                    trees.push(levels);
-                }
-
-                // Where each tree's levels start among the nodes.
-                let depth = trees.iter().map(Vec::len).max().unwrap_or(0);
-                let mut starts: Vec<Vec<usize>> = vec![Vec::new(); trees.len()];
-                let mut count = 0;
-
-                for level in 0..depth {
-                    for (tree, starts) in trees.iter().zip(&mut starts) {
-                        if let Some(level) = tree.get(level) {
-                            starts.push(count);
-                            count += level.len();
-                        }
-                    }
-                }
-
-                let mut nodes = Vec::with_capacity(count);
-
-                for level in 0..depth {
-                    for (tree, starts) in trees.iter().zip(&starts) {
-                        for (bounds, parts, boxes) in tree.get(level).into_iter().flatten() {
-                            let half =
-                                [0, 1, 2].map(|axis| (bounds[axis + 3] - bounds[axis]) / 2.0);
-                            let below = starts.get(level + 1).copied().unwrap_or(0);
-
-                            nodes.push(Node {
-                                center: [0, 1, 2]
-                                    .map(|axis| (bounds[axis + 3] + bounds[axis]) / 2.0),
-                                half,
-                                radius: half.iter().map(|side| side * side).sum::<f32>().sqrt(),
-                                first_part: to_word(below + parts.start),
-                                first_box: to_word(boxes.start),
-                                box_count: to_word(boxes.len()),
-                                part_count: parts.len() as u8,
-                                last: [u8::MAX; 2],
-                                hides: false,
-                            });
-                        }
-                    }
-                }
-
-                List {
-                    nodes,
-                    searches: vec![[0; 2]; trees.len()],
-                    hidden,
-                }
-            })
+            .map(|(bounds, runs)| List::new(bounds, runs))
             .collect();
 
         BoxHide {
