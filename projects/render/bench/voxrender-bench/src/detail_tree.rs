@@ -1,4 +1,4 @@
-use crate::{PlacedBox, TILE, TileScene, bounds_around, box_corners, to_word};
+use crate::{PlacedBox, TILE, TileBox, TileScene, bounds_around, box_corners, to_word};
 use std::ops::Range;
 use ty_math::TyVector3U32;
 
@@ -43,7 +43,7 @@ impl DetailTree {
     /// 1. `lists`: a view's marched, solid, and glass boxes, each as
     ///    [`PlacedBox::list`] gives them
     pub fn new(tiles: &TileScene, lists: [&[PlacedBox]; LISTS]) -> Option<Self> {
-        if tiles.spans.iter().all(|&span| span == 1) {
+        if tiles.objects.iter().all(|object| object.span == 1) {
             return None;
         }
 
@@ -57,17 +57,17 @@ impl DetailTree {
         // The boxes in each list of the tile at `tile` among a placement's
         // object's, or `None` for a tile with no box.
         let boxes_of = |placement: usize, tile: TyVector3U32| {
-            let object = &tiles.objects[tiles.placements[placement].0];
+            let object = &tiles.objects[tiles.placements[placement].object];
             let masks = &object.masks;
 
             // The boxes of a tile follow one another in its object's list.
-            let held = |places: &[u32], place: Option<usize>, first: usize| {
+            let held = |boxes: &[TileBox], place: Option<usize>, first: usize| {
                 let Some(place) = place else {
                     return first..first;
                 };
 
-                let low = places.partition_point(|&held| (held as usize) < place);
-                let high = places.partition_point(|&held| held as usize <= place);
+                let low = boxes.partition_point(|held| held.tile < place);
+                let high = boxes.partition_point(|held| held.tile <= place);
 
                 first + low..first + high
             };
@@ -76,8 +76,8 @@ impl DetailTree {
             let glass = object.glass_at(tile);
 
             let ranges = [
-                held(&masks.places, opaque, firsts[0][placement]),
-                held(&masks.solid_places, opaque, firsts[1][placement]),
+                held(&masks.boxes, opaque, firsts[0][placement]),
+                held(&masks.solids, opaque, firsts[1][placement]),
                 // A glass tile draws one box, unless the view draws none.
                 glass.map_or(0..0, |glass| {
                     let first = firsts[2][placement] + glass;
@@ -92,9 +92,10 @@ impl DetailTree {
         };
 
         let tile_of = |placement: usize, tile: TyVector3U32, boxes: [Range<u32>; LISTS]| {
-            let (object, transform) = &tiles.placements[placement];
+            let placed = &tiles.placements[placement];
+            let transform = &placed.transform;
             let low = tile * TILE;
-            let high = (low + TILE).min(tiles.objects[*object].bounds);
+            let high = (low + TILE).min(tiles.objects[placed.object].bounds);
 
             let (least, most) = bounds_around(
                 box_corners(low.as_dvec3(), high.as_dvec3())
@@ -121,7 +122,7 @@ impl DetailTree {
         // coarsest. The placement before one that has a copy draws the
         // copy a level finer.
         for placement in (0..tiles.placements.len()).filter(|&at| tiles.coarser(at).is_none()) {
-            let counts = tiles.objects[tiles.placements[placement].0].counts();
+            let counts = tiles.objects[tiles.placements[placement].object].counts();
 
             for x in 0..counts.x {
                 for y in 0..counts.y {
@@ -148,7 +149,7 @@ impl DetailTree {
                 .checked_sub(1)
                 .filter(|&finer| tiles.coarser(finer) == Some(placement))
             {
-                let counts = tiles.objects[tiles.placements[finer].0].counts();
+                let counts = tiles.objects[tiles.placements[finer].object].counts();
 
                 for corner in 0..8u32 {
                     let under =
@@ -228,21 +229,8 @@ mod tests {
 
         tiles.place_object(object, TyTransformF64::IDENTITY);
 
-        let list = |solid: bool| {
-            let boxes: Vec<_> = (tiles.objects.iter())
-                .map(|object| {
-                    if solid {
-                        object.masks.solids.as_slice()
-                    } else {
-                        object.masks.boxes.as_slice()
-                    }
-                })
-                .collect();
-
-            PlacedBox::list(&tiles.placements, &boxes, &tiles.spans)
-        };
-
-        let (marched, solid) = (list(false), list(true));
+        let marched = PlacedBox::list(&tiles, |object| &object.masks.boxes);
+        let solid = PlacedBox::list(&tiles, |object| &object.masks.solids);
 
         (tiles, marched, solid)
     }
@@ -251,10 +239,15 @@ mod tests {
     fn a_floor_keeps_two_copies_down_to_one_tile() {
         let (tiles, _, _) = floor();
 
-        assert_eq!(tiles.spans, [1, 2, 4]);
+        let spans: Vec<_> = tiles.objects.iter().map(|object| object.span).collect();
+
+        assert_eq!(spans, [1, 2, 4]);
         assert_eq!(tiles.objects[2].bounds, TyVector3U32::new(16, 1, 16));
         assert_eq!(tiles.placements.len(), 3);
-        assert_eq!(tiles.placements[2].1.scale, TyVector3F64::splat(4.0));
+        assert_eq!(
+            tiles.placements[2].transform.scale,
+            TyVector3F64::splat(4.0)
+        );
         assert_eq!((tiles.coarser(0), tiles.coarser(2)), (Some(1), None));
     }
 

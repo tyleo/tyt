@@ -21,6 +21,16 @@ pub struct ObjectTiles {
     /// object's.
     pub slabs: Vec<CellBox>,
 
+    /// How many of its object's cells one of the cells spans along an axis:
+    /// one for an object, and twice the one before for each of its coarser
+    /// copies.
+    pub span: u32,
+
+    /// The empty cells the grid holds ahead of its object's first cell
+    /// along each axis, which set its coarser copies on the lattice their
+    /// scene's objects share.
+    pub shift: TyVector3U32,
+
     /// The object's cells as a shadow ray walks them.
     pub casters: CasterTiles,
 
@@ -45,12 +55,15 @@ impl ObjectTiles {
     /// 2. `glass`: with it, the tiles keep the surfaces between materials
     ///    that pass light, and it gives what a glass cell's word holds for
     ///    a material, under 2^12
-    /// 3. `slabs`: whether the tiles keep the grid's slabs
+    /// 3. `span`: how many of its object's cells one of the grid's spans
+    /// 4. `shift`: the empty cells the grid holds ahead of its object's
+    ///    first
     pub fn new(
         grid: &CellGrid,
         opaque: &dyn Fn(u32) -> bool,
         glass: Option<&mut dyn FnMut(u32) -> u32>,
-        slabs: bool,
+        span: u32,
+        shift: TyVector3U32,
     ) -> Result<Self> {
         let masks = TileMasks::new(grid, opaque)?;
         let counts = (grid.bounds + TILE - 1) / TILE;
@@ -67,31 +80,25 @@ impl ObjectTiles {
             places
         };
 
-        let places = placed(&mut masks.corners.iter().copied());
+        let places = placed(&mut masks.tiles.iter().map(|tile| tile.corner));
 
-        let glass = match glass {
-            Some(place) => GlassTiles::new(grid, opaque, place),
+        let glass = glass.map_or_else(GlassTiles::default, |place| {
+            GlassTiles::new(grid, opaque, place)
+        });
 
-            None => GlassTiles {
-                boxes: Vec::new(),
-                surfaces: Vec::new(),
-                tiles: Vec::new(),
-                cells: Vec::new(),
-                words: Vec::new(),
-            },
-        };
-
-        let glass_places = placed(&mut glass.boxes.iter().map(|&(low, _)| low));
+        let glass_places = placed(&mut glass.boxes.iter().map(|drawn| drawn.cells.0));
 
         Ok(ObjectTiles {
             bounds: grid.bounds,
             masks,
             glass,
-            slabs: if slabs {
+            slabs: if span == 1 {
                 solid_slabs(grid, opaque)
             } else {
                 Vec::new()
             },
+            span,
+            shift,
             casters: CasterTiles::new(grid, opaque)?,
             places,
             glass_places,
@@ -134,7 +141,7 @@ impl ObjectTiles {
         let [x, y, z] = cell.map(|coordinate| coordinate as u32);
         let place = self.tile_at(TyVector3U32::new(x, y, z) / TILE)?;
         let row = y % TILE * TILE + x % TILE;
-        let bits = self.masks.words[(self.masks.offsets[place] + row) as usize];
+        let bits = self.masks.words[(self.masks.tiles[place].offset + row) as usize];
 
         (bits >> (z % TILE) & 1 == 1).then_some((place, (row * TILE + z % TILE) as u16))
     }
@@ -143,10 +150,10 @@ impl ObjectTiles {
     /// `tile` among [`masks`](Self::masks)' tiles. `None` for a cell with
     /// no record, which has no surface.
     pub fn material_of(&self, tile: usize, index: u16) -> Option<u32> {
-        let record = self.masks.recorded[tile].binary_search(&index).ok()?;
-        let entry = usize::from(self.masks.entries[tile][record]);
+        let tile = &self.masks.tiles[tile];
+        let record = tile.recorded.binary_search(&index).ok()?;
 
-        Some(self.masks.palette(self.masks.offsets[tile])[entry])
+        Some(self.masks.palette(tile.offset)[usize::from(tile.entries[record])])
     }
 }
 
@@ -171,7 +178,8 @@ mod tests {
         cells[(17 * 3 + 1) * 4 + 2] = 6;
 
         let grid = CellGrid { bounds, cells };
-        let tiles = ObjectTiles::new(&grid, &|material| material == 2, None, true).unwrap();
+        let shift = TyVector3U32::ZERO;
+        let tiles = ObjectTiles::new(&grid, &|material| material == 2, None, 1, shift).unwrap();
 
         let (tile, index) = tiles.opaque_at([17, 0, 2]).unwrap();
 

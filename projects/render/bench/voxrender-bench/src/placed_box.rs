@@ -1,4 +1,6 @@
-use crate::{BoxCrosser, CellBox, bounds_around, box_corners, to_word};
+use crate::{
+    BoxCrosser, ObjectTiles, TileBox, TilePlacement, TileScene, bounds_around, box_corners, to_word,
+};
 use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
 
@@ -6,14 +8,13 @@ use voxrender::grid_point;
 /// so boxes that only touch do.
 const TOUCH: f64 = 1.0e-4;
 
-/// One placement's box around the live cells of one of its object's
-/// bricks.
+/// One placement's box of cells within one of its object's tiles.
 pub struct PlacedBox {
     /// The placement's index in the scene's placement order.
     pub placement: u32,
 
-    /// The box's index among its object's boxes.
-    pub brick: usize,
+    /// The tile's place among its object's tiles of the box's kind.
+    pub tile: usize,
 
     /// The box's low cell in the placement's grid.
     pub low: TyVector3U32,
@@ -33,33 +34,26 @@ pub struct PlacedBox {
 }
 
 impl PlacedBox {
-    /// Each placement's boxes, in the order of `placements`.
-    ///
-    /// # Arguments
-    ///
-    /// 1. `placements`: each placement's object and its transform from the
-    ///    object's cells to the world
-    /// 2. `boxes`: each object's boxes
-    /// 3. `spans`: how many cells of the object it copies one of each
-    ///    object's cells spans
-    pub fn list(
-        placements: &[(usize, TyTransformF64)],
-        boxes: &[&[CellBox]],
-        spans: &[u32],
-    ) -> Vec<Self> {
+    /// The boxes `boxes` gives for the object of each of `tiles`'
+    /// placements, in the placements' order.
+    pub fn list(tiles: &TileScene, boxes: impl Fn(&ObjectTiles) -> &[TileBox]) -> Vec<Self> {
         let mut placed = Vec::new();
 
-        for (index, (object, transform)) in (0u32..).zip(placements) {
-            for (brick, &(low, high)) in boxes[*object].iter().enumerate() {
+        for (index, TilePlacement { object, transform }) in (0u32..).zip(&tiles.placements) {
+            let object = &tiles.objects[*object];
+
+            for &TileBox { cells, tile } in boxes(object) {
+                let (low, high) = cells;
+
                 let corners = box_corners(low.as_dvec3(), high.as_dvec3())
                     .map(|corner| transform.transform_point(corner));
 
                 placed.push(PlacedBox {
                     placement: index,
-                    brick,
+                    tile,
                     low,
                     high,
-                    span: spans[*object],
+                    span: object.span,
                     transform: *transform,
                     world: bounds_around(corners),
                 });
@@ -216,22 +210,35 @@ impl PlacedBox {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BoxCrosser, PlacedBox};
+    use crate::{BoxCrosser, CellGrid, PlacedBox, TileScene};
     use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 
     #[test]
     fn only_boxes_of_two_placements_that_share_space_cross() {
         // Three placements of a cube. The second touches the first. The
         // third cuts into the second.
-        let placements = [0.0, 16.0, 24.0].map(|x| {
-            (
-                0,
-                TyTransformF64::from_translation(TyVector3F64::new(x, 0.0, 0.0)),
-            )
-        });
+        let mut tiles = TileScene::new(false, false);
 
-        let cube = [(TyVector3U32::ZERO, TyVector3U32::splat(16))];
-        let placed = PlacedBox::list(&placements, &[&cube], &[1]);
+        tiles.opaque.push(true);
+        tiles.materials.push(Default::default());
+
+        let grid = CellGrid {
+            bounds: TyVector3U32::splat(16),
+            cells: vec![1; 16 * 16 * 16],
+        };
+
+        let cube = tiles.push_object(&grid, [0; 3]).unwrap();
+
+        for x in [0.0, 16.0, 24.0] {
+            let position = TyVector3F64::new(x, 0.0, 0.0);
+
+            tiles.place_object(cube, TyTransformF64::from_translation(position));
+        }
+
+        // A tile of live cells alone gives one solid box.
+        let placed = PlacedBox::list(&tiles, |object| &object.masks.solids);
+
+        assert_eq!(placed.len(), 3);
 
         // The second and third cubes share the cells from x = 24 to 32:
         // the second's 8 to 16, and the third's 0 to 8.

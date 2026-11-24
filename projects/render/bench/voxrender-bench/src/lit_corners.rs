@@ -277,10 +277,8 @@ mod tests {
 
                     (
                         object_id,
-                        masks
-                            .corners
-                            .into_iter()
-                            .zip(masks.recorded)
+                        (masks.tiles.into_iter())
+                            .map(|tile| (tile.corner, tile.recorded))
                             .collect::<Vec<_>>(),
                     )
                 })

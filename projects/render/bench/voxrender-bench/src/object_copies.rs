@@ -2,11 +2,9 @@ use crate::{CellGrid, ObjectTiles, Result, TILE, to_word};
 use ty_math::TyVector3U32;
 
 /// The tiles of `grid` and then of each of its coarser copies, finest
-/// first, with the empty cells the grid takes ahead of its first cell
-/// along each axis. A [`TileScene`](crate::TileScene) keeps them as one
-/// object. They read nothing a scene changes as it takes other objects, so
-/// a loader can build several objects' at once. Errors as
-/// [`ObjectTiles::new`] does.
+/// first. A [`TileScene`](crate::TileScene) keeps them as one object. They
+/// read nothing a scene changes as it takes other objects, so a loader can
+/// build several objects' at once. Errors as [`ObjectTiles::new`] does.
 ///
 /// With `coarser`, each copy halves the one before, as
 /// [`CellGrid::halved`] does, down to a copy that fits one tile. A copy's
@@ -27,7 +25,7 @@ pub fn object_copies(
     coarser: bool,
     opaque: &[bool],
     glass: Option<&[u32]>,
-) -> Result<(Vec<ObjectTiles>, TyVector3U32)> {
+) -> Result<Vec<ObjectTiles>> {
     let copies = if coarser {
         (0..)
             .find(|&copies| grid.bounds.max_element() >> copies <= TILE)
@@ -67,11 +65,16 @@ pub fn object_copies(
             None
         };
 
+        // The empty cells sit ahead of the object alone, and a copy halves
+        // them away.
+        let shift = if copy == 0 { shift } else { TyVector3U32::ZERO };
+
         tiles.push(ObjectTiles::new(
             level,
             &|material| opaque[material as usize],
             place,
-            copy == 0,
+            1 << copy,
+            shift,
         )?);
 
         if copy < copies {
@@ -80,5 +83,5 @@ pub fn object_copies(
         }
     }
 
-    Ok((tiles, shift))
+    Ok(tiles)
 }

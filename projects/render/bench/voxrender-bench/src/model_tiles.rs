@@ -11,7 +11,7 @@ use std::{
     },
     thread,
 };
-use ty_math::{TyBoundsF64, TyTransformF64, TyVector3U32};
+use ty_math::{TyBoundsF64, TyTransformF64};
 use voxj::{VoxjFile, VoxjPositionBlock, VoxjSampleBlock};
 use voxj_codec::{DependenciesImpl, from_voxj_or_voxjz_file_bytes};
 use voxj_voxcore::from_voxj_file;
@@ -28,14 +28,8 @@ type Held = (
 );
 
 /// One object as a thread builds it: its tiles and those of its coarser
-/// copies, the empty cells ahead of its first, its placements, and the
-/// world bounds of its live voxels.
-type Built = (
-    Vec<ObjectTiles>,
-    TyVector3U32,
-    Vec<TyTransformF64>,
-    Option<TyBoundsF64>,
-);
+/// copies, its placements, and the world bounds of its live voxels.
+type Built = (Vec<ObjectTiles>, Vec<TyTransformF64>, Option<TyBoundsF64>);
 
 /// A Voxel Json model as a [`BoxView`](crate::BoxView) draws it, with what
 /// frames it.
@@ -188,10 +182,9 @@ impl ModelTiles {
                                 drop(object_scene);
 
                                 let glass = glass.then_some(glass_materials.as_slice());
-                                let (copies, shift) =
-                                    object_copies(&grid, first, coarser, &opaque, glass)?;
+                                let copies = object_copies(&grid, first, coarser, &opaque, glass)?;
 
-                                Ok((copies, shift, transforms, bounds))
+                                Ok((copies, transforms, bounds))
                             });
 
                         match object {
@@ -221,8 +214,8 @@ impl ModelTiles {
         let mut bounds: Option<TyBoundsF64> = None;
 
         for object in built.into_inner().expect("the threads ended") {
-            let (copies, shift, transforms, placed) = object.expect("each object built");
-            let at = tiles.push_copies(copies, shift);
+            let (copies, transforms, placed) = object.expect("each object built");
+            let at = tiles.push_copies(copies);
 
             for transform in transforms {
                 tiles.place_object(at, transform);

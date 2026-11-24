@@ -1,7 +1,8 @@
 use crate::{
     BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, DetailTree, Error,
-    GlassTiles, LISTS, LitFill, PassTerms, PlacedBox, Result, TileMasks, TileScene, ViewEye,
-    ViewTarget, box_corners, box_view_shader, quad_tlas, storage_words, tile_quads, to_word,
+    GlassTiles, LISTS, LitFill, PassTerms, PlacedBox, Result, TileMasks, TilePlacement, TileScene,
+    ViewEye, ViewTarget, box_corners, box_view_shader, quad_tlas, storage_words, tile_quads,
+    to_word,
 };
 use std::{collections::HashMap, mem};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
@@ -428,13 +429,7 @@ impl BoxView {
         // The surfaces between materials that pass light draw as glass
         // where the device blends a tint a channel.
         let blends = Self::draws_glass(device);
-        let no_glass = GlassTiles {
-            boxes: Vec::new(),
-            surfaces: Vec::new(),
-            tiles: Vec::new(),
-            cells: Vec::new(),
-            words: Vec::new(),
-        };
+        let no_glass = GlassTiles::default();
 
         let glass_of = |object: usize| {
             if blends {
@@ -444,12 +439,14 @@ impl BoxView {
             }
         };
 
-        let object_of: Vec<_> = tiles.placements.iter().map(|&(object, _)| object).collect();
+        let object_of: Vec<_> = (tiles.placements.iter())
+            .map(|placed| placed.object)
+            .collect();
 
         let placements: Vec<_> = tiles
             .placements
             .iter()
-            .map(|&(_, transform)| {
+            .map(|&TilePlacement { transform, .. }| {
                 (
                     transform,
                     TyMatrix4x4F64::from_scale_rotation_translation(
@@ -461,21 +458,8 @@ impl BoxView {
             })
             .collect();
 
-        let marched = PlacedBox::list(
-            &tiles.placements,
-            &(objects.iter())
-                .map(|object| object.masks.boxes.as_slice())
-                .collect::<Vec<_>>(),
-            &tiles.spans,
-        );
-
-        let solid = PlacedBox::list(
-            &tiles.placements,
-            &(objects.iter())
-                .map(|object| object.masks.solids.as_slice())
-                .collect::<Vec<_>>(),
-            &tiles.spans,
-        );
+        let marched = PlacedBox::list(tiles, |object| &object.masks.boxes);
+        let solid = PlacedBox::list(tiles, |object| &object.masks.solids);
 
         // Each marched box's entries in `crosser_words`, as their first and
         // their count.
@@ -522,12 +506,15 @@ impl BoxView {
         // cells take in `lit`.
         let sizes: Vec<_> = (0..objects.len())
             .map(|object| {
-                let records: usize = objects[object].masks.recorded.iter().map(Vec::len).sum();
-                let glass: usize = glass_of(object).cells.iter().map(Vec::len).sum();
+                let masks = &objects[object].masks;
+                let records: usize = masks.tiles.iter().map(|tile| tile.recorded.len()).sum();
+                let glass: usize = (glass_of(object).tiles.iter())
+                    .map(|tile| tile.cells.len())
+                    .sum();
                 let placed = object_of.iter().filter(|&&placed| placed == object).count();
 
                 (
-                    objects[object].masks.words.len() + glass_of(object).words.len(),
+                    masks.words.len() + glass_of(object).words.len(),
                     (records + glass) * placed,
                 )
             })
@@ -576,7 +563,7 @@ impl BoxView {
             .filter(|&object| group[object] == object)
             .collect();
 
-        firsts.sort_by_key(|&first| tiles.spans[first]);
+        firsts.sort_by_key(|&first| objects[first].span);
 
         for first in firsts {
             let members = || (first..objects.len()).filter(|&object| group[object] == first);
@@ -652,18 +639,10 @@ impl BoxView {
 
         // A box's object and its tile's offset among the object's mask
         // words.
-        let tile_of = |placed: &PlacedBox, solid: bool| {
+        let tile_of = |placed: &PlacedBox| {
             let object = object_of[placed.placement as usize];
-            let masks = &objects[object].masks;
 
-            (
-                object,
-                if solid {
-                    &masks.solid_tiles
-                } else {
-                    &masks.tiles
-                }[placed.brick],
-            )
+            (object, objects[object].masks.tiles[placed.tile].offset)
         };
 
         // `box_view.wgsl`'s `lit` for each page: a word for each record
@@ -685,11 +664,8 @@ impl BoxView {
                     lit_places[placement] = to_word(lit_words.len());
 
                     lit_words.extend(
-                        objects[object_of[placement]]
-                            .masks
-                            .entries
-                            .iter()
-                            .flatten()
+                        (objects[object_of[placement]].masks.tiles.iter())
+                            .flat_map(|tile| &tile.entries)
                             .map(|&entry| u32::from(entry) << 24),
                     );
                 }
@@ -697,13 +673,11 @@ impl BoxView {
                 // A word for each glass cell follows: the first of each
                 // glass tile's, for each placement.
                 for &placement in &placed {
-                    glass_lit[placement] = glass_of(object_of[placement])
-                        .cells
-                        .iter()
-                        .map(|cells| {
+                    glass_lit[placement] = (glass_of(object_of[placement]).tiles.iter())
+                        .map(|tile| {
                             let first = to_word(lit_words.len());
 
-                            lit_words.resize(lit_words.len() + cells.len(), 0);
+                            lit_words.resize(lit_words.len() + tile.cells.len(), 0);
 
                             first
                         })
@@ -914,7 +888,7 @@ impl BoxView {
         // A ray traces an object's quads, so its coarser copies cast none.
         let mut mirror_tile = |tile: (usize, u32)| {
             *tile_mirrors.entry(tile).or_insert_with(|| {
-                tiles.spans[tile.0] == 1 && ids_of(tile).iter().any(|&id| mirror_reach(id) > 0.0)
+                objects[tile.0].span == 1 && ids_of(tile).iter().any(|&id| mirror_reach(id) > 0.0)
             })
         };
 
@@ -937,8 +911,8 @@ impl BoxView {
         // object's first word in its page. The last two words hold what
         // its fragments read of the tile with no load: the tile's first
         // material and the first of its lit words.
-        let mut words_of = |placed: &PlacedBox, solid: bool, more: [u32; 2]| {
-            let (object, tile) = tile_of(placed, solid);
+        let mut words_of = |placed: &PlacedBox, more: [u32; 2]| {
+            let (object, tile) = tile_of(placed);
             let mut words = placed.words(placed.placement, offsets[object].0 + tile, more);
             let before = objects[object].masks.words[(tile + TileMasks::FIRST) as usize];
 
@@ -958,13 +932,13 @@ impl BoxView {
 
                 crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
 
-                words_of(placed, false, span)
+                words_of(placed, span)
             })
             .collect();
 
         let solid_words: Vec<_> = solid
             .iter()
-            .map(|placed| words_of(placed, true, [0, 0]))
+            .map(|placed| words_of(placed, [0, 0]))
             .collect();
 
         // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
@@ -977,7 +951,7 @@ impl BoxView {
 
         let solid_mirrors: Vec<_> = solid
             .iter()
-            .map(|placed| mirror_tile(tile_of(placed, true)))
+            .map(|placed| mirror_tile(tile_of(placed)))
             .collect();
 
         // A marched box's fragment can also shade a hit in a box it
@@ -986,13 +960,13 @@ impl BoxView {
             .iter()
             .zip(&crossers)
             .map(|(placed, entries)| {
-                mirror_tile(tile_of(placed, false))
+                mirror_tile(tile_of(placed))
                     || entries.iter().any(|entry| {
                         let other = (entry.entry & !BoxCrosser::SOLID) as usize;
 
                         match other.checked_sub(marched.len()) {
                             Some(other) => solid_mirrors[other],
-                            None => mirror_tile(tile_of(&marched[other], false)),
+                            None => mirror_tile(tile_of(&marched[other])),
                         }
                     })
             })
@@ -1007,20 +981,20 @@ impl BoxView {
 
         let solid_glows: Vec<_> = solid
             .iter()
-            .map(|placed| glow_tile(tile_of(placed, true)))
+            .map(|placed| glow_tile(tile_of(placed)))
             .collect();
 
         let march_glows: Vec<_> = marched
             .iter()
             .zip(&crossers)
             .map(|(placed, entries)| {
-                glow_tile(tile_of(placed, false))
+                glow_tile(tile_of(placed))
                     || entries.iter().any(|entry| {
                         let other = (entry.entry & !BoxCrosser::SOLID) as usize;
 
                         match other.checked_sub(marched.len()) {
                             Some(other) => solid_glows[other],
-                            None => glow_tile(tile_of(&marched[other], false)),
+                            None => glow_tile(tile_of(&marched[other])),
                         }
                     })
             })
@@ -1053,7 +1027,7 @@ impl BoxView {
                 tiles
                     .placements
                     .iter()
-                    .flat_map(|(object, transform)| {
+                    .flat_map(|TilePlacement { object, transform }| {
                         objects[*object].slabs.iter().map(|&(low, high)| {
                             box_corners(low.as_dvec3(), high.as_dvec3())
                                 .map(|corner| transform.transform_point(corner))
@@ -1141,11 +1115,10 @@ impl BoxView {
         });
 
         let glass = PlacedBox::list(
-            &tiles.placements,
-            &(0..objects.len())
-                .map(|object| glass_of(object).boxes.as_slice())
-                .collect::<Vec<_>>(),
-            &tiles.spans,
+            tiles,
+            |object| {
+                if blends { &object.glass.boxes } else { &[] }
+            },
         );
 
         let detail = DetailTree::new(tiles, [&marched, &solid, &glass]);
@@ -1156,22 +1129,19 @@ impl BoxView {
             .map(|placed| {
                 let object = object_of[placed.placement as usize];
                 let first = offsets[object].1;
-                let GlassTiles {
-                    tiles, surfaces, ..
-                } = glass_of(object);
+                let tile = &glass_of(object).tiles[placed.tile];
 
                 // The box around the tile's surfaces, 4 bits a side: its
                 // low cell in the tile, then its high cell.
-                let (low, high) = surfaces[placed.brick];
+                let (low, high) = tile.surfaces;
                 let [x, y, z] = (low % 16).to_array();
                 let [far_x, far_y, far_z] = ((high - 1) % 16).to_array();
                 let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
 
-                let mut words =
-                    placed.words(placed.placement, first + tiles[placed.brick], [surfaces, 0]);
+                let mut words = placed.words(placed.placement, first + tile.offset, [surfaces, 0]);
 
                 // The first of the tile's words in `lit`.
-                words[11] = glass_lit[placed.placement as usize][placed.brick];
+                words[11] = glass_lit[placed.placement as usize][placed.tile];
 
                 glass_boxes.push(placed, words, page(placed), false, false);
 

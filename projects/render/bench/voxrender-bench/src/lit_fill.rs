@@ -1,6 +1,6 @@
 use crate::{
-    LitPage, PassTerms, TILE, TileMasks, TileScene, bounds_around, box_corners, storage_words,
-    to_word,
+    LitPage, PassTerms, TILE, TileMasks, TilePlacement, TileScene, bounds_around, box_corners,
+    storage_words, to_word,
 };
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 use voxrender::{grid_vector, quantize_direction};
@@ -114,7 +114,7 @@ impl LitFill {
         let mut placement_bytes = Vec::new();
         let mut lights = Vec::new();
 
-        for (object, transform) in &tiles.placements {
+        for TilePlacement { object, transform } in &tiles.placements {
             let bounds = tiles.objects[*object].bounds.to_array();
             let rotation = transform.rotation.to_array();
 
@@ -160,7 +160,7 @@ impl LitFill {
         let axes = [across, toward.cross(across), toward];
 
         let spans = (tiles.placements.iter())
-            .map(|(object, transform)| {
+            .map(|TilePlacement { object, transform }| {
                 span(
                     &axes,
                     transform,
@@ -213,7 +213,7 @@ impl LitFill {
             axes,
             spans,
             sizes: (tiles.placements.iter())
-                .map(|(object, _)| tiles.spans[*object])
+                .map(|placed| tiles.objects[placed.object].span)
                 .collect(),
         }
     }
@@ -248,7 +248,7 @@ impl LitFill {
         // glass tiles'.
         for glassy in [false, true] {
             for &index in placements {
-                let (object, transform) = &tiles.placements[index];
+                let TilePlacement { object, transform } = &tiles.placements[index];
                 let object = &tiles.objects[*object];
 
                 if glassy {
@@ -260,14 +260,12 @@ impl LitFill {
                 // Each tile's low corner and the indices of its cells that
                 // take a word.
                 let cells: Vec<(TyVector3U32, &Vec<u16>)> = if !glassy {
-                    let masks = &object.masks;
-
-                    masks.corners.iter().copied().zip(&masks.recorded).collect()
+                    (object.masks.tiles.iter())
+                        .map(|tile| (tile.corner, &tile.recorded))
+                        .collect()
                 } else if glass {
-                    let tiles = &object.glass;
-
-                    (tiles.boxes.iter().map(|(low, _)| *low / TILE * TILE))
-                        .zip(&tiles.cells)
+                    (object.glass.boxes.iter().zip(&object.glass.tiles))
+                        .map(|(drawn, tile)| (drawn.cells.0 / TILE * TILE, &tile.cells))
                         .collect()
                 } else {
                     Vec::new()

@@ -72,10 +72,8 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
 
         tiles.insert(
             object_id,
-            masks
-                .corners
-                .into_iter()
-                .zip(masks.recorded)
+            (masks.tiles.into_iter())
+                .map(|tile| (tile.corner, tile.recorded))
                 .collect::<Vec<_>>(),
         );
     }

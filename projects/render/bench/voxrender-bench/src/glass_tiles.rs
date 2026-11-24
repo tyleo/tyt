@@ -1,4 +1,4 @@
-use crate::{CellBox, CellGrid, TILE, TILE_CELLS, live_boxes, tile_cell, to_word};
+use crate::{CellGrid, GlassTile, TILE, TILE_CELLS, TileBox, live_boxes, tile_cell, to_word};
 use ty_math::TyVector3U32;
 
 /// An object's surfaces between materials that pass light, by tile, as a
@@ -20,24 +20,17 @@ use ty_math::TyVector3U32;
 /// [`cells`](Self::cells) in the 12 bits from bit 8, under the cell's
 /// material from bit 20. Face `2 * axis` looks down its axis and face
 /// `2 * axis + 1` up it.
+#[derive(Default)]
 pub struct GlassTiles {
+    /// Each tile that holds a surface, in raster order.
+    pub tiles: Vec<GlassTile>,
+
     /// The box each tile draws: the box around its busy cells. The tile's
     /// opaque cells draw a box whose faces can lie before a surface they do
     /// not hide, so a walk starts no later than that box does.
-    pub boxes: Vec<CellBox>,
+    pub boxes: Vec<TileBox>,
 
-    /// The box around each tile's cells with a surface, where a walk can
-    /// end.
-    pub surfaces: Vec<CellBox>,
-
-    /// The offset in [`words`](Self::words) of each box's tile.
-    pub tiles: Vec<u32>,
-
-    /// The indices in each box's tile of its cells with a surface, in
-    /// order.
-    pub cells: Vec<Vec<u16>>,
-
-    /// Each tile's words.
+    /// The tiles' words.
     pub words: Vec<u32>,
 }
 
@@ -63,13 +56,7 @@ impl GlassTiles {
     ) -> Self {
         let passes = |value: u32| value.checked_sub(1).is_some_and(|id| !opaque(id));
 
-        let mut tiles = GlassTiles {
-            boxes: Vec::new(),
-            surfaces: Vec::new(),
-            tiles: Vec::new(),
-            cells: Vec::new(),
-            words: Vec::new(),
-        };
+        let mut tiles = GlassTiles::default();
 
         for (low, _) in live_boxes(grid) {
             let corner = low / TILE * TILE;
@@ -148,10 +135,17 @@ impl GlassTiles {
                 (corner_of(least), corner_of(most))
             };
 
-            tiles.boxes.push(corners(drawn));
-            tiles.surfaces.push(corners(surfaces));
-            tiles.cells.push(surfaced);
-            tiles.tiles.push(to_word(tiles.words.len()));
+            tiles.boxes.push(TileBox {
+                cells: corners(drawn),
+                tile: tiles.tiles.len(),
+            });
+
+            tiles.tiles.push(GlassTile {
+                surfaces: corners(surfaces),
+                offset: to_word(tiles.words.len()),
+                cells: surfaced,
+            });
+
             tiles.words.extend(rows);
             tiles.words.extend(busy);
         }
@@ -178,15 +172,21 @@ mod tests {
         let tiles = GlassTiles::new(&grid, &|id| id == 0, &mut |id| id + 10);
 
         // The wall joins the box the tile draws.
+        let [drawn] = tiles.boxes[..] else {
+            panic!("the object fits one tile");
+        };
+
+        let tile = &tiles.tiles[drawn.tile];
+
         assert_eq!(
-            tiles.boxes,
-            [(TyVector3U32::new(0, 0, 0), TyVector3U32::new(4, 1, 1))]
+            drawn.cells,
+            (TyVector3U32::new(0, 0, 0), TyVector3U32::new(4, 1, 1))
         );
         assert_eq!(
-            tiles.surfaces,
-            [(TyVector3U32::new(1, 0, 0), TyVector3U32::new(4, 1, 1))]
+            tile.surfaces,
+            (TyVector3U32::new(1, 0, 0), TyVector3U32::new(4, 1, 1))
         );
-        assert_eq!(tiles.tiles, [0]);
+        assert_eq!(tile.offset, 0);
 
         // A row runs along z, so each cell sits in a row of its own.
         let row = |x: usize| tiles.words[x];
@@ -210,7 +210,7 @@ mod tests {
         );
 
         // A cell's index takes y, then x, then z.
-        assert_eq!(tiles.cells, [[16, 32, 48]]);
+        assert_eq!(tile.cells, [16, 32, 48]);
     }
 
     #[test]

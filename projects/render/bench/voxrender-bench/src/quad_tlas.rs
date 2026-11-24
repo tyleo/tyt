@@ -1,5 +1,5 @@
-use crate::{ObjectQuads, to_word};
-use ty_math::{TyTransformF64, TyVector3F64};
+use crate::{ObjectQuads, TilePlacement, to_word};
+use ty_math::TyVector3F64;
 use wgpu::{
     AccelerationStructureFlags, AccelerationStructureGeometryFlags,
     AccelerationStructureUpdateMode, BlasBuildEntry, BlasGeometries, BlasGeometrySizeDescriptors,
@@ -17,16 +17,13 @@ use wgpu::{
 /// object with no quad has no instance. The device must have ray queries,
 /// and the scene's quads number under 2^24.
 ///
-/// # Arguments
-///
-/// 1. `quads`: each object's quads
-/// 2. `placements`: each placement's object among `quads` and its
-///    transform from the object's cells to the world
+/// `quads` holds each object's quads, and `placements` each placement of
+/// one.
 pub fn quad_tlas(
     device: &Device,
     queue: &Queue,
     quads: &[ObjectQuads],
-    placements: &[(usize, TyTransformF64)],
+    placements: &[TilePlacement],
 ) -> Tlas {
     let init = |label, contents: &[u8]| {
         device.create_buffer_init(&BufferInitDescriptor {
@@ -103,7 +100,7 @@ pub fn quad_tlas(
 
     let instanced: Vec<_> = placements
         .iter()
-        .filter(|(object, _)| blases[*object].is_some())
+        .filter(|placed| blases[placed.object].is_some())
         .collect();
 
     let mut tlas = device.create_tlas(&CreateTlasDescriptor {
@@ -113,7 +110,7 @@ pub fn quad_tlas(
         update_mode: AccelerationStructureUpdateMode::Build,
     });
 
-    for (slot, (object, transform)) in instanced.into_iter().enumerate() {
+    for (slot, TilePlacement { object, transform }) in instanced.into_iter().enumerate() {
         // Grid cells to world: rotation times scale, then position.
         let columns = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
             .map(|axis| transform.rotation * axis);

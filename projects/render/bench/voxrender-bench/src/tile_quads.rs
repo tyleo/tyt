@@ -1,6 +1,6 @@
 use crate::{
-    CellBox, ObjectQuads, ObjectTiles, TILE, TileScene, bounds_around, box_corners, map_threads,
-    tile_cell, to_word,
+    CellBox, ObjectQuads, ObjectTiles, TILE, TilePlacement, TileScene, bounds_around, box_corners,
+    map_threads, tile_cell, to_word,
 };
 use std::collections::BTreeMap;
 use ty_math::{TyVector3F64, TyVector3U32};
@@ -28,7 +28,7 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
             let object = &tiles.objects[index];
             let mut quads = ObjectQuads::default();
 
-            if tiles.spans[index] == 1 {
+            if object.span == 1 {
                 push_region(&mut quads, object, (TyVector3U32::ZERO, object.bounds));
             }
 
@@ -38,9 +38,9 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
 
     let reaches: Vec<f64> = (0..tiles.materials.len() as u32).map(reach).collect();
 
-    let casts: Vec<_> = (tiles.objects.iter().zip(&tiles.spans))
-        .map(|(object, &span)| {
-            if span > 1 {
+    let casts: Vec<_> = (tiles.objects.iter())
+        .map(|object| {
+            if object.span > 1 {
                 Vec::new()
             } else {
                 cast_boxes(object, &reaches)
@@ -53,7 +53,7 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
     // starts off its face and the rounding of the corners.
     let mut reached: Vec<(TyVector3F64, TyVector3F64)> = Vec::new();
 
-    for (object, transform) in &tiles.placements {
+    for TilePlacement { object, transform } in &tiles.placements {
         let widest = transform.scale.abs().max_element();
 
         for &((low, high), cells) in &casts[*object] {
@@ -74,8 +74,8 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
 
     let mut kept: Vec<Vec<CellBox>> = vec![Vec::new(); tiles.objects.len()];
 
-    for (object, transform) in &tiles.placements {
-        if tiles.spans[*object] > 1 {
+    for TilePlacement { object, transform } in &tiles.placements {
+        if tiles.objects[*object].span > 1 {
             continue;
         }
 
@@ -161,10 +161,10 @@ fn cast_boxes(object: &ObjectTiles, reaches: &[f64]) -> Vec<(CellBox, f64)> {
     let masks = &object.masks;
     let mut boxes = Vec::new();
 
-    for (tile, &corner) in masks.corners.iter().enumerate() {
+    for tile in &masks.tiles {
         // The reach of each of the tile's materials, in the order a record
         // cell's entry counts them.
-        let ids = masks.palette(masks.offsets[tile]);
+        let ids = masks.palette(tile.offset);
 
         if ids.iter().all(|&id| reaches[id as usize] == 0.0) {
             continue;
@@ -173,11 +173,11 @@ fn cast_boxes(object: &ObjectTiles, reaches: &[f64]) -> Vec<(CellBox, f64)> {
         let (mut low, mut high) = (TyVector3U32::MAX, TyVector3U32::ZERO);
         let mut longest: f64 = 0.0;
 
-        for (&index, &entry) in masks.recorded[tile].iter().zip(&masks.entries[tile]) {
+        for (&index, &entry) in tile.recorded.iter().zip(&tile.entries) {
             let cells = reaches[ids[usize::from(entry)] as usize];
 
             if cells > 0.0 {
-                let cell = corner + tile_cell(usize::from(index));
+                let cell = tile.corner + tile_cell(usize::from(index));
 
                 low = low.min(cell);
                 high = high.max(cell + 1);

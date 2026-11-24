@@ -1,7 +1,7 @@
-use crate::{CellGrid, ObjectTiles, Result, object_copies, to_word};
+use crate::{CellGrid, ObjectTiles, Result, TilePlacement, object_copies, to_word};
 use branded_id::U32Id;
 use std::collections::HashMap;
-use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyTransformF64, TyVector3U32};
+use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyTransformF64};
 use voxcore::{BVoxObject, material};
 use voxrender::{RenderLight, RenderMaterial, RenderScene};
 
@@ -28,20 +28,9 @@ pub struct TileScene {
     /// first.
     pub(crate) objects: Vec<ObjectTiles>,
 
-    /// How many of its object's cells one cell of each of
-    /// [`objects`](Self::objects) spans along an axis: one for an object,
-    /// and twice the one before for each of its copies.
-    pub(crate) spans: Vec<u32>,
-
-    /// The empty cells each of [`objects`](Self::objects) holds ahead of its
-    /// first cell along each axis, which set its copies on the lattice. A
-    /// copy holds none.
-    shifts: Vec<TyVector3U32>,
-
-    /// Each placement's object among [`objects`](Self::objects) and its
-    /// transform from the object's cells to the world. A placement of each
-    /// of the object's copies follows it, finest first.
-    pub(crate) placements: Vec<(usize, TyTransformF64)>,
+    /// Each placement of one of [`objects`](Self::objects). A placement of
+    /// each of the object's copies follows it, finest first.
+    pub(crate) placements: Vec<TilePlacement>,
 
     /// The materials that pass light, in the order a glass cell's word
     /// counts them, for a scene that keeps glass.
@@ -74,8 +63,6 @@ impl TileScene {
             opaque: Vec::new(),
             lights: Vec::new(),
             objects: Vec::new(),
-            spans: Vec::new(),
-            shifts: Vec::new(),
             placements: Vec::new(),
             glass_materials: Vec::new(),
             glass,
@@ -196,23 +183,18 @@ impl TileScene {
     /// light has a place over 65534.
     pub fn push_object(&mut self, grid: &CellGrid, first: [i64; 3]) -> Result<usize> {
         let glass = self.glass.then_some(self.glass_materials.as_slice());
-        let (copies, shift) = object_copies(grid, first, self.coarser, &self.opaque, glass)?;
+        let copies = object_copies(grid, first, self.coarser, &self.opaque, glass)?;
 
-        Ok(self.push_copies(copies, shift))
+        Ok(self.push_copies(copies))
     }
 
-    /// Adds an object as [`object_copies`] gives its tiles and the empty
-    /// cells ahead of its first, built for this scene's materials. Returns
-    /// the object's place among the scene's objects.
-    pub(crate) fn push_copies(&mut self, copies: Vec<ObjectTiles>, shift: TyVector3U32) -> usize {
+    /// Adds an object as [`object_copies`] gives its tiles, built for this
+    /// scene's materials. Returns the object's place among the scene's
+    /// objects.
+    pub(crate) fn push_copies(&mut self, copies: Vec<ObjectTiles>) -> usize {
         let place = self.objects.len();
 
-        for (copy, tiles) in copies.into_iter().enumerate() {
-            self.objects.push(tiles);
-            self.spans.push(1 << copy);
-            self.shifts
-                .push(if copy == 0 { shift } else { TyVector3U32::ZERO });
-        }
+        self.objects.extend(copies);
 
         place
     }
@@ -221,36 +203,30 @@ impl TileScene {
     /// for by `transform`, which carries its cells to the world, and with
     /// it each of its copies.
     pub fn place_object(&mut self, object: usize, transform: TyTransformF64) {
-        assert!(
-            self.spans.get(object) == Some(&1),
-            "the object is one the scene took"
-        );
+        let spans = |copy: usize| self.objects.get(copy).map(|tiles| tiles.span);
+
+        assert!(spans(object) == Some(1), "the object is one the scene took");
 
         // The grid's first cell sits ahead of the object's.
-        let position = transform.transform_point(-self.shifts[object].as_dvec3());
+        let position = transform.transform_point(-self.objects[object].shift.as_dvec3());
 
-        for copy in object..self.objects.len() {
-            let span = self.spans[copy];
+        // The object's copies follow it, up to the next object.
+        let copies = (object + 1..).take_while(|&copy| spans(copy).is_some_and(|span| span > 1));
 
-            if copy > object && span == 1 {
-                break;
-            }
+        for copy in [object].into_iter().chain(copies) {
+            let scale = transform.scale * f64::from(self.objects[copy].span);
 
-            self.placements.push((
-                copy,
-                TyTransformF64::new(
-                    position,
-                    transform.rotation,
-                    transform.scale * f64::from(span),
-                ),
-            ));
+            self.placements.push(TilePlacement {
+                object: copy,
+                transform: TyTransformF64::new(position, transform.rotation, scale),
+            });
         }
     }
 
     /// The placement that draws the copy a level coarser of what the
     /// placement at `placement` draws, if the scene keeps one.
     pub(crate) fn coarser(&self, placement: usize) -> Option<usize> {
-        let span = |placement: usize| self.spans[self.placements[placement].0];
+        let span = |placement: usize| self.objects[self.placements[placement].object].span;
 
         (placement + 1 < self.placements.len() && span(placement + 1) > span(placement))
             .then_some(placement + 1)
@@ -270,13 +246,11 @@ mod tests {
             assert_eq!(tiles.materials.len(), tiles.opaque.len(), "{name}");
             assert_eq!(tiles.placements.len(), scene.placement_count(), "{name}");
 
-            for (&(object, transform), (_, placement)) in
-                tiles.placements.iter().zip(scene.iter_placements())
-            {
+            for (placed, (_, placement)) in tiles.placements.iter().zip(scene.iter_placements()) {
                 let bounds = scene.object(placement.object_id).unwrap().bounds();
 
-                assert_eq!(tiles.objects[object].bounds, bounds, "{name}");
-                assert_eq!(transform, placement.transform, "{name}");
+                assert_eq!(tiles.objects[placed.object].bounds, bounds, "{name}");
+                assert_eq!(placed.transform, placement.transform, "{name}");
             }
         }
     }
