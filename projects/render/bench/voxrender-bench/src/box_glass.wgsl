@@ -11,15 +11,15 @@
 //    low cell in the tile, then its high cell
 // 3. In `shading.y`, the first of the tile's words in `lit`
 //
-// A busy cell's word holds where its material's values start in
-// `materials`, which `past` lists, and its place among the tile's words in
-// `lit`. The cell's word in `lit` holds the sun's light on the cell's
-// surfaces as four 8-bit parts of one.
+// A busy cell's `GlassTiles` word holds where its material's values start in
+// `materials` and its place among the tile's words in `lit`. The cell's word
+// in `lit` holds the sun's light on the cell's surfaces as four 8-bit parts
+// of one.
 //
-// A box spans its tile's opaque cells too. The opaque view's depth holds
-// the faces of the box around those, which can lie before a surface they
-// do not hide. A ray that starts on its box then starts no later. An opaque
-// cell ends it, on its way to the surfaces or among them.
+// A box spans its tile's opaque cells too. The opaque view's depth holds the
+// faces of the box around those cells, and such a face can lie before a
+// surface it does not hide. A ray that starts on its box starts no later
+// than such a face. An opaque cell ends the walk.
 //
 // A surface reflects the hemispheres alone. A ray that starts inside a
 // material leaves it for nothing in the box that holds the eye. A walk in
@@ -52,8 +52,7 @@ struct Walked {
     passed: vec3<f32>,
 }
 
-// The word of the tile's cell at `bit`, or zero for a cell that is not
-// busy: a cell with no surface.
+// The word of the tile's cell at `bit`, or zero for a cell with no surface.
 fn busy_cell(tile: u32, bit: i32) -> u32 {
     let cells = cells_at(tile, bit);
 
@@ -66,9 +65,9 @@ fn busy_cell(tile: u32, bit: i32) -> u32 {
     return bits[tile + BUSY_CELLS + rank];
 }
 
-// What a fragment's ray sees of a face on each of its grid's axes, a part
-// an axis. A surface's normal faces back along the ray, so one ray meets
-// every face on an axis from the same side.
+// What a fragment's ray sees of a face on each of its grid's axes, one
+// component an axis. A surface's normal faces back along the ray, so one ray
+// meets every face on an axis from the same side.
 struct Sides {
     // The cosines between the normal and the view, the sun, and the half
     // vector of the two.
@@ -116,15 +115,15 @@ fn sides_of(box: Box) -> Sides {
     );
 }
 
-// The hemispheres' light from a direction whose +Y is `up`, with the sky
-// meeting the ground over a band `band` is half the inverse of.
+// The hemispheres' light from a direction whose +Y is `up`. `band` holds half
+// the inverse of the width over which the sky meets the ground.
 fn sky_from(up: f32, band: f32) -> vec3<f32> {
     return mix(frame.ground.rgb, frame.sky.rgb, clamp(0.5 + up * band, 0.0, 1.0));
 }
 
-// `walked` past the surface of the cell of word `cell` that the ray crosses
-// on the one axis of `across`, or `walked` where the cell's face there is
-// no surface. With `leaves` the ray crosses out of the cell.
+// `walked` past the surface the ray crosses on the one axis of `across` in
+// the cell of word `cell`. A face with no surface leaves `walked` as it is.
+// With `leaves` the ray crosses out of the cell.
 //
 // A material's values:
 //
@@ -190,8 +189,7 @@ fn past(walked: Walked, sides: Sides, cell: u32, across: vec3<bool>, ahead: vec3
 
     color += mirrored * reflectance;
 
-    // The cell's word in `lit`: the sun's light that reaches its
-    // surfaces.
+    // The cell's word in `lit`.
     let shade = sides.lit + ((cell >> 8u) & 0xfffu);
 
     // The diffuse color under the hemispheres and the sun.
@@ -259,11 +257,10 @@ fn glass_walk(box: Box, start: vec3<f32>, direction: vec3<f32>, entry: vec3<bool
 
     let strides = select(vec3<i32>(-16, -256, -1), vec3<i32>(16, 256, 1), ahead);
 
-    // A busy cell on the ray's way to that box is opaque because the box
-    // holds every surface. It hides the surfaces. The ray steps to the box
-    // through the cells' bits alone, and the walk starts there. The fish
-    // tank drew 0.3 ms faster on Quest than with the walk's steps all the
-    // way. A ray whose first cell lies in the box has no way to step.
+    // A busy cell before the surfaces' box is opaque because that box holds
+    // every surface. The ray steps to the box through the cells' bits alone
+    // because those steps cost less than the walk's. A ray whose first cell
+    // lies in the box takes no steps.
     let outset = clamp(floor(start), box.low, box.high - 1.0);
 
     if near > 0.0 && (any(outset < low) || any(outset >= high)) {
@@ -322,8 +319,8 @@ fn glass_walk(box: Box, start: vec3<f32>, direction: vec3<f32>, entry: vec3<bool
     }
 
     // The target holds tonemapped light, and the blend runs on that. Under
-    // its shoulder the tonemap takes 0.04 off a color, which the light
-    // behind the glass has already paid. A bright light takes the tonemap
+    // its shoulder the tonemap takes 0.04 off a color. The light behind the
+    // glass has already paid that 0.04. A bright light takes the tonemap
     // itself.
     var light = walked.light;
 

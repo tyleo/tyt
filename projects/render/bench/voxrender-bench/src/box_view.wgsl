@@ -1,22 +1,16 @@
 // A shaded view of the boxes around each tile's live cells, over
 // `mask_march.wgsl`. Multiview passes draw both eyes. A hit shades as the
-// contract's opaque surface under one sun and the hemispheres: corner
-// occlusion from the tile's words, the sun's corner shadows from
-// `LitCorners`, Lambert and GGX, and emission, under the contract's
-// tonemap. A face reflects what `mirrored` meets along its mirror ray.
-// `BoxView` prepends:
+// contract's opaque surface under one sun and the hemispheres. `BoxView`
+// prepends:
 //
 // 1. `RECORDS`, the offset in a tile's words of its cells' records
 // 2. `MIRRORS`, whether a face can cast a mirror ray
-// 3. `MIRROR_CUT`, the share of a face's reflectance a mirror ray runs down
-//    to
+// 3. `MIRROR_CUT`, the reflectance share a mirror ray runs down to
 // 4. `MIRROR_REACH`, the least cells a mirror ray reaches
 // 5. `BLOOM`, whether a fragment adds the halo
-// 6. `BLOOM_THRESHOLD`, the level of an emission's brightest channel that
-//    blooms
-// 7. `BLOOM_SOURCE`. A module with a `BLOOM_SOURCE` draws the bloom's source
-//    in place of the view: a hit's emission over the threshold, scaled by
-//    `BLOOM_SOURCE`
+// 6. `BLOOM_THRESHOLD`, the brightest channel's emission level that blooms
+// 7. `BLOOM_SOURCE`, the scale on a hit's emission over the threshold in a
+//    module that draws the bloom's source in place of the view, else zero
 // 8. `TINTS`, how far past a cell's word in `lit` its tint lies, or zero
 //    where the scene keeps none
 //
@@ -28,8 +22,8 @@ const RAY_W: f32 = 1.0;
 // The part of a cell a mirror ray starts off its face.
 const MIRROR_START: f32 = 1.0 / 64.0;
 
-// The part of a cell that the ray from the eye to a glowing hit ends
-// short of the hit, which keeps the hit's face out of the ray's way.
+// The part of a cell short of a glowing hit where the eye's ray to it ends.
+// The gap keeps the hit's face from hiding the hit.
 const SOURCE_SHORT: f32 = 0.25;
 
 // What a clip position's w scales by to give the nearest depth that stays
@@ -48,8 +42,8 @@ struct Frame {
     sky: vec4<f32>,
     ground: vec4<f32>,
 
-    // The scene's placements. Each eye has a `Place` for each, the first
-    // eye's first.
+    // The count of the scene's placements. Each eye has a `Place` for each,
+    // the first eye's first.
     placements: u32,
 
     // What a pixel spans of the target's width and height.
@@ -117,7 +111,8 @@ struct Box {
     @location(2) @interpolate(flat) low: vec3<f32>,
     @location(3) @interpolate(flat) high: vec3<f32>,
 
-    // Zero, since a perspective ray's depth falls by its distance alone.
+    // The depth an orthographic ray loses over a unit of its direction. Zero
+    // under a perspective view.
     @location(4) @interpolate(flat) fall: f32,
 
     // The axis of the fragment's face, plus 4 on the box's high face.
@@ -132,13 +127,11 @@ struct Box {
     @location(7) @interpolate(flat) crossers: vec3<u32>,
 
     // The tile's first material in `materials`, then the first of its
-    // words in `lit`. A fragment reads both here, where a read from the
-    // tile's words would hold up the reads that follow from it.
+    // words in `lit`. Both ride here to spare a fragment a dependent read.
     @location(8) @interpolate(flat) shading: vec2<u32>,
 
-    // The world direction from the eye to the point, at any length. A
-    // fragment that takes it here reads one of its placement's axes, where
-    // one that turns its ray to the world reads all three.
+    // The world direction from the eye to the point, at any length. With it
+    // a fragment reads one of its placement's axes in place of all three.
     @location(9) toward: vec3<f32>,
 }
 
@@ -151,29 +144,26 @@ struct Box {
 // incidence and occlusion strength.
 @group(0) @binding(3) var<storage, read> materials: array<vec4<f32>>;
 // Three words per box: its low cell and its placement's index, the corner
-// past its high cell and the offset of its tile's words, and in the last
-// two parts the tile's first material in `materials` and the first of its
-// words in `lit`.
+// past its high cell and the offset of its tile's words, then the first of
+// its entries in `crossers`, their count, the tile's first material in
+// `materials`, and the first of the tile's words in `lit`.
 @group(0) @binding(4) var<storage, read> boxes: array<vec4<u32>>;
-// Two words per box that shares space with a box: the low corner of a box
-// around the shared space and the other box's index in `boxes` as bits,
-// plus `SOLID` for a solid one, then the high corner.
+// Two words per `BoxCrosser`: the low corner of the shared space with the
+// other box's index in `boxes` as w's bits, plus `SOLID` for a solid box,
+// then the high corner.
 @group(0) @binding(5) var<storage, read> crossers: array<vec4<f32>>;
 // Each placement's `LitCorners` words. A word's high 8 bits hold its
 // cell's place among its tile's materials. With `TINTS`, each cell's tint
-// follows them: what the materials between it and the sun pass of the
-// sun's light, as four 8-bit parts of one.
+// follows them: the share of the sun's light that reaches the cell, as four
+// 8-bit parts of one.
 @group(0) @binding(6) var<storage, read> lit: array<u32>;
-// The halo each eye's fragments add, a layer an eye: `BoxBloom`'s.
+// `BoxBloom`'s halo, a layer an eye.
 @group(0) @binding(8) var bloom: texture_2d_array<f32>;
 @group(0) @binding(9) var bloom_sampler: sampler;
 
-// The box's vertex at the grid's `grid` for `eye`, on the face of code
-// `face`. `low` holds the box's low cell and its placement's index. `high`
-// holds the corner past the box's high cell and the offset of its tile's
-// words. `more` holds the first of the box's entries in `crossers`, their
-// count, the tile's first material in `materials`, and the first of its
-// words in `lit`.
+// The box's vertex at grid point `grid` for `eye`, on the face of code
+// `face`. `low`, `high`, and `more` hold the box's words as `boxes` lays
+// them out.
 fn vertex_of(
     eye: u32,
     grid: vec3<u32>,
@@ -211,8 +201,7 @@ fn vertex_of(
     );
 }
 
-// A corner of the box, for the back faces `inside` shades. Bit `a` of
-// `corner` picks the box's high face on axis `a`.
+// A corner of the back faces `inside` shades, its depth scaled by `NEARER`.
 @vertex
 fn place_near(
     @builtin(view_index) eye: u32,
@@ -395,10 +384,10 @@ fn sun_light(normal: vec3<f32>, view: vec3<f32>, diffuse: vec3<f32>, reflectance
         * frame.sunlight.rgb;
 }
 
-// The shaded color of `cell` in `source`'s tile, across the face on the one
-// axis of `across`. `cells` holds the cell's bit. The face's normal points
-// up its axis where the ray moves down the axis. The hit lies at `at` in
-// the tile's cells, along a ray of `direction` in them.
+// The shaded color of `cell` in `source`'s tile, hit across the face on the
+// one axis of `across`. `cells` holds the cell's bit. `ahead` marks the axes
+// the ray moves up. The hit lies at `at` in the tile's cells, along a ray of
+// `direction` in them.
 fn surface(
     source: Source,
     cells: Cells,
@@ -412,10 +401,8 @@ fn surface(
     let up = !any(across & ahead);
     let face = dot(vec3<u32>(across), vec3<u32>(0u, 2u, 4u)) + u32(up);
 
-    // The cell's place among its tile's record cells. Its word in `lit`
-    // holds its faces' lit corners under its material: the tile's first,
-    // plus the cell's place among the tile's. Its record holds its faces'
-    // occlusion.
+    // The cell's place among its tile's record cells. The place indexes the
+    // cell's word in `lit` and its record of its faces' occlusion.
     let rank = (cells >> 16u) + countOneBits(cells & ((1u << u32(cell.z)) - 1u));
     let light = lit[source.lit + rank];
     let open = bits[tile + RECORDS + rank * 2u + (face >> 2u)] >> ((face & 3u) * 8u);
@@ -453,14 +440,12 @@ fn surface(
         vec2<f32>(1.0),
     );
 
-    // The face's normal points one way along its axis.
     let side = places[source.place].axes[face >> 1u];
     let normal = select(-side.xyz, side.xyz, up);
 
     let occlusion = across_face(corners_of(open, 2u), along);
     let lights = (light >> (face * 4u)) & 15u;
 
-    // The world direction to the eye.
     let view = -normalize(source.toward);
 
     let metallic = base.a;
@@ -527,7 +512,6 @@ fn surface(
 
     color += reflected * reflectance;
 
-    // The halo at the pixel.
     if BLOOM {
         color += textureSampleLevel(bloom, bloom_sampler, source.pixel * frame.texel, eye, 0.0).rgb;
     }

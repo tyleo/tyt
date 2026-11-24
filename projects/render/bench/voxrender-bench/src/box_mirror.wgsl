@@ -8,10 +8,9 @@
 @group(0) @binding(10) var tlas: acceleration_structure;
 
 // The light that reaches `origin` from the quad the ray along the unit
-// `direction` meets within `reach` meters, then the meters to the quad.
-// The meters are negative where the ray meets none. The quad shades flat:
-// its material's emission, and its color under the sun and the hemispheres
-// with no shadow and no occlusion.
+// `direction` meets within `reach` meters, then the meters to the quad,
+// negative where the ray meets none. The quad shades flat: its emission plus
+// its color under the sun and the hemispheres, with no shadow or occlusion.
 fn mirrored(origin: vec3<f32>, direction: vec3<f32>, reach: f32) -> vec4<f32> {
     var query: ray_query;
 

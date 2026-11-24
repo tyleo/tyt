@@ -1,62 +1,24 @@
-// A march through a tile's bits in a box raster's fragments. A fragment
-// steps its ray a cell at a time, from the point the rasterizer gives it on
-// its box.
-//
-// `front`, `crossed`, `inside`, and `held` discard a miss and keep the depth
-// their vertices give, which lets the depth test run before the march.
-// `solid` marches nothing.
-//
-// Under face depth the nearest face wins a pixel. That face must then hold
-// the pixel's first hit, so a front face's fragment finds the first hit of
-// any placement inside its box. `front` serves a box that shares space with
-// no other placement's box. `crossed` steps through its tile and then
-// through each box of another placement that shares space with its box. A
-// hit past its box is some other box's to find.
-//
-// `inside` shades the back faces of a box a ray can start inside. A hit in
-// such a box lies before the box's back face. The front face of the box
-// behind can share that face's plane. A vertex entry for `inside` scales its
-// depth by `NEARER`, which keeps the hit ahead of that box's.
-//
-// `held` shades the back faces of a box that holds the view's eye and
-// shares space with other placements' boxes. Its ray starts at the eye, so
-// the first hit it finds in its tile and in those boxes is the pixel's. A
-// vertex entry for `held` gives it the nearest depth. Its box also draws its
-// front faces through `crossed` for an eye outside it.
+// A box raster's march through a tile's bits. A fragment steps its ray a cell
+// at a time from the rasterizer's point on its box. Every entry but `solid`
+// discards a miss and keeps its vertices' depth. Keeping that depth lets the
+// depth test run before the march.
 //
 // The WGSL that includes this file defines:
 //
 // 1. `RAY_W`, 1 under a perspective view and 0 under an orthographic one
-// 2. `Box`, the fragment's inputs: `clip`, its position. `point`, its point
-//    in the tile's cells. `ray`, a perspective view's eye from the tile's low
-//    corner, or the reverse of an orthographic view's direction. `low`, the
-//    box's low cell in the tile. `high`, the corner past the box's high
-//    cell. `words`, whose x holds the offset of the tile's words in `bits`.
-//    `fall`, the depth an orthographic ray loses over a unit of its
-//    direction. `face`, the axis of the fragment's face, plus 4 on the box's
-//    high face. `crossers`, the first of the box's entries in `crossers` and
-//    their count
-// 3. `Cells`, what one load gives of a tile's words as `TileMasks` lays
-//    them out. `cells_at` loads the `Cells` that hold a cell's bit, and
-//    `live_in` tells whether the cell is live in them
-// 4. `crossers`, whose entries each hold a box of another placement that
-//    shares space with a box, as `BoxCrosser` lays it out
-// 5. `Source`, what tells `surface` whose cell it shades. `source_of` gives
-//    the source of the fragment's box
-// 6. `other_of`, the `Other` of a `crossers` entry's box: the ray through
-//    the fragment as that box's tile sees it
-// 7. `surface`, what a fragment writes for a hit cell of a source, given the
-//    `Cells` that hold the cell's bit, the one axis of the face the ray
-//    crossed into the cell, the axes the ray moves up, the hit's point in
-//    the tile's cells, and the ray's direction in them
-//
-// Its vertex entries place a corner only when `sound` holds for the corner's
-// position and its `ray`. They take a box's back faces from `BoxDraw`'s
-// corners through `corner_of` and `corner_face`, and its faces toward the
-// view from `BoxDraw`'s front corners through `front_of`.
+// 2. `Box`, the fragment's inputs
+// 3. `Cells`, one load of a tile's `TileMasks` words. `cells_at` loads the
+//    `Cells` that hold a cell's bit. `live_in` reads the bit from them
+// 4. `crossers`, whose `BoxCrosser` entries each hold another placement's
+//    box that shares space with a box
+// 5. `Source`, which tells `surface` whose cell it shades. `source_of` gives
+//    the fragment box's `Source`
+// 6. `other_of`, which gives a `crossers` entry's box as an `Other`
+// 7. `surface`, what a fragment writes for a source's hit cell
 
 // What a perspective view's reversed depth scales by to come a part in 1024
-// nearer.
+// nearer. `inside` finds each hit before its box's back face. The scale keeps
+// that hit ahead of a box behind whose front face shares the plane.
 const NEARER: f32 = 1.0 + 1.0 / 1024.0;
 
 // The bit of a `crossers` entry that marks a solid box.
@@ -75,13 +37,12 @@ struct Hit {
     // box ends.
     along: f32,
 
-    // The `Cells` that hold the hit cell's bit. A hit hands them on, where a
-    // second load would hold up the reads that follow from it.
+    // The `Cells` that hold the hit cell's bit. A hit hands them on because
+    // a second load would stall the reads that depend on it.
     cells: Cells,
 }
 
-// A box of another placement, as a fragment whose box shares space with it
-// reads it.
+// Another placement's box that shares space with the fragment's box.
 struct Other {
     // The offset of the box's tile's words in `bits`.
     tile: u32,
@@ -99,9 +60,8 @@ struct Other {
     source: Source,
 }
 
-// Whether each component of `a` and of `b` is a finite number. The test
-// reads bits, which a compiler that takes every number as finite leaves
-// alone.
+// Whether every component of `a` and `b` is finite. The test reads bits so
+// that a compiler that assumes finite floats cannot fold it away.
 fn sound(a: vec4<f32>, b: vec4<f32>) -> bool {
     let top = vec4<u32>(0x7f800000u);
 
@@ -132,21 +92,17 @@ struct Front {
     face: u32,
 }
 
-// The vertex `vertex` of the box from `low` to `high`, one of the 7 corners
-// of its three faces toward the view. Bit `b` of `vertex` picks the far
-// side on the axis the bit stands for, and no vertex sets all three. `ray`
-// is the placement's `Place::ray`.
+// Corner `vertex` of the three faces toward the view of the box from `low`
+// to `high`, for the placement's `Place::ray`. Each set bit of `vertex`
+// picks the far side on its axis, and no vertex sets all three. Bit 0 picks
+// on x. Bits 1 and 2 pick on y and z, swapped where the view sees an odd
+// count of high faces. The swap keeps `BoxDraw`'s triangles wound
+// counterclockwise from outside.
 //
-// A perspective view's eye past the box's middle sees the high face, as
-// does an orthographic view whose reverse direction points up the axis. An
-// eye between the two faces sees neither, and the face then winds away from
-// it.
-//
-// Bit 0 stands for x. Bits 1 and 2 stand for y and z, or for z and y where
-// the view sees an odd count of high faces, which keeps `BoxDraw`'s
-// triangles wound counterclockwise from outside. A face's triangles start
-// at its corner that no other face holds. That corner has a single clear
-// bit, which gives the face.
+// A view sees an axis's high face where its eye lies past the box's middle,
+// or where an orthographic `ray` points up the axis. An eye between the two
+// faces sees neither, and its face winds away. A face's triangles start at
+// the corner no other face holds. That corner's one clear bit gives the face.
 fn front_of(vertex: u32, ray: vec3<f32>, low: vec3<u32>, high: vec3<u32>) -> Front {
     let toward = ray * 2.0 > vec3<f32>(low + high) * RAY_W;
     let odd = (toward.x != toward.y) != toward.z;
@@ -200,9 +156,8 @@ fn live(tile: u32, bit: i32) -> bool {
 // on each axis. `strides` holds what a step along each axis adds to a bit.
 // Returns false once the ray has passed `end`.
 //
-// A march's loops count no steps. This test ends them, because each step
-// moves a finite ray on by a cell. `sound` keeps any other ray from a
-// fragment.
+// A march's loops have no step limit. They end because each step moves a
+// finite ray a cell on. `sound` keeps any other ray from a fragment.
 fn advance(march: ptr<function, March>, rate: vec3<f32>, strides: vec3<i32>, end: f32) -> bool {
     let next = (*march).next;
     let across = least(next);
@@ -237,15 +192,12 @@ fn first_hit(
 ) -> Hit {
     let ahead = direction >= vec3<f32>(0.0);
 
-    // The ray's units per cell on each axis.
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
 
     let cell = clamp(floor(start), low, high - 1.0);
 
-    // What a step along each axis adds to a cell's bit.
     let strides = select(vec3<i32>(-16, -256, -1), vec3<i32>(16, 256, 1), ahead);
 
-    // How far along the ray each axis's next cell face lies.
     let within = start - cell;
     let next = abs(select(within, 1.0 - within, ahead)) * rate;
 
@@ -319,8 +271,7 @@ fn hit_from_back(box: Box) -> Hit {
 // directions past the eye and nearer than `reach` directions past that. A
 // hit lies `along` directions past it. A miss holds `reach`.
 fn other_hit(other: Other, solid: bool, base: f32, reach: f32) -> Hit {
-    // Where the ray crosses each axis's two faces of the box, in directions
-    // from the eye.
+    // Where the ray enters and leaves the box, in directions from the eye.
     let turned = select(other.direction, vec3<f32>(1.0e-12), abs(other.direction) < vec3<f32>(1.0e-12));
     let lows = (other.low - other.eye) / turned;
     let highs = (other.high - other.eye) / turned;
@@ -329,13 +280,11 @@ fn other_hit(other: Other, solid: bool, base: f32, reach: f32) -> Hit {
     let near = max(nears.x, max(nears.y, nears.z));
     let far = min(fars.x, min(fars.y, fars.z));
 
-    // The ray's stretch in both boxes starts `base` past the eye or where
-    // the ray enters the other box, whichever comes later.
     let first = max(near, base);
 
-    // A ray that starts the stretch inside a solid box met its face before
-    // the stretch, where another box finds it, or starts at an eye inside
-    // the box, which sees none of it.
+    // A ray already inside a solid box at `base` takes no hit. Another box
+    // finds the face it crossed before, or the eye lies inside the box and
+    // sees none of it.
     if first >= min(far, base + reach) || (solid && near < base) {
         return Hit(false, 0, vec3<bool>(false), reach, Cells());
     }
@@ -385,12 +334,10 @@ fn face_of(box: Box) -> vec3<bool> {
     return vec3<u32>(box.face & 3u) == vec3<u32>(0u, 1u, 2u);
 }
 
-// A front face's fragment. The rasterizer's point is where the ray enters
-// the box.
-//
-// The march runs in the entry's own loop and shades where it hits. Fewer
-// values then stay live through the loop than `first_hit` hands back, and
-// the fragment ran 8% faster on Quest.
+// A front face's fragment for a box that shares space with no other
+// placement's box. The rasterizer's point is where the ray enters the box.
+// The march inlines `first_hit` and shades in its loop because fewer live
+// values run faster on a mobile GPU.
 @fragment
 fn front(box: Box) -> @location(0) vec4<f32> {
     let direction = direction_of(box);
@@ -422,8 +369,10 @@ fn front(box: Box) -> @location(0) vec4<f32> {
     discard;
 }
 
-// A front face's fragment of a box that shares space with other placements'
-// boxes, under a perspective view.
+// A front face's fragment for a box that shares space with other placements'
+// boxes, under a perspective view. The nearest face wins a pixel, so the
+// fragment finds the first hit of any placement inside its box. A hit past
+// its box is some other box's to find.
 @fragment
 fn crossed(box: Box) -> @location(0) vec4<f32> {
     let direction = direction_of(box);
@@ -474,8 +423,10 @@ fn crossed(box: Box) -> @location(0) vec4<f32> {
     return shade(source, hit, start, along);
 }
 
-// A back face's fragment of a box that holds a perspective view's eye and
-// shares space with other placements' boxes.
+// A back face's fragment for a box that holds a perspective view's eye and
+// shares space with other placements' boxes. Its ray starts at the eye, so
+// its first hit across its tile and those boxes is the pixel's. The box draws
+// its front faces through `crossed` for an eye outside it.
 @fragment
 fn held(box: Box) -> @location(0) vec4<f32> {
     let direction = direction_of(box);
@@ -483,9 +434,9 @@ fn held(box: Box) -> @location(0) vec4<f32> {
     let ahead = direction >= vec3<f32>(0.0);
     let rate = 1.0 / max(abs(direction), vec3<f32>(1.0e-12));
 
-    // How far back along the ray each axis's entry face lies. The ray
-    // starts where it enters the box, or at the eye inside the box, one
-    // direction back.
+    // How far back along the ray each axis's entry face lies. The ray starts
+    // where it enters the box, or at the eye one direction back when the eye
+    // lies inside.
     let faces = abs(box.point - select(box.high, box.low, ahead)) * rate;
     let entry = min(faces.x, min(faces.y, faces.z));
     let before = min(entry, 1.0);

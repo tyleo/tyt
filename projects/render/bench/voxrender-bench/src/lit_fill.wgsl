@@ -1,11 +1,9 @@
-// A scene's lit corners under one directional light, a word a record cell
-// as `LitCorners` lays them out, over `grid_walk.wgsl`. An invocation
-// fills one record cell: for each of its faces toward the light with no
-// opaque cell before it, it casts the contract's ray from each corner
-// through the placements that can shadow its tile. A corner is lit where
-// some of the light reaches it. What the materials on the way pass of the
-// light in each channel lands in the cell's tint as the mean over its lit
-// corners.
+// A scene's lit corners under one directional light, a `LitCorners` word a
+// record cell, over `grid_walk.wgsl`. An invocation fills one record cell.
+// It casts the contract's ray from each corner of each face toward the light
+// with no opaque cell before it, through the placements that can shadow its
+// tile. A corner is lit where some of the light reaches it. The cell's tint
+// takes the mean over its lit corners of what the materials on the way pass.
 //
 // A cell of a material that passes light fills as a glass cell. Its word
 // takes the mean of the light on the corners of its surfaces: its faces
@@ -33,7 +31,7 @@ struct Fill {
     first: u32,
 
     // How far past a cell's word in `lit` its tint lies, or zero for a
-    // scene whose materials pass no light, which keeps no tints.
+    // scene that keeps no tints.
     tints: u32,
 }
 
@@ -63,8 +61,8 @@ struct Light {
 // tint as four 8-bit parts of one.
 @group(0) @binding(7) var<storage, read_write> lit: array<u32>;
 // Three per material key: what its surface passes at most, under the share
-// no voxel covers. Its reflectance at normal incidence. What its
-// reflectance rises by toward grazing.
+// no voxel covers, then its reflectance at normal incidence, then what that
+// rises by toward grazing.
 @group(0) @binding(8) var<storage, read> passes: array<vec4<f32>>;
 
 // The word of the tile that holds `position` of `placement`'s grid.
@@ -117,15 +115,14 @@ fn pass_of(material: u32, fade: f32) -> vec3<f32> {
     return most.a + most.rgb * (1.0 - reflectance);
 }
 
-// What one placement's grid passes of the light along `ray` in each channel.
-// `ray` has no end. The walk runs voxrender's integer walk in i32 alone
-// through each surface a shadow ray pays. `fades` holds the fade of a face on
-// each axis.
+// What one placement's grid passes of the light along `ray` in each channel,
+// through voxrender's integer walk in i32 alone. `ray` has no end. `fades`
+// holds the fade of a face on each axis.
 //
-// The ray pays the material it starts in at normal incidence and leaves
-// it with no exit. It then pays each material it enters, and each it
-// leaves for an empty cell, the grid's edge, or a material that passes
-// light. An opaque cell passes nothing.
+// The ray pays the material it starts in at normal incidence and pays no
+// exit from it. It then pays each material it enters, and each it leaves for
+// an empty cell, the grid's edge, or a material that passes light. An opaque
+// cell passes nothing.
 fn passed(placement: Placement, ray: Ray, fades: vec3<f32>) -> vec3<f32> {
     let mirrored = enter(placement, ray);
 
@@ -143,8 +140,8 @@ fn passed(placement: Placement, ray: Ray, fades: vec3<f32>) -> vec3<f32> {
     var cell = mirrored.cell;
     var through = vec3<f32>(1.0);
 
-    // The walk's cell in the grid, which a mirrored axis counts down, and
-    // the cell's tile with its word. No tile of the grid matches the first.
+    // The walk's cell in the grid, counted down on a mirrored axis, then its
+    // tile and the tile's word. The starting `tile` lies outside the grid.
     var position = select(cell, bounds - vec3<i32>(1) - cell, flip);
     var tile = vec3<i32>(-2);
     var word = 0u;
