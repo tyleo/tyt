@@ -1,4 +1,7 @@
-use crate::{LitFill, Result, TileMasks, TileScene, ViewPages, to_word};
+use crate::{
+    BObjectTile, BTilePlacement, LitFill, Result, TileMasks, TileScene, ViewPages, to_word,
+};
+use branded_id::{IdRange, IdVec, UsizeId};
 use ty_math::TyVector3F64;
 use wgpu::{
     Buffer, BufferUsages, Device, Queue,
@@ -16,11 +19,11 @@ pub struct ViewLit {
     pub buffers: Vec<Buffer>,
 
     /// The first of each placement's words in its page's.
-    pub places: Vec<u32>,
+    pub places: IdVec<BTilePlacement, u32>,
 
     /// The first word of each of each placement's glass tiles in its
     /// page's.
-    pub glass: Vec<Vec<u32>>,
+    pub glass: IdVec<BTilePlacement, IdVec<BObjectTile, u32>>,
 
     /// How far past a record cell's word its tint lies, or zero for a
     /// scene the sun's light takes no tint in.
@@ -42,17 +45,19 @@ impl ViewLit {
         tinted: bool,
     ) -> Result<Self> {
         let placements = &tiles.placements;
-        let mut places = vec![0; placements.len()];
-        let mut glass: Vec<Vec<u32>> = vec![Vec::new(); placements.len()];
+        let mut places = IdVec::from_vec(vec![0; placements.len()]);
+        let mut glass = IdVec::from_vec(vec![IdVec::new(); placements.len()]);
 
         // Each page's placements and words.
-        let laid: Vec<(Vec<usize>, Vec<u32>)> = (0..pages.count)
+        let laid: Vec<(Vec<UsizeId<BTilePlacement>>, Vec<u32>)> = (0..pages.count)
             .map(|page| {
-                let placed: Vec<_> = (0..placements.len())
-                    .filter(|&placement| pages.of[placements[placement].object] == page)
+                let object = |placement: UsizeId<BTilePlacement>| placements[placement].object;
+
+                let placed: Vec<_> = IdRange::from_len(placements.len())
+                    .filter(|&placement| pages.of[object(placement)].to_usize() == page)
                     .collect();
 
-                let object = |placement: usize| &tiles.objects[placements[placement].object];
+                let object = |placement| &tiles.objects[object(placement)];
                 let mut words: Vec<u32> = Vec::new();
 
                 for &placement in &placed {
@@ -66,15 +71,15 @@ impl ViewLit {
                 }
 
                 for &placement in &placed {
-                    glass[placement] = (object(placement).glass.tiles.iter())
-                        .map(|tile| {
-                            let first = to_word(words.len());
+                    let firsts = (object(placement).glass.tiles.iter()).map(|tile| {
+                        let first = to_word(words.len());
 
-                            words.resize(words.len() + tile.cells.len(), 0);
+                        words.resize(words.len() + tile.cells.len(), 0);
 
-                            first
-                        })
-                        .collect();
+                        first
+                    });
+
+                    glass[placement] = IdVec::from_vec(firsts.collect());
                 }
 
                 words.extend([0; TileMasks::SPARE as usize]);
@@ -109,7 +114,13 @@ impl ViewLit {
                 // where its first would lie.
                 let firsts: Vec<_> = placed.iter().map(|&placement| places[placement]).collect();
                 let glass_firsts: Vec<_> = (placed.iter().zip(&page.glass_places))
-                    .map(|(&placement, &place)| glass[placement].first().copied().unwrap_or(place))
+                    .map(|(&placement, &place)| {
+                        glass[placement]
+                            .as_slice()
+                            .first()
+                            .copied()
+                            .unwrap_or(place)
+                    })
                     .collect();
 
                 assert_eq!(

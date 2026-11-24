@@ -1,7 +1,8 @@
 use crate::{
-    LitPage, PassTerms, TILE, TileMasks, TilePlacement, TileScene, bounds_around, box_corners,
-    storage_words, to_word,
+    BTileObject, BTilePlacement, LitPage, PassTerms, TILE, TileMasks, TilePlacement, TileScene,
+    bounds_around, box_corners, storage_words, to_word,
 };
+use branded_id::{IdVec, UsizeId};
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 use voxrender::{grid_vector, quantize_direction};
 use voxrender_wgpu::GRID_WALK_WGSL;
@@ -72,7 +73,7 @@ impl LitFill {
     /// the unit `toward`.
     pub fn new(device: &Device, tiles: &TileScene, toward: TyVector3F64) -> Self {
         let mut caster_words = Vec::new();
-        let mut offsets = Vec::new();
+        let mut offsets = IdVec::<BTileObject, u32>::new();
 
         for object in &tiles.objects {
             offsets.push(to_word(caster_words.len()));
@@ -232,7 +233,7 @@ impl LitFill {
         &self,
         device: &Device,
         tiles: &TileScene,
-        placements: &[usize],
+        placements: &[UsizeId<BTilePlacement>],
         tints: Option<u32>,
     ) -> LitPage {
         let mut places = Vec::new();
@@ -284,7 +285,7 @@ impl LitFill {
                     // and reaches as far toward it. Its cells span as many
                     // of its object's as the tile's do: an object's coarser
                     // copy shadows that copy's cells alone.
-                    let size = self.sizes[index];
+                    let size = self.sizes[index.to_usize()];
 
                     casters.extend((0u32..).zip(&self.spans).zip(&self.sizes).filter_map(
                         |((caster, (low, high)), &cast)| {
@@ -302,7 +303,7 @@ impl LitFill {
                         corner.x,
                         corner.y,
                         corner.z,
-                        to_word(index),
+                        to_word(index.to_usize()),
                         to_word(first),
                         to_word(casters.len() - first),
                         0,

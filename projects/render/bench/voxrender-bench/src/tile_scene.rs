@@ -1,5 +1,8 @@
-use crate::{CellGrid, ObjectTiles, Result, TilePlacement, object_copies, to_word};
-use branded_id::U32Id;
+use crate::{
+    BTileObject, BTilePlacement, CellGrid, ObjectTiles, Result, TilePlacement, object_copies,
+    to_word,
+};
+use branded_id::{IdVec, U32Id, UsizeId};
 use std::collections::HashMap;
 use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyTransformF64};
 use voxcore::{BVoxObject, material};
@@ -26,11 +29,11 @@ pub struct TileScene {
 
     /// Each object's tiles. An object's coarser copies follow it, finest
     /// first.
-    pub(crate) objects: Vec<ObjectTiles>,
+    pub(crate) objects: IdVec<BTileObject, ObjectTiles>,
 
     /// Each placement of one of [`objects`](Self::objects). A placement of
     /// each of the object's copies follows it, finest first.
-    pub(crate) placements: Vec<TilePlacement>,
+    pub(crate) placements: IdVec<BTilePlacement, TilePlacement>,
 
     /// The materials that pass light, in the order a glass cell's word
     /// counts them, for a scene that keeps glass.
@@ -62,8 +65,8 @@ impl TileScene {
             materials: Vec::new(),
             opaque: Vec::new(),
             lights: Vec::new(),
-            objects: Vec::new(),
-            placements: Vec::new(),
+            objects: IdVec::new(),
+            placements: IdVec::new(),
             glass_materials: Vec::new(),
             glass,
             coarser,
@@ -176,12 +179,16 @@ impl TileScene {
 
     /// Adds the object of `grid`, whose cells hold places among the
     /// scene's materials, with its coarser copies if the scene keeps them.
-    /// Returns the object's place among the scene's objects. `first` says
+    /// Returns the object's id. `first` says
     /// where the object's first cell sits on the lattice the scene's objects
     /// share, in cells, or holds zeros for an object off any lattice. Errors
     /// if a tile holds over 256 materials, or if a material that passes
     /// light has a place over 65534.
-    pub fn push_object(&mut self, grid: &CellGrid, first: [i64; 3]) -> Result<usize> {
+    pub fn push_object(
+        &mut self,
+        grid: &CellGrid,
+        first: [i64; 3],
+    ) -> Result<UsizeId<BTileObject>> {
         let glass = self.glass.then_some(self.glass_materials.as_slice());
         let copies = object_copies(grid, first, self.coarser, &self.opaque, glass)?;
 
@@ -189,21 +196,20 @@ impl TileScene {
     }
 
     /// Adds an object as [`object_copies`] gives its tiles, built for this
-    /// scene's materials. Returns the object's place among the scene's
-    /// objects.
-    pub(crate) fn push_copies(&mut self, copies: Vec<ObjectTiles>) -> usize {
-        let place = self.objects.len();
+    /// scene's materials. Returns the object's id.
+    pub(crate) fn push_copies(&mut self, copies: Vec<ObjectTiles>) -> UsizeId<BTileObject> {
+        let object = self.objects.end();
 
-        self.objects.extend(copies);
+        self.objects.as_mut_vec().extend(copies);
 
-        place
+        object
     }
 
     /// Places the object [`push_object`](Self::push_object) gave `object`
     /// for by `transform`, which carries its cells to the world, and with
     /// it each of its copies.
-    pub fn place_object(&mut self, object: usize, transform: TyTransformF64) {
-        let spans = |copy: usize| self.objects.get(copy).map(|tiles| tiles.span);
+    pub fn place_object(&mut self, object: UsizeId<BTileObject>, transform: TyTransformF64) {
+        let spans = |copy: UsizeId<BTileObject>| self.objects.get(copy).map(|tiles| tiles.span);
 
         assert!(spans(object) == Some(1), "the object is one the scene took");
 
@@ -211,7 +217,9 @@ impl TileScene {
         let position = transform.transform_point(-self.objects[object].shift.as_dvec3());
 
         // The object's copies follow it, up to the next object.
-        let copies = (object + 1..).take_while(|&copy| spans(copy).is_some_and(|span| span > 1));
+        let copies = (1..)
+            .map(|after| object.offset(after))
+            .take_while(|&copy| spans(copy).is_some_and(|span| span > 1));
 
         for copy in [object].into_iter().chain(copies) {
             let scale = transform.scale * f64::from(self.objects[copy].span);
@@ -225,11 +233,16 @@ impl TileScene {
 
     /// The placement that draws the copy a level coarser of what the
     /// placement at `placement` draws, if the scene keeps one.
-    pub(crate) fn coarser(&self, placement: usize) -> Option<usize> {
-        let span = |placement: usize| self.objects[self.placements[placement].object].span;
+    pub(crate) fn coarser(
+        &self,
+        placement: UsizeId<BTilePlacement>,
+    ) -> Option<UsizeId<BTilePlacement>> {
+        let span = |placement: UsizeId<BTilePlacement>| {
+            Some(self.objects[self.placements.get(placement)?.object].span)
+        };
+        let next = placement.offset(1);
 
-        (placement + 1 < self.placements.len() && span(placement + 1) > span(placement))
-            .then_some(placement + 1)
+        (span(next) > span(placement)).then_some(next)
     }
 }
 

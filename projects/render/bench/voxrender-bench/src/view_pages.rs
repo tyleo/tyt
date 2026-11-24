@@ -1,4 +1,5 @@
-use crate::{Error, Result, TileMasks, TileScene, to_word};
+use crate::{BTileObject, BViewPage, Error, Result, TileMasks, TileScene, to_word};
+use branded_id::{IdVec, UsizeId};
 use wgpu::{Buffer, BufferDescriptor, BufferUsages, Device};
 
 /// The pages a view's objects fill, one after another. A page holds its
@@ -6,7 +7,7 @@ use wgpu::{Buffer, BufferDescriptor, BufferUsages, Device};
 /// each within what one storage binding holds.
 pub struct ViewPages {
     /// The page that holds each of the scene's objects.
-    pub of: Vec<usize>,
+    pub of: IdVec<BTileObject, UsizeId<BViewPage>>,
 
     /// How many pages the scene fills, at least one.
     pub count: usize,
@@ -25,15 +26,17 @@ impl ViewPages {
     ///    leave the rest to their tints
     pub fn new(
         tiles: &TileScene,
-        crossing: impl IntoIterator<Item = [usize; 2]>,
+        crossing: impl IntoIterator<Item = [UsizeId<BTileObject>; 2]>,
         page_bytes: u64,
         tinted: bool,
     ) -> Result<Self> {
-        let objects = &tiles.objects;
+        // The objects by their places, which a group's members follow one
+        // another in.
+        let objects = tiles.objects.as_slice();
         let mut placed = vec![0; objects.len()];
 
         for placement in &tiles.placements {
-            placed[placement.object] += 1;
+            placed[placement.object.to_usize()] += 1;
         }
 
         // The words of each object's tiles, and of what its placements'
@@ -56,7 +59,7 @@ impl ViewPages {
         let mut group: Vec<_> = (0..objects.len()).collect();
 
         for [a, b] in crossing {
-            let (a, b) = (group[a], group[b]);
+            let (a, b) = (group[a.to_usize()], group[b.to_usize()]);
 
             if a != b {
                 for joined in &mut group {
@@ -77,7 +80,7 @@ impl ViewPages {
 
         let most = (page_bytes / 4) as usize;
         let most_lit = (if tinted { most / 2 } else { most }) - TileMasks::SPARE as usize;
-        let mut of = vec![0; objects.len()];
+        let mut of = vec![UsizeId::from_usize(0); objects.len()];
         let mut filled = (0, 0);
         let mut count = 1;
 
@@ -103,23 +106,30 @@ impl ViewPages {
             filled = (filled.0 + bits, filled.1 + lit);
 
             for object in members() {
-                of[object] = count - 1;
+                of[object] = UsizeId::from_usize(count - 1);
             }
         }
 
-        Ok(ViewPages { of, count })
+        Ok(ViewPages {
+            of: IdVec::from_vec(of),
+            count,
+        })
     }
 
     /// `box_view.wgsl`'s `bits` for each page: each of its objects' mask
     /// words, then the object's glass tiles' words. Also returns where each
     /// object's words start in its page's.
-    pub fn bits(&self, device: &Device, tiles: &TileScene) -> (Vec<Buffer>, Vec<u32>) {
+    pub fn bits(
+        &self,
+        device: &Device,
+        tiles: &TileScene,
+    ) -> (Vec<Buffer>, IdVec<BTileObject, u32>) {
         let mut starts: Vec<u32> = vec![0; tiles.objects.len()];
 
         let buffers = (0..self.count)
             .map(|page| {
                 let held: Vec<_> = (tiles.objects.iter().zip(&self.of).zip(0..))
-                    .filter(|((_, of), _)| **of == page)
+                    .filter(|((_, of), _)| of.to_usize() == page)
                     .map(|((object, _), index)| (object, index))
                     .collect();
 
@@ -157,6 +167,6 @@ impl ViewPages {
             })
             .collect();
 
-        (buffers, starts)
+        (buffers, IdVec::from_vec(starts))
     }
 }

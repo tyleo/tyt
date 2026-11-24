@@ -1,9 +1,10 @@
 use crate::{
-    BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, DetailTree, Error,
-    LISTS, MaskTile, PlacedBox, Result, TileMasks, TilePlacement, TileScene, ViewBoxes, ViewEye,
-    ViewLights, ViewLit, ViewMaterials, ViewPages, ViewTarget, box_corners, box_view_shader,
-    quad_tlas, storage_words, tile_quads, to_word,
+    BObjectTile, BTileObject, BViewBox, BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces,
+    BoxHide, BoxPart, DetailTree, Error, LISTS, MaskTile, PlacedBox, Result, TileMasks,
+    TilePlacement, TileScene, ViewBoxes, ViewEye, ViewLights, ViewLit, ViewMaterials, ViewPages,
+    ViewTarget, box_corners, box_view_shader, quad_tlas, storage_words, tile_quads, to_word,
 };
+use branded_id::{IdVec, UsizeId};
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxrender::{RenderBloom, grid_point, tonemap};
 use wgpu::{
@@ -106,7 +107,7 @@ pub struct BoxView {
     finest: f64,
 
     /// The boxes the last sort drew, each list's as their places in it.
-    shown: [Vec<usize>; LISTS],
+    shown: [Vec<UsizeId<BViewBox>>; LISTS],
 
     /// The target's width and height.
     size: [u32; 2],
@@ -133,7 +134,7 @@ pub struct BoxView {
     glass: ViewBoxes,
 
     /// Whether each marched box shares space with another placement's box.
-    crossing: Vec<bool>,
+    crossing: IdVec<BViewBox, bool>,
 
     /// The test that keeps hidden boxes from drawing, for a scene of
     /// [`TESTED`] boxes or more with a slab to hide one.
@@ -151,7 +152,7 @@ pub struct BoxView {
 
     /// Each run's opaque boxes as of the last sort, in the order they
     /// draw.
-    order: [Vec<usize>; RUNS],
+    order: [Vec<UsizeId<BViewBox>>; RUNS],
 
     /// The last sort's boxes and keys, kept for their room.
     sorted: Vec<[u32; 12]>,
@@ -223,7 +224,8 @@ impl BoxView {
 
         let page_bytes = page_bytes.unwrap_or(device.limits().max_storage_buffer_binding_size);
         let objects = &tiles.objects;
-        let object_of = |placed: &PlacedBox| tiles.placements[placed.placement as usize].object;
+        let object_of =
+            |placed: &PlacedBox| tiles.placements[placed.placement.to_usize_id()].object;
 
         let marched = PlacedBox::list(tiles, |object| &object.masks.boxes);
         let solid = PlacedBox::list(tiles, |object| &object.masks.solids);
@@ -272,7 +274,7 @@ impl BoxView {
         let traced = device.features().contains(Features::EXPERIMENTAL_RAY_QUERY);
         let mut materials = ViewMaterials::new(tiles);
 
-        let traits: Vec<Vec<TileTraits>> = (objects.iter())
+        let traits: Vec<IdVec<BObjectTile, TileTraits>> = (objects.iter())
             .map(|object| {
                 let of = |tile: &MaskTile| {
                     let ids = object.masks.palette(tile.offset);
@@ -293,9 +295,11 @@ impl BoxView {
                     }
                 };
 
-                object.masks.tiles.iter().map(of).collect()
+                IdVec::from_vec(object.masks.tiles.iter().map(of).collect())
             })
             .collect();
+
+        let traits = IdVec::<BTileObject, _>::from_vec(traits);
 
         let traits_of = |placed: &PlacedBox| traits[object_of(placed)][placed.tile];
         let page_of = |placed: &PlacedBox| pages.of[object_of(placed)];
@@ -309,10 +313,10 @@ impl BoxView {
             let masks = &objects[object].masks;
             let tile = masks.tiles[placed.tile].offset;
             let before = masks.words[(tile + TileMasks::FIRST) as usize];
-            let mut words = placed.words(placed.placement, starts[object] + tile, more);
+            let mut words = placed.words(starts[object] + tile, more);
 
             words[10] = traits_of(placed).material;
-            words[11] = lit.places[placed.placement as usize] + before;
+            words[11] = lit.places[placed.placement.to_usize_id()] + before;
 
             words
         };
@@ -368,15 +372,16 @@ impl BoxView {
             let [x, y, z] = (low % 16).to_array();
             let [far_x, far_y, far_z] = ((high - 1) % 16).to_array();
             let surfaces = x | y << 4 | z << 8 | far_x << 12 | far_y << 16 | far_z << 20;
-            let mut words = placed.words(placed.placement, first + tile.offset, [surfaces, 0]);
+            let mut words = placed.words(first + tile.offset, [surfaces, 0]);
 
             // The first of the tile's words in `lit`.
-            words[11] = lit.glass[placed.placement as usize][placed.tile];
+            words[11] = lit.glass[placed.placement.to_usize_id()][placed.tile];
 
             glass_boxes.push(placed, words, page_of(placed), false, false);
         }
 
         let crossing: Vec<bool> = crossers.iter().map(|entries| !entries.is_empty()).collect();
+        let crossing = IdVec::<BViewBox, _>::from_vec(crossing);
         let hide = hide_of(tiles, [(&marched, &marched_boxes), (&solid, &solid_boxes)]);
         let detail = DetailTree::new(tiles, [&marched, &solid, &glass]);
 
@@ -427,7 +432,7 @@ impl BoxView {
         );
 
         // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
-        let box_words = [marched_boxes.words.as_slice(), &solid_boxes.words].concat();
+        let box_words = [marched_boxes.words.as_slice(), solid_boxes.words.as_slice()].concat();
 
         // A shader's array has room for one element at the least.
         let quad_list = storage_words(device, "view quads", &quad_words, 1);
@@ -546,7 +551,7 @@ impl BoxView {
         // A box that crosses another draws in two parts when it lies near
         // the head, so the draw has room for each such box twice.
         let mut parts = vec![
-            part("held", BoxFaces::Held, near, count(&crossing)),
+            part("held", BoxFaces::Held, near, count(crossing.as_slice())),
             part("inside", BoxFaces::NearBack, near, 0),
             part("solid", BoxFaces::Front, 0, solid.len()),
             part("solid", BoxFaces::Front, near, 0),
@@ -617,8 +622,18 @@ impl BoxView {
             let parts = [
                 part("held", BoxFaces::Held, 0, glow_crossed),
                 part("inside", BoxFaces::NearBack, 0, 0),
-                part("solid", BoxFaces::Front, 0, count(&solid_boxes.glow)),
-                part("front", BoxFaces::Front, 0, count(&marched_boxes.glow)),
+                part(
+                    "solid",
+                    BoxFaces::Front,
+                    0,
+                    count(solid_boxes.glow.as_slice()),
+                ),
+                part(
+                    "front",
+                    BoxFaces::Front,
+                    0,
+                    count(marched_boxes.glow.as_slice()),
+                ),
                 part("crossed", BoxFaces::Front, 0, 0),
             ];
 
@@ -871,7 +886,7 @@ impl BoxView {
             let crossing = &self.crossing;
             let solid = &self.solid;
             let marched = &self.marched;
-            let glowing = |boxes: &'_ ViewBoxes, keys: &[u64]| -> Vec<usize> {
+            let glowing = |boxes: &'_ ViewBoxes, keys: &[u64]| -> Vec<UsizeId<BViewBox>> {
                 (keys.iter().map(|&key| ViewBoxes::index_of(key)))
                     .filter(|&index| boxes.glow[index])
                     .collect()
@@ -931,7 +946,7 @@ impl BoxView {
             let hide = self.hide.as_ref().filter(|_| part >= SOLID_RUN);
 
             let shown = (order.iter().copied())
-                .filter(|&index| !hide.is_some_and(|hide| hide.hides(list, index)));
+                .filter(|&index| !hide.is_some_and(|hide| hide.hides(list, index.to_usize())));
 
             boxes.deal(shown, part, self.pages, &mut self.sorted, &mut runs);
         }
@@ -1073,7 +1088,7 @@ fn hide_of(tiles: &TileScene, lists: [(&Vec<PlacedBox>, &ViewBoxes); 2]) -> Opti
             .map(<[PlacedBox]>::len)
             .collect();
 
-        (boxes.bounds.clone(), runs)
+        (boxes.bounds.as_vec().clone(), runs)
     });
 
     Some(BoxHide::new(slabs, lists.into()))

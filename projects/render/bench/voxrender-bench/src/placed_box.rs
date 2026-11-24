@@ -1,6 +1,8 @@
 use crate::{
-    BoxCrosser, ObjectTiles, TileBox, TilePlacement, TileScene, bounds_around, box_corners, to_word,
+    BObjectTile, BTilePlacement, BoxCrosser, ObjectTiles, TileBox, TilePlacement, TileScene,
+    bounds_around, box_corners, to_word,
 };
+use branded_id::{IteratorExt, U32Id, UsizeId};
 use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
 
@@ -10,11 +12,10 @@ const TOUCH: f64 = 1.0e-4;
 
 /// One placement's box of cells within one of its object's tiles.
 pub struct PlacedBox {
-    /// The placement's index in the scene's placement order.
-    pub placement: u32,
+    pub placement: U32Id<BTilePlacement>,
 
-    /// The tile's place among its object's tiles of the box's kind.
-    pub tile: usize,
+    /// The tile among its object's tiles of the box's kind.
+    pub tile: UsizeId<BObjectTile>,
 
     /// The box's low cell in the placement's grid.
     pub low: TyVector3U32,
@@ -39,7 +40,8 @@ impl PlacedBox {
     pub fn list(tiles: &TileScene, boxes: impl Fn(&ObjectTiles) -> &[TileBox]) -> Vec<Self> {
         let mut placed = Vec::new();
 
-        for (index, TilePlacement { object, transform }) in (0u32..).zip(&tiles.placements) {
+        for (placement, placed_object) in tiles.placements.iter().enumerate_ids() {
+            let TilePlacement { object, transform } = placed_object;
             let object = &tiles.objects[*object];
 
             for &TileBox { cells, tile } in boxes(object) {
@@ -49,7 +51,7 @@ impl PlacedBox {
                     .map(|corner| transform.transform_point(corner));
 
                 placed.push(PlacedBox {
-                    placement: index,
+                    placement,
                     tile,
                     low,
                     high,
@@ -68,14 +70,17 @@ impl PlacedBox {
         self.world
     }
 
-    /// The box's three `vec4<u32>`s: its low cell and `low`, the corner past
-    /// its high cell and `high`, then `more` and two zeros.
-    pub fn words(&self, low: u32, high: u32, more: [u32; 2]) -> [u32; 12] {
+    /// The box's three `vec4<u32>`s: its low cell and its placement, the
+    /// corner past its high cell and `tile`, then `more` and two zeros.
+    pub fn words(&self, tile: u32, more: [u32; 2]) -> [u32; 12] {
         let [x, y, z] = self.low.to_array();
         let [far_x, far_y, far_z] = self.high.to_array();
         let [first, count] = more;
+        let placement = self.placement.to_u32();
 
-        [x, y, z, low, far_x, far_y, far_z, high, first, count, 0, 0]
+        [
+            x, y, z, placement, far_x, far_y, far_z, tile, first, count, 0, 0,
+        ]
     }
 
     /// Whether some axis parts the box from `other`: an axis along which

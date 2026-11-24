@@ -1,4 +1,7 @@
-use crate::{CellGrid, GlassTile, TILE, TILE_CELLS, TileBox, live_boxes, tile_cell, to_word};
+use crate::{
+    BObjectTile, CellGrid, GlassTile, TILE, TILE_CELLS, TileBox, live_boxes, tile_cell, to_word,
+};
+use branded_id::IdVec;
 use ty_math::TyVector3U32;
 
 /// An object's surfaces between materials that pass light, by tile, as a
@@ -23,7 +26,7 @@ use ty_math::TyVector3U32;
 #[derive(Default)]
 pub struct GlassTiles {
     /// Each tile that holds a surface, in raster order.
-    pub tiles: Vec<GlassTile>,
+    pub tiles: IdVec<BObjectTile, GlassTile>,
 
     /// The box each tile draws: the box around its busy cells. The tile's
     /// opaque cells draw a box whose faces can lie before a surface they do
@@ -137,7 +140,7 @@ impl GlassTiles {
 
             tiles.boxes.push(TileBox {
                 cells: corners(drawn),
-                tile: tiles.tiles.len(),
+                tile: tiles.tiles.end(),
             });
 
             tiles.tiles.push(GlassTile {

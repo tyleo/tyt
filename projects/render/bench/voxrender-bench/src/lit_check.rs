@@ -1,6 +1,7 @@
 use crate::{
     CellGrid, Error, Gpu, LitCorners, LitFill, Result, TileMasks, TileScene, map_readback,
 };
+use branded_id::IdRange;
 use std::collections::HashMap;
 use ty_math::TyVector3F64;
 use voxrender::{RenderLight, RenderScene};
@@ -27,7 +28,7 @@ pub fn lit_check(gpu: &Gpu, scene: &RenderScene) -> Result<String> {
     scene_tiles.solid = true;
     scene_tiles.push_scene(scene)?;
 
-    let placements: Vec<_> = (0..scene_tiles.placements.len()).collect();
+    let placements: Vec<_> = IdRange::from_len(scene_tiles.placements.len()).collect();
 
     let fill = LitFill::new(&gpu.device, &scene_tiles, toward).page(
         &gpu.device,

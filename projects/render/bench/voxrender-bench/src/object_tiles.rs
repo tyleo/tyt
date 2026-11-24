@@ -1,6 +1,8 @@
 use crate::{
-    CasterTiles, CellBox, CellGrid, GlassTiles, Result, TILE, TileMasks, raster_index, solid_slabs,
+    BObjectTile, CasterTiles, CellBox, CellGrid, GlassTiles, Result, TILE, TileMasks, raster_index,
+    solid_slabs,
 };
+use branded_id::UsizeId;
 use ty_math::TyVector3U32;
 
 /// One object's cells by tile, as a view and its shadow bake keep them. An
@@ -110,27 +112,23 @@ impl ObjectTiles {
         (self.bounds + TILE - 1) / TILE
     }
 
-    /// The place among [`masks`](Self::masks)' tiles of the tile at `tile`
-    /// among the grid's tiles, or `None` for a tile with no opaque cell.
-    pub fn tile_at(&self, tile: TyVector3U32) -> Option<usize> {
-        let place = self.places[raster_index(tile, self.counts())];
-
-        place.checked_sub(1).map(|place| place as usize)
+    /// The one of [`masks`](Self::masks)' tiles at `tile` among the grid's
+    /// tiles, or `None` for a tile with no opaque cell.
+    pub fn tile_at(&self, tile: TyVector3U32) -> Option<UsizeId<BObjectTile>> {
+        held(&self.places, raster_index(tile, self.counts()))
     }
 
-    /// The place among [`glass`](Self::glass)' tiles of the tile at `tile`
-    /// among the grid's tiles, or `None` for a tile with no surface
-    /// between materials that pass light.
-    pub fn glass_at(&self, tile: TyVector3U32) -> Option<usize> {
-        let place = self.glass_places[raster_index(tile, self.counts())];
-
-        place.checked_sub(1).map(|place| place as usize)
+    /// The one of [`glass`](Self::glass)' tiles at `tile` among the grid's
+    /// tiles, or `None` for a tile with no surface between materials that
+    /// pass light.
+    pub fn glass_at(&self, tile: TyVector3U32) -> Option<UsizeId<BObjectTile>> {
+        held(&self.glass_places, raster_index(tile, self.counts()))
     }
 
-    /// The opaque cell at `cell` of the grid, as its tile's place among
-    /// [`masks`](Self::masks)' tiles and its index in the tile. `None` for
-    /// any other cell and outside the grid.
-    pub fn opaque_at(&self, cell: [i64; 3]) -> Option<(usize, u16)> {
+    /// The opaque cell at `cell` of the grid, as the one of
+    /// [`masks`](Self::masks)' tiles that holds it and its index in the
+    /// tile. `None` for any other cell and outside the grid.
+    pub fn opaque_at(&self, cell: [i64; 3]) -> Option<(UsizeId<BObjectTile>, u16)> {
         let inside =
             (0..3).all(|axis| cell[axis] >= 0 && cell[axis] < i64::from(self.bounds[axis]));
 
@@ -146,10 +144,10 @@ impl ObjectTiles {
         (bits >> (z % TILE) & 1 == 1).then_some((place, (row * TILE + z % TILE) as u16))
     }
 
-    /// The material of the record cell of index `index` in the tile at
-    /// `tile` among [`masks`](Self::masks)' tiles. `None` for a cell with
-    /// no record, which has no surface.
-    pub fn material_of(&self, tile: usize, index: u16) -> Option<u32> {
+    /// The material of the record cell of index `index` in `tile` of
+    /// [`masks`](Self::masks)' tiles. `None` for a cell with no record,
+    /// which has no surface.
+    pub fn material_of(&self, tile: UsizeId<BObjectTile>, index: u16) -> Option<u32> {
         let tile = &self.masks.tiles[tile];
         let record = tile.recorded.binary_search(&index).ok()?;
 
@@ -157,9 +155,17 @@ impl ObjectTiles {
     }
 }
 
+/// The tile whose place plus one `places` holds at `at`, if it holds one.
+fn held(places: &[u32], at: usize) -> Option<UsizeId<BObjectTile>> {
+    let place = places[at].checked_sub(1)?;
+
+    Some(UsizeId::from_usize(place as usize))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{CellGrid, ObjectTiles};
+    use branded_id::UsizeId;
     use ty_math::TyVector3U32;
 
     #[test]
@@ -183,7 +189,7 @@ mod tests {
 
         let (tile, index) = tiles.opaque_at([17, 0, 2]).unwrap();
 
-        assert_eq!((tile, index), (1, 16 + 2));
+        assert_eq!((tile, index), (UsizeId::from_usize(1), 16 + 2));
         assert_eq!(tiles.material_of(tile, index), Some(2));
         assert_eq!(tiles.opaque_at([17, 1, 2]), None);
         assert_eq!(tiles.opaque_at([17, 2, 2]), None);

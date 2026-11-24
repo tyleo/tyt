@@ -4,6 +4,7 @@
 
 // Public API
 
+mod b_tile_object;
 mod bench_scene;
 mod box_view;
 mod box_view_shader;
@@ -28,6 +29,7 @@ mod view_image;
 mod view_options;
 mod view_target;
 
+pub use b_tile_object::*;
 pub use bench_scene::*;
 pub use box_view::*;
 pub use box_view_shader::*;
@@ -55,6 +57,10 @@ pub use view_target::*;
 // Internal API
 
 mod art_room_scene;
+mod b_object_tile;
+mod b_tile_placement;
+mod b_view_box;
+mod b_view_page;
 mod bench_scenes;
 mod bounds_around;
 mod box_bindings;
@@ -122,6 +128,10 @@ mod view_pages;
 mod world_to_clip;
 
 pub(crate) use art_room_scene::*;
+pub(crate) use b_object_tile::*;
+pub(crate) use b_tile_placement::*;
+pub(crate) use b_view_box::*;
+pub(crate) use b_view_page::*;
 pub(crate) use bench_scenes::*;
 pub(crate) use bounds_around::*;
 pub(crate) use box_bindings::*;

@@ -1,4 +1,5 @@
-use crate::{BoxBindings, BoxFaces, BoxPart, BoxRun, ViewTarget, to_word};
+use crate::{BViewPage, BoxBindings, BoxFaces, BoxPart, BoxRun, ViewTarget, to_word};
+use branded_id::{IdVec, UsizeId};
 use std::{num::NonZeroU64, ops::Range};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
@@ -60,7 +61,7 @@ pub struct BoxDraw {
     runs: Vec<Run>,
 
     /// Each page's bindings.
-    bind_groups: Vec<BindGroup>,
+    bind_groups: IdVec<BViewPage, BindGroup>,
 
     corners: Buffer,
 
@@ -91,7 +92,7 @@ struct Run {
     part: usize,
 
     /// The page whose bindings the run's boxes read.
-    page: usize,
+    page: UsizeId<BViewPage>,
 
     boxes: Range<u32>,
 }
@@ -337,7 +338,7 @@ impl BoxDraw {
             });
         }
 
-        let bind_groups = pages
+        let bind_groups: Vec<_> = pages
             .iter()
             .map(|page| {
                 let mut resources: Vec<_> = (0u32..)
@@ -379,7 +380,7 @@ impl BoxDraw {
         BoxDraw {
             parts: drawn,
             runs: Vec::new(),
-            bind_groups,
+            bind_groups: IdVec::from_vec(bind_groups),
             corners,
             indices,
             boxes,
@@ -476,7 +477,7 @@ impl BoxDraw {
 
         for &BoxRun { part, page, count } in runs {
             assert!(
-                part < self.parts.len() && page < self.bind_groups.len(),
+                part < self.parts.len() && page < self.bind_groups.end(),
                 "a run draws one of the draw's parts over one of its pages"
             );
 
@@ -519,7 +520,7 @@ impl BoxDraw {
         {
             if *width > 0 && *height > 0 {
                 pass.set_scissor_rect(*left, *top, *width, *height);
-                pass.set_bind_group(0, &self.bind_groups[0], &[]);
+                pass.set_bind_group(0, &self.bind_groups.as_slice()[0], &[]);
                 pass.set_pipeline(cover);
                 pass.draw(0..3, 0..1);
             }

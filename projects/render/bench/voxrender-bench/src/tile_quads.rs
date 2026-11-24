@@ -1,7 +1,8 @@
 use crate::{
-    CellBox, ObjectQuads, ObjectTiles, TILE, TilePlacement, TileScene, bounds_around, box_corners,
-    map_threads, tile_cell, to_word,
+    BObjectTile, CellBox, ObjectQuads, ObjectTiles, TILE, TilePlacement, TileScene, bounds_around,
+    box_corners, map_threads, tile_cell, to_word,
 };
+use branded_id::UsizeId;
 use std::collections::BTreeMap;
 use ty_math::{TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
@@ -25,7 +26,7 @@ use voxsurface::{SurfaceGrid, SurfaceMethod, mesh_grid_keyed};
 pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<ObjectQuads> {
     let Some(reach) = reach else {
         return map_threads(tiles.objects.len(), |index| {
-            let object = &tiles.objects[index];
+            let object = &tiles.objects.as_slice()[index];
             let mut quads = ObjectQuads::default();
 
             if object.span == 1 {
@@ -56,7 +57,7 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
     for TilePlacement { object, transform } in &tiles.placements {
         let widest = transform.scale.abs().max_element();
 
-        for &((low, high), cells) in &casts[*object] {
+        for &((low, high), cells) in &casts[object.to_usize()] {
             let (least, most) = bounds_around(
                 box_corners(low.as_dvec3(), high.as_dvec3())
                     .map(|corner| transform.transform_point(corner)),
@@ -101,13 +102,13 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
             let last = last.ceil().max(TyVector3F64::ZERO).as_uvec3().min(bounds);
 
             if first.cmplt(last).all() {
-                kept[*object].push((first, last));
+                kept[object.to_usize()].push((first, last));
             }
         }
     }
 
     map_threads(tiles.objects.len(), |index| {
-        let (object, kept) = (&tiles.objects[index], &kept[index]);
+        let (object, kept) = (&tiles.objects.as_slice()[index], &kept[index]);
         let mut quads = ObjectQuads::default();
         let whole = (TyVector3U32::ZERO, object.bounds);
 
@@ -118,7 +119,7 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
         }
 
         // The box around what each tile keeps, in the tiles' order.
-        let mut regions: BTreeMap<usize, CellBox> = BTreeMap::new();
+        let mut regions: BTreeMap<UsizeId<BObjectTile>, CellBox> = BTreeMap::new();
 
         for &(low, high) in kept {
             let (first, last) = (low / TILE, (high - 1) / TILE);

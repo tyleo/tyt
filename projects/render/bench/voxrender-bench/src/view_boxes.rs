@@ -1,4 +1,5 @@
-use crate::{BoxRun, PlacedBox, sort_keys, squared_distance, to_word};
+use crate::{BViewBox, BViewPage, BoxRun, PlacedBox, sort_keys, squared_distance, to_word};
+use branded_id::{IdRange, IdVec, UsizeId};
 
 /// One list of a view's boxes as a sort reads them. A sort reads every
 /// box's bounds and little else, so each of a box's parts lies with the
@@ -6,19 +7,19 @@ use crate::{BoxRun, PlacedBox, sort_keys, squared_distance, to_word};
 #[derive(Default)]
 pub struct ViewBoxes {
     /// The low and then the high corner of the world box around each box.
-    pub bounds: Vec<[f32; 6]>,
+    pub bounds: IdVec<BViewBox, [f32; 6]>,
 
     /// Each box's three `vec4<u32>`s.
-    pub words: Vec<[u32; 12]>,
+    pub words: IdVec<BViewBox, [u32; 12]>,
 
     /// The page that holds each box's tile.
-    pub page: Vec<usize>,
+    pub page: IdVec<BViewBox, UsizeId<BViewPage>>,
 
     /// Whether each box's fragments can cast a mirror ray.
-    pub mirror: Vec<bool>,
+    pub mirror: IdVec<BViewBox, bool>,
 
     /// Whether each box's fragments can meet an emission that blooms.
-    pub glow: Vec<bool>,
+    pub glow: IdVec<BViewBox, bool>,
 }
 
 impl ViewBoxes {
@@ -26,7 +27,7 @@ impl ViewBoxes {
         &mut self,
         placed: &PlacedBox,
         words: [u32; 12],
-        page: usize,
+        page: UsizeId<BViewPage>,
         mirror: bool,
         glow: bool,
     ) {
@@ -42,18 +43,18 @@ impl ViewBoxes {
         self.glow.push(glow);
     }
 
-    /// The index of the box a sort's `key` holds.
-    pub fn index_of(key: u64) -> usize {
-        (key & 0xffff_ffff) as usize
+    /// The box a sort's `key` holds.
+    pub fn index_of(key: u64) -> UsizeId<BViewBox> {
+        UsizeId::from_usize((key & 0xffff_ffff) as usize)
     }
 
     /// Fills `keys` with a key per box, nearest to `point` first, and
     /// returns how many of the boxes lie within `reach` of `point`. A key
     /// holds the bits of its box's squared distance above the box's index.
-    /// With `shown`, only the boxes at those indices take a key.
+    /// With `shown`, only those boxes take a key.
     pub fn nearest_first(
         &self,
-        shown: Option<&[usize]>,
+        shown: Option<&[UsizeId<BViewBox>]>,
         point: [f32; 3],
         reach: f32,
         keys: &mut Vec<u64>,
@@ -62,15 +63,15 @@ impl ViewBoxes {
         keys.clear();
 
         // A square is no less than zero, so its bits order as it does.
-        let key = |index: usize| {
+        let key = |index: UsizeId<BViewBox>| {
             let square = squared_distance(&self.bounds[index], point);
 
-            u64::from(square.to_bits()) << 32 | index as u64
+            u64::from(square.to_bits()) << 32 | index.to_usize() as u64
         };
 
         match shown {
             Some(shown) => keys.extend(shown.iter().map(|&index| key(index))),
-            None => keys.extend((0..self.bounds.len()).map(key)),
+            None => keys.extend(IdRange::from_len(self.bounds.len()).map(key)),
         }
 
         sort_keys(keys, spare);
@@ -82,13 +83,13 @@ impl ViewBoxes {
     /// them. The boxes keep their order within a page.
     pub fn deal(
         &self,
-        indices: impl Iterator<Item = usize> + Clone,
+        indices: impl Iterator<Item = UsizeId<BViewBox>> + Clone,
         part: usize,
         pages: usize,
         sorted: &mut Vec<[u32; 12]>,
         runs: &mut Vec<BoxRun>,
     ) {
-        for page in 0..pages {
+        for page in IdRange::from_len(pages) {
             let before = sorted.len();
             let held = indices.clone().filter(|&index| self.page[index] == page);
 
@@ -108,7 +109,7 @@ impl ViewBoxes {
     /// `part` to `runs` for each stretch of them that one page holds.
     pub fn deal_in_order(
         &self,
-        indices: impl Iterator<Item = usize>,
+        indices: impl Iterator<Item = UsizeId<BViewBox>>,
         part: usize,
         sorted: &mut Vec<[u32; 12]>,
         runs: &mut Vec<BoxRun>,

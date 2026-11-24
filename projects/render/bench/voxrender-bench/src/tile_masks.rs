@@ -1,7 +1,8 @@
 use crate::{
-    CellBox, CellGrid, Error, MaskTile, Result, TILE, TILE_CELLS, TileBox, live_boxes, tile_cell,
-    to_word,
+    BObjectTile, CellBox, CellGrid, Error, MaskTile, Result, TILE, TILE_CELLS, TileBox, live_boxes,
+    tile_cell, to_word,
 };
+use branded_id::IdVec;
 use ty_math::TyVector3U32;
 
 /// The most solid boxes a tile gives up.
@@ -51,7 +52,7 @@ const STRAY_SHARE: usize = 8;
 #[derive(Default)]
 pub struct TileMasks {
     /// Each tile that holds an opaque cell, in raster order.
-    pub tiles: Vec<MaskTile>,
+    pub tiles: IdVec<BObjectTile, MaskTile>,
 
     /// Boxes that hold only live cells, in the tiles' order. A raster draws
     /// their faces as the cells' faces, with no march.
@@ -235,7 +236,7 @@ impl TileMasks {
     /// whose cells are `live`: its solid boxes, then the box around its
     /// other live cells.
     fn push_boxes(&mut self, corner: TyVector3U32, live: Vec<bool>) {
-        let place = self.tiles.len();
+        let place = self.tiles.end();
         let placed = |(low, high): CellBox| TileBox {
             cells: (corner + low, corner + high),
             tile: place,
@@ -565,7 +566,7 @@ mod tests {
         // A row runs along z, so the wall's cell and the glass cell each
         // start a row.
         assert_eq!(masks.tiles.len(), 1);
-        assert_eq!(masks.tiles[0].corner, TyVector3U32::ZERO);
+        assert_eq!(masks.tiles.as_slice()[0].corner, TyVector3U32::ZERO);
         assert!(is_set(&masks.words, 0, 0));
         assert!(!is_set(&masks.words, 0, 16));
     }

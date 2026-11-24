@@ -1,4 +1,5 @@
-use crate::{ObjectQuads, TilePlacement, to_word};
+use crate::{BTilePlacement, ObjectQuads, TilePlacement, to_word};
+use branded_id::IdSlice;
 use ty_math::TyVector3F64;
 use wgpu::{
     AccelerationStructureFlags, AccelerationStructureGeometryFlags,
@@ -23,7 +24,7 @@ pub fn quad_tlas(
     device: &Device,
     queue: &Queue,
     quads: &[ObjectQuads],
-    placements: &[TilePlacement],
+    placements: &IdSlice<BTilePlacement, TilePlacement>,
 ) -> Tlas {
     let init = |label, contents: &[u8]| {
         device.create_buffer_init(&BufferInitDescriptor {
@@ -100,7 +101,7 @@ pub fn quad_tlas(
 
     let instanced: Vec<_> = placements
         .iter()
-        .filter(|placed| blases[placed.object].is_some())
+        .filter(|placed| blases[placed.object.to_usize()].is_some())
         .collect();
 
     let mut tlas = device.create_tlas(&CreateTlasDescriptor {
@@ -111,6 +112,8 @@ pub fn quad_tlas(
     });
 
     for (slot, TilePlacement { object, transform }) in instanced.into_iter().enumerate() {
+        let object = object.to_usize();
+
         // Grid cells to world: rotation times scale, then position.
         let columns = [TyVector3F64::X, TyVector3F64::Y, TyVector3F64::Z]
             .map(|axis| transform.rotation * axis);
@@ -127,9 +130,9 @@ pub fn quad_tlas(
         }
 
         tlas[slot] = Some(TlasInstance::new(
-            blases[*object].as_ref().expect("the object has quads"),
+            blases[object].as_ref().expect("the object has quads"),
             rows,
-            first_quads[*object].expect("the object has quads"),
+            first_quads[object].expect("the object has quads"),
             0xff,
         ));
     }
