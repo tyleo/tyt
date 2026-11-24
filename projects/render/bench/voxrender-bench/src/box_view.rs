@@ -1,11 +1,13 @@
 use crate::{
     BObjectTile, BTileObject, BViewBox, BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces,
-    BoxHide, BoxPart, DetailTree, Error, LISTS, MaskTile, PlacedBox, Result, TileMasks,
+    BoxHide, BoxPart, BoxWords, DetailTree, Error, LISTS, MaskTile, PlacedBox, Result, TileMasks,
     TilePlacement, TileScene, ViewBoxes, ViewEye, ViewLights, ViewLit, ViewMaterials, ViewPages,
     ViewTarget, box_corners, box_view_shader, eye_texture, quad_tlas, storage_words, tile_quads,
     to_word,
 };
 use branded_id::{IdVec, UsizeId};
+use bytemuck::{Pod, Zeroable};
+use std::mem::offset_of;
 use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxrender::{RenderBloom, grid_point, tonemap};
 use wgpu::{
@@ -15,16 +17,6 @@ use wgpu::{
     TextureViewDescriptor,
     util::{BufferInitDescriptor, DeviceExt},
 };
-
-/// The bytes of one of `box_view.wgsl`'s `Place`s.
-const PLACE_BYTES: usize = 128;
-
-/// The bytes a frame rewrites at the start of a `Place`: its matrix and ray.
-const EYE_BYTES: usize = 80;
-
-/// The bytes of `box_view.wgsl`'s `Frame`, and where its eyes start.
-const FRAME_BYTES: usize = 112;
-const EYES_AT: u64 = 80;
 
 /// The standard deviations of the bloom's widest blur that the halo reaches
 /// past what glows.
@@ -103,11 +95,11 @@ pub struct BoxView {
     /// `box_view.wgsl`'s `Frame`. A frame rewrites its eyes.
     frame: Buffer,
 
-    /// Each eye's `Place` for each placement.
+    /// Each eye's [`Place`] for each placement, the first eye's first.
     places: Buffer,
 
-    /// The bytes of `places`.
-    place_bytes: Vec<u8>,
+    /// What `places` holds.
+    place_values: Vec<Place>,
 
     /// Each placement's transform and its grid-to-world matrix.
     placements: Vec<(TyTransformF64, TyMatrix4x4F64)>,
@@ -139,7 +131,7 @@ pub struct BoxView {
     order: [Vec<UsizeId<BViewBox>>; RUNS],
 
     /// The last sort's boxes and keys, kept for their room.
-    sorted: Vec<[u32; 12]>,
+    sorted: Vec<BoxWords>,
     solid_keys: Vec<u64>,
     marched_keys: Vec<u64>,
     glass_keys: Vec<u64>,
@@ -291,21 +283,21 @@ impl BoxView {
             let before = masks.words[(tile + TileMasks::FIRST) as usize];
             let mut words = placed.words(starts[object] + tile, more);
 
-            words[10] = traits_of(placed).material;
-            words[11] = lit.places[placed.placement.to_usize_id()] + before;
+            words.material = traits_of(placed).material;
+            words.lit = lit.places[placed.placement.to_usize_id()] + before;
 
             words
         };
 
-        let mut crosser_words: Vec<u32> = Vec::new();
+        let mut crosser_list: Vec<BoxCrosser> = Vec::new();
         let mut marched_boxes = ViewBoxes::default();
         let mut solid_boxes = ViewBoxes::default();
         let mut glass_boxes = ViewBoxes::default();
 
         for (placed, entries) in marched.iter().zip(&crossers) {
-            let span = [to_word(crosser_words.len() / 8), to_word(entries.len())];
+            let span = [to_word(crosser_list.len()), to_word(entries.len())];
 
-            crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
+            crosser_list.extend(entries);
 
             // A marched box's fragment can also shade a hit in a box it
             // crosses.
@@ -351,7 +343,7 @@ impl BoxView {
             let mut words = placed.words(first + tile.offset, [surfaces, 0]);
 
             // Word 11 holds the first of the tile's words in `lit`.
-            words[11] = lit.glass[placed.placement.to_usize_id()][placed.tile];
+            words.lit = lit.glass[placed.placement.to_usize_id()][placed.tile];
 
             glass_boxes.push(placed, words, page_of(placed), false, false);
         }
@@ -396,7 +388,7 @@ impl BoxView {
 
         let frame = init(
             "view frame",
-            &frame_bytes(&lights, tiles.placements.len(), size),
+            bytemuck::bytes_of(&Frame::new(&lights, tiles.placements.len(), size)),
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         );
         let material_list = init(
@@ -409,8 +401,9 @@ impl BoxView {
         let box_words = [marched_boxes.words.as_slice(), solid_boxes.words.as_slice()].concat();
 
         let quad_list = storage_words(device, "view quads", &quad_words, 1);
-        let box_list = storage_words(device, "view boxes", box_words.as_flattened(), 12);
-        let crosser_list = storage_words(device, "view crossers", &crosser_words, 8);
+        let box_list = storage_words(device, "view boxes", bytemuck::cast_slice(&box_words), 12);
+        let crosser_list = bytemuck::cast_slice(&crosser_list);
+        let crosser_list = storage_words(device, "view crossers", crosser_list, 8);
 
         let placements: Vec<_> = (tiles.placements.iter())
             .map(|&TilePlacement { transform, .. }| {
@@ -424,11 +417,14 @@ impl BoxView {
             })
             .collect();
 
-        let place_bytes = place_bytes(&placements);
+        // Each eye takes a place for each placement.
+        let place_values: Vec<_> = (placements.iter().chain(&placements))
+            .map(|(transform, _)| Place::new(transform))
+            .collect();
 
         let places = device.create_buffer(&BufferDescriptor {
             label: Some("view places"),
-            size: place_bytes.len().max(2 * PLACE_BYTES) as u64,
+            size: (place_values.len().max(2) * size_of::<Place>()) as u64,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -624,7 +620,7 @@ impl BoxView {
             size,
             frame,
             places,
-            place_bytes,
+            place_values,
             placements,
             solid: solid_boxes,
             marched: marched_boxes,
@@ -672,33 +668,24 @@ impl BoxView {
                 .map(move |placement| (eye, placement))
         });
 
-        for (place, (eye, (transform, grid_to_world))) in
-            self.place_bytes.chunks_exact_mut(PLACE_BYTES).zip(each)
-        {
-            let clip = (eye.world_to_clip * *grid_to_world).to_cols_array();
+        for (place, (eye, (transform, grid_to_world))) in self.place_values.iter_mut().zip(each) {
+            let clip = eye.world_to_clip * *grid_to_world;
 
             // A box holds an eye within `REACH` of it, in the grid's cells
             // along its finest axis.
             let cells = REACH * scale / transform.scale.abs().min_element();
-            let ray = grid_point(transform, eye.position).extend(cells).to_array();
+            let ray = grid_point(transform, eye.position).extend(cells);
 
-            for (bytes, value) in place[..EYE_BYTES]
-                .chunks_exact_mut(4)
-                .zip(clip.into_iter().chain(ray))
-            {
-                bytes.copy_from_slice(&(value as f32).to_le_bytes());
-            }
+            place.clip = clip.to_cols_array().map(narrow);
+            place.ray = ray.to_array().map(narrow);
         }
 
-        queue.write_buffer(&self.places, 0, &self.place_bytes);
+        queue.write_buffer(&self.places, 0, bytemuck::cast_slice(&self.place_values));
 
-        let eye_bytes: Vec<u8> = eyes
-            .iter()
-            .flat_map(|eye| eye.position.as_vec3().extend(0.0).to_array())
-            .flat_map(f32::to_le_bytes)
-            .collect();
+        let positions = eyes.map(|eye| eye.position.as_vec3().extend(0.0).to_array());
+        let eyes_at = offset_of!(Frame, eyes) as u64;
 
-        queue.write_buffer(&self.frame, EYES_AT, &eye_bytes);
+        queue.write_buffer(&self.frame, eyes_at, bytemuck::cast_slice(&positions));
 
         let head = ((eyes[0].position + eyes[1].position) / 2.0)
             .as_vec3()
@@ -1039,63 +1026,94 @@ fn hide_of(tiles: &TileScene, lists: [(&Vec<PlacedBox>, &ViewBoxes); 2]) -> Opti
     Some(BoxHide::new(slabs, lists.into()))
 }
 
-/// `box_view.wgsl`'s `Frame` for a target whose width and height are
-/// `size`, with zeros where a frame writes its eyes.
-fn frame_bytes(lights: &ViewLights, placements: usize, size: [u32; 2]) -> Vec<u8> {
-    let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
-    let (toward, sun) = lights.sun.unwrap_or((TyVector3F64::Y, black));
-    let rgb = |light: TyLinSrgbF64| [light.red, light.green, light.blue];
-    let mut frame = Vec::new();
+/// `box_view.wgsl`'s `Frame`.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct Frame {
+    /// The unit direction toward the sun.
+    sun: [f32; 4],
 
-    for light in [
-        toward.to_array(),
-        rgb(sun),
-        rgb(lights.sky),
-        rgb(lights.ground),
-    ] {
-        for value in light.into_iter().chain([0.0]) {
-            frame.extend((value as f32).to_le_bytes());
-        }
-    }
+    sunlight: [f32; 4],
 
-    // The placements' count, then what a pixel spans of the target.
-    for value in [to_word(placements), 0] {
-        frame.extend(value.to_le_bytes());
-    }
+    sky: [f32; 4],
 
-    for side in size {
-        frame.extend((1.0 / side as f32).to_le_bytes());
-    }
+    ground: [f32; 4],
 
-    frame.resize(FRAME_BYTES, 0);
+    placements: u32,
 
-    frame
+    pad: u32,
+
+    /// What a pixel spans of the target's width and height.
+    texel: [f32; 2],
+
+    /// Each eye in the world, which a frame writes.
+    eyes: [[f32; 4]; 2],
 }
 
-/// `box_view.wgsl`'s `Place` for each of `placements`, once an eye. A
-/// `Place` ends with each grid axis's world direction and the meters a cell
-/// spans along it. Zeros stand where a frame writes its matrix and ray.
-fn place_bytes(placements: &[(TyTransformF64, TyMatrix4x4F64)]) -> Vec<u8> {
-    let mut bytes = vec![0; placements.len() * 2 * PLACE_BYTES];
-    let each = placements.iter().chain(placements);
+impl Frame {
+    /// The frame of a target whose width and height are `size`, with zeros
+    /// for its eyes.
+    fn new(lights: &ViewLights, placements: usize, size: [u32; 2]) -> Self {
+        let black = TyLinSrgbF64::new(0.0, 0.0, 0.0);
+        let (toward, sun) = lights.sun.unwrap_or((TyVector3F64::Y, black));
+        let rgb = |light: TyLinSrgbF64| [light.red, light.green, light.blue, 0.0].map(narrow);
 
-    for (place, (transform, _)) in bytes.chunks_exact_mut(PLACE_BYTES).zip(each) {
+        Frame {
+            sun: toward.extend(0.0).to_array().map(narrow),
+            sunlight: rgb(sun),
+            sky: rgb(lights.sky),
+            ground: rgb(lights.ground),
+            placements: to_word(placements),
+            pad: 0,
+            texel: size.map(|side| 1.0 / side as f32),
+            eyes: [[0.0; 4]; 2],
+        }
+    }
+}
+
+/// `box_view.wgsl`'s `Place`: one eye's read of one placement.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct Place {
+    /// The placement's grid-to-clip matrix for the eye, which a frame
+    /// writes.
+    clip: [f32; 16],
+
+    /// The eye in the grid, then the cells within which a box holds the
+    /// eye, which a frame writes.
+    ray: [f32; 4],
+
+    /// Each grid axis's world direction, then the meters a cell spans along
+    /// it.
+    axes: [[f32; 4]; 3],
+}
+
+impl Place {
+    /// The place of a placement under `transform`, with zeros where a frame
+    /// writes.
+    fn new(transform: &TyTransformF64) -> Self {
         let [x, y, z] = transform.scale.to_array();
 
         let axes = [
             (TyVector3F64::X, x),
             (TyVector3F64::Y, y),
             (TyVector3F64::Z, z),
-        ]
-        .map(|(axis, meters)| (transform.rotation * axis).extend(meters).to_array());
+        ];
 
-        for (bytes, value) in place[EYE_BYTES..]
-            .chunks_exact_mut(4)
-            .zip(axes.as_flattened())
-        {
-            bytes.copy_from_slice(&(*value as f32).to_le_bytes());
+        Place {
+            clip: [0.0; 16],
+            ray: [0.0; 4],
+            axes: axes.map(|(axis, meters)| {
+                (transform.rotation * axis)
+                    .extend(meters)
+                    .to_array()
+                    .map(narrow)
+            }),
         }
     }
+}
 
-    bytes
+/// `value` as a shader's float.
+fn narrow(value: f64) -> f32 {
+    value as f32
 }

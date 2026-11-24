@@ -1,4 +1,4 @@
-use crate::{BViewPage, BoxBindings, BoxFaces, BoxPart, BoxRun, ViewTarget, to_word};
+use crate::{BViewPage, BoxBindings, BoxFaces, BoxPart, BoxRun, BoxWords, ViewTarget, to_word};
 use branded_id::{IdVec, UsizeId};
 use std::{num::NonZeroU64, ops::Range};
 use wgpu::{
@@ -89,7 +89,7 @@ struct Run {
 
 impl BoxDraw {
     /// The bytes of a box's three `vec4<u32>`s.
-    pub const BOX_BYTES: usize = 48;
+    pub const BOX_BYTES: usize = size_of::<BoxWords>();
 
     /// The depth format. Depth runs reversed in f32.
     pub const DEPTH: TextureFormat = TextureFormat::Depth32Float;
@@ -441,7 +441,7 @@ impl BoxDraw {
     /// Replaces the boxes with `boxes`, three `vec4<u32>`s each, which the
     /// runs of `runs` take in draw order. Panics unless `boxes` holds the
     /// runs' boxes and no more than the draw has room for.
-    pub fn rewrite(&mut self, queue: &Queue, boxes: &[[u32; 12]], runs: &[BoxRun]) {
+    pub fn rewrite(&mut self, queue: &Queue, boxes: &[BoxWords], runs: &[BoxRun]) {
         let held: u64 = runs.iter().map(|run| u64::from(run.count)).sum();
         let bytes: &[u8] = bytemuck::cast_slice(boxes);
 

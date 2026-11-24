@@ -1,6 +1,6 @@
 use crate::{
-    BObjectTile, BTilePlacement, BoxCrosser, ObjectTiles, TileBox, TilePlacement, TileScene,
-    bounds_around, box_corners, to_word,
+    BObjectTile, BTilePlacement, BoxCrosser, BoxWords, ObjectTiles, TileBox, TilePlacement,
+    TileScene, bounds_around, box_corners, to_word,
 };
 use branded_id::{IteratorExt, U32Id, UsizeId};
 use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
@@ -69,17 +69,18 @@ impl PlacedBox {
         self.world
     }
 
-    /// The box's three `vec4<u32>`s: its low cell and its placement, the
-    /// corner past its high cell and `tile`, then `more` and two zeros.
-    pub fn words(&self, tile: u32, more: [u32; 2]) -> [u32; 12] {
-        let [x, y, z] = self.low.to_array();
-        let [far_x, far_y, far_z] = self.high.to_array();
-        let [first, count] = more;
-        let placement = self.placement.to_u32();
-
-        [
-            x, y, z, placement, far_x, far_y, far_z, tile, first, count, 0, 0,
-        ]
+    /// The box's words for a tile whose words start at `tile` in its
+    /// page's, with zeros for its material and its lit words.
+    pub fn words(&self, tile: u32, more: [u32; 2]) -> BoxWords {
+        BoxWords {
+            low: self.low.to_array(),
+            placement: self.placement.to_u32(),
+            high: self.high.to_array(),
+            tile,
+            more,
+            material: 0,
+            lit: 0,
+        }
     }
 
     /// Whether some axis parts the box from `other`. Their spans along a
@@ -178,9 +179,10 @@ impl PlacedBox {
                         let (low, high) = own.shared_with(other);
 
                         of_own.push(BoxCrosser {
+                            low: low.to_array(),
                             entry: entry(other_index),
-                            low,
-                            high,
+                            high: high.to_array(),
+                            pad: 0,
                         });
                     }
                 }
@@ -213,7 +215,7 @@ impl PlacedBox {
 #[cfg(test)]
 mod tests {
     use crate::{BoxCrosser, CellGrid, PlacedBox, TileScene};
-    use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
+    use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 
     #[test]
     fn only_boxes_of_two_placements_that_share_space_cross() {
@@ -245,9 +247,10 @@ mod tests {
         // The second and third cubes share the cells from x = 24 to 32:
         // the second's 8 to 16, and the third's 0 to 8.
         let shared = |entry, low: f32, high: f32| BoxCrosser {
+            low: [low, 0.0, 0.0],
             entry,
-            low: TyVector3F32::new(low, 0.0, 0.0),
-            high: TyVector3F32::new(high, 16.0, 16.0),
+            high: [high, 16.0, 16.0],
+            pad: 0,
         };
 
         assert_eq!(

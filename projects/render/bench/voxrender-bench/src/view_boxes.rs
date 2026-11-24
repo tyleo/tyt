@@ -1,4 +1,6 @@
-use crate::{BViewBox, BViewPage, BoxRun, PlacedBox, sort_keys, squared_distance, to_word};
+use crate::{
+    BViewBox, BViewPage, BoxRun, BoxWords, PlacedBox, sort_keys, squared_distance, to_word,
+};
 use branded_id::{IdRange, IdVec, UsizeId};
 
 /// One list of a view's boxes, laid out by part because a sort reads every
@@ -8,8 +10,7 @@ pub struct ViewBoxes {
     /// The low and then the high corner of the world box around each box.
     pub bounds: IdVec<BViewBox, [f32; 6]>,
 
-    /// Each box's three `vec4<u32>`s.
-    pub words: IdVec<BViewBox, [u32; 12]>,
+    pub words: IdVec<BViewBox, BoxWords>,
 
     /// The page that holds each box's tile.
     pub page: IdVec<BViewBox, UsizeId<BViewPage>>,
@@ -25,7 +26,7 @@ impl ViewBoxes {
     pub fn push(
         &mut self,
         placed: &PlacedBox,
-        words: [u32; 12],
+        words: BoxWords,
         page: UsizeId<BViewPage>,
         mirror: bool,
         glow: bool,
@@ -85,7 +86,7 @@ impl ViewBoxes {
         indices: impl Iterator<Item = UsizeId<BViewBox>> + Clone,
         part: usize,
         pages: usize,
-        sorted: &mut Vec<[u32; 12]>,
+        sorted: &mut Vec<BoxWords>,
         runs: &mut Vec<BoxRun>,
     ) {
         for page in IdRange::from_len(pages) {
@@ -110,7 +111,7 @@ impl ViewBoxes {
         &self,
         indices: impl Iterator<Item = UsizeId<BViewBox>>,
         part: usize,
-        sorted: &mut Vec<[u32; 12]>,
+        sorted: &mut Vec<BoxWords>,
         runs: &mut Vec<BoxRun>,
     ) {
         // Whether a run of this call is the last of `runs`.
