@@ -3747,6 +3747,7 @@ name = "voxrender-bench"
 version = "0.1.0"
 dependencies = [
  "branded-id",
+ "bytemuck",
  "ty-math",
  "voxconv",
  "voxcore",

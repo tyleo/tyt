@@ -1,4 +1,4 @@
-use crate::{Result, lattice_light};
+use crate::{Result, TILE, lattice_light, tile_cell, to_word};
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyVector3F64, TyVector3U32};
@@ -14,9 +14,6 @@ const ONE: i32 = 1 << GRID_FRACTION_BITS;
 
 /// A corner's inset from its face's edges in fixed point.
 const INSET: i32 = ONE >> SHADOW_INSET_BITS;
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
 
 /// A scene's corner shadows under one directional light, as `box_view.wgsl`
 /// reads them: a word for each record cell of each placement's tiles, in
@@ -116,9 +113,7 @@ impl LitCorners {
 
             let blocks = |cell| value(cell).checked_sub(1).is_some_and(opaque);
 
-            corners.places.push(
-                u32::try_from(corners.words.len()).expect("a scene's lit words number under 2^32"),
-            );
+            corners.places.push(to_word(corners.words.len()));
 
             // The tile's rays cast so far, and the ones the light reaches.
             let mut cast = vec![0u32; rows];
@@ -131,9 +126,7 @@ impl LitCorners {
                 reached.fill(0);
 
                 for &index in recorded {
-                    let index = u32::from(index);
-                    let local = [index / TILE % TILE, index / (TILE * TILE), index % TILE]
-                        .map(|coordinate| coordinate as i32);
+                    let local = tile_cell(usize::from(index)).as_ivec3().to_array();
                     let cell = [0, 1, 2].map(|axis| corner[axis] + local[axis]);
                     let mut word = 0;
 

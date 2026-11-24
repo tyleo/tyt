@@ -1,8 +1,5 @@
-use crate::{CellGrid, ObjectTiles, Result};
+use crate::{CellGrid, ObjectTiles, Result, TILE, to_word};
 use ty_math::TyVector3U32;
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
 
 /// The tiles of `grid` and then of each of its coarser copies, finest
 /// first, with the empty cells the grid takes ahead of its first cell
@@ -61,7 +58,7 @@ pub fn object_copies(
                 .and_then(|glass| glass.iter().position(|&placed| placed == material))
                 .expect("the scene placed each material that passes light");
 
-            u32::try_from(place * 7).expect("a scene's glass materials number under 586")
+            to_word(place * 7)
         };
 
         let place: Option<&mut dyn FnMut(u32) -> u32> = if glass.is_some() {

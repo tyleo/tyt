@@ -1,9 +1,6 @@
-use crate::{PlacedBox, TileScene};
+use crate::{PlacedBox, TILE, TileScene, bounds_around, box_corners, to_word};
 use std::ops::Range;
-use ty_math::{TyVector3F64, TyVector3U32};
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
+use ty_math::TyVector3U32;
 
 /// The lists of a view's boxes a tree's tiles hold: the marched boxes, the
 /// solid ones, and the glass ones.
@@ -89,14 +86,9 @@ impl DetailTree {
                 }),
             ];
 
-            let count = |range: Range<usize>| {
-                let index =
-                    |index: usize| u32::try_from(index).expect("a view's boxes number under 2^32");
+            let words = |range: Range<usize>| to_word(range.start)..to_word(range.end);
 
-                index(range.start)..index(range.end)
-            };
-
-            (opaque.is_some() || glass.is_some()).then(|| ranges.map(count))
+            (opaque.is_some() || glass.is_some()).then(|| ranges.map(words))
         };
 
         let tile_of = |placement: usize, tile: TyVector3U32, boxes: [Range<u32>; LISTS]| {
@@ -104,19 +96,10 @@ impl DetailTree {
             let low = tile * TILE;
             let high = (low + TILE).min(tiles.objects[*object].bounds);
 
-            let (least, most) = (0..8u32)
-                .map(|corner| {
-                    let far = TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
-
-                    transform.transform_point((low + (high - low) * far).as_dvec3())
-                })
-                .fold(
-                    (
-                        TyVector3F64::splat(f64::INFINITY),
-                        TyVector3F64::splat(f64::NEG_INFINITY),
-                    ),
-                    |(least, most), corner| (least.min(corner), most.max(corner)),
-                );
+            let (least, most) = bounds_around(
+                box_corners(low.as_dvec3(), high.as_dvec3())
+                    .map(|corner| transform.transform_point(corner)),
+            );
 
             let [low_x, low_y, low_z] = least.as_vec3().to_array();
             let [high_x, high_y, high_z] = most.as_vec3().to_array();
@@ -180,10 +163,7 @@ impl DetailTree {
                 }
             }
 
-            let index =
-                |index: usize| u32::try_from(index).expect("a scene's tiles number under 2^32");
-
-            tree[next].under = index(first)..index(tree.len());
+            tree[next].under = to_word(first)..to_word(tree.len());
             next += 1;
         }
 

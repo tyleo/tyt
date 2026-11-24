@@ -1,10 +1,6 @@
+use crate::{ViewEye, box_corners};
 use ty_math::{TyMatrix4x4F64, TyVector3F64};
 use voxrender::{RenderProjection, RenderScene, RenderView, RenderViewRays};
-
-/// The perspective's near plane in world units. Reversed depth keeps f32's
-/// relative precision at every distance. The plane can then sit far nearer
-/// than any cell.
-const NEAR: f64 = 1.0 / 1024.0 / 1024.0;
 
 /// The matrix that carries a world point to clip space so that each pixel
 /// center samples the ray `RenderViewRays` casts through it.
@@ -45,7 +41,7 @@ pub fn world_to_clip(
             [
                 [2.0 / w, 0.0, 1.0 / w - 1.0, 0.0],
                 [0.0, -2.0 / h, 1.0 - 1.0 / h, 0.0],
-                [0.0, 0.0, 0.0, NEAR],
+                [0.0, 0.0, 0.0, ViewEye::NEAR],
                 [0.0, 0.0, 1.0, 0.0],
             ],
         ),
@@ -63,15 +59,9 @@ pub fn world_to_clip(
                         .bounds()
                         .as_dvec3();
 
-                    (0..8).map(move |corner| {
-                        let point = TyVector3F64::new(
-                            if corner & 1 == 0 { 0.0 } else { bounds.x },
-                            if corner & 2 == 0 { 0.0 } else { bounds.y },
-                            if corner & 4 == 0 { 0.0 } else { bounds.z },
-                        );
-
+                    box_corners(TyVector3F64::ZERO, bounds).map(|corner| {
                         to_pixels
-                            .transform_point3(placement.transform.transform_point(point))
+                            .transform_point3(placement.transform.transform_point(corner))
                             .z
                     })
                 })

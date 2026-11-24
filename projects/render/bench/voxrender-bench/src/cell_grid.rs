@@ -1,3 +1,4 @@
+use crate::raster_index;
 use ty_math::TyVector3U32;
 use voxrender::RenderObject;
 use voxrender_wgpu::dense_cells;
@@ -25,6 +26,19 @@ impl CellGrid {
         CellGrid {
             bounds: object.bounds(),
             cells,
+        }
+    }
+
+    /// What the cell at `cell` holds, or 0 outside the grid.
+    pub fn at(&self, cell: [i64; 3]) -> u32 {
+        let inside = (0..3).all(|axis| (0..i64::from(self.bounds[axis])).contains(&cell[axis]));
+
+        if inside {
+            let [x, y, z] = cell.map(|side| side as u32);
+
+            self.cells[raster_index(TyVector3U32::new(x, y, z), self.bounds)]
+        } else {
+            0
         }
     }
 
@@ -71,14 +85,11 @@ impl CellGrid {
                             2 * z + (corner & 1),
                         );
 
-                        if at.cmplt(self.bounds).all() {
-                            let index = (at.x * self.bounds.y + at.y) * self.bounds.z + at.z;
-                            let value = self.cells[index as usize];
+                        let value = self.at(at.to_array().map(i64::from));
 
-                            if value != 0 {
-                                live[count] = value;
-                                count += 1;
-                            }
+                        if value != 0 {
+                            live[count] = value;
+                            count += 1;
                         }
                     }
 

@@ -1,4 +1,4 @@
-use crate::{CellGrid, ObjectTiles, Result, object_copies};
+use crate::{CellGrid, ObjectTiles, Result, object_copies, to_word};
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyLinSrgbF64, TyQuaternionF64, TyTransformF64, TyVector3U32};
@@ -184,7 +184,7 @@ impl TileScene {
                 place
             });
 
-        u32::try_from(place).expect("a scene's materials number under 2^32")
+        to_word(place)
     }
 
     /// Adds the object of `grid`, whose cells hold places among the

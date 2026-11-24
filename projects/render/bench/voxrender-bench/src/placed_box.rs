@@ -1,4 +1,4 @@
-use crate::BoxCrosser;
+use crate::{BoxCrosser, CellBox, bounds_around, box_corners, to_word};
 use ty_math::{TyTransformF64, TyVector3F32, TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
 
@@ -39,38 +39,20 @@ impl PlacedBox {
     ///
     /// 1. `placements`: each placement's object and its transform from the
     ///    object's cells to the world
-    /// 2. `boxes`: each object's boxes as low cells and the corners past
-    ///    their high cells
+    /// 2. `boxes`: each object's boxes
     /// 3. `spans`: how many cells of the object it copies one of each
     ///    object's cells spans
     pub fn list(
         placements: &[(usize, TyTransformF64)],
-        boxes: &[&[(TyVector3U32, TyVector3U32)]],
+        boxes: &[&[CellBox]],
         spans: &[u32],
     ) -> Vec<Self> {
         let mut placed = Vec::new();
 
         for (index, (object, transform)) in (0u32..).zip(placements) {
             for (brick, &(low, high)) in boxes[*object].iter().enumerate() {
-                let corners = (0..8).map(|corner| {
-                    let pick = |bit: u32, low: u32, high: u32| {
-                        f64::from(if corner & bit == 0 { low } else { high })
-                    };
-
-                    transform.transform_point(TyVector3F64::new(
-                        pick(1, low.x, high.x),
-                        pick(2, low.y, high.y),
-                        pick(4, low.z, high.z),
-                    ))
-                });
-
-                let world = corners.fold(
-                    (
-                        TyVector3F64::splat(f64::INFINITY),
-                        TyVector3F64::splat(f64::NEG_INFINITY),
-                    ),
-                    |(least, most), corner| (least.min(corner), most.max(corner)),
-                );
+                let corners = box_corners(low.as_dvec3(), high.as_dvec3())
+                    .map(|corner| transform.transform_point(corner));
 
                 placed.push(PlacedBox {
                     placement: index,
@@ -79,7 +61,7 @@ impl PlacedBox {
                     high,
                     span: spans[*object],
                     transform: *transform,
-                    world,
+                    world: bounds_around(corners),
                 });
             }
         }
@@ -163,7 +145,7 @@ impl PlacedBox {
         let mut crossers = vec![Vec::new(); marched.len()];
 
         let entry = |at: usize| {
-            let index = u32::try_from(at).expect("a scene's boxes number under 2^31");
+            let index = to_word(at);
 
             assert!(
                 index < BoxCrosser::SOLID,
@@ -216,29 +198,12 @@ impl PlacedBox {
     /// with `other`, in the cells of the box's tile. The box holds all of
     /// that space and can hold more.
     fn shared_with(&self, other: &Self) -> (TyVector3F32, TyVector3F32) {
-        let (other_low, other_high) = (other.low.as_dvec3(), other.high.as_dvec3());
+        let corners = box_corners(other.low.as_dvec3(), other.high.as_dvec3());
 
-        let (least, most) = (0..8)
-            .map(|corner| {
-                let pick = |bit: u32, low: f64, high: f64| {
-                    if corner & bit == 0 { low } else { high }
-                };
-
-                let point = TyVector3F64::new(
-                    pick(1, other_low.x, other_high.x),
-                    pick(2, other_low.y, other_high.y),
-                    pick(4, other_low.z, other_high.z),
-                );
-
-                grid_point(&self.transform, other.transform.transform_point(point))
-            })
-            .fold(
-                (
-                    TyVector3F64::splat(f64::INFINITY),
-                    TyVector3F64::splat(f64::NEG_INFINITY),
-                ),
-                |(least, most), corner| (least.min(corner), most.max(corner)),
-            );
+        let (least, most) =
+            bounds_around(corners.map(|corner| {
+                grid_point(&self.transform, other.transform.transform_point(corner))
+            }));
 
         let tile = (self.low / 16 * 16).as_dvec3();
 

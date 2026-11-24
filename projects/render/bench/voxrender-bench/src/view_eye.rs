@@ -1,9 +1,5 @@
 use ty_math::{TyMatrix4x4F64, TyQuaternionF64, TyVector3F64};
 
-/// The near plane in world units. Reversed depth keeps f32's relative
-/// precision at every distance, so the plane sits far nearer than any cell.
-const NEAR: f64 = 1.0 / 1024.0 / 1024.0;
-
 /// One eye of a [`BoxView`](crate::BoxView)'s frame.
 #[derive(Clone, Copy, Debug)]
 pub struct ViewEye {
@@ -16,6 +12,11 @@ pub struct ViewEye {
 }
 
 impl ViewEye {
+    /// The near plane in world units. Reversed depth keeps f32's relative
+    /// precision at every distance, so the plane sits far nearer than any
+    /// cell.
+    pub(crate) const NEAR: f64 = 1.0 / 1024.0 / 1024.0;
+
     /// The eye at `position`, looking down `rotation`'s -Z with +Y up,
     /// through a frustum whose sides sit at the tangents `left`, `right`,
     /// `up`, and `down` of their angles from the axis. A side below or left
@@ -35,7 +36,7 @@ impl ViewEye {
         let rows = [
             [2.0 / across, 0.0, (right + left) / across, 0.0],
             [0.0, 2.0 / along, (up + down) / along, 0.0],
-            [0.0, 0.0, 0.0, NEAR],
+            [0.0, 0.0, 0.0, Self::NEAR],
             [0.0, 0.0, -1.0, 0.0],
         ];
 
@@ -50,7 +51,7 @@ impl ViewEye {
     /// The world units along an eye's axis to what a view drew at `depth`,
     /// or `None` for zero, the depth a pass clears to.
     pub fn distance(depth: f32) -> Option<f64> {
-        (depth > 0.0).then(|| NEAR / f64::from(depth))
+        (depth > 0.0).then(|| Self::NEAR / f64::from(depth))
     }
 }
 

@@ -1,8 +1,7 @@
-use crate::{CasterTiles, CellGrid, GlassTiles, Result, TileMasks, solid_slabs};
+use crate::{
+    CasterTiles, CellBox, CellGrid, GlassTiles, Result, TILE, TileMasks, raster_index, solid_slabs,
+};
 use ty_math::TyVector3U32;
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
 
 /// One object's cells by tile, as a view and its shadow bake keep them. An
 /// object's grid can hold far more cells than a device has room for, and
@@ -20,7 +19,7 @@ pub struct ObjectTiles {
     /// The boxes of opaque cells alone that hide what lies behind them, or
     /// none for a coarser copy of an object, whose cells reach past the
     /// object's.
-    pub slabs: Vec<(TyVector3U32, TyVector3U32)>,
+    pub slabs: Vec<CellBox>,
 
     /// The object's cells as a shadow ray walks them.
     pub casters: CasterTiles,
@@ -62,9 +61,7 @@ impl ObjectTiles {
             let mut places = vec![0; (counts.x * counts.y * counts.z) as usize];
 
             for (place, corner) in (1..).zip(corners) {
-                let tile = corner / TILE;
-
-                places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize] = place;
+                places[raster_index(corner / TILE, counts)] = place;
             }
 
             places
@@ -109,8 +106,7 @@ impl ObjectTiles {
     /// The place among [`masks`](Self::masks)' tiles of the tile at `tile`
     /// among the grid's tiles, or `None` for a tile with no opaque cell.
     pub fn tile_at(&self, tile: TyVector3U32) -> Option<usize> {
-        let counts = self.counts();
-        let place = self.places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize];
+        let place = self.places[raster_index(tile, self.counts())];
 
         place.checked_sub(1).map(|place| place as usize)
     }
@@ -119,8 +115,7 @@ impl ObjectTiles {
     /// among the grid's tiles, or `None` for a tile with no surface
     /// between materials that pass light.
     pub fn glass_at(&self, tile: TyVector3U32) -> Option<usize> {
-        let counts = self.counts();
-        let place = self.glass_places[((tile.x * counts.y + tile.y) * counts.z + tile.z) as usize];
+        let place = self.glass_places[raster_index(tile, self.counts())];
 
         place.checked_sub(1).map(|place| place as usize)
     }
@@ -149,11 +144,9 @@ impl ObjectTiles {
     /// no record, which has no surface.
     pub fn material_of(&self, tile: usize, index: u16) -> Option<u32> {
         let record = self.masks.recorded[tile].binary_search(&index).ok()?;
-        let offset = self.masks.offsets[tile];
-        let palette = self.masks.words[(offset + TileMasks::PALETTE) as usize];
-        let entry = u32::from(self.masks.entries[tile][record]);
+        let entry = usize::from(self.masks.entries[tile][record]);
 
-        Some(self.masks.words[(offset + (palette & 0xffff) + entry) as usize])
+        Some(self.masks.palette(self.masks.offsets[tile])[entry])
     }
 }
 

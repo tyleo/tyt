@@ -1,11 +1,5 @@
-use crate::{CellGrid, Error, Result, live_boxes};
+use crate::{CellBox, CellGrid, Error, Result, TILE, TILE_CELLS, live_boxes, tile_cell, to_word};
 use ty_math::TyVector3U32;
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
-
-/// The cells of a tile.
-const CELLS: usize = (TILE * TILE * TILE) as usize;
 
 /// The most solid boxes a tile gives up.
 const SOLIDS: usize = 4;
@@ -19,9 +13,6 @@ const STRAYS: usize = 16;
 /// The cells of a box's face layer per stray cell it holds, at the least,
 /// for the cells to come off.
 const STRAY_SHARE: usize = 8;
-
-/// A box of cells: its low cell and the corner past its high cell.
-type CellBox = (TyVector3U32, TyVector3U32);
 
 /// An object's non-empty tiles as a mask march reads them.
 ///
@@ -106,10 +97,10 @@ pub struct TileMasks {
 
 impl TileMasks {
     /// The words of one tile's bits.
-    const BIT_WORDS: usize = CELLS / 32;
+    const BIT_WORDS: usize = TILE_CELLS / 32;
 
     /// The rows of a tile.
-    const ROWS: usize = CELLS / TILE as usize;
+    const ROWS: usize = TILE_CELLS / TILE as usize;
 
     /// The spare records after a shaded tile's records: the most live
     /// cells a row holds.
@@ -147,23 +138,6 @@ impl TileMasks {
         solids: bool,
         opaque: Option<&dyn Fn(u32) -> bool>,
     ) -> Result<Self> {
-        let bounds = grid.bounds;
-        let cells = &grid.cells;
-
-        // The value of the cell at `cell`: 0 when empty or outside the
-        // object, else its material id plus one.
-        let value = |cell: [i64; 3]| {
-            let inside = (0..3).all(|axis| cell[axis] >= 0 && cell[axis] < i64::from(bounds[axis]));
-
-            if inside {
-                let [x, y, z] = cell.map(|coordinate| coordinate as usize);
-
-                cells[(x * bounds.y as usize + y) * bounds.z as usize + z]
-            } else {
-                0
-            }
-        };
-
         let mut masks = TileMasks {
             solids: Vec::new(),
             solid_tiles: Vec::new(),
@@ -181,21 +155,13 @@ impl TileMasks {
         // The object's record cells so far.
         let mut record_cells = 0;
 
-        for (low, _) in live_boxes(grid, TILE) {
+        for (low, _) in live_boxes(grid) {
             let corner = low / TILE * TILE;
 
             // Each cell's value: 0 when empty, else its material id plus
             // one.
-            let values: Vec<u32> = (0..CELLS)
-                .map(|index| {
-                    let cell = corner + position(index);
-
-                    if cell.cmplt(bounds).all() {
-                        cells[((cell.x * bounds.y + cell.y) * bounds.z + cell.z) as usize]
-                    } else {
-                        0
-                    }
-                })
+            let values: Vec<u32> = (0..TILE_CELLS)
+                .map(|index| grid.at((corner + tile_cell(index)).to_array().map(i64::from)))
                 .collect();
 
             // A shaded view's tile holds its opaque cells alone.
@@ -212,13 +178,12 @@ impl TileMasks {
                 continue;
             }
 
-            let offset =
-                u32::try_from(masks.words.len()).expect("an object's mask words number under 2^32");
+            let offset = to_word(masks.words.len());
 
             let Some(opaque) = opaque else {
                 masks.words.resize(masks.words.len() + Self::BIT_WORDS, 0);
 
-                for index in (0..CELLS).filter(|&index| live[index]) {
+                for index in (0..TILE_CELLS).filter(|&index| live[index]) {
                     masks.words[offset as usize + index / 32] |= 1 << (index % 32);
                 }
 
@@ -232,14 +197,14 @@ impl TileMasks {
             // Whether the cell `offset` from the tile's cell `index` is
             // opaque.
             let blocks = |index: usize, offset: [i64; 3]| {
-                let [x, y, z] = position(index).to_array().map(i64::from);
+                let [x, y, z] = tile_cell(index).to_array().map(i64::from);
                 let cell = [
                     low_x + x + offset[0],
                     low_y + y + offset[1],
                     low_z + z + offset[2],
                 ];
 
-                value(cell).checked_sub(1).is_some_and(opaque)
+                grid.at(cell).checked_sub(1).is_some_and(opaque)
             };
 
             let surface =
@@ -325,11 +290,19 @@ impl TileMasks {
         Ok(masks)
     }
 
+    /// The material ids of the shaded tile whose words start at `offset`.
+    pub fn palette(&self, offset: u32) -> &[u32] {
+        let palette = self.words[(offset + Self::PALETTE) as usize];
+        let first = (offset + (palette & 0xffff)) as usize;
+
+        &self.words[first..first + (palette >> 16) as usize]
+    }
+
     /// Appends the boxes of the tile at `corner`, whose words start at
     /// `offset` and whose cells are `live`: its solid boxes when `solids`,
     /// then the box around its other live cells.
     fn push_boxes(&mut self, corner: TyVector3U32, offset: u32, live: Vec<bool>, solids: bool) {
-        let place = u32::try_from(self.corners.len()).expect("an object's tiles number under 2^32");
+        let place = to_word(self.corners.len());
 
         self.corners.push(corner);
         self.offsets.push(offset);
@@ -434,9 +407,9 @@ impl Tile {
         let mut low = TyVector3U32::MAX;
         let mut high = TyVector3U32::ZERO;
 
-        for index in (0..CELLS).filter(|&index| self.left[index]) {
-            low = low.min(position(index));
-            high = high.max(position(index) + 1);
+        for index in (0..TILE_CELLS).filter(|&index| self.left[index]) {
+            low = low.min(tile_cell(index));
+            high = high.max(tile_cell(index) + 1);
         }
 
         (low.x < high.x).then_some((low, high))
@@ -542,9 +515,9 @@ impl Tile {
                 behind_high[axis] = behind.wrapping_add(1);
 
                 let backed = extent[axis] > 1
-                    && (0..CELLS)
+                    && (0..TILE_CELLS)
                         .filter(|&index| {
-                            let cell = position(index);
+                            let cell = tile_cell(index);
 
                             self.left[index]
                                 && cell.cmpge(behind_low).all()
@@ -564,8 +537,8 @@ impl Tile {
                 let mut cells = 0;
                 let mut runs: Vec<CellBox> = Vec::new();
 
-                for index in (0..CELLS).filter(|&index| self.left[index]) {
-                    let cell = position(index);
+                for index in (0..TILE_CELLS).filter(|&index| self.left[index]) {
+                    let cell = tile_cell(index);
 
                     if cell.cmplt(layer_low).any() || cell.cmpge(layer_high).any() {
                         continue;
@@ -619,13 +592,6 @@ impl Tile {
             }
         }
     }
-}
-
-/// The cell of `index` in a tile.
-fn position(index: usize) -> TyVector3U32 {
-    let index = index as u32;
-
-    TyVector3U32::new(index / TILE % TILE, index / (TILE * TILE), index % TILE)
 }
 
 #[cfg(test)]

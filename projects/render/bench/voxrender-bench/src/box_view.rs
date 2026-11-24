@@ -1,12 +1,10 @@
 use crate::{
     BoxBindings, BoxBloom, BoxCrosser, BoxDraw, BoxFaces, BoxHide, BoxPart, DetailTree, Error,
     GlassTiles, LISTS, LitFill, PassTerms, PlacedBox, Result, TileMasks, TileScene, ViewEye,
-    box_view_shader, quad_tlas, tile_quads,
+    box_corners, box_view_shader, quad_tlas, storage_words, tile_quads, to_word,
 };
 use std::{collections::HashMap, mem, num::NonZeroU32};
-use ty_math::{
-    TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64, TyVector3U32,
-};
+use ty_math::{TyLinSrgbF32, TyLinSrgbF64, TyMatrix4x4F64, TyTransformF64, TyVector3F64};
 use voxcore::material;
 use voxrender::{RenderBloom, RenderLight, grid_point, tonemap};
 use wgpu::{
@@ -290,11 +288,7 @@ impl ViewBoxes {
             let count = (sorted.len() - before) / BoxDraw::BOX_BYTES;
 
             if count > 0 {
-                runs.push((
-                    part,
-                    page,
-                    u32::try_from(count).expect("a scene's boxes number under 2^32"),
-                ));
+                runs.push((part, page, to_word(count)));
             }
         }
     }
@@ -431,7 +425,6 @@ impl BoxView {
         let radius = bloom.radius;
         let bloom = glows.then(|| (BoxBloom::new(device, size, bloom), bloom.threshold as f32));
 
-        let count = |value: usize| u32::try_from(value).expect("a scene's words number under 2^32");
         let objects = &tiles.objects;
 
         // The surfaces between materials that pass light draw as glass
@@ -613,10 +606,6 @@ impl BoxView {
             }
         }
 
-        let words_bytes = |words: &[u32]| -> Vec<u8> {
-            words.iter().flat_map(|word| word.to_le_bytes()).collect()
-        };
-
         // `box_view.wgsl`'s `bits` for each page: each of its objects' mask
         // words, then the object's glass tiles' words. An object keeps
         // where each starts in its page.
@@ -633,7 +622,7 @@ impl BoxView {
                 for &object in &held {
                     let glass = words + objects[object].masks.words.len();
 
-                    offsets[object] = (count(words), count(glass));
+                    offsets[object] = (to_word(words), to_word(glass));
                     words = glass + glass_of(object).words.len();
                 }
 
@@ -695,7 +684,7 @@ impl BoxView {
                 let mut lit_words: Vec<u32> = Vec::new();
 
                 for &placement in &placed {
-                    lit_places[placement] = count(lit_words.len());
+                    lit_places[placement] = to_word(lit_words.len());
 
                     lit_words.extend(
                         objects[object_of[placement]]
@@ -714,7 +703,7 @@ impl BoxView {
                         .cells
                         .iter()
                         .map(|cells| {
-                            let first = count(lit_words.len());
+                            let first = to_word(lit_words.len());
 
                             lit_words.resize(lit_words.len() + cells.len(), 0);
 
@@ -733,7 +722,7 @@ impl BoxView {
         let tints = tinted.then(|| {
             let most = page_lit.iter().map(|(_, words)| words.len()).max();
 
-            count(most.expect("a view has a page"))
+            to_word(most.expect("a view has a page"))
         });
 
         // The sun's corner shadows, which the GPU fills into the words' low
@@ -747,7 +736,7 @@ impl BoxView {
                 let Some(fill) = &fill else {
                     return Ok(device.create_buffer_init(&BufferInitDescriptor {
                         label: Some("view lit corners"),
-                        contents: &words_bytes(lit_words),
+                        contents: bytemuck::cast_slice(lit_words),
                         usage: BufferUsages::STORAGE,
                     }));
                 };
@@ -772,7 +761,7 @@ impl BoxView {
                     "the fill lays out the view's words"
                 );
 
-                queue.write_buffer(&page.lit, 0, &words_bytes(lit_words));
+                queue.write_buffer(&page.lit, 0, bytemuck::cast_slice(lit_words));
                 page.fill(device, queue)?;
 
                 Ok(page.lit)
@@ -898,7 +887,7 @@ impl BoxView {
 
                     materials.extend(ids.iter().flat_map(|&id| material_values(id)));
 
-                    u32::try_from(first).expect("a scene's tiles' materials number under 2^32")
+                    to_word(first)
                 })
             })
         };
@@ -967,11 +956,7 @@ impl BoxView {
             .iter()
             .zip(&crossers)
             .map(|(placed, entries)| {
-                let count = |entries: usize| {
-                    u32::try_from(entries).expect("a scene's crossing boxes number under 2^32")
-                };
-
-                let span = [count(crosser_words.len() / 8), count(entries.len())];
+                let span = [to_word(crosser_words.len() / 8), to_word(entries.len())];
 
                 crosser_words.extend(entries.iter().flat_map(BoxCrosser::words));
 
@@ -985,7 +970,7 @@ impl BoxView {
             .collect();
 
         // `box_view.wgsl`'s `boxes`: the marched boxes, then the solid ones.
-        let mut box_words: Vec<u32> = march_words
+        let box_words: Vec<u32> = march_words
             .iter()
             .chain(&solid_words)
             .flatten()
@@ -1072,12 +1057,8 @@ impl BoxView {
                     .iter()
                     .flat_map(|(object, transform)| {
                         objects[*object].slabs.iter().map(|&(low, high)| {
-                            [0, 1, 2, 3, 4, 5, 6, 7].map(|corner: u32| {
-                                let far =
-                                    TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
-
-                                transform.transform_point((low + (high - low) * far).as_dvec3())
-                            })
+                            box_corners(low.as_dvec3(), high.as_dvec3())
+                                .map(|corner| transform.transform_point(corner))
                         })
                     })
                     .collect::<Vec<_>>()
@@ -1114,11 +1095,8 @@ impl BoxView {
             frame.extend((*value as f32).to_le_bytes());
         }
 
-        let placement_count =
-            u32::try_from(placements.len()).expect("a scene's placements number under 2^32");
-
         // The placements' count, then what a pixel spans of the target.
-        for value in [placement_count, 0] {
+        for value in [to_word(placements.len()), 0] {
             frame.extend(value.to_le_bytes());
         }
 
@@ -1128,10 +1106,6 @@ impl BoxView {
 
         // Each eye in the world, which a frame writes.
         frame.resize(FRAME_BYTES, 0);
-
-        if box_words.is_empty() {
-            box_words.resize(12, 0);
-        }
 
         // What a mirror ray traces, on a device with ray queries: the
         // scene's opaque quads, each of one material, and each quad's
@@ -1167,10 +1141,6 @@ impl BoxView {
 
             quad_tlas(device, queue, &quads, &tiles.placements)
         });
-
-        if quad_words.is_empty() {
-            quad_words.push(0);
-        }
 
         let glass = PlacedBox::list(
             &tiles.placements,
@@ -1215,10 +1185,6 @@ impl BoxView {
         // in `lit`, whose material lies up to 255 past the hit tile's first.
         materials.resize(materials.len() + 255 * 12, 0.0);
 
-        if crosser_words.is_empty() {
-            crosser_words.resize(8, 0);
-        }
-
         let init = |label, contents: &[u8], usage| {
             device.create_buffer_init(&BufferInitDescriptor {
                 label: Some(label),
@@ -1227,32 +1193,21 @@ impl BoxView {
             })
         };
 
-        let material_bytes: Vec<u8> = materials
-            .iter()
-            .flat_map(|value| value.to_le_bytes())
-            .collect();
-
         let frame = init(
             "view frame",
             &frame,
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         );
-        let quad_list = init(
-            "view quads",
-            &words_bytes(&quad_words),
+        let materials = init(
+            "view materials",
+            bytemuck::cast_slice(&materials),
             BufferUsages::STORAGE,
         );
-        let materials = init("view materials", &material_bytes, BufferUsages::STORAGE);
-        let box_list = init(
-            "view boxes",
-            &words_bytes(&box_words),
-            BufferUsages::STORAGE,
-        );
-        let crosser_list = init(
-            "view crossers",
-            &words_bytes(&crosser_words),
-            BufferUsages::STORAGE,
-        );
+
+        // A shader's array has room for one element at the least.
+        let quad_list = storage_words(device, "view quads", &quad_words, 1);
+        let box_list = storage_words(device, "view boxes", &box_words, 12);
+        let crosser_list = storage_words(device, "view crossers", &crosser_words, 8);
 
         let places = device.create_buffer(&BufferDescriptor {
             label: Some("view places"),

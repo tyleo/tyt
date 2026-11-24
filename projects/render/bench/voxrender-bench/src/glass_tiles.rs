@@ -1,8 +1,5 @@
-use crate::{CellGrid, live_boxes};
+use crate::{CellBox, CellGrid, TILE, TILE_CELLS, live_boxes, tile_cell, to_word};
 use ty_math::TyVector3U32;
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
 
 /// An object's surfaces between materials that pass light, by tile, as a
 /// glass walk reads them.
@@ -24,15 +21,14 @@ const TILE: u32 = 16;
 /// material from bit 20. Face `2 * axis` looks down its axis and face
 /// `2 * axis + 1` up it.
 pub struct GlassTiles {
-    /// The box each tile draws, as its low cell and the corner past its
-    /// high cell: the box around its busy cells. The tile's opaque cells
-    /// draw a box whose faces can lie before a surface they do not hide,
-    /// so a walk starts no later than that box does.
-    pub boxes: Vec<(TyVector3U32, TyVector3U32)>,
+    /// The box each tile draws: the box around its busy cells. The tile's
+    /// opaque cells draw a box whose faces can lie before a surface they do
+    /// not hide, so a walk starts no later than that box does.
+    pub boxes: Vec<CellBox>,
 
     /// The box around each tile's cells with a surface, where a walk can
     /// end.
-    pub surfaces: Vec<(TyVector3U32, TyVector3U32)>,
+    pub surfaces: Vec<CellBox>,
 
     /// The offset in [`words`](Self::words) of each box's tile.
     pub tiles: Vec<u32>,
@@ -65,23 +61,6 @@ impl GlassTiles {
         opaque: &dyn Fn(u32) -> bool,
         place: &mut dyn FnMut(u32) -> u32,
     ) -> Self {
-        let bounds = grid.bounds;
-        let cells = &grid.cells;
-
-        // The value of the cell at `cell`: 0 when empty or outside the
-        // object, else its material id plus one.
-        let value = |cell: [i64; 3]| {
-            let inside = (0..3).all(|axis| cell[axis] >= 0 && cell[axis] < i64::from(bounds[axis]));
-
-            if inside {
-                let [x, y, z] = cell.map(|coordinate| coordinate as usize);
-
-                cells[(x * bounds.y as usize + y) * bounds.z as usize + z]
-            } else {
-                0
-            }
-        };
-
         let passes = |value: u32| value.checked_sub(1).is_some_and(|id| !opaque(id));
 
         let mut tiles = GlassTiles {
@@ -92,17 +71,8 @@ impl GlassTiles {
             words: Vec::new(),
         };
 
-        for (low, _) in live_boxes(grid, TILE) {
-            let corner = (low / TILE * TILE).to_array().map(i64::from);
-
-            // The tile's cell of `index`, in the object's grid.
-            let cell_of = |index: u32| {
-                [
-                    corner[0] + i64::from(index / TILE % TILE),
-                    corner[1] + i64::from(index / (TILE * TILE)),
-                    corner[2] + i64::from(index % TILE),
-                ]
-            };
+        for (low, _) in live_boxes(grid) {
+            let corner = low / TILE * TILE;
 
             let mut rows = vec![0; Self::ROWS as usize];
             let mut busy = Vec::new();
@@ -120,9 +90,11 @@ impl GlassTiles {
                 }
             };
 
-            for index in 0..TILE * TILE * TILE {
-                let cell = cell_of(index);
-                let own = value(cell);
+            for index in 0..TILE_CELLS as u32 {
+                let cell = (corner + tile_cell(index as usize))
+                    .to_array()
+                    .map(i64::from);
+                let own = grid.at(cell);
 
                 if index % TILE == 0 {
                     rows[(index / TILE) as usize] = (busy.len() as u32) << 16;
@@ -135,7 +107,7 @@ impl GlassTiles {
 
                             beside[(face / 2) as usize] += if face % 2 == 1 { 1 } else { -1 };
 
-                            let other = value(beside);
+                            let other = grid.at(beside);
 
                             other != own && (other == 0 || passes(other))
                         })
@@ -179,10 +151,7 @@ impl GlassTiles {
             tiles.boxes.push(corners(drawn));
             tiles.surfaces.push(corners(surfaces));
             tiles.cells.push(surfaced);
-            tiles.tiles.push(
-                u32::try_from(tiles.words.len())
-                    .expect("an object's glass words number under 2^32"),
-            );
+            tiles.tiles.push(to_word(tiles.words.len()));
             tiles.words.extend(rows);
             tiles.words.extend(busy);
         }

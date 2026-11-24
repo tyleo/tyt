@@ -61,10 +61,7 @@ impl LitPage {
             queue.write_buffer(
                 &self.frame,
                 0,
-                &[first + count, first]
-                    .iter()
-                    .flat_map(|word| word.to_le_bytes())
-                    .collect::<Vec<_>>(),
+                bytemuck::cast_slice(&[first + count, first]),
             );
 
             let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {

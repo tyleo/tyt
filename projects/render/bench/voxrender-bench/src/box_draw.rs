@@ -1,4 +1,4 @@
-use crate::{BoxBindings, BoxFaces, BoxPart};
+use crate::{BoxBindings, BoxFaces, BoxPart, to_word};
 use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
@@ -15,10 +15,6 @@ use wgpu::{
     VertexFormat, VertexState, VertexStepMode,
     util::{BufferInitDescriptor, DeviceExt},
 };
-
-/// The vertices a box's shaders take: its 8 corners, each a number whose
-/// bit `a` picks a side of the box on an axis.
-const VERTICES: u32 = 8;
 
 /// A box's three faces toward the view, two triangles each over the 7
 /// corners the faces hold. Bit `b` of a corner picks the far side on the
@@ -150,16 +146,12 @@ impl BoxDraw {
 
         let corners = init(
             "box corners",
-            &(0..VERTICES).flat_map(u32::to_le_bytes).collect::<Vec<_>>(),
+            bytemuck::cast_slice(&[0u32, 1, 2, 3, 4, 5, 6, 7]),
             BufferUsages::VERTEX,
         );
         let indices = init(
             "box indices",
-            &TRIANGLES
-                .iter()
-                .chain(&FRONTS)
-                .flat_map(|index| index.to_le_bytes())
-                .collect::<Vec<_>>(),
+            bytemuck::cast_slice(&[TRIANGLES.as_slice(), &FRONTS].concat()),
             BufferUsages::INDEX,
         );
         let boxes = device.create_buffer(&BufferDescriptor {
@@ -169,7 +161,7 @@ impl BoxDraw {
             mapped_at_creation: false,
         });
 
-        let buffers = u32::try_from(bindings.len()).expect("a draw's bindings number under 2^32");
+        let buffers = to_word(bindings.len());
 
         let mut entries: Vec<_> = (0u32..)
             .zip(bindings)
@@ -560,8 +552,6 @@ impl BoxDraw {
 
     /// The passes the runs draw in.
     fn runs(&self) -> u32 {
-        u32::try_from(self.runs.len())
-            .expect("a draw's runs number under 2^32")
-            .max(1)
+        to_word(self.runs.len()).max(1)
     }
 }

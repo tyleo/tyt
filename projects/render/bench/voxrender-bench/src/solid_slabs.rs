@@ -1,4 +1,4 @@
-use crate::CellGrid;
+use crate::{CellBox, CellGrid};
 use ty_math::TyVector3U32;
 
 /// The most slabs an object gives.
@@ -16,18 +16,14 @@ const OFFERS: usize = 4;
 /// A box of cells as its low cell and the corner past its high cell.
 type Slab = ([usize; 3], [usize; 3]);
 
-/// Up to [`MOST`] boxes of `grid`'s opaque cells alone, widest face first,
-/// each as its low cell and the corner past its high cell. `opaque` says
-/// whether a material passes no light. What lies behind such a box
-/// cannot show, which lets a view leave it out.
+/// Up to [`MOST`] boxes of `grid`'s opaque cells alone, widest face first.
+/// `opaque` says whether a material passes no light. What lies behind such
+/// a box cannot show, which lets a view leave it out.
 ///
 /// Each layer of cells across an axis offers its largest rectangles of
 /// opaque cells. The widest offers win. One grows along its axis for as
 /// long as the layers beside it fill its rectangle.
-pub fn solid_slabs(
-    grid: &CellGrid,
-    opaque: &dyn Fn(u32) -> bool,
-) -> Vec<(TyVector3U32, TyVector3U32)> {
+pub fn solid_slabs(grid: &CellGrid, opaque: &dyn Fn(u32) -> bool) -> Vec<CellBox> {
     let bounds = grid.bounds.to_array().map(|side| side as usize);
 
     let solid: Vec<bool> = grid

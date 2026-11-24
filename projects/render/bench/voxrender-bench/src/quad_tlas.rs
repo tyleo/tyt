@@ -1,4 +1,4 @@
-use crate::ObjectQuads;
+use crate::{ObjectQuads, to_word};
 use ty_math::{TyTransformF64, TyVector3F64};
 use wgpu::{
     AccelerationStructureFlags, AccelerationStructureGeometryFlags,
@@ -36,8 +36,6 @@ pub fn quad_tlas(
         })
     };
 
-    let count = |value: usize| u32::try_from(value).expect("a scene's quads number under 2^30");
-
     let mut total = 0;
     let mut first_quads = Vec::new();
     let mut blases = Vec::new();
@@ -51,14 +49,14 @@ pub fn quad_tlas(
             continue;
         }
 
-        first_quads.push(Some(count(total)));
+        first_quads.push(Some(to_word(total)));
         total += object.faces.len();
 
         let size = BlasTriangleGeometrySizeDescriptor {
             vertex_format: VertexFormat::Float32x3,
-            vertex_count: count(object.positions.len()),
+            vertex_count: to_word(object.positions.len()),
             index_format: Some(IndexFormat::Uint32),
-            index_count: Some(count(object.indices.len())),
+            index_count: Some(to_word(object.indices.len())),
             flags: AccelerationStructureGeometryFlags::OPAQUE,
         };
 
@@ -73,23 +71,12 @@ pub fn quad_tlas(
             },
         );
 
-        let vertices = init(
-            "quad vertices",
-            &object
-                .positions
-                .iter()
-                .flat_map(|position| position.to_array())
-                .flat_map(f32::to_le_bytes)
-                .collect::<Vec<_>>(),
-        );
-        let indices = init(
-            "quad indices",
-            &object
-                .indices
-                .iter()
-                .flat_map(|index| index.to_le_bytes())
-                .collect::<Vec<_>>(),
-        );
+        let positions: Vec<_> = (object.positions.iter())
+            .flat_map(|position| position.to_array())
+            .collect();
+
+        let vertices = init("quad vertices", bytemuck::cast_slice(&positions));
+        let indices = init("quad indices", bytemuck::cast_slice(&object.indices));
 
         inputs.push((blases.len(), size, vertices, indices));
         blases.push(Some(blas));
@@ -121,7 +108,7 @@ pub fn quad_tlas(
 
     let mut tlas = device.create_tlas(&CreateTlasDescriptor {
         label: Some("placements"),
-        max_instances: count(instanced.len().max(1)),
+        max_instances: to_word(instanced.len().max(1)),
         flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
         update_mode: AccelerationStructureUpdateMode::Build,
     });

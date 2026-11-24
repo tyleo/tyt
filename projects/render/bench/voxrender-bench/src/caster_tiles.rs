@@ -1,11 +1,5 @@
-use crate::{CellGrid, Error, Result};
+use crate::{CellGrid, Error, Result, TILE, TILE_CELLS};
 use ty_math::TyVector3U32;
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
-
-/// The cells of a tile.
-const CELLS: usize = (TILE * TILE * TILE) as usize;
 
 /// An object's cells by tile, as `lit_fill.wgsl`'s shadow rays read them.
 /// The words grow with the object's tiles that hold a cell, where a word
@@ -34,7 +28,7 @@ impl CasterTiles {
     pub const KEYED: u32 = 1 << 31;
 
     /// The words of a tile's bits.
-    pub const BIT_WORDS: usize = CELLS / 32;
+    pub const BIT_WORDS: usize = TILE_CELLS / 32;
 
     /// The tiles of `grid`, where `opaque` says whether a material passes
     /// no light. Errors if a material that passes light has a place over
@@ -45,7 +39,7 @@ impl CasterTiles {
         let counts = (bounds + TILE - 1) / TILE;
         let mut words = vec![0; (counts.x * counts.y * counts.z) as usize];
         let mut bits = [0u32; Self::BIT_WORDS];
-        let mut keys = [0u32; CELLS / 2];
+        let mut keys = [0u32; TILE_CELLS / 2];
 
         // Whether each material id met so far is opaque.
         let mut known: Vec<Option<bool>> = Vec::new();

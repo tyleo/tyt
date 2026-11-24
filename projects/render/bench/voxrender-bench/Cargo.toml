@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 branded-id = "0.2.0"
+bytemuck = "1.25.0"
 ty-math = { version = "0.5.0", default-features = false, features = ["color"] }
 voxconv = { version = "0.5.0", default-features = false, features = [
     "impl",

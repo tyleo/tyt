@@ -1,4 +1,7 @@
-use crate::{LitPage, PassTerms, TileMasks, TileScene};
+use crate::{
+    LitPage, PassTerms, TILE, TileMasks, TileScene, bounds_around, box_corners, storage_words,
+    to_word,
+};
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3U32};
 use voxrender::{grid_vector, quantize_direction};
 use voxrender_wgpu::GRID_WALK_WGSL;
@@ -8,9 +11,6 @@ use wgpu::{
     ShaderRuntimeChecks, ShaderSource,
     util::{BufferInitDescriptor, DeviceExt},
 };
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
 
 /// The bytes of the two `Steps` that end `grid_walk.wgsl`'s `Placement`.
 const STEP_BYTES: usize = 192;
@@ -65,7 +65,7 @@ pub struct LitFill {
 }
 
 /// The low and high corners of a box along a light's axes.
-type Span = ([f64; 3], [f64; 3]);
+type Span = (TyVector3F64, TyVector3F64);
 
 impl LitFill {
     /// Uploads what every page's fill of `tiles` reads, for a light along
@@ -75,13 +75,8 @@ impl LitFill {
         let mut offsets = Vec::new();
 
         for object in &tiles.objects {
-            offsets.push(count(caster_words.len()));
+            offsets.push(to_word(caster_words.len()));
             caster_words.extend(&object.casters.words);
-        }
-
-        // A binding cannot be empty.
-        if caster_words.is_empty() {
-            caster_words.resize(8, 0);
         }
 
         // `lit_fill.wgsl`'s `passes`: three `vec4<f32>`s for each key, a
@@ -212,15 +207,9 @@ impl LitFill {
                 cache: None,
             }),
             placements: init("lit fill placements", &placement_bytes),
-            casters: init("lit fill cells", &bytes(&caster_words)),
+            casters: storage_words(device, "lit fill cells", &caster_words, 8),
             lights: init("lit fill lights", &lights),
-            passes: init(
-                "lit fill passes",
-                &passes
-                    .iter()
-                    .flat_map(|value| value.to_le_bytes())
-                    .collect::<Vec<_>>(),
-            ),
+            passes: init("lit fill passes", bytemuck::cast_slice(&passes)),
             axes,
             spans,
             sizes: (tiles.placements.iter())
@@ -263,9 +252,9 @@ impl LitFill {
                 let object = &tiles.objects[*object];
 
                 if glassy {
-                    glass_places.push(count(recorded.len()));
+                    glass_places.push(to_word(recorded.len()));
                 } else {
-                    places.push(count(recorded.len()));
+                    places.push(to_word(recorded.len()));
                 }
 
                 // Each tile's low corner and the indices of its cells that
@@ -320,9 +309,9 @@ impl LitFill {
                         corner.x,
                         corner.y,
                         corner.z,
-                        count(index),
-                        count(first),
-                        count(casters.len() - first),
+                        to_word(index),
+                        to_word(first),
+                        to_word(casters.len() - first),
                         0,
                         0,
                     ]);
@@ -332,7 +321,7 @@ impl LitFill {
             }
         }
 
-        let cells = count(recorded.len());
+        let cells = to_word(recorded.len());
         let words = cells + TileMasks::SPARE;
 
         assert!(
@@ -340,33 +329,15 @@ impl LitFill {
             "a tint lies past the page's words"
         );
 
-        // A binding cannot be empty.
-        for words in [&mut tile_words, &mut casters, &mut recorded] {
-            if words.is_empty() {
-                words.resize(8, 0);
-            }
-        }
+        let frame = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("lit fill frame"),
+            contents: bytemuck::cast_slice(&[cells, 0, tints.unwrap_or(0), 0]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
 
-        let init = |label, contents: &[u8], usage| {
-            device.create_buffer_init(&BufferInitDescriptor {
-                label: Some(label),
-                contents,
-                usage,
-            })
-        };
-
-        let frame = init(
-            "lit fill frame",
-            &bytes(&[cells, 0, tints.unwrap_or(0), 0]),
-            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        );
-        let tile_words = init("lit fill tiles", &bytes(&tile_words), BufferUsages::STORAGE);
-        let casters = init("lit fill casters", &bytes(&casters), BufferUsages::STORAGE);
-        let recorded = init(
-            "lit fill record cells",
-            &bytes(&recorded),
-            BufferUsages::STORAGE,
-        );
+        let tile_words = storage_words(device, "lit fill tiles", &tile_words, 8);
+        let casters = storage_words(device, "lit fill casters", &casters, 8);
+        let recorded = storage_words(device, "lit fill record cells", &recorded, 8);
 
         let lit = device.create_buffer(&BufferDescriptor {
             label: Some("lit corners"),
@@ -410,16 +381,6 @@ impl LitFill {
     }
 }
 
-/// `value` as a word.
-fn count(value: usize) -> u32 {
-    u32::try_from(value).expect("a scene's words number under 2^32")
-}
-
-/// The bytes of `words`.
-fn bytes(words: &[u32]) -> Vec<u8> {
-    words.iter().flat_map(|word| word.to_le_bytes()).collect()
-}
-
 /// The low and high corners, along `axes`, of the box around the cells
 /// from `low` to before `high` of a grid that `transform` places.
 fn span(
@@ -428,21 +389,9 @@ fn span(
     low: TyVector3U32,
     high: TyVector3U32,
 ) -> Span {
-    let mut least = [f64::INFINITY; 3];
-    let mut most = [f64::NEG_INFINITY; 3];
+    bounds_around(box_corners(low.as_dvec3(), high.as_dvec3()).map(|corner| {
+        let point = transform.transform_point(corner);
 
-    for corner in 0..8u32 {
-        let far = TyVector3U32::new(corner & 1, corner >> 1 & 1, corner >> 2);
-        let cell = low + (high - low) * far;
-        let point = transform.transform_point(cell.as_dvec3());
-
-        for (axis, direction) in axes.iter().enumerate() {
-            let along = direction.dot(point);
-
-            least[axis] = least[axis].min(along);
-            most[axis] = most[axis].max(along);
-        }
-    }
-
-    (least, most)
+        TyVector3F64::from_array(axes.map(|axis| axis.dot(point)))
+    }))
 }

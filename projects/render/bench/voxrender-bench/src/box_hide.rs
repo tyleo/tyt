@@ -1,4 +1,4 @@
-use crate::FaceShadow;
+use crate::{FaceShadow, to_word};
 use std::ops::Range;
 use ty_math::TyVector3F64;
 
@@ -461,18 +461,14 @@ impl BoxHide {
                                 [0, 1, 2].map(|axis| (bounds[axis + 3] - bounds[axis]) / 2.0);
                             let below = starts.get(level + 1).copied().unwrap_or(0);
 
-                            let narrow = |value: usize| {
-                                u32::try_from(value).expect("a scene's boxes number under 2^32")
-                            };
-
                             nodes.push(Node {
                                 center: [0, 1, 2]
                                     .map(|axis| (bounds[axis + 3] + bounds[axis]) / 2.0),
                                 half,
                                 radius: half.iter().map(|side| side * side).sum::<f32>().sqrt(),
-                                first_part: narrow(below + parts.start),
-                                first_box: narrow(boxes.start),
-                                box_count: narrow(boxes.len()),
+                                first_part: to_word(below + parts.start),
+                                first_box: to_word(boxes.start),
+                                box_count: to_word(boxes.len()),
                                 part_count: parts.len() as u8,
                                 last: [u8::MAX; 2],
                                 hides: false,

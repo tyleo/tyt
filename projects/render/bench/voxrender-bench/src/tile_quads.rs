@@ -1,14 +1,11 @@
-use crate::{ObjectQuads, ObjectTiles, TileMasks, TileScene, map_threads};
+use crate::{
+    CellBox, ObjectQuads, ObjectTiles, TILE, TileScene, bounds_around, box_corners, map_threads,
+    tile_cell, to_word,
+};
 use std::collections::BTreeMap;
 use ty_math::{TyVector3F64, TyVector3U32};
 use voxrender::grid_point;
 use voxsurface::{SurfaceGrid, SurfaceMethod, mesh_grid_keyed};
-
-/// The cells along each side of a tile.
-const TILE: u32 = 16;
-
-/// A box of cells: its low cell and the corner past its high cell.
-type CellBox = (TyVector3U32, TyVector3U32);
 
 /// Each object's opaque quads, in the order of `tiles`' objects. A greedy
 /// run merges the cells of one material alone, so a quad holds one. An
@@ -60,15 +57,10 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
         let widest = transform.scale.abs().max_element();
 
         for &((low, high), cells) in &casts[*object] {
-            let (least, most) = corners(low.as_dvec3(), high.as_dvec3())
-                .map(|corner| transform.transform_point(corner))
-                .fold(
-                    (
-                        TyVector3F64::splat(f64::INFINITY),
-                        TyVector3F64::splat(f64::NEG_INFINITY),
-                    ),
-                    |(least, most), corner| (least.min(corner), most.max(corner)),
-                );
+            let (least, most) = bounds_around(
+                box_corners(low.as_dvec3(), high.as_dvec3())
+                    .map(|corner| transform.transform_point(corner)),
+            );
 
             let margin = (cells + 1.0) * widest;
 
@@ -89,15 +81,10 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
 
         let bounds = tiles.objects[*object].bounds;
 
-        let (least, most) = corners(TyVector3F64::ZERO, bounds.as_dvec3())
-            .map(|corner| transform.transform_point(corner))
-            .fold(
-                (
-                    TyVector3F64::splat(f64::INFINITY),
-                    TyVector3F64::splat(f64::NEG_INFINITY),
-                ),
-                |(least, most), corner| (least.min(corner), most.max(corner)),
-            );
+        let (least, most) = bounds_around(
+            box_corners(TyVector3F64::ZERO, bounds.as_dvec3())
+                .map(|corner| transform.transform_point(corner)),
+        );
 
         let end = reached.partition_point(|(low, _)| low.x < most.x);
 
@@ -107,15 +94,8 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
             }
 
             // The box around the reached box in the placement's cells.
-            let (first, last) = corners(low, high)
-                .map(|corner| grid_point(transform, corner))
-                .fold(
-                    (
-                        TyVector3F64::splat(f64::INFINITY),
-                        TyVector3F64::splat(f64::NEG_INFINITY),
-                    ),
-                    |(least, most), corner| (least.min(corner), most.max(corner)),
-                );
+            let (first, last) =
+                bounds_around(box_corners(low, high).map(|corner| grid_point(transform, corner)));
 
             let first = first.floor().max(TyVector3F64::ZERO).as_uvec3();
             let last = last.ceil().max(TyVector3F64::ZERO).as_uvec3().min(bounds);
@@ -174,21 +154,6 @@ pub fn tile_quads(tiles: &TileScene, reach: Option<&dyn Fn(u32) -> f64>) -> Vec<
     })
 }
 
-/// The eight corners of the box from `low` to `high`.
-fn corners(low: TyVector3F64, high: TyVector3F64) -> impl Iterator<Item = TyVector3F64> {
-    (0..8u32).map(move |corner| {
-        let pick = |bit: u32, axis: usize| {
-            if corner & bit == 0 {
-                low[axis]
-            } else {
-                high[axis]
-            }
-        };
-
-        TyVector3F64::new(pick(1, 0), pick(2, 1), pick(4, 2))
-    })
-}
-
 /// The box around each tile's cells whose material casts a mirror ray,
 /// with the longest of those materials' reaches in cells. `reaches` holds
 /// each of the scene's materials', or zero where it casts none.
@@ -199,10 +164,7 @@ fn cast_boxes(object: &ObjectTiles, reaches: &[f64]) -> Vec<(CellBox, f64)> {
     for (tile, &corner) in masks.corners.iter().enumerate() {
         // The reach of each of the tile's materials, in the order a record
         // cell's entry counts them.
-        let offset = masks.offsets[tile];
-        let palette = masks.words[(offset + TileMasks::PALETTE) as usize];
-        let ids = (offset + (palette & 0xffff)) as usize;
-        let ids = &masks.words[ids..ids + (palette >> 16) as usize];
+        let ids = masks.palette(masks.offsets[tile]);
 
         if ids.iter().all(|&id| reaches[id as usize] == 0.0) {
             continue;
@@ -215,9 +177,7 @@ fn cast_boxes(object: &ObjectTiles, reaches: &[f64]) -> Vec<(CellBox, f64)> {
             let cells = reaches[ids[usize::from(entry)] as usize];
 
             if cells > 0.0 {
-                let index = u32::from(index);
-                let cell = corner
-                    + TyVector3U32::new(index / TILE % TILE, index / (TILE * TILE), index % TILE);
+                let cell = corner + tile_cell(usize::from(index));
 
                 low = low.min(cell);
                 high = high.max(cell + 1);
@@ -239,8 +199,7 @@ fn push_region(quads: &mut ObjectQuads, object: &ObjectTiles, (low, high): CellB
     let region = Region::new(object, low, high - low);
     let mesh = mesh_grid_keyed(&region, SurfaceMethod::Greedy, &|cell| cell - 1, &|_| true);
 
-    let count = |value: usize| u32::try_from(value).expect("an object's quads number under 2^30");
-    let first = count(quads.positions.len());
+    let first = to_word(quads.positions.len());
 
     quads.positions.extend(
         mesh.positions
@@ -253,7 +212,7 @@ fn push_region(quads: &mut ObjectQuads, object: &ObjectTiles, (low, high): CellB
     quads.faces.extend(
         mesh.spans
             .iter()
-            .map(|span| count(span.d) * 2 + u32::from(span.sign > 0)),
+            .map(|span| to_word(span.d) * 2 + u32::from(span.sign > 0)),
     );
     quads
         .materials

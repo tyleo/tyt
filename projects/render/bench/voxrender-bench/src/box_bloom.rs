@@ -128,10 +128,7 @@ impl BoxBloom {
         let values = |scale: f64| {
             device.create_buffer_init(&BufferInitDescriptor {
                 label: Some("bloom"),
-                contents: &[scale as f32, 0.0, 0.0, 0.0]
-                    .iter()
-                    .flat_map(|value| value.to_le_bytes())
-                    .collect::<Vec<_>>(),
+                contents: bytemuck::cast_slice(&[scale as f32, 0.0, 0.0, 0.0]),
                 usage: BufferUsages::UNIFORM,
             })
         };
